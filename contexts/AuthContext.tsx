@@ -34,6 +34,8 @@ const AuthContext = createContext<AuthContextType>({
 
 export const useAuth = () => useContext(AuthContext);
 
+const PROFILE_CACHE_KEY = 'pt_user_profile_cache';
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [session, setSession] = useState<Session | null>(null);
     const [user, setUser] = useState<User | null>(null);
@@ -42,7 +44,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [authError, setAuthError] = useState<string | null>(null);
 
     const fetchProfile = useCallback(async (currentUser: User) => {
-        setAuthError(null); // Clear previous errors
+        setAuthError(null); 
         try {
             // 15-second timeout for profile check
             const profilePromise = supabase
@@ -59,74 +61,95 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const { data, error } = response;
 
             if (error) {
-                // EMERGENCY BYPASS: Infinite Recursion
+                // EMERGENCY BYPASS: Infinite Recursion check
                 const isRecursion = error.message?.toLowerCase().includes('infinite recursion') || error.code === '42P17';
                 
                 if (isRecursion) {
                     console.warn("Critical DB Policy Error (Recursion). Activating Emergency Admin Access.");
-                    setProfile({
+                    const emergencyProfile: UserProfile = {
                         id: currentUser.id,
                         role: 'admin',
                         is_subscribed: true
-                    });
+                    };
+                    setProfile(emergencyProfile);
                     setAuthError(`DB Recursion Error Detected. Emergency Access Granted.`);
                     return;
                 }
 
-                // Metadata fallback
-                const meta = currentUser.user_metadata || {};
-                const metaHasRole = meta.role === 'admin' || meta.is_subscribed === true;
-
-                if (metaHasRole) {
-                     console.warn("DB Error encountered. Falling back to User Metadata.", error.message);
-                     setProfile({
-                         id: currentUser.id,
-                         role: meta.role || 'user',
-                         is_subscribed: meta.is_subscribed || false
-                     });
-                } else {
-                    if (error.code === 'PGRST116') {
-                        // Profile missing, create default
-                        console.log("Profile missing, creating default entry...");
-                        const { data: newProfile, error: createError } = await supabase
-                            .from('profiles')
-                            .insert([{ id: currentUser.id, role: 'user', is_subscribed: false }])
-                            .select()
-                            .single();
-                        
-                        if (createError) {
-                            console.error("Failed to create profile:", createError);
-                            setAuthError(`Creation Failed: ${createError.message}`);
-                            setProfile({ id: currentUser.id, role: 'user', is_subscribed: false });
-                        } else {
-                            setProfile(newProfile as UserProfile);
-                        }
+                if (error.code === 'PGRST116') {
+                    // Profile missing in DB, create default
+                    console.log("Profile missing, creating default entry...");
+                    
+                    // Try minimal insert first to avoid RLS issues on protected columns like 'role' or 'is_subscribed'
+                    // We rely on DB defaults (role='user', is_subscribed=false)
+                    const { data: newProfile, error: createError } = await supabase
+                        .from('profiles')
+                        .upsert({ 
+                            id: currentUser.id, 
+                            email: currentUser.email
+                        })
+                        .select()
+                        .single();
+                    
+                    if (createError) {
+                        const errorMsg = createError.message || JSON.stringify(createError) || "Unknown Error";
+                        console.error("Failed to create profile:", errorMsg);
+                        // Fallback to cache if creation fails (e.g. offline)
+                        loadFromCacheOrFallback(currentUser, `Creation Failed: ${errorMsg}`);
                     } else {
-                        // Genuine DB Error
-                        console.error("Supabase Error:", error);
-                        setAuthError(`DB Error: ${error.message || error.code}`);
-                        setProfile({ id: currentUser.id, role: 'user', is_subscribed: false });
+                        setProfile(newProfile as UserProfile);
+                        localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(newProfile));
                     }
+                } else {
+                    // Genuine DB Error (Network, Permissions, etc)
+                    console.warn("Supabase Error:", error);
+                    loadFromCacheOrFallback(currentUser, `DB Error: ${error.message}`);
                 }
             } else if (data) {
                 setProfile(data as UserProfile);
+                // Update Cache on successful fetch
+                localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(data));
             }
         } catch (err: any) {
-            // Network failures also trigger metadata fallback if available
-            const meta = currentUser.user_metadata || {};
-            if (meta.role === 'admin' || meta.is_subscribed === true) {
-                setProfile({
-                    id: currentUser.id,
-                    role: meta.role || 'user',
-                    is_subscribed: meta.is_subscribed || false
-                });
-            } else {
-                console.warn("Profile fetch exception:", err);
-                setAuthError(`Network/Client Error: ${err.message}`);
-                setProfile({ id: currentUser.id, role: 'user', is_subscribed: false });
-            }
+            console.warn("Profile fetch exception:", err);
+            loadFromCacheOrFallback(currentUser, `Network Error: ${err.message}`);
         }
     }, []);
+
+    const loadFromCacheOrFallback = (currentUser: User, errorMessage: string) => {
+        // 1. Try Local Storage Cache
+        try {
+            const cachedStr = localStorage.getItem(PROFILE_CACHE_KEY);
+            if (cachedStr) {
+                const cached = JSON.parse(cachedStr) as UserProfile;
+                if (cached.id === currentUser.id) {
+                    console.log("Loaded profile from local cache (Offline Mode)");
+                    setProfile(cached);
+                    // Don't set authError to keep UI clean, or set a warning if desired
+                    return; 
+                }
+            }
+        } catch (e) {
+            console.error("Cache parse error", e);
+        }
+
+        // 2. Try User Metadata (JWT)
+        const meta = currentUser.user_metadata || {};
+        if (meta.role === 'admin' || meta.is_subscribed === true) {
+            console.log("Loaded profile from JWT Metadata");
+            setProfile({
+                id: currentUser.id,
+                role: meta.role || 'user',
+                is_subscribed: meta.is_subscribed || false
+            });
+            return;
+        }
+
+        // 3. Final Default (Unsubscribed)
+        console.warn("Using default unsubscribed profile due to error.");
+        setAuthError(errorMessage);
+        setProfile({ id: currentUser.id, role: 'user', is_subscribed: false });
+    };
 
     useEffect(() => {
         let mounted = true;
@@ -144,6 +167,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     if (data?.session) {
                         setSession(data.session);
                         setUser(data.session.user);
+                        
+                        // Optimistically load cache immediately to prevent flicker
+                        try {
+                            const cachedStr = localStorage.getItem(PROFILE_CACHE_KEY);
+                            if (cachedStr) {
+                                const cached = JSON.parse(cachedStr);
+                                if (cached.id === data.session.user.id) {
+                                    setProfile(cached);
+                                }
+                            }
+                        } catch(e) {}
+
                         await fetchProfile(data.session.user);
                     }
                 }
@@ -170,6 +205,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             } else {
                 setProfile(null);
                 setAuthError(null);
+                localStorage.removeItem(PROFILE_CACHE_KEY); // Clear cache on logout
             }
             
             setLoading(false);
@@ -187,6 +223,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(null);
         setSession(null);
         setAuthError(null);
+        localStorage.removeItem(PROFILE_CACHE_KEY);
     };
 
     const refreshProfile = async () => {
@@ -218,7 +255,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         // 3. Paid Subscription Dates
-        // Active if: End Date exists AND is in Future AND (Start Date is null OR Start Date is Past)
         const isSubValid = subEnd && subEnd.getTime() > now.getTime();
         const isSubStarted = !subStart || subStart.getTime() <= now.getTime();
 
@@ -229,7 +265,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         // 4. Trial Dates
-        // Active if: End Date exists AND is in Future AND (Start Date is null OR Start Date is Past)
         const isTrialValid = trialEnd && trialEnd.getTime() > now.getTime();
         const isTrialStarted = !trialStart || trialStart.getTime() <= now.getTime();
 

@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ToolId } from '../types';
@@ -120,6 +119,15 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool }) => {
 
                         {!isAuthPage && !isLandingPage && <button onClick={() => navigate('/docs')} className="hidden sm:block text-sm font-medium text-slate-500 hover:text-indigo-600 transition-colors">Docs</button>}
                         
+                        {isAdmin && (
+                            <button 
+                                onClick={() => navigate('/admin')} 
+                                className={`text-sm font-bold transition-colors ${location.pathname === '/admin' ? 'text-indigo-600' : 'text-slate-500 hover:text-indigo-600'}`}
+                            >
+                                Admin
+                            </button>
+                        )}
+
                         <div className="h-4 w-px bg-slate-200"></div>
 
                         {user ? (

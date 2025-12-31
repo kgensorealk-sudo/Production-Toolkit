@@ -1,8 +1,8 @@
-
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
 import Toast from '../components/Toast';
+import LoadingOverlay from '../components/LoadingOverlay';
 
 const AuthPage: React.FC = () => {
     const navigate = useNavigate();
@@ -25,24 +25,28 @@ const AuthPage: React.FC = () => {
                 if (error) throw error;
                 setToast({ msg: 'Account created! You can now sign in.', type: 'success' });
                 setIsSignUp(false); // Switch to login view
+                setLoading(false);
             } else {
                 const { error } = await supabase.auth.signInWithPassword({
                     email,
                     password,
                 });
                 if (error) throw error;
-                navigate('/');
+                
+                // Navigate immediately, letting LandingPage handle the loading experience
+                navigate('/landing');
             }
         } catch (error: any) {
             setToast({ msg: error.message || 'Authentication failed', type: 'error' });
-        } finally {
             setLoading(false);
         }
     };
 
     return (
         <div className="min-h-[calc(100vh-80px)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-            <div className="max-w-md w-full space-y-8 glass-panel bg-white p-10 rounded-2xl shadow-xl animate-scale-in">
+            <div className="relative max-w-md w-full space-y-8 glass-panel bg-white p-10 rounded-2xl shadow-xl animate-scale-in">
+                {loading && <LoadingOverlay message={isSignUp ? "Creating Account..." : "Signing in..."} color="indigo" />}
+                
                 <div>
                     <div className="mx-auto h-16 w-16 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/30">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -40,10 +40,12 @@ export enum ToolId {
 
 export interface UserProfile {
     id: string;
+    email?: string; // Added for display in Admin
     role: 'admin' | 'user';
     is_subscribed: boolean;
     subscription_start?: string | null;
     subscription_end?: string | null;
     trial_start?: string | null;
     trial_end?: string | null;
+    created_at?: string; // Added for sorting
 }

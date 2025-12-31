@@ -13,6 +13,7 @@ import ReferenceGenerator from './pages/ReferenceGenerator';
 import Docs from './pages/Docs';
 import AuthPage from './pages/AuthPage';
 import LandingPage from './pages/LandingPage';
+import AdminDashboard from './pages/AdminDashboard';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ToolId } from './types';
 import LoadingOverlay from './components/LoadingOverlay';
@@ -88,6 +89,12 @@ const AppRoutes: React.FC = () => {
             <Route path="/" element={
                 <SubscribedRoute>
                     <Layout><Dashboard /></Layout>
+                </SubscribedRoute>
+            } />
+
+            <Route path="/admin" element={
+                <SubscribedRoute>
+                    <Layout><AdminDashboard /></Layout>
                 </SubscribedRoute>
             } />
 
