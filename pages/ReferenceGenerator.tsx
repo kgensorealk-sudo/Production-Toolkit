@@ -54,16 +54,26 @@ const ReferenceGenerator: React.FC = () => {
 
     // --- Parsing Logic ---
     const parseAuthors = (authorString: string) => {
-        // Expected: "Babedi, L., von der Heyden, B.P." OR "BGMRQ (Bureau ...)"
         const authors: { surname: string; initials: string }[] = [];
         
-        // Regex looks for: Word(s), Space, Capital Letter, Dot (Person)
-        const personPattern = /[^,]+,\s+[A-Z]\.(?:[A-Z]\.)?/g;
-        const tokens = authorString.match(personPattern);
+        // Pattern A: "Surname, I." (Standard Elsevier/Harvard)
+        const surnameFirstPattern = /[^,]+,\s+[A-Z]\.(?:[A-Z]\.)?/g;
+        const surnameFirstTokens = authorString.match(surnameFirstPattern);
 
-        // If we find patterns matching "Name, I.", assume it's a list of people
-        if (tokens && tokens.length > 0) {
-            tokens.forEach(token => {
+        // Pattern B: "I. Surname" (IEEE/Vancouver)
+        // Looks for: Initial(s) with dots, space, Name (e.g. "X. Shi" or "W. Dai")
+        // Also handles "X.-Y. Shi" or similar
+        const initialFirstPattern = /(?:[A-Z]\.-?)?(?:[A-Z]\.\s?)+[\w-]+/g;
+        const initialFirstTokens = authorString.match(initialFirstPattern);
+
+        // Decide which pattern to use based on which matches more of the string
+        // Heuristic: If we find clear "Surname, I." matches, use that.
+        // Otherwise, if we find "I. Surname" matches, use that.
+        
+        const useSurnameFirst = (surnameFirstTokens?.length || 0) >= (initialFirstTokens?.length || 0);
+        
+        if (useSurnameFirst && surnameFirstTokens && surnameFirstTokens.length > 0) {
+            surnameFirstTokens.forEach(token => {
                 const clean = token.trim();
                 const commaIdx = clean.lastIndexOf(',');
                 if (commaIdx > -1) {
@@ -72,12 +82,28 @@ const ReferenceGenerator: React.FC = () => {
                     if (initials && !initials.endsWith('.')) initials += '.';
                     authors.push({ surname, initials });
                 } else {
-                    // Fallback for weird formatting within match
+                    authors.push({ surname: clean, initials: '' });
+                }
+            });
+        } else if (initialFirstTokens && initialFirstTokens.length > 0) {
+            // Parse "X. Shi" or "W. Dai"
+            initialFirstTokens.forEach(token => {
+                let clean = token.trim();
+                // Strip leading "and " if it got caught (though regex shouldn't)
+                clean = clean.replace(/^and\s+/i, '');
+
+                const lastSpace = clean.lastIndexOf(' ');
+                if (lastSpace > -1) {
+                    let initials = clean.substring(0, lastSpace).trim();
+                    const surname = clean.substring(lastSpace + 1).trim();
+                    if (initials && !initials.endsWith('.')) initials += '.';
+                    authors.push({ surname, initials });
+                } else {
                     authors.push({ surname: clean, initials: '' });
                 }
             });
         } else {
-            // Fallback: If no "Name, I." pattern found, it's likely an Organization or Collaboration
+            // Fallback: Organization or Collaboration
             // Split by semicolon if present, otherwise treat as one block
             const parts = authorString.includes(';') ? authorString.split(';') : [authorString];
             parts.forEach(p => {
@@ -105,102 +131,184 @@ const ReferenceGenerator: React.FC = () => {
             if (cleanText.endsWith('.')) cleanText = cleanText.slice(0, -1).trim();
         }
 
-        // 1. Year
-        const yearMatch = cleanText.match(/\(?(\d{4})\)?[\.,]/);
+        // 1. Find Year
+        const yearMatch = cleanText.match(/\(?(\d{4})\)?/);
+        
         if (yearMatch) {
             res.year = yearMatch[1];
-            // Split text: [Authors] [Year] [Rest]
-            const yearIdx = cleanText.indexOf(yearMatch[0]);
-            const authorPart = cleanText.substring(0, yearIdx).trim().replace(/,$/, '');
-            cleanText = cleanText.substring(yearIdx + yearMatch[0].length).trim();
+            const yearIndex = cleanText.indexOf(yearMatch[0]);
             
-            res.authors = parseAuthors(authorPart);
+            // Heuristic: If year is late in the string (>50% length), assume Vancouver/IEEE style (Year at end)
+            if (yearIndex > cleanText.length * 0.5) {
+                // --- STRATEGY: VANCOUVER / IEEE (Year at end) ---
+                // Format: [Authors], [Title]. [Journal] [Vol] ([Year]), [Pages].
+
+                // 1. Post-Year: Pages/ID
+                let postYear = cleanText.substring(yearIndex + yearMatch[0].length).trim();
+                
+                // Clean leading punctuation (e.g., if format is (2025), e11696)
+                if (postYear.startsWith(',') || postYear.startsWith('.')) {
+                    postYear = postYear.substring(1).trim();
+                }
+
+                // Check for Pages/Article ID in postYear (e.g. "e11696." or "45-50.")
+                const pageMatch = postYear.match(/([e0-9]+(?:[–-][0-9]+)?)\.?$/);
+                if (pageMatch) {
+                    const pages = pageMatch[1];
+                    if (pages.includes('–') || pages.includes('-')) {
+                        const [f, l] = pages.split(/[–-]/);
+                        res.fpage = f;
+                        res.lpage = l;
+                    } else {
+                        res.fpage = pages; // Article ID often treated as first page
+                    }
+                }
+
+                // 2. Pre-Year: [Authors], [Title]. [Journal] [Vol]
+                let preYear = cleanText.substring(0, yearIndex).trim();
+                
+                // Extract Volume (number at end of preYear)
+                const volMatch = preYear.match(/\s(\d+)\s*$/);
+                if (volMatch) {
+                    res.volume = volMatch[1];
+                    preYear = preYear.substring(0, volMatch.index).trim();
+                }
+
+                // Extract Journal and Title
+                // Strategy: 
+                // 1. Isolate Authors from Rest (Comma separation logic)
+                // 2. Isolate Title from Journal (Right-to-Left dot separation logic)
+
+                const segments = preYear.split(',').map(s => s.trim());
+                let titleStartIndex = -1;
+
+                // Find where Authors end and Title begins
+                for (let i = 0; i < segments.length; i++) {
+                        let seg = segments[i];
+                        seg = seg.replace(/^and\s+/i, '');
+                        
+                        // Check if this segment looks like a name part (X. Shi)
+                        const hasInitial = /[A-Z]\./.test(seg);
+                        const isShort = seg.length < 35;
+                        
+                        // If it's long, or lacks an initial (and isn't the first segment), it's likely title start
+                        if (!isShort || (!hasInitial && i > 0)) {
+                            titleStartIndex = i;
+                            break;
+                        }
+                }
+                
+                if (titleStartIndex > -1) {
+                    const authorString = segments.slice(0, titleStartIndex).join(', ');
+                    const titleJournalString = segments.slice(titleStartIndex).join(', ');
+                    
+                    res.authors = parseAuthors(authorString);
+                    
+                    // Split Title vs Journal using Right-to-Left analysis
+                    // "Title. Adv. Funct. Mater." -> We assume Journal is at the end.
+                    const tjParts = titleJournalString.split('. ');
+                    
+                    if (tjParts.length > 1) {
+                        let journalStartIdx = tjParts.length - 1;
+                        
+                        // Work backwards to find where Journal starts
+                        // Stop if we hit a segment that looks like a Title (Long, or starts lowercase)
+                        for (let k = tjParts.length - 1; k > 0; k--) {
+                            const seg = tjParts[k];
+                            // Heuristics:
+                            // Journal parts usually short (< 45 chars) or Abbreviated/TitleCased.
+                            // Title segments are usually longer sentences.
+                            
+                            const isLong = seg.length > 45; 
+                            const startsLower = /^[a-z]/.test(seg); 
+                            
+                            if (isLong || startsLower) {
+                                // This segment is part of Title. Next one is Journal start.
+                                journalStartIdx = k + 1;
+                                break;
+                            }
+                            
+                            // Continue leftwards to capture multi-part journals
+                            journalStartIdx = k;
+                        }
+                        
+                        // Safety: Force at least index 1 if possible (assuming index 0 is always Title)
+                        if (journalStartIdx === 0 && tjParts.length > 1) journalStartIdx = 1;
+
+                        res.title = tjParts.slice(0, journalStartIdx).join('. ').replace(/\.$/, '');
+                        res.source = tjParts.slice(journalStartIdx).join('. ');
+                    } else {
+                         // No dots? Assume whole thing is Title (fallback)
+                         res.title = titleJournalString;
+                    }
+                } else {
+                    // Fallback: If logic failed, try simple dot split
+                    const firstDot = preYear.indexOf('. ');
+                    if (firstDot > -1) {
+                            res.authors = parseAuthors(preYear.substring(0, firstDot));
+                            res.title = preYear.substring(firstDot + 1).replace(/\.$/, '');
+                    } else {
+                            res.authors = parseAuthors(preYear);
+                    }
+                }
+
+            } else {
+                // --- STRATEGY: HARVARD / STANDARD (Year near start) ---
+                // Format: [Authors] ([Year]) [Title]. [Source]
+                
+                const authorPart = cleanText.substring(0, yearIndex).trim().replace(/,$/, '');
+                res.authors = parseAuthors(authorPart);
+                
+                let rest = cleanText.substring(yearIndex + yearMatch[0].length).trim();
+                // Clean leading punctuation like ")." or "."
+                rest = rest.replace(/^[).,;:\s]+/, '');
+
+                // Extract Pages (End)
+                const pageMatch = rest.match(/(?:pp\.?|:)?\s*(\d+)[–-](\d+)\.?$/);
+                if (pageMatch) {
+                    res.fpage = pageMatch[1];
+                    res.lpage = pageMatch[2];
+                    rest = rest.substring(0, pageMatch.index).trim().replace(/,$/, '');
+                } else {
+                    // Check for single page/ID
+                    const singlePage = rest.match(/,\s*([e0-9]+)\.?$/);
+                    if (singlePage) {
+                        res.fpage = singlePage[1];
+                        rest = rest.substring(0, singlePage.index).trim();
+                    }
+                }
+
+                // Extract Volume
+                const volMatch = rest.match(/(?:vol\.?\s*|)(\d+)(?:\((\d+)\))?/i);
+                if (volMatch && !res.isBook) {
+                    if (rest.endsWith(volMatch[0])) {
+                        res.volume = volMatch[1];
+                        if (volMatch[2]) res.issue = volMatch[2];
+                        rest = rest.substring(0, volMatch.index).trim().replace(/,$/, '');
+                    }
+                }
+
+                // Split Title and Source
+                // Standard: Title. Source.
+                const splitDot = rest.indexOf('. ');
+                if (splitDot > -1) {
+                    res.title = rest.substring(0, splitDot).trim();
+                    res.source = rest.substring(splitDot + 1).trim();
+                } else {
+                    res.source = rest; 
+                }
+            }
+        } else {
+            // No year found? Treat entire string as Source or Title
+            res.title = cleanText;
         }
 
-        // 2. Check for "In: ... (Eds)" -> Chapter
-        const inMatch = cleanText.match(/In:\s*(.*?)\s*\((Eds?\.?)\),?/i);
+        // 2. Check for "In: ... (Eds)" -> Chapter (Common across styles)
+        const inMatch = text.match(/In:\s*(.*?)\s*\((Eds?\.?)\),?/i);
         if (inMatch) {
             res.isChapter = true;
-            res.title = cleanText.substring(0, inMatch.index).trim().replace(/[\.,]$/, '');
-            
-            const editorPart = inMatch[1];
-            res.editors = parseAuthors(editorPart);
-            
-            // Remove the In: part
-            cleanText = cleanText.substring(inMatch.index! + inMatch[0].length).trim();
-        }
-
-        // 3a. Total Pages (Book/Monograph) - e.g. "662 pp."
-        const totalPagesMatch = cleanText.match(/,\s*(\d+)\s*pp\.?$/);
-        if (totalPagesMatch) {
-            res.totalPages = totalPagesMatch[1];
-            res.isBook = true;
-            cleanText = cleanText.substring(0, totalPagesMatch.index).trim();
-        } else {
-            // 3b. Page Range (Journal/Chapter) - e.g. "47-78"
-            const pageMatch = cleanText.match(/(?:pp\.?|:)?\s*(\d+)[–-](\d+)\.?$/);
-            if (pageMatch) {
-                res.fpage = pageMatch[1];
-                res.lpage = pageMatch[2];
-                cleanText = cleanText.substring(0, pageMatch.index).trim().replace(/,$/, '');
-            }
-        }
-
-        // 4. Volume (and Issue) - Journals
-        const volMatch = cleanText.match(/(?:vol\.?\s*|)(\d+)(?:\((\d+)\))?/i);
-        if (volMatch && !res.isBook) {
-            // Ensure this is near the end
-            if (cleanText.endsWith(volMatch[0])) {
-                res.volume = volMatch[1];
-                if (volMatch[2]) res.issue = volMatch[2];
-                cleanText = cleanText.substring(0, volMatch.index).trim().replace(/,$/, '');
-            }
-        }
-
-        // 5. Source / Journal / Book Title / Publisher
-        if (res.isChapter) {
-            // For chapters, cleanText has Book Title and Series/Publisher info
-            // Try to split Book Title and Series Title if volume exists
-            if (res.volume) {
-                const lastDot = cleanText.lastIndexOf('. ');
-                if (lastDot > -1) {
-                    res.source = cleanText.substring(0, lastDot).trim();
-                    res.series = cleanText.substring(lastDot + 1).trim();
-                } else {
-                    res.source = cleanText;
-                }
-            } else {
-                res.source = cleanText;
-            }
-        } else if (res.isBook) {
-            // Monograph: Title. Publisher, Location.
-            // Split Title from Publisher info by first dot usually
-            const splitDot = cleanText.indexOf('. ');
-            if (splitDot > -1) {
-                res.title = cleanText.substring(0, splitDot).trim();
-                const pubInfo = cleanText.substring(splitDot + 1).trim();
-                
-                // Parse "Publisher, Location"
-                // Heuristic: Split by last comma
-                const lastComma = pubInfo.lastIndexOf(',');
-                if (lastComma > -1) {
-                    res.publisher = pubInfo.substring(0, lastComma).trim();
-                    res.location = pubInfo.substring(lastComma + 1).trim();
-                } else {
-                    res.publisher = pubInfo;
-                }
-            } else {
-                res.title = cleanText;
-            }
-        } else {
-            // Journal Article: Title. Journal Name
-            const splitDot = cleanText.indexOf('. ');
-            if (splitDot > -1) {
-                res.title = cleanText.substring(0, splitDot).trim();
-                res.source = cleanText.substring(splitDot + 1).trim();
-            } else {
-                res.source = cleanText; 
-            }
+            // Often "In:" comes after Title in Harvard
+            // Re-evaluate title/source split if we found "In:"
         }
 
         return res;
@@ -266,6 +374,7 @@ const ReferenceGenerator: React.FC = () => {
 
             // Host Block
             let hostXml = '';
+            const lastPageXml = ref.lpage ? `<sb:last-page>${escapeXml(ref.lpage)}</sb:last-page>` : '';
             
             if (ref.isChapter) {
                 // Book Chapter
@@ -274,14 +383,14 @@ const ReferenceGenerator: React.FC = () => {
                     ? `<sb:book-series><sb:series><sb:title><sb:maintitle>${escapeXml(ref.series || ref.source)}</sb:maintitle></sb:title>${ref.volume ? `<sb:volume-nr>${escapeXml(ref.volume)}</sb:volume-nr>` : ''}</sb:series></sb:book-series>`
                     : '';
 
-                hostXml = `<sb:host><sb:edited-book>${editorsXml}${sourceTitle}${bookSeriesXml}<sb:date>${escapeXml(ref.year)}</sb:date></sb:edited-book><sb:pages><sb:first-page>${escapeXml(ref.fpage)}</sb:first-page><sb:last-page>${escapeXml(ref.lpage)}</sb:last-page></sb:pages></sb:host>`;
+                hostXml = `<sb:host><sb:edited-book>${editorsXml}${sourceTitle}${bookSeriesXml}<sb:date>${escapeXml(ref.year)}</sb:date></sb:edited-book><sb:pages><sb:first-page>${escapeXml(ref.fpage)}</sb:first-page>${lastPageXml}</sb:pages></sb:host>`;
             } else if (ref.isBook) {
                 // Monograph / Whole Book
                 hostXml = `<sb:host><sb:book><sb:date>${escapeXml(ref.year)}</sb:date><sb:publisher><sb:name>${escapeXml(ref.publisher || '')}</sb:name><sb:location>${escapeXml(ref.location || '')}</sb:location></sb:publisher></sb:book><sb:pages><sb:first-page>${escapeXml(ref.totalPages || '')}</sb:first-page></sb:pages></sb:host>`;
             } else {
                 // Journal Article
                 const sourceTitle = `<sb:title><sb:maintitle>${escapeXml(ref.source)}</sb:maintitle></sb:title>`;
-                hostXml = `<sb:host><sb:issue><sb:series>${sourceTitle}<sb:volume-nr>${escapeXml(ref.volume)}</sb:volume-nr></sb:series>${ref.issue ? `<sb:issue-nr>${escapeXml(ref.issue)}</sb:issue-nr>` : ''}<sb:date>${escapeXml(ref.year)}</sb:date></sb:issue><sb:pages><sb:first-page>${escapeXml(ref.fpage)}</sb:first-page><sb:last-page>${escapeXml(ref.lpage)}</sb:last-page></sb:pages></sb:host>`;
+                hostXml = `<sb:host><sb:issue><sb:series>${sourceTitle}<sb:volume-nr>${escapeXml(ref.volume)}</sb:volume-nr></sb:series>${ref.issue ? `<sb:issue-nr>${escapeXml(ref.issue)}</sb:issue-nr>` : ''}<sb:date>${escapeXml(ref.year)}</sb:date></sb:issue><sb:pages><sb:first-page>${escapeXml(ref.fpage)}</sb:first-page>${lastPageXml}</sb:pages></sb:host>`;
             }
 
             const commentXml = ref.comment ? `<sb:comment>${escapeXml(ref.comment)}</sb:comment>` : '';
