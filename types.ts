@@ -33,6 +33,7 @@ export interface UserProfile {
     subscription_end?: string;
     trial_start?: string;
     trial_end?: string;
+    last_seen?: string;
 }
 
 export enum ToolId {

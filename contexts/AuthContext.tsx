@@ -122,6 +122,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     }, [profile]);
 
+    // Heartbeat for Online Status (Last Seen)
+    useEffect(() => {
+        if (!user) return;
+
+        const updateLastSeen = async () => {
+            await supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', user.id);
+        };
+
+        // Initial update
+        updateLastSeen();
+
+        // Update every 2 minutes
+        const interval = setInterval(updateLastSeen, 120000); 
+
+        return () => clearInterval(interval);
+    }, [user]);
+
     useEffect(() => {
         let mounted = true;
 

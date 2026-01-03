@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import { UserProfile } from '../types';
 import Toast from '../components/Toast';
@@ -42,8 +42,17 @@ create table if not exists public.profiles (
   is_subscribed boolean default false,
   subscription_end timestamp with time zone,
   trial_start timestamp with time zone,
-  trial_end timestamp with time zone
+  trial_end timestamp with time zone,
+  last_seen timestamp with time zone default now()
 );
+
+-- ADDING LAST_SEEN COLUMN IF MISSING (For Migration)
+do $$
+begin
+  if not exists (select 1 from information_schema.columns where table_name='profiles' and column_name='last_seen') then
+    alter table public.profiles add column last_seen timestamp with time zone default now();
+  end if;
+end $$;
 
 alter table profiles enable row level security;
 
@@ -117,14 +126,15 @@ create policy "Admins manage keys" on access_keys for all using (is_admin());
 create or replace function public.handle_new_user()
 returns trigger as $$
 begin
-  insert into public.profiles (id, email, is_subscribed, trial_start, trial_end, subscription_end)
+  insert into public.profiles (id, email, is_subscribed, trial_start, trial_end, subscription_end, last_seen)
   values (
     new.id,
     new.email,
     true,
     now(),
     now() + interval '20 days',
-    now() + interval '20 days'
+    now() + interval '20 days',
+    now()
   );
   return new;
 end;
@@ -149,13 +159,15 @@ where not exists (select 1 from announcements);
 const AdminDashboard: React.FC = () => {
     // Tab State
     const [activeTab, setActiveTab] = useState<'users' | 'announcements' | 'guide'>('users');
-    const [loading, setLoading] = useState(false);
+    const [isLoading, setIsLoading] = useState(false); // Initial full-screen load
+    const [isRefetching, setIsRefetching] = useState(false); // Background refresh
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
 
     // User Management State
     const [users, setUsers] = useState<UserProfile[]>([]);
     const [search, setSearch] = useState('');
     const [duration, setDuration] = useState('1y'); 
+    const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'online'>('all');
 
     // Announcement State
     const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -163,18 +175,66 @@ const AdminDashboard: React.FC = () => {
     const [newTitle, setNewTitle] = useState('');
     const [newContent, setNewContent] = useState('');
     const [newType, setNewType] = useState<'info' | 'warning' | 'success' | 'error'>('info');
+    
+    // Refs
+    const titleInputRef = useRef<HTMLInputElement>(null);
 
     // Helper to safely get error message
-    const getErrMsg = (error: any) => error?.message || 'Unknown error occurred';
+    const getErrMsg = (error: any) => {
+        if (!error) return 'Unknown error occurred';
+        if (typeof error === 'string') return error;
+        if (error instanceof Error) return error.message;
+        if (typeof error === 'object') {
+            if (error.message) return String(error.message);
+            if (error.error_description) return String(error.error_description);
+            if (error.details) return String(error.details);
+            try { return JSON.stringify(error); } catch (e) { return 'Object Error'; }
+        }
+        return String(error);
+    };
+
+    // Helper to check online status (within last 5 mins)
+    // We use a safe comparison to handle potential timezone skew or nulls
+    const checkIsOnline = (lastSeen?: string) => {
+        if (!lastSeen) return false;
+        try {
+            const last = new Date(lastSeen).getTime();
+            const now = new Date().getTime();
+            if (isNaN(last)) return false;
+            // 5 minutes buffer
+            return (now - last) < 5 * 60 * 1000;
+        } catch (e) {
+            return false;
+        }
+    };
+
+    // Helper to format last seen
+    const formatLastSeen = (dateStr?: string) => {
+        if (!dateStr) return 'Never';
+        try {
+            const date = new Date(dateStr);
+            const now = new Date();
+            const diffSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+            
+            if (diffSeconds < 60) return 'Just now';
+            if (diffSeconds < 3600) return `${Math.floor(diffSeconds / 60)}m ago`;
+            if (diffSeconds < 86400) return `${Math.floor(diffSeconds / 3600)}h ago`;
+            return date.toLocaleDateString();
+        } catch (e) {
+            return 'Invalid Date';
+        }
+    };
 
     // --- User Fetching ---
-    const fetchUsers = async () => {
-        setLoading(true);
+    const fetchUsers = useCallback(async (isBackground = false) => {
+        if (!isBackground) setIsLoading(true);
+        else setIsRefetching(true);
+
         try {
             const timeoutPromise = new Promise((_, reject) => 
                 setTimeout(() => reject(new Error('Request timed out')), 15000)
             );
-            const dataPromise = supabase.from('profiles').select('*').order('email', { ascending: true });
+            const dataPromise = supabase.from('profiles').select('*').order('last_seen', { ascending: false });
             const result = await Promise.race([dataPromise, timeoutPromise]) as any;
             const { data, error } = result;
 
@@ -182,15 +242,19 @@ const AdminDashboard: React.FC = () => {
             setUsers(data || []);
         } catch (error: any) {
             console.error('Error fetching users:', error);
-            setToast({ msg: 'Failed to load users: ' + getErrMsg(error), type: 'error' });
+            // Only toast on manual fetch failure to avoid spamming background errors
+            if (!isBackground) {
+                setToast({ msg: 'Failed to load users: ' + getErrMsg(error), type: 'error' });
+            }
         } finally {
-            setLoading(false);
+            if (!isBackground) setIsLoading(false);
+            else setIsRefetching(false);
         }
-    };
+    }, []);
 
     // --- Announcement Fetching ---
-    const fetchAnnouncements = async () => {
-        setLoading(true);
+    const fetchAnnouncements = useCallback(async () => {
+        setIsLoading(true);
         try {
             const { data, error } = await supabase
                 .from('announcements')
@@ -201,21 +265,29 @@ const AdminDashboard: React.FC = () => {
             setAnnouncements(data || []);
         } catch (error: any) {
             console.error('Error fetching announcements:', error);
-            // Check for missing table error specifically
             if (error?.code === '42P01') {
                 setToast({ msg: 'Announcements table missing. Check Guide tab.', type: 'warn' });
             } else {
                 setToast({ msg: 'Failed to load announcements: ' + getErrMsg(error), type: 'error' });
             }
         } finally {
-            setLoading(false);
+            setIsLoading(false);
         }
-    };
+    }, []);
 
+    // Initial Load & Tab Change
     useEffect(() => {
-        if (activeTab === 'users') fetchUsers();
-        else if (activeTab === 'announcements') fetchAnnouncements();
-    }, [activeTab]);
+        if (activeTab === 'users') {
+            fetchUsers();
+            // Auto-refresh users every 30 seconds to keep online status live
+            const intervalId = setInterval(() => {
+                fetchUsers(true);
+            }, 30000);
+            return () => clearInterval(intervalId);
+        } else if (activeTab === 'announcements') {
+            fetchAnnouncements();
+        }
+    }, [activeTab, fetchUsers, fetchAnnouncements]);
 
     // --- User Logic ---
     const calculateExpiry = (type: string) => {
@@ -238,12 +310,10 @@ const AdminDashboard: React.FC = () => {
             const expiryDate = calculateExpiry(duration);
             updates.subscription_end = expiryDate;
             
-            // If explicitly trial or test, set trial markers
             if (duration === 'trial' || duration === '1min') {
                 updates.trial_start = new Date().toISOString();
                 updates.trial_end = expiryDate;
             } else {
-                // For real plans, clear trial data to differentiate in UI
                 updates.trial_start = null;
                 updates.trial_end = null;
             }
@@ -284,71 +354,51 @@ const AdminDashboard: React.FC = () => {
         setNewContent(ann.content);
         setNewType(ann.type);
         setEditingId(ann.id);
+        setTimeout(() => {
+            titleInputRef.current?.focus();
+        }, 100);
     };
 
     const saveAnnouncement = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newTitle || !newContent) return;
 
-        setLoading(true);
+        setIsLoading(true);
         try {
             if (editingId) {
-                // UPDATE Existing
                 const { error } = await supabase.from('announcements')
-                    .update({
-                        title: newTitle,
-                        content: newContent,
-                        type: newType
-                    })
+                    .update({ title: newTitle, content: newContent, type: newType })
                     .eq('id', editingId);
 
                 if (error) throw error;
-                
-                // Optimistic Update
                 setAnnouncements(prev => prev.map(a => 
                     a.id === editingId ? { ...a, title: newTitle, content: newContent, type: newType } : a
                 ));
                 setToast({ msg: 'Template updated successfully', type: 'success' });
             } else {
-                // CREATE New
                 const { data, error } = await supabase.from('announcements').insert([{
-                    title: newTitle,
-                    content: newContent,
-                    type: newType,
-                    is_active: false // Created inactive by default
+                    title: newTitle, content: newContent, type: newType, is_active: false
                 }]).select();
 
                 if (error) throw error;
-                
-                if (data) {
-                    setAnnouncements(prev => [data[0], ...prev]);
-                } else {
-                    fetchAnnouncements();
-                }
+                if (data) setAnnouncements(prev => [data[0], ...prev]);
+                else fetchAnnouncements();
                 setToast({ msg: 'Template created', type: 'success' });
             }
-            
             resetForm();
         } catch (error: any) {
             setToast({ msg: 'Save failed: ' + getErrMsg(error), type: 'error' });
         } finally {
-            setLoading(false);
+            setIsLoading(false);
         }
     };
 
     const deleteAnnouncement = async (id: string) => {
         if (!confirm('Are you sure you want to delete this template?')) return;
-        
         try {
-            // Select returned rows to ensure deletion actually occurred
             const { data, error } = await supabase.from('announcements').delete().eq('id', id).select();
-            
             if (error) throw error;
-            
-            // If RLS blocks deletion, no error is thrown but data is empty
-            if (!data || data.length === 0) {
-                throw new Error('Permission denied. Please run the SQL Repair script.');
-            }
+            if (!data || data.length === 0) throw new Error('Permission denied. Please run the SQL Repair script.');
             
             setAnnouncements(announcements.filter(a => a.id !== id));
             if (editingId === id) resetForm();
@@ -359,30 +409,22 @@ const AdminDashboard: React.FC = () => {
     };
 
     const activateAnnouncement = async (id: string) => {
-        setLoading(true);
+        setIsLoading(true);
         try {
-            // 1. Deactivate all
             await supabase.from('announcements').update({ is_active: false }).neq('id', '00000000-0000-0000-0000-000000000000'); 
-            
-            // 2. Activate target
             const { error } = await supabase.from('announcements').update({ is_active: true }).eq('id', id);
-            
             if (error) throw error;
-            
-            setAnnouncements(announcements.map(a => ({
-                ...a,
-                is_active: a.id === id
-            })));
+            setAnnouncements(announcements.map(a => ({ ...a, is_active: a.id === id })));
             setToast({ msg: 'Announcement Live!', type: 'success' });
         } catch (error: any) {
             setToast({ msg: 'Activation failed: ' + getErrMsg(error), type: 'error' });
         } finally {
-            setLoading(false);
+            setIsLoading(false);
         }
     };
 
     const deactivateAll = async () => {
-        setLoading(true);
+        setIsLoading(true);
         try {
             const { error } = await supabase.from('announcements').update({ is_active: false }).neq('id', '00000000-0000-0000-0000-000000000000');
             if (error) throw error;
@@ -391,7 +433,7 @@ const AdminDashboard: React.FC = () => {
         } catch (error: any) {
             setToast({ msg: 'Deactivation failed: ' + getErrMsg(error), type: 'error' });
         } finally {
-            setLoading(false);
+            setIsLoading(false);
         }
     };
 
@@ -400,14 +442,26 @@ const AdminDashboard: React.FC = () => {
         setToast({ msg: 'SQL Copied to Clipboard', type: 'success' });
     };
 
-    const filteredUsers = users.filter(u => 
-        u.email.toLowerCase().includes(search.toLowerCase()) || 
-        u.id.includes(search)
-    );
+    const filteredUsers = users.filter(u => {
+        const matchesSearch = u.email.toLowerCase().includes(search.toLowerCase()) || u.id.includes(search);
+        
+        const isExpired = u.subscription_end && new Date(u.subscription_end) < new Date();
+        const isActive = u.is_subscribed && !isExpired;
+        const isOnline = checkIsOnline(u.last_seen);
+
+        if (filterStatus === 'active' && !isActive) return false;
+        if (filterStatus === 'online' && !isOnline) return false;
+        
+        return matchesSearch;
+    });
 
     const stats = {
         total: users.length,
-        active: users.filter(u => u.is_subscribed).length,
+        active: users.filter(u => {
+            const isExpired = u.subscription_end && new Date(u.subscription_end) < new Date();
+            return u.is_subscribed && !isExpired;
+        }).length,
+        online: users.filter(u => checkIsOnline(u.last_seen)).length
     };
 
     return (
@@ -420,12 +474,23 @@ const AdminDashboard: React.FC = () => {
                 
                 {/* Stats / Actions */}
                 <div className="flex gap-4">
-                    <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center min-w-[100px]">
+                    <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center min-w-[90px]">
                         <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Users</span>
                         <span className="text-2xl font-bold text-slate-800">{stats.total}</span>
                     </div>
+                    <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center min-w-[90px]">
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Active</span>
+                        <span className="text-2xl font-bold text-emerald-600">{stats.active}</span>
+                    </div>
+                    <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center min-w-[90px]">
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Online</span>
+                        <span className="text-2xl font-bold text-blue-600 relative">
+                            {stats.online}
+                            <span className="absolute top-0 -right-2 w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+                        </span>
+                    </div>
                     {activeTab === 'announcements' && (
-                        <button onClick={deactivateAll} className="bg-white hover:bg-rose-50 px-4 py-2 rounded-xl border border-slate-200 hover:border-rose-200 shadow-sm flex flex-col items-center min-w-[100px] text-rose-600 transition-colors">
+                        <button onClick={deactivateAll} className="bg-white hover:bg-rose-50 px-4 py-2 rounded-xl border border-slate-200 hover:border-rose-200 shadow-sm flex flex-col items-center min-w-[90px] text-rose-600 transition-colors">
                             <span className="text-xs font-bold uppercase tracking-wider">Emergency</span>
                             <span className="text-sm font-bold mt-1">Stop All</span>
                         </button>
@@ -462,24 +527,39 @@ const AdminDashboard: React.FC = () => {
             </div>
 
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col min-h-[500px] animate-slide-up relative">
-                {loading && <LoadingOverlay message="Processing..." color="slate" />}
+                {isLoading && <LoadingOverlay message="Processing..." color="slate" />}
                 
                 {/* USERS TAB */}
                 {activeTab === 'users' && (
                     <>
                         <div className="p-4 border-b border-slate-100 bg-slate-50 flex flex-col sm:flex-row justify-between items-center gap-4">
-                            <div className="relative flex-grow w-full sm:max-w-xs">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                            <div className="flex items-center gap-4 flex-grow w-full sm:w-auto">
+                                <div className="relative flex-grow sm:max-w-xs">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                                    </div>
+                                    <input 
+                                        type="text" 
+                                        value={search}
+                                        onChange={(e) => setSearch(e.target.value)}
+                                        placeholder="Search users..."
+                                        className="pl-9 w-full rounded-lg border-slate-200 text-sm focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                                    />
                                 </div>
-                                <input 
-                                    type="text" 
-                                    value={search}
-                                    onChange={(e) => setSearch(e.target.value)}
-                                    placeholder="Search users..."
-                                    className="pl-9 w-full rounded-lg border-slate-200 text-sm focus:ring-indigo-500 focus:border-indigo-500 bg-white"
-                                />
+                                <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
+                                    <span className="text-xs font-bold text-slate-500 uppercase">View:</span>
+                                    <select 
+                                        value={filterStatus} 
+                                        onChange={(e) => setFilterStatus(e.target.value as any)}
+                                        className="text-sm font-semibold text-slate-700 bg-transparent border-none outline-none focus:ring-0 cursor-pointer"
+                                    >
+                                        <option value="all">All Users</option>
+                                        <option value="active">Active Only</option>
+                                        <option value="online">Online Now</option>
+                                    </select>
+                                </div>
                             </div>
+                            
                             <div className="flex items-center gap-3 w-full sm:w-auto">
                                 <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
                                     <span className="text-xs font-bold text-slate-500 uppercase">Grant:</span>
@@ -494,7 +574,11 @@ const AdminDashboard: React.FC = () => {
                                         <option value="1y">1 Year</option>
                                     </select>
                                 </div>
-                                <button onClick={fetchUsers} className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-white rounded-lg transition-all">
+                                <button 
+                                    onClick={() => fetchUsers(false)} 
+                                    className={`p-2 text-slate-500 hover:text-indigo-600 hover:bg-white rounded-lg transition-all ${isRefetching ? 'animate-spin text-indigo-600' : ''}`}
+                                    title="Refresh List"
+                                >
                                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                                 </button>
                             </div>
@@ -505,44 +589,77 @@ const AdminDashboard: React.FC = () => {
                                     <tr>
                                         <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">User</th>
                                         <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Role</th>
-                                        <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                                        <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Plan Status</th>
+                                        <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Last Seen</th>
                                         <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-slate-100">
-                                    {filteredUsers.map(u => {
-                                        const isExpired = u.subscription_end && new Date(u.subscription_end) < new Date();
-                                        const isVisuallyActive = u.is_subscribed && !isExpired;
-                                        return (
-                                        <tr key={u.id} className="hover:bg-slate-50/80 transition-colors">
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="flex items-center">
-                                                    <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs uppercase mr-3">
-                                                        {u.email ? u.email.substring(0,2) : '??'}
-                                                    </div>
-                                                    <div className="text-sm font-medium text-slate-900">{u.email}</div>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                <span onClick={() => toggleAdmin(u)} className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full cursor-pointer border ${u.role === 'admin' ? 'bg-purple-100 text-purple-800 border-purple-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
-                                                    {u.role}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                {isVisuallyActive ? (
-                                                    <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">Active</span>
-                                                ) : (
-                                                    <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-slate-100 text-slate-500 border border-slate-200">Inactive</span>
-                                                )}
-                                                {u.subscription_end && <div className="text-[10px] text-slate-400 mt-1">{new Date(u.subscription_end).toLocaleDateString()}</div>}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                                <button onClick={() => toggleSubscription(u)} className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors ${u.is_subscribed ? 'text-rose-600 border-rose-200 hover:bg-rose-50' : 'text-emerald-600 border-emerald-200 hover:bg-emerald-50'}`}>
-                                                    {u.is_subscribed ? 'Revoke' : 'Grant'}
-                                                </button>
+                                    {filteredUsers.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={5} className="px-6 py-8 text-center text-slate-400 text-sm">
+                                                No users found matching your criteria.
                                             </td>
                                         </tr>
-                                    )})}
+                                    ) : (
+                                        filteredUsers.map(u => {
+                                            const isExpired = u.subscription_end && new Date(u.subscription_end) < new Date();
+                                            const isActive = u.is_subscribed && !isExpired;
+                                            const isTrial = isActive && u.trial_end && u.subscription_end && 
+                                                new Date(u.trial_end).getTime() === new Date(u.subscription_end).getTime();
+                                            const isOnline = checkIsOnline(u.last_seen);
+                                            
+                                            return (
+                                            <tr key={u.id} className="hover:bg-slate-50/80 transition-colors">
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="flex items-center">
+                                                        <div className="relative">
+                                                            <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs uppercase mr-3">
+                                                                {u.email ? u.email.substring(0,2) : '??'}
+                                                            </div>
+                                                            {isOnline && (
+                                                                <span className="absolute -top-0.5 -right-0.5 block h-2.5 w-2.5 rounded-full ring-2 ring-white bg-emerald-400"></span>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex flex-col">
+                                                            <span className="text-sm font-medium text-slate-900">{u.email}</span>
+                                                            <span className="text-[10px] text-slate-400 font-mono">{u.id.split('-')[0]}...</span>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <span onClick={() => toggleAdmin(u)} className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full cursor-pointer border ${u.role === 'admin' ? 'bg-purple-100 text-purple-800 border-purple-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                                                        {u.role}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    {isActive ? (
+                                                        isTrial ? (
+                                                            <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-amber-100 text-amber-800 border border-amber-200">Trial</span>
+                                                        ) : (
+                                                            <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">Active</span>
+                                                        )
+                                                    ) : (
+                                                        <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-slate-100 text-slate-500 border border-slate-200">Inactive</span>
+                                                    )}
+                                                    {u.subscription_end && <div className="text-[10px] text-slate-400 mt-1">{new Date(u.subscription_end).toLocaleDateString()}</div>}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`}></span>
+                                                        <span className={`text-xs ${isOnline ? 'font-bold text-slate-700' : 'text-slate-400'}`}>
+                                                            {isOnline ? 'Online' : formatLastSeen(u.last_seen)}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                                    <button onClick={() => toggleSubscription(u)} className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors ${u.is_subscribed ? 'text-rose-600 border-rose-200 hover:bg-rose-50' : 'text-emerald-600 border-emerald-200 hover:bg-emerald-50'}`}>
+                                                        {u.is_subscribed ? 'Revoke' : 'Grant'}
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        )})
+                                    )}
                                 </tbody>
                             </table>
                         </div>
@@ -569,6 +686,7 @@ const AdminDashboard: React.FC = () => {
                                     <div>
                                         <label className="block text-xs font-semibold text-slate-500 mb-1">Title</label>
                                         <input 
+                                            ref={titleInputRef}
                                             type="text" 
                                             required
                                             value={newTitle}
@@ -679,11 +797,18 @@ const AdminDashboard: React.FC = () => {
                         <div className="flex justify-between items-center mb-4">
                             <div>
                                 <h3 className="text-lg font-bold text-slate-800">Database Setup Guide</h3>
-                                <p className="text-slate-500 text-sm">
-                                    1. Go to your Supabase Project &rarr; SQL Editor.<br/>
-                                    2. Paste the script below and run it to initialize tables, policies, and triggers.<br/>
-                                    3. <b>Important:</b> After running, sign up in the app, then manually run the final update command to make yourself an admin.
-                                </p>
+                                <div className="text-slate-500 text-sm mt-1 space-y-2">
+                                    <p>1. Go to your Supabase Project &rarr; SQL Editor.</p>
+                                    <p>2. Paste the script below and run it to initialize tables, policies, and triggers.</p>
+                                    <p>3. <b>Important:</b> After running, sign up in the app, then manually run the final update command to make yourself an admin.</p>
+                                    
+                                    <div className="bg-amber-50 border border-amber-200 rounded p-2 text-amber-800 text-xs font-medium mt-2">
+                                        <strong>EXE / Local Build Requirement:</strong><br/>
+                                        Since you are running this locally/offline, you must create a file named <code>.env</code> in your project root folder and add your Google API Key:
+                                        <br/><code className="bg-amber-100 px-1 rounded block mt-1">API_KEY=your_actual_google_api_key</code>
+                                        Without this, the Reference Generator tool will fail to build or run.
+                                    </div>
+                                </div>
                             </div>
                             <button onClick={copySql} className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2">
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>

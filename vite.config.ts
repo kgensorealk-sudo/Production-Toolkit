@@ -1,4 +1,3 @@
-
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -26,7 +25,7 @@ export default defineConfig(({ mode }) => {
     // Expose env variables to the client-side code
     // On Vercel, ensure you add API_KEY in the Project Settings > Environment Variables
     define: {
-      'process.env.API_KEY': JSON.stringify(env.API_KEY || process.env.API_KEY),
+      'process.env.API_KEY': JSON.stringify(env.API_KEY || process.env.API_KEY || ""),
     },
   };
 });
