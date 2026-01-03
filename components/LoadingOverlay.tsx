@@ -1,8 +1,9 @@
+
 import React from 'react';
 
 interface LoadingOverlayProps {
     message?: string;
-    color?: 'indigo' | 'purple' | 'teal' | 'emerald' | 'orange' | 'rose' | 'blue' | 'pink';
+    color?: 'indigo' | 'purple' | 'teal' | 'emerald' | 'orange' | 'rose' | 'blue' | 'pink' | 'slate';
 }
 
 const LoadingOverlay: React.FC<LoadingOverlayProps> = ({ message = 'Processing...', color = 'indigo' }) => {
@@ -14,7 +15,8 @@ const LoadingOverlay: React.FC<LoadingOverlayProps> = ({ message = 'Processing..
         orange: { bg: 'bg-orange-600', border: 'border-orange-600', text: 'text-orange-600' },
         rose: { bg: 'bg-rose-600', border: 'border-rose-600', text: 'text-rose-600' },
         blue: { bg: 'bg-blue-600', border: 'border-blue-600', text: 'text-blue-600' },
-        pink: { bg: 'bg-pink-600', border: 'border-pink-600', text: 'text-pink-600' }
+        pink: { bg: 'bg-pink-600', border: 'border-pink-600', text: 'text-pink-600' },
+        slate: { bg: 'bg-slate-600', border: 'border-slate-600', text: 'text-slate-600' }
     };
 
     const theme = themes[color];

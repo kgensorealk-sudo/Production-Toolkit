@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ToolId } from '../types';
-import { supabase } from '../supabase';
 import { useAuth } from '../contexts/AuthContext';
+import TrialTimer from './TrialTimer';
 
 interface LayoutProps {
     children: React.ReactNode;
@@ -11,61 +12,18 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children, currentTool }) => {
     const navigate = useNavigate();
-    const location = useLocation();
-    const { user, profile, isAdmin, isSubscribed, isTrialing, daysLeft, signOut } = useAuth();
-    const [isConnected, setIsConnected] = useState<boolean>(false);
-
-    useEffect(() => {
-        const checkConnection = async () => {
-            try {
-                // Attempt a lightweight request to check connectivity
-                const { error } = await supabase.from('access_keys').select('count', { count: 'exact', head: true });
-                
-                // If the error explicitly indicates a fetch failure, we are offline/disconnected.
-                if (error && (error.message.toLowerCase().includes('fetch') || error.message.toLowerCase().includes('network'))) {
-                    setIsConnected(false);
-                } else {
-                    setIsConnected(true);
-                }
-            } catch (e) {
-                setIsConnected(false);
-            }
-        };
-        checkConnection();
-    }, []);
+    const { signOut, user, profile } = useAuth();
 
     const handleSignOut = async () => {
         await signOut();
-        navigate('/auth');
+        navigate('/login');
     };
 
-    const isAuthPage = location.pathname === '/auth';
-    const isLandingPage = location.pathname === '/landing';
-
-    // If user is on landing page (not subscribed), we might want to disable clicking the logo to go to dashboard
-    const canAccessDashboard = isSubscribed || isAdmin;
-
-    // Helper to render subscription badge
-    const renderSubBadge = () => {
-        if (isAdmin) {
-             return <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1 rounded uppercase tracking-wider">Admin</span>;
-        }
-        if (isTrialing) {
-             return (
-                <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-1 rounded uppercase tracking-wider" title="Free Trial Active">
-                    Trial {daysLeft !== null ? `(${daysLeft}d)` : ''}
-                </span>
-             );
-        }
-        if (isSubscribed) {
-             return (
-                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1 rounded uppercase tracking-wider">
-                    Pro Plan {daysLeft !== null ? `(${daysLeft}d)` : ''}
-                </span>
-             );
-        }
-        return <span className="text-[10px] font-medium text-slate-400">Unsubscribe User</span>;
-    };
+    // Determine if the current subscription is a trial
+    // Logic: If trial_end exists and matches the subscription_end exactly, it's a trial.
+    // If they differ (or trial_end is null), it means a full subscription was granted which updated subscription_end only.
+    const isTrial = profile?.trial_end && profile?.subscription_end && 
+                    new Date(profile.trial_end).getTime() === new Date(profile.subscription_end).getTime();
 
     return (
         <div className="min-h-screen flex flex-col font-sans text-slate-900">
@@ -73,8 +31,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool }) => {
                 <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
                     <div className="flex items-center gap-6">
                          <div 
-                            onClick={() => (canAccessDashboard && !isAuthPage) ? navigate('/') : null} 
-                            className={`flex items-center gap-3 group ${canAccessDashboard && !isAuthPage ? 'cursor-pointer' : 'cursor-default opacity-80'}`}
+                            onClick={() => navigate('/dashboard')} 
+                            className="flex items-center gap-3 cursor-pointer group"
                          >
                             <div className="bg-gradient-to-br from-indigo-600 to-violet-600 text-white p-2 rounded-xl shadow-lg shadow-indigo-500/20 group-hover:shadow-indigo-500/40 transition-all duration-300 group-hover:scale-105">
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -107,58 +65,33 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool }) => {
                     </div>
                     
                     <div className="flex items-center gap-4">
-                        <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition-colors ${isConnected ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-200'}`} title={isConnected ? "Connected to Supabase" : "Supabase Disconnected"}>
-                            <span className={`relative flex h-2 w-2`}>
-                              {isConnected && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>}
-                              <span className={`relative inline-flex rounded-full h-2 w-2 ${isConnected ? 'bg-emerald-500' : 'bg-slate-300'}`}></span>
-                            </span>
-                            <span className={`text-[10px] font-bold uppercase tracking-wider hidden sm:block ${isConnected ? 'text-emerald-700' : 'text-slate-400'}`}>
-                                {isConnected ? 'Online' : 'Offline'}
-                            </span>
-                        </div>
+                        {profile?.is_subscribed && profile.subscription_end && (
+                            <TrialTimer 
+                                endDate={profile.subscription_end} 
+                                isTrial={!!isTrial} 
+                                label={isTrial ? "Trial" : "Plan"} 
+                            />
+                        )}
 
-                        {!isAuthPage && !isLandingPage && <button onClick={() => navigate('/docs')} className="hidden sm:block text-sm font-medium text-slate-500 hover:text-indigo-600 transition-colors">Docs</button>}
-                        
-                        {isAdmin && (
-                            <button 
-                                onClick={() => navigate('/admin')} 
-                                className={`text-sm font-bold transition-colors ${location.pathname === '/admin' ? 'text-indigo-600' : 'text-slate-500 hover:text-indigo-600'}`}
-                            >
-                                Admin
+                        {profile?.role === 'admin' && (
+                            <button onClick={() => navigate('/admin')} className="text-sm font-bold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100 hover:bg-indigo-100 transition-colors hidden sm:block">
+                                Admin Console
                             </button>
                         )}
-
-                        <div className="h-4 w-px bg-slate-200"></div>
-
-                        {user ? (
-                             <div className="flex items-center gap-3">
-                                <div className="hidden md:flex flex-col items-end">
-                                    <span className="text-xs font-bold text-slate-700">{user.email?.split('@')[0]}</span>
-                                    {renderSubBadge()}
-                                </div>
-                                <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs border border-indigo-200">
-                                    {user.email?.charAt(0).toUpperCase()}
-                                </div>
-                                <button 
-                                    onClick={handleSignOut}
-                                    className="text-xs text-slate-500 hover:text-red-600 transition-colors"
-                                    title="Sign Out"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                                    </svg>
-                                </button>
-                             </div>
-                        ) : (
-                            !isAuthPage && (
-                                <button 
-                                    onClick={() => navigate('/auth')} 
-                                    className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors shadow-lg shadow-slate-500/20"
-                                >
-                                    Sign In
-                                </button>
-                            )
-                        )}
+                        <button onClick={() => navigate('/docs')} className="text-sm font-medium text-slate-500 hover:text-indigo-600 transition-colors hidden sm:block">Documentation</button>
+                        <div className="h-4 w-px bg-slate-200 hidden sm:block"></div>
+                        
+                        <div className="flex items-center gap-3">
+                            {user && (
+                                <span className="text-xs text-slate-500 font-medium hidden sm:block">{user.email}</span>
+                            )}
+                            <button 
+                                onClick={handleSignOut}
+                                className="text-xs font-bold text-slate-500 hover:text-rose-600 border border-slate-200 hover:border-rose-200 bg-white hover:bg-rose-50 px-3 py-1.5 rounded-lg transition-all"
+                            >
+                                Sign Out
+                            </button>
+                        </div>
                     </div>
                 </div>
             </header>

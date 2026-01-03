@@ -1,8 +1,8 @@
 
-
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ToolId } from '../types';
+import AnnouncementModal from '../components/AnnouncementModal';
 
 interface ToolCardProps {
     title: string;
@@ -52,6 +52,7 @@ const Dashboard: React.FC = () => {
 
     return (
         <div className="max-w-7xl mx-auto px-4 py-20 sm:px-6 lg:px-8">
+            <AnnouncementModal />
             <div className="text-center mb-20 animate-fade-in">
                 <h2 className="text-4xl md:text-5xl font-extrabold text-slate-900 tracking-tight mb-6">
                     Editorial <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-violet-600">Workflow Suite</span>
@@ -128,7 +129,7 @@ const Dashboard: React.FC = () => {
                     iconColor="bg-pink-50 text-pink-600"
                     borderColor="bg-pink-500"
                     delay={600}
-                    Icon={(props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>}
+                    Icon={(props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>}
                     onClick={() => handleLaunch(ToolId.TABLE_FIXER)}
                 />
 

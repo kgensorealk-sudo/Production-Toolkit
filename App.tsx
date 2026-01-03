@@ -1,6 +1,8 @@
+
 import React from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
+import Landing from './pages/Landing';
 import Dashboard from './pages/Dashboard';
 import XmlRenumber from './pages/XmlRenumber';
 import CreditGenerator from './pages/CreditGenerator';
@@ -11,174 +13,135 @@ import ArticleHighlights from './pages/ArticleHighlights';
 import ViewSync from './pages/ViewSync';
 import ReferenceGenerator from './pages/ReferenceGenerator';
 import Docs from './pages/Docs';
-import AuthPage from './pages/AuthPage';
-import LandingPage from './pages/LandingPage';
+import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ToolId } from './types';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import LoadingOverlay from './components/LoadingOverlay';
 
-// 1. Authenticated but maybe not subscribed
-const ProtectedRoute: React.FC<React.PropsWithChildren> = ({ children }) => {
-    const { user, loading } = useAuth();
+// Protected Route Wrapper
+const ProtectedRoute: React.FC<{ children: React.ReactNode; requireSubscription?: boolean }> = ({ children, requireSubscription = false }) => {
+    const { session, profile, loading } = useAuth();
     
     if (loading) {
-        return <div className="min-h-screen flex items-center justify-center bg-slate-50"><LoadingOverlay color="indigo" message="Loading..." /></div>;
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-slate-50">
+                <LoadingOverlay message="Authenticating..." color="indigo" />
+            </div>
+        );
     }
     
-    if (!user) {
-        return <Navigate to="/auth" replace />;
+    if (!session) {
+        return <Navigate to="/login" replace />;
     }
 
-    return <>{children}</>;
-};
-
-// 2. Authenticated AND (Subscribed OR Admin)
-const SubscribedRoute: React.FC<React.PropsWithChildren> = ({ children }) => {
-    const { user, loading, isSubscribed, isAdmin } = useAuth();
-    
-    if (loading) {
-        return <div className="min-h-screen flex items-center justify-center bg-slate-50"><LoadingOverlay color="indigo" message="Loading..." /></div>;
-    }
-    
-    if (!user) {
-        return <Navigate to="/auth" replace />;
-    }
-
-    // If not subscribed and not admin, send to landing page (the "interactive page")
-    if (!isSubscribed && !isAdmin) {
-        return <Navigate to="/landing" replace />;
-    }
-
-    return <>{children}</>;
-};
-
-// 3. Not Authenticated
-const PublicRoute: React.FC<React.PropsWithChildren> = ({ children }) => {
-    const { user, loading } = useAuth();
-
-    if (loading) {
-        return <div className="min-h-screen flex items-center justify-center bg-slate-50"><LoadingOverlay color="indigo" message="Loading..." /></div>;
-    }
-
-    if (user) {
+    // If subscription is required but profile says not subscribed, redirect to Landing (Home)
+    if (requireSubscription && !profile?.is_subscribed) {
         return <Navigate to="/" replace />;
     }
 
     return <>{children}</>;
 };
 
-const AppRoutes: React.FC = () => {
-    return (
-        <Routes>
-            {/* Public Access */}
-            <Route path="/auth" element={
-                <PublicRoute>
-                    <Layout><AuthPage /></Layout>
-                </PublicRoute>
-            } />
-            
-            {/* Authenticated (Any User) - This is the "Interactive Page" for unsubscribed users */}
-            <Route path="/landing" element={
-                <ProtectedRoute>
-                    <Layout><LandingPage /></Layout>
-                </ProtectedRoute>
-            } />
+// Admin Route Wrapper
+const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const { session, profile, loading } = useAuth();
+    
+    if (loading) {
+        return <LoadingOverlay message="Verifying Admin..." color="slate" />;
+    }
+    
+    if (!session || profile?.role !== 'admin') {
+        return <Navigate to="/" replace />;
+    }
 
-            {/* Subscribed Access (Dashboard & Tools) */}
-            <Route path="/" element={
-                <SubscribedRoute>
-                    <Layout><Dashboard /></Layout>
-                </SubscribedRoute>
-            } />
-
-            <Route path="/admin" element={
-                <SubscribedRoute>
-                    <Layout><AdminDashboard /></Layout>
-                </SubscribedRoute>
-            } />
-
-            <Route path="/docs" element={
-                <SubscribedRoute>
-                    <Layout><Docs /></Layout>
-                </SubscribedRoute>
-            } />
-            
-            <Route path="/xmlRenumber" element={
-                <SubscribedRoute>
-                    <Layout currentTool={ToolId.XML_RENUMBER}>
-                        <XmlRenumber />
-                    </Layout>
-                </SubscribedRoute>
-            } />
-            
-            <Route path="/creditGenerator" element={
-                <SubscribedRoute>
-                    <Layout currentTool={ToolId.CREDIT_GENERATOR}>
-                        <CreditGenerator />
-                    </Layout>
-                </SubscribedRoute>
-            } />
-
-            <Route path="/quickDiff" element={
-                <SubscribedRoute>
-                    <Layout currentTool={ToolId.QUICK_DIFF}>
-                        <QuickDiff />
-                    </Layout>
-                </SubscribedRoute>
-            } />
-            
-            <Route path="/tagCleaner" element={
-                <SubscribedRoute>
-                    <Layout currentTool={ToolId.TAG_CLEANER}>
-                        <TagCleaner />
-                    </Layout>
-                </SubscribedRoute>
-            } />
-
-            <Route path="/tableFixer" element={
-                <SubscribedRoute>
-                    <Layout currentTool={ToolId.TABLE_FIXER}>
-                        <TableFixer />
-                    </Layout>
-                </SubscribedRoute>
-            } />
-
-            <Route path="/highlightsGen" element={
-                <SubscribedRoute>
-                    <Layout currentTool={ToolId.HIGHLIGHTS_GEN}>
-                        <ArticleHighlights />
-                    </Layout>
-                </SubscribedRoute>
-            } />
-
-            <Route path="/viewSync" element={
-                <SubscribedRoute>
-                    <Layout currentTool={ToolId.VIEW_SYNC}>
-                        <ViewSync />
-                    </Layout>
-                </SubscribedRoute>
-            } />
-
-            <Route path="/referenceGen" element={
-                <SubscribedRoute>
-                    <Layout currentTool={ToolId.REFERENCE_GEN}>
-                        <ReferenceGenerator />
-                    </Layout>
-                </SubscribedRoute>
-            } />
-            
-            {/* Catch all redirect */}
-            <Route path="*" element={<Navigate to="/" replace>{null}</Navigate>} />
-        </Routes>
-    );
+    return <>{children}</>;
 };
 
 const App: React.FC = () => {
     return (
         <AuthProvider>
             <HashRouter>
-                <AppRoutes />
+                <Routes>
+                    <Route path="/login" element={<Login />} />
+                    
+                    {/* Landing Page (Protected only by Auth, shows status) */}
+                    <Route path="/" element={<ProtectedRoute><Landing /></ProtectedRoute>} />
+                    
+                    {/* Admin Dashboard */}
+                    <Route path="/admin" element={<AdminRoute><Layout><AdminDashboard /></Layout></AdminRoute>} />
+
+                    {/* Dashboard (Protected by Auth AND Subscription) */}
+                    <Route path="/dashboard" element={<ProtectedRoute requireSubscription={true}><Layout><Dashboard /></Layout></ProtectedRoute>} />
+                    
+                    {/* Documentation (Protected by Auth, maybe doesn't need sub?) Let's keep it safe. */}
+                    <Route path="/docs" element={<ProtectedRoute requireSubscription={true}><Layout><Docs /></Layout></ProtectedRoute>} />
+                    
+                    {/* Tools (Protected by Auth AND Subscription) */}
+                    <Route path="/xmlRenumber" element={
+                        <ProtectedRoute requireSubscription={true}>
+                            <Layout currentTool={ToolId.XML_RENUMBER}>
+                                <XmlRenumber />
+                            </Layout>
+                        </ProtectedRoute>
+                    } />
+                    
+                    <Route path="/creditGenerator" element={
+                        <ProtectedRoute requireSubscription={true}>
+                            <Layout currentTool={ToolId.CREDIT_GENERATOR}>
+                                <CreditGenerator />
+                            </Layout>
+                        </ProtectedRoute>
+                    } />
+
+                    <Route path="/quickDiff" element={
+                        <ProtectedRoute requireSubscription={true}>
+                            <Layout currentTool={ToolId.QUICK_DIFF}>
+                                <QuickDiff />
+                            </Layout>
+                        </ProtectedRoute>
+                    } />
+                    
+                    <Route path="/tagCleaner" element={
+                        <ProtectedRoute requireSubscription={true}>
+                            <Layout currentTool={ToolId.TAG_CLEANER}>
+                                <TagCleaner />
+                            </Layout>
+                        </ProtectedRoute>
+                    } />
+
+                    <Route path="/tableFixer" element={
+                        <ProtectedRoute requireSubscription={true}>
+                            <Layout currentTool={ToolId.TABLE_FIXER}>
+                                <TableFixer />
+                            </Layout>
+                        </ProtectedRoute>
+                    } />
+
+                    <Route path="/highlightsGen" element={
+                        <ProtectedRoute requireSubscription={true}>
+                            <Layout currentTool={ToolId.HIGHLIGHTS_GEN}>
+                                <ArticleHighlights />
+                            </Layout>
+                        </ProtectedRoute>
+                    } />
+
+                    <Route path="/viewSync" element={
+                        <ProtectedRoute requireSubscription={true}>
+                            <Layout currentTool={ToolId.VIEW_SYNC}>
+                                <ViewSync />
+                            </Layout>
+                        </ProtectedRoute>
+                    } />
+
+                    <Route path="/referenceGen" element={
+                        <ProtectedRoute requireSubscription={true}>
+                            <Layout currentTool={ToolId.REFERENCE_GEN}>
+                                <ReferenceGenerator />
+                            </Layout>
+                        </ProtectedRoute>
+                    } />
+                </Routes>
             </HashRouter>
         </AuthProvider>
     );

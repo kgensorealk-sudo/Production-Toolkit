@@ -1,6 +1,8 @@
 
 import { CreditRole } from './types';
 
+export const APP_ID = 'prod-toolkit-v1';
+
 export const CREDIT_DB: CreditRole[] = [
     { name: "Conceptualization", url: "http://credit.niso.org/contributor-roles/conceptualization", aliases: ["conceptualization", "concept", "idea", "conception"] },
     { name: "Data curation", url: "http://credit.niso.org/contributor-roles/data-curation", aliases: ["data curation", "data", "curation", "data management"] },

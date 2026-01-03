@@ -1,5 +1,5 @@
 {
-  "name": "Browser Version Production Toolkit",
-  "description": "A secure, Online-capable suite of editorial workflow tools",
+  "name": "Production Toolkit: Browser Version",
+  "description": "A secure, offline-capable suite of editorial workflow tools including XML normalization, CRediT role tagging, text comparison, and tag cleaning.",
   "requestFramePermissions": []
 }

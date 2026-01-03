@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { GoogleGenAI, Type } from "@google/genai";
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
@@ -9,33 +10,168 @@ interface ParsedRef {
     year: string;
     title: string;
     editors: { surname: string; initials: string }[];
-    source: string; // Journal or Book title (or Publisher string temp)
+    source: string;
     series?: string; 
     volume: string;
     issue: string;
     fpage: string;
     lpage: string;
-    totalPages?: string; // For books (e.g. 662)
+    articleNumber?: string;
+    doi?: string;
+    totalPages?: string;
     publisher?: string;
     location?: string;
     comment?: string;
     isChapter: boolean;
-    isBook: boolean; // For Monographs
+    isBook: boolean;
+    hasEtAl: boolean;
     originalText: string;
+    genre?: string; 
+    patentNumber?: string;
+    institution?: string;
+    degree?: string;
 }
+
+interface QcIssue {
+    refIndex: number;
+    type: 'error' | 'warning';
+    field: string;
+    message: string;
+}
+
+// --- Helpers ---
+const JOURNAL_ABBREVIATIONS: Record<string, string> = {
+    'Journal': 'J.', 'American': 'Am.', 'International': 'Int.', 'Review': 'Rev.',
+    'Research': 'Res.', 'Science': 'Sci.', 'Physics': 'Phys.', 'Chemistry': 'Chem.',
+    'Biology': 'Biol.', 'Medicine': 'Med.', 'Engineering': 'Eng.', 'Transactions': 'Trans.',
+    'Proceedings': 'Proc.', 'Conference': 'Conf.', 'Letters': 'Lett.', 'Applications': 'Appl.',
+    'Systems': 'Syst.', 'Society': 'Soc.', 'Association': 'Assoc.', 'European': 'Eur.',
+    'Clinical': 'Clin.', 'Experimental': 'Exp.', 'Molecular': 'Mol.', 'Cellular': 'Cell.',
+    'Genetics': 'Genet.', 'Biochemistry': 'Biochem.', 'Microbiology': 'Microbiol.',
+    'Nature': 'Nat.', 'Plos': 'PLoS', 'Academy': 'Acad.', 'National': 'Natl.',
+    'Psychology': 'Psychol.', 'Psychological': 'Psychol.', 'Education': 'Educ.',
+    'Educational': 'Educ.', 'Learning': 'Learn.', 'Instruction': 'Instr.',
+    'Developmental': 'Dev.', 'Quarterly': 'Q.', 'Applied': 'Appl.', 'Bulletin': 'Bull.',
+    'Archives': 'Arch.', 'Annals': 'Ann.', 'Annual': 'Annu.', 'British': 'Br.',
+    'Canadian': 'Can.', 'Chinese': 'Chin.', 'Japanese': 'Jpn.', 'Indian': 'Ind.',
+    'Medical': 'Med.', 'Environmental': 'Environ.', 'Technology': 'Technol.'
+};
+
+const REVERSE_ABBREVIATIONS = Object.entries(JOURNAL_ABBREVIATIONS).reduce((acc, [key, val]) => {
+    acc[val] = key;
+    return acc;
+}, {} as Record<string, string>);
+
+const formatJournal = (name: string, mode: 'full' | 'abbrev'): string => {
+    if (!name) return '';
+    const words = name.split(' ');
+    
+    if (mode === 'abbrev') {
+        return words.map(w => {
+            const cleanW = w.replace(/[.,:;]$/, '');
+            const punct = w.slice(cleanW.length);
+            const replacement = JOURNAL_ABBREVIATIONS[cleanW];
+            return replacement ? replacement + punct : w; 
+        }).join(' ');
+    } else {
+        return words.map(w => {
+            const cleanW = w.replace(/[.,:;]$/, '');
+            const replacement = REVERSE_ABBREVIATIONS[w] || REVERSE_ABBREVIATIONS[w + '.'] || REVERSE_ABBREVIATIONS[cleanW + '.'];
+            return replacement || w;
+        }).join(' ');
+    }
+};
+
+const expandPageRange = (start: string, end: string): string => {
+    if (/^\d+$/.test(start) && /^\d+$/.test(end)) {
+        const sVal = parseInt(start, 10);
+        const eVal = parseInt(end, 10);
+        if (eVal < sVal && end.length < start.length) {
+            const prefix = start.substring(0, start.length - end.length);
+            return prefix + end;
+        }
+    }
+    return end;
+};
+
+const toTitleCase = (str: string) => {
+    if (!str) return '';
+    let workingStr = str;
+    const isAllCaps = str === str.toUpperCase() && str.length > 4 && /[A-Z]/.test(str);
+    if (isAllCaps) workingStr = str.toLowerCase();
+
+    const smallWords = /^(a|an|and|as|at|but|by|en|for|if|in|nor|of|on|or|per|the|to|vs?\.?|via)$/i;
+    
+    return workingStr.split(' ').map((word, index, parts) => {
+        if (index > 0 && index < parts.length - 1 && smallWords.test(word) && word.charAt(0) !== word.charAt(0).toUpperCase()) {
+            return word.toLowerCase();
+        }
+        return word.charAt(0).toUpperCase() + word.slice(1);
+    }).join(' ');
+};
+
+const toSentenceCase = (str: string) => {
+    if (!str) return '';
+    let workingStr = str;
+    if (workingStr === workingStr.toUpperCase() && /[A-Z]/.test(workingStr)) workingStr = workingStr.toLowerCase();
+
+    const words = workingStr.split(' ');
+    return words.map((w, i) => {
+        const cleanW = w.replace(/^['"(]+/, '').replace(/['"),.:;?!]+$/, '');
+        const isAcronym = /[A-Z].*[A-Z]/.test(cleanW) || (/^[A-Z0-9]+$/.test(cleanW) && cleanW.length > 1);
+        if (isAcronym) return w;
+        if (i === 0) return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+        const prev = words[i-1];
+        if (prev && /[.?!:]$/.test(prev)) return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+        return w.toLowerCase();
+    }).join(' ');
+};
+
+const cleanVal = (val: any): string => {
+    if (val === null || val === undefined) return '';
+    const str = String(val).trim();
+    if (str.toLowerCase() === 'null') return '';
+    return str;
+};
+
+// --- Components ---
+
+const RibbonButton: React.FC<{ 
+    onClick: () => void; 
+    icon: React.ReactNode; 
+    label: string; 
+    disabled?: boolean;
+    active?: boolean;
+}> = ({ onClick, icon, label, disabled, active }) => (
+    <button 
+        onClick={onClick} 
+        disabled={disabled}
+        className={`flex flex-col items-center justify-center p-2 min-w-[70px] rounded-lg transition-all text-xs font-medium gap-1.5
+            ${active ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-100'}
+            ${disabled ? 'opacity-50 cursor-not-allowed' : 'active:scale-95'}
+        `}
+    >
+        <div className={`p-2 rounded-md ${active ? 'bg-indigo-200' : 'bg-slate-200'} ${disabled ? 'grayscale' : ''}`}>
+            {icon}
+        </div>
+        <span>{label}</span>
+    </button>
+);
 
 const ReferenceGenerator: React.FC = () => {
     const [input, setInput] = useState('');
-    const [output, setOutput] = useState('');
     const [parsedRefs, setParsedRefs] = useState<ParsedRef[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     
     // View State
-    const [activeTab, setActiveTab] = useState<'xml' | 'report'>('xml');
+    const [showInput, setShowInput] = useState(true);
+    const [viewMode, setViewMode] = useState<'grid' | 'xml' | 'report' | 'text'>('grid');
     
     // Options
     const [citationStyle, setCitationStyle] = useState<'numbered' | 'name-date'>('name-date');
     const [startId, setStartId] = useState<number>(3000);
+    const [journalFormat, setJournalFormat] = useState<'full' | 'abbrev'>('full');
+    const [titleCasing, setTitleCasing] = useState<'original' | 'title' | 'sentence'>('original');
 
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
 
@@ -52,296 +188,199 @@ const ReferenceGenerator: React.FC = () => {
         return `${prefix}${String(num).padStart(4, '0')}`;
     };
 
-    // --- Parsing Logic ---
-    const parseAuthors = (authorString: string) => {
-        const authors: { surname: string; initials: string }[] = [];
-        
-        // Pattern A: "Surname, I." (Standard Elsevier/Harvard)
-        const surnameFirstPattern = /[^,]+,\s+[A-Z]\.(?:[A-Z]\.)?/g;
-        const surnameFirstTokens = authorString.match(surnameFirstPattern);
-
-        // Pattern B: "I. Surname" (IEEE/Vancouver)
-        // Looks for: Initial(s) with dots, space, Name (e.g. "X. Shi" or "W. Dai")
-        // Also handles "X.-Y. Shi" or similar
-        const initialFirstPattern = /(?:[A-Z]\.-?)?(?:[A-Z]\.\s?)+[\w-]+/g;
-        const initialFirstTokens = authorString.match(initialFirstPattern);
-
-        // Decide which pattern to use based on which matches more of the string
-        // Heuristic: If we find clear "Surname, I." matches, use that.
-        // Otherwise, if we find "I. Surname" matches, use that.
-        
-        const useSurnameFirst = (surnameFirstTokens?.length || 0) >= (initialFirstTokens?.length || 0);
-        
-        if (useSurnameFirst && surnameFirstTokens && surnameFirstTokens.length > 0) {
-            surnameFirstTokens.forEach(token => {
-                const clean = token.trim();
-                const commaIdx = clean.lastIndexOf(',');
-                if (commaIdx > -1) {
-                    const surname = clean.substring(0, commaIdx).trim();
-                    let initials = clean.substring(commaIdx + 1).trim();
-                    if (initials && !initials.endsWith('.')) initials += '.';
-                    authors.push({ surname, initials });
-                } else {
-                    authors.push({ surname: clean, initials: '' });
-                }
-            });
-        } else if (initialFirstTokens && initialFirstTokens.length > 0) {
-            // Parse "X. Shi" or "W. Dai"
-            initialFirstTokens.forEach(token => {
-                let clean = token.trim();
-                // Strip leading "and " if it got caught (though regex shouldn't)
-                clean = clean.replace(/^and\s+/i, '');
-
-                const lastSpace = clean.lastIndexOf(' ');
-                if (lastSpace > -1) {
-                    let initials = clean.substring(0, lastSpace).trim();
-                    const surname = clean.substring(lastSpace + 1).trim();
-                    if (initials && !initials.endsWith('.')) initials += '.';
-                    authors.push({ surname, initials });
-                } else {
-                    authors.push({ surname: clean, initials: '' });
-                }
-            });
-        } else {
-            // Fallback: Organization or Collaboration
-            // Split by semicolon if present, otherwise treat as one block
-            const parts = authorString.includes(';') ? authorString.split(';') : [authorString];
-            parts.forEach(p => {
-                if (p.trim()) authors.push({ surname: p.trim(), initials: '' });
-            });
+    const applyFormatting = (ref: ParsedRef): ParsedRef => {
+        const newRef = { ...ref };
+        if (!newRef.isBook && !newRef.isChapter) {
+            newRef.source = formatJournal(newRef.source, journalFormat);
         }
-        return authors;
+        if (titleCasing !== 'original') {
+            if (titleCasing === 'title') newRef.title = toTitleCase(newRef.title);
+            else if (titleCasing === 'sentence') newRef.title = toSentenceCase(newRef.title);
+        }
+        return newRef;
     };
 
-    const parseSingleCitation = (text: string): ParsedRef => {
-        let cleanText = text.trim();
-        const res: ParsedRef = {
-            authors: [], year: '', title: '', editors: [], source: '', 
-            volume: '', issue: '', fpage: '', lpage: '', 
-            isChapter: false, isBook: false,
-            originalText: text.trim()
-        };
-
-        // 0. Extract Comment (at the end in parens, e.g. (in Chinese...))
-        const commentMatch = cleanText.match(/\((in [^)]+)\)\.?$/i);
-        if (commentMatch) {
-            res.comment = commentMatch[0];
-            cleanText = cleanText.replace(commentMatch[0], '').trim();
-            // Remove trailing dot if left behind
-            if (cleanText.endsWith('.')) cleanText = cleanText.slice(0, -1).trim();
+    // --- Parsing Logic (Gemini) ---
+    const parseWithGemini = async () => {
+        if (!input.trim()) {
+            setToast({ msg: "Please paste references first.", type: "warn" });
+            return;
+        }
+        if (!process.env.API_KEY) {
+            setToast({ msg: "API Key not found. Please configure environment.", type: "error" });
+            return;
         }
 
-        // 1. Find Year
-        const yearMatch = cleanText.match(/\(?(\d{4})\)?/);
+        setIsLoading(true);
         
-        if (yearMatch) {
-            res.year = yearMatch[1];
-            const yearIndex = cleanText.indexOf(yearMatch[0]);
+        try {
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const model = "gemini-3-flash-preview";
             
-            // Heuristic: If year is late in the string (>50% length), assume Vancouver/IEEE style (Year at end)
-            if (yearIndex > cleanText.length * 0.5) {
-                // --- STRATEGY: VANCOUVER / IEEE (Year at end) ---
-                // Format: [Authors], [Title]. [Journal] [Vol] ([Year]), [Pages].
-
-                // 1. Post-Year: Pages/ID
-                let postYear = cleanText.substring(yearIndex + yearMatch[0].length).trim();
-                
-                // Clean leading punctuation (e.g., if format is (2025), e11696)
-                if (postYear.startsWith(',') || postYear.startsWith('.')) {
-                    postYear = postYear.substring(1).trim();
-                }
-
-                // Check for Pages/Article ID in postYear (e.g. "e11696." or "45-50.")
-                const pageMatch = postYear.match(/([e0-9]+(?:[–-][0-9]+)?)\.?$/);
-                if (pageMatch) {
-                    const pages = pageMatch[1];
-                    if (pages.includes('–') || pages.includes('-')) {
-                        const [f, l] = pages.split(/[–-]/);
-                        res.fpage = f;
-                        res.lpage = l;
-                    } else {
-                        res.fpage = pages; // Article ID often treated as first page
-                    }
-                }
-
-                // 2. Pre-Year: [Authors], [Title]. [Journal] [Vol]
-                let preYear = cleanText.substring(0, yearIndex).trim();
-                
-                // Extract Volume (number at end of preYear)
-                const volMatch = preYear.match(/\s(\d+)\s*$/);
-                if (volMatch) {
-                    res.volume = volMatch[1];
-                    preYear = preYear.substring(0, volMatch.index).trim();
-                }
-
-                // Extract Journal and Title
-                // Strategy: 
-                // 1. Isolate Authors from Rest (Comma separation logic)
-                // 2. Isolate Title from Journal (Right-to-Left dot separation logic)
-
-                const segments = preYear.split(',').map(s => s.trim());
-                let titleStartIndex = -1;
-
-                // Find where Authors end and Title begins
-                for (let i = 0; i < segments.length; i++) {
-                        let seg = segments[i];
-                        seg = seg.replace(/^and\s+/i, '');
-                        
-                        // Check if this segment looks like a name part (X. Shi)
-                        const hasInitial = /[A-Z]\./.test(seg);
-                        const isShort = seg.length < 35;
-                        
-                        // If it's long, or lacks an initial (and isn't the first segment), it's likely title start
-                        if (!isShort || (!hasInitial && i > 0)) {
-                            titleStartIndex = i;
-                            break;
-                        }
-                }
-                
-                if (titleStartIndex > -1) {
-                    const authorString = segments.slice(0, titleStartIndex).join(', ');
-                    const titleJournalString = segments.slice(titleStartIndex).join(', ');
-                    
-                    res.authors = parseAuthors(authorString);
-                    
-                    // Split Title vs Journal using Right-to-Left analysis
-                    // "Title. Adv. Funct. Mater." -> We assume Journal is at the end.
-                    const tjParts = titleJournalString.split('. ');
-                    
-                    if (tjParts.length > 1) {
-                        let journalStartIdx = tjParts.length - 1;
-                        
-                        // Work backwards to find where Journal starts
-                        // Stop if we hit a segment that looks like a Title (Long, or starts lowercase)
-                        for (let k = tjParts.length - 1; k > 0; k--) {
-                            const seg = tjParts[k];
-                            // Heuristics:
-                            // Journal parts usually short (< 45 chars) or Abbreviated/TitleCased.
-                            // Title segments are usually longer sentences.
-                            
-                            const isLong = seg.length > 45; 
-                            const startsLower = /^[a-z]/.test(seg); 
-                            
-                            if (isLong || startsLower) {
-                                // This segment is part of Title. Next one is Journal start.
-                                journalStartIdx = k + 1;
-                                break;
+            const schema = {
+                type: Type.ARRAY,
+                items: {
+                    type: Type.OBJECT,
+                    properties: {
+                        authors: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    surname: { type: Type.STRING },
+                                    initials: { type: Type.STRING }
+                                }
                             }
-                            
-                            // Continue leftwards to capture multi-part journals
-                            journalStartIdx = k;
+                        },
+                        year: { type: Type.STRING },
+                        title: { type: Type.STRING },
+                        source: { type: Type.STRING, description: "Journal name, Book title, or Conference name" },
+                        volume: { type: Type.STRING },
+                        issue: { type: Type.STRING },
+                        pages: { type: Type.STRING, description: "Full page range e.g. 100-110, or article number" },
+                        doi: { type: Type.STRING },
+                        publisher: { type: Type.STRING, description: "Publisher name (e.g. Springer, Elsevier)" },
+                        location: { type: Type.STRING, description: "City/Country of publication (e.g. Cham, New York)" },
+                        patentNumber: { type: Type.STRING, description: "Patent number if applicable (e.g. US 1234567)" },
+                        institution: { type: Type.STRING, description: "University or Organization for theses/reports" },
+                        degree: { type: Type.STRING, description: "Degree type for theses (e.g., PhD, MSc)" },
+                        type: { type: Type.STRING, enum: ["journal", "book", "chapter", "report", "conference", "patent", "thesis", "website", "other"] },
+                        genre: { type: Type.STRING, description: "Specific type description e.g. 'Government Report', 'Thesis', 'Webpage'" },
+                        editors: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    surname: { type: Type.STRING },
+                                    initials: { type: Type.STRING }
+                                }
+                            }
                         }
-                        
-                        // Safety: Force at least index 1 if possible (assuming index 0 is always Title)
-                        if (journalStartIdx === 0 && tjParts.length > 1) journalStartIdx = 1;
+                    }
+                }
+            };
 
-                        res.title = tjParts.slice(0, journalStartIdx).join('. ').replace(/\.$/, '');
-                        res.source = tjParts.slice(journalStartIdx).join('. ');
+            // Limit input to prevent context overflow if user pastes huge list
+            const lines = input.split(/\n+/).filter(l => l.trim().length > 5);
+            const prompt = `Parse the following bibliographic references into structured JSON. 
+            
+            Strictly classify 'type' as one of:
+            - 'journal': Standard academic journals.
+            - 'conference': Look for keywords like "Proc.", "Proceedings", "Conf.", "Symposium", "Workshop", "Meeting" in the source title.
+            - 'book': Monographs.
+            - 'chapter': "In: [Book Title]".
+            - 'report', 'patent', 'thesis', 'website'.
+            
+            Extract authors, year, title, source (journal/book/conf title), volume, issue, pages, DOI.
+            For Books/Chapters/Conferences: Carefully extract 'publisher' and 'location' if present.
+            For Patents: Extract 'patentNumber', and put the Assignee in 'publisher'.
+            For Theses: Extract 'institution' and 'degree'.
+            For Reports: Extract 'institution' or 'publisher'.
+            
+            For authors, split into surname and initials.
+            
+            Input References:
+            ${lines.join('\n')}
+            `;
+
+            const response = await ai.models.generateContent({
+                model: model,
+                contents: prompt,
+                config: {
+                    responseMimeType: "application/json",
+                    responseSchema: schema
+                }
+            });
+
+            const jsonText = response.text || '[]';
+            const parsedData = JSON.parse(jsonText);
+
+            // Map JSON to ParsedRef
+            const mappedRefs: ParsedRef[] = parsedData.map((item: any, idx: number) => {
+                let fpage = '';
+                let lpage = '';
+                let articleNumber = cleanVal(item.articleNumber);
+
+                const pagesRaw = cleanVal(item.pages);
+                if (pagesRaw) {
+                    const cleanPages = pagesRaw.replace(/\s+/g, '');
+                    if (cleanPages.match(/[–-—]/)) {
+                        const parts = cleanPages.split(/[–-—]/);
+                        fpage = parts[0];
+                        lpage = expandPageRange(parts[0], parts[1]);
+                    } else if (cleanPages.toLowerCase().startsWith('e') || cleanPages.length > 4) {
+                        articleNumber = cleanPages;
                     } else {
-                         // No dots? Assume whole thing is Title (fallback)
-                         res.title = titleJournalString;
-                    }
-                } else {
-                    // Fallback: If logic failed, try simple dot split
-                    const firstDot = preYear.indexOf('. ');
-                    if (firstDot > -1) {
-                            res.authors = parseAuthors(preYear.substring(0, firstDot));
-                            res.title = preYear.substring(firstDot + 1).replace(/\.$/, '');
-                    } else {
-                            res.authors = parseAuthors(preYear);
+                        fpage = cleanPages;
                     }
                 }
 
-            } else {
-                // --- STRATEGY: HARVARD / STANDARD (Year near start) ---
-                // Format: [Authors] ([Year]) [Title]. [Source]
+                // Determine XML logic types
+                const rawType = cleanVal(item.type).toLowerCase();
+                const isConference = rawType === 'conference';
                 
-                const authorPart = cleanText.substring(0, yearIndex).trim().replace(/,$/, '');
-                res.authors = parseAuthors(authorPart);
-                
-                let rest = cleanText.substring(yearIndex + yearMatch[0].length).trim();
-                // Clean leading punctuation like ")." or "."
-                rest = rest.replace(/^[).,;:\s]+/, '');
+                // Heuristic: Conferences with publisher/location/editors map to <sb:edited-book> (Chapter logic)
+                // Conferences with just Vol/Issue map to <sb:issue> (Journal logic)
+                const hasPubLoc = (cleanVal(item.publisher) && cleanVal(item.publisher).toLowerCase() !== 'null') || (cleanVal(item.location) && cleanVal(item.location).toLowerCase() !== 'null');
+                const hasEditors = item.editors && item.editors.length > 0;
 
-                // Extract Pages (End)
-                const pageMatch = rest.match(/(?:pp\.?|:)?\s*(\d+)[–-](\d+)\.?$/);
-                if (pageMatch) {
-                    res.fpage = pageMatch[1];
-                    res.lpage = pageMatch[2];
-                    rest = rest.substring(0, pageMatch.index).trim().replace(/,$/, '');
-                } else {
-                    // Check for single page/ID
-                    const singlePage = rest.match(/,\s*([e0-9]+)\.?$/);
-                    if (singlePage) {
-                        res.fpage = singlePage[1];
-                        rest = rest.substring(0, singlePage.index).trim();
-                    }
-                }
+                const isChapter = rawType === 'chapter' || (isConference && (hasEditors || hasPubLoc));
+                const isBook = rawType === 'book' || rawType === 'report' || rawType === 'thesis'; 
 
-                // Extract Volume
-                const volMatch = rest.match(/(?:vol\.?\s*|)(\d+)(?:\((\d+)\))?/i);
-                if (volMatch && !res.isBook) {
-                    if (rest.endsWith(volMatch[0])) {
-                        res.volume = volMatch[1];
-                        if (volMatch[2]) res.issue = volMatch[2];
-                        rest = rest.substring(0, volMatch.index).trim().replace(/,$/, '');
-                    }
-                }
+                return {
+                    authors: item.authors || [],
+                    year: cleanVal(item.year),
+                    title: cleanVal(item.title),
+                    editors: item.editors || [],
+                    source: cleanVal(item.source),
+                    volume: cleanVal(item.volume),
+                    issue: cleanVal(item.issue),
+                    fpage: fpage,
+                    lpage: lpage,
+                    articleNumber: articleNumber,
+                    doi: cleanVal(item.doi),
+                    publisher: cleanVal(item.publisher),
+                    location: cleanVal(item.location),
+                    patentNumber: cleanVal(item.patentNumber),
+                    institution: cleanVal(item.institution),
+                    degree: cleanVal(item.degree),
+                    isChapter: isChapter,
+                    isBook: isBook,
+                    hasEtAl: false, 
+                    originalText: lines[idx] || '',
+                    genre: cleanVal(item.genre) || (rawType !== 'journal' ? toTitleCase(rawType) : 'Journal Article')
+                };
+            });
 
-                // Split Title and Source
-                // Standard: Title. Source.
-                const splitDot = rest.indexOf('. ');
-                if (splitDot > -1) {
-                    res.title = rest.substring(0, splitDot).trim();
-                    res.source = rest.substring(splitDot + 1).trim();
-                } else {
-                    res.source = rest; 
-                }
-            }
-        } else {
-            // No year found? Treat entire string as Source or Title
-            res.title = cleanText;
+            setParsedRefs(mappedRefs);
+            setToast({ msg: `Successfully parsed ${mappedRefs.length} references with AI.`, type: "success" });
+            setViewMode('grid');
+
+        } catch (e: any) {
+            console.error(e);
+            setToast({ msg: "AI Parsing failed. Please check API Key.", type: "error" });
+        } finally {
+            setIsLoading(false);
         }
-
-        // 2. Check for "In: ... (Eds)" -> Chapter (Common across styles)
-        const inMatch = text.match(/In:\s*(.*?)\s*\((Eds?\.?)\),?/i);
-        if (inMatch) {
-            res.isChapter = true;
-            // Often "In:" comes after Title in Harvard
-            // Re-evaluate title/source split if we found "In:"
-        }
-
-        return res;
     };
 
     const generateLabel = (ref: ParsedRef, idx: number) => {
-        if (citationStyle === 'numbered') {
-            return `[${idx + 1}]`;
-        }
-
-        // Name-Date Style
-        if (ref.authors.length === 0) {
-            return ref.year ? `${ref.year}` : `[${idx + 1}]`;
-        }
-
+        if (citationStyle === 'numbered') return `[${idx + 1}]`;
+        if (ref.authors.length === 0) return ref.year ? `${ref.year}` : `[${idx + 1}]`;
         const surnames = ref.authors.map(a => a.surname);
         let namePart = '';
-
-        if (surnames.length === 1) {
-            namePart = surnames[0];
-        } else if (surnames.length === 2) {
-            namePart = `${surnames[0]} and ${surnames[1]}`;
-        } else {
-            namePart = `${surnames[0]} et al.`;
-        }
-
+        if (surnames.length === 1) namePart = surnames[0];
+        else if (surnames.length === 2) namePart = `${surnames[0]} and ${surnames[1]}`;
+        else namePart = `${surnames[0]} et al.`;
+        if (ref.hasEtAl && surnames.length > 0 && !namePart.includes('et al')) namePart += ' et al.';
         return `${namePart}, ${ref.year}`;
     };
 
-    const buildXml = (refs: ParsedRef[], startIdNum: number): string => {
-        const refStrings = refs.map((ref, idx) => {
-            const currentNum = startIdNum + (idx * 5); 
+    const buildXml = (): string => {
+        const refStrings = parsedRefs.map((rawRef, idx) => {
+            const ref = applyFormatting(rawRef);
             
+            const currentNum = startId + (idx * 5); 
             const bibId = formatId('bb', currentNum);
             const refId = formatId('rf', currentNum);
             const srcId = formatId('se', currentNum);
@@ -349,18 +388,13 @@ const ReferenceGenerator: React.FC = () => {
             const originalTextXml = escapeXml(ref.originalText);
             const labelText = generateLabel(ref, idx);
 
-            // Authors
             let authorsXml = '';
             ref.authors.forEach(a => {
-                if (a.initials) {
-                    authorsXml += `<sb:author><ce:given-name>${escapeXml(a.initials)}</ce:given-name><ce:surname>${escapeXml(a.surname)}</ce:surname></sb:author>`;
-                } else {
-                    // Organization / Collaboration (No initials)
-                    authorsXml += `<sb:collaboration>${escapeXml(a.surname)}</sb:collaboration>`;
-                }
+                if (a.initials) authorsXml += `<sb:author><ce:given-name>${escapeXml(a.initials)}</ce:given-name><ce:surname>${escapeXml(a.surname)}</ce:surname></sb:author>`;
+                else authorsXml += `<sb:collaboration>${escapeXml(a.surname)}</sb:collaboration>`;
             });
+            if (ref.hasEtAl) authorsXml += `<sb:et-al/>`;
 
-            // Editors
             let editorsXml = '';
             if (ref.editors.length > 0) {
                 ref.editors.forEach(e => {
@@ -369,120 +403,198 @@ const ReferenceGenerator: React.FC = () => {
                 editorsXml = `<sb:editors>${editorsXml}</sb:editors>`;
             }
 
-            // Titles
             const contributionTitle = `<sb:title><sb:maintitle>${escapeXml(ref.title)}</sb:maintitle></sb:title>`;
+            const doiXml = ref.doi ? `<ce:doi>${escapeXml(ref.doi)}</ce:doi>` : '';
 
-            // Host Block
             let hostXml = '';
             const lastPageXml = ref.lpage ? `<sb:last-page>${escapeXml(ref.lpage)}</sb:last-page>` : '';
             
-            if (ref.isChapter) {
-                // Book Chapter
-                const sourceTitle = `<sb:title><sb:maintitle>${escapeXml(ref.source)}</sb:maintitle></sb:title>`;
-                const bookSeriesXml = (ref.series || ref.volume) 
-                    ? `<sb:book-series><sb:series><sb:title><sb:maintitle>${escapeXml(ref.series || ref.source)}</sb:maintitle></sb:title>${ref.volume ? `<sb:volume-nr>${escapeXml(ref.volume)}</sb:volume-nr>` : ''}</sb:series></sb:book-series>`
-                    : '';
+            // Map institution to publisher if publisher is missing (common for reports/theses in basic XML schema)
+            const displayPublisher = ref.publisher || ref.institution;
+            
+            const hasPub = displayPublisher && displayPublisher.toLowerCase() !== 'null';
+            const hasLoc = ref.location && ref.location.toLowerCase() !== 'null';
+            
+            let publisherXml = '';
+            if (hasPub || hasLoc) {
+                const pName = hasPub ? `<sb:name>${escapeXml(displayPublisher || '')}</sb:name>` : '';
+                const pLoc = hasLoc ? `<sb:location>${escapeXml(ref.location || '')}</sb:location>` : '';
+                publisherXml = `<sb:publisher>${pName}${pLoc}</sb:publisher>`;
+            }
 
-                hostXml = `<sb:host><sb:edited-book>${editorsXml}${sourceTitle}${bookSeriesXml}<sb:date>${escapeXml(ref.year)}</sb:date></sb:edited-book><sb:pages><sb:first-page>${escapeXml(ref.fpage)}</sb:first-page>${lastPageXml}</sb:pages></sb:host>`;
-            } else if (ref.isBook) {
-                // Monograph / Whole Book
-                hostXml = `<sb:host><sb:book><sb:date>${escapeXml(ref.year)}</sb:date><sb:publisher><sb:name>${escapeXml(ref.publisher || '')}</sb:name><sb:location>${escapeXml(ref.location || '')}</sb:location></sb:publisher></sb:book><sb:pages><sb:first-page>${escapeXml(ref.totalPages || '')}</sb:first-page></sb:pages></sb:host>`;
-            } else {
-                // Journal Article
+            if (ref.isChapter) {
                 const sourceTitle = `<sb:title><sb:maintitle>${escapeXml(ref.source)}</sb:maintitle></sb:title>`;
-                hostXml = `<sb:host><sb:issue><sb:series>${sourceTitle}<sb:volume-nr>${escapeXml(ref.volume)}</sb:volume-nr></sb:series>${ref.issue ? `<sb:issue-nr>${escapeXml(ref.issue)}</sb:issue-nr>` : ''}<sb:date>${escapeXml(ref.year)}</sb:date></sb:issue><sb:pages><sb:first-page>${escapeXml(ref.fpage)}</sb:first-page>${lastPageXml}</sb:pages></sb:host>`;
+                const bookSeriesXml = (ref.series || (ref.volume && ref.volume.trim())) 
+                    ? `<sb:book-series><sb:series><sb:title><sb:maintitle>${escapeXml(ref.series || ref.source)}</sb:maintitle></sb:title>${(ref.volume && ref.volume.trim()) ? `<sb:volume-nr>${escapeXml(ref.volume)}</sb:volume-nr>` : ''}</sb:series></sb:book-series>`
+                    : '';
+                const pagesXml = (ref.fpage && ref.fpage.trim()) ? `<sb:pages><sb:first-page>${escapeXml(ref.fpage)}</sb:first-page>${lastPageXml}</sb:pages>` : '';
+                
+                hostXml = `<sb:host><sb:edited-book>${editorsXml}${sourceTitle}${bookSeriesXml}<sb:date>${escapeXml(ref.year)}</sb:date>${publisherXml}</sb:edited-book>${pagesXml}${doiXml}</sb:host>`;
+            } else if (ref.isBook) {
+                const pagesXml = (ref.totalPages && ref.totalPages.trim()) ? `<sb:pages><sb:first-page>${escapeXml(ref.totalPages)}</sb:first-page></sb:pages>` : '';
+                // Include degree/patent info in book-like structure if needed, or just standard book xml
+                let extraInfo = '';
+                if (ref.degree) extraInfo = `<sb:comment>${escapeXml(ref.degree)}</sb:comment>`;
+                if (ref.patentNumber) extraInfo = `<sb:comment>Patent: ${escapeXml(ref.patentNumber)}</sb:comment>`;
+
+                hostXml = `<sb:host><sb:book><sb:date>${escapeXml(ref.year)}</sb:date>${publisherXml}</sb:book>${pagesXml}${doiXml}${extraInfo}</sb:host>`;
+            } else {
+                const sourceTitle = `<sb:title><sb:maintitle>${escapeXml(ref.source)}</sb:maintitle></sb:title>`;
+                const volumeXml = (ref.volume && ref.volume.trim() && ref.volume !== 'null') ? `<sb:volume-nr>${escapeXml(ref.volume)}</sb:volume-nr>` : '';
+                const issueXml = (ref.issue && ref.issue.trim() && ref.issue !== 'null') ? `<sb:issue-nr>${escapeXml(ref.issue)}</sb:issue-nr>` : '';
+                
+                let locationXml = '';
+                if (ref.articleNumber && ref.articleNumber !== 'null') {
+                    locationXml = `<sb:article-number>${escapeXml(ref.articleNumber)}</sb:article-number>`;
+                } else if (ref.fpage && ref.fpage.trim() && ref.fpage !== 'null') {
+                    locationXml = `<sb:pages><sb:first-page>${escapeXml(ref.fpage)}</sb:first-page>${lastPageXml}</sb:pages>`;
+                }
+
+                hostXml = `<sb:host><sb:issue><sb:series>${sourceTitle}${volumeXml}</sb:series>${issueXml}<sb:date>${escapeXml(ref.year)}</sb:date></sb:issue>${locationXml}${doiXml}</sb:host>`;
             }
 
             const commentXml = ref.comment ? `<sb:comment>${escapeXml(ref.comment)}</sb:comment>` : '';
-
-            // Always Linearized
             return `<ce:bib-reference id="${bibId}"><ce:label>${labelText}</ce:label><sb:reference id="${refId}"><sb:contribution langtype="en"><sb:authors>${authorsXml}</sb:authors>${contributionTitle}</sb:contribution>${hostXml}${commentXml}</sb:reference><ce:source-text id="${srcId}">${originalTextXml}</ce:source-text></ce:bib-reference>`;
         });
         
         return refStrings.join('\n');
     };
 
-    const processReferences = () => {
-        if (!input.trim()) {
-            setToast({ msg: "Please paste references first.", type: "warn" });
-            return;
-        }
+    const generateTextReport = (): string => {
+        if (parsedRefs.length === 0) return 'No references parsed yet.';
 
-        setIsLoading(true);
-
-        setTimeout(() => {
-            // Split input by newlines to handle multiple references
-            const lines = input.split(/\n+/).filter(l => l.trim().length > 10);
+        return parsedRefs.map((ref, idx) => {
+            const authorsStr = ref.authors.length > 0 
+                ? ref.authors.map(a => `${a.surname}${a.initials ? ', ' + a.initials : ''}`).join('; ')
+                : 'Not detected';
             
-            const parsed = lines.map(line => parseSingleCitation(line));
-            const xmlOutput = buildXml(parsed, startId);
+            const editorsStr = ref.editors.length > 0
+                ? ref.editors.map(e => `${e.surname}${e.initials ? ', ' + e.initials : ''}`).join('; ')
+                : '';
 
-            setParsedRefs(parsed);
-            setOutput(xmlOutput);
-            setToast({ msg: `Generated ${lines.length} references.`, type: "success" });
-            setIsLoading(false);
-        }, 800);
+            let pubInfo = ref.source || '';
+            if (ref.publisher) pubInfo += pubInfo ? ` (${ref.publisher})` : ref.publisher;
+            if (ref.institution) pubInfo += pubInfo ? ` (${ref.institution})` : ref.institution;
+            if (ref.location) pubInfo += pubInfo ? ` [${ref.location}]` : ref.location;
+
+            return `REFERENCE SCAN #${idx + 1}
+==================================================
+${ref.originalText}
+
+Authors:
+${authorsStr}
+
+Year:
+${ref.year || 'Not provided'}
+
+Title:
+${ref.title || 'Not provided'}
+
+Journal / Publisher / Institution:
+${pubInfo || 'Not provided'}
+
+Volume:
+${ref.volume || 'Not applicable'}
+
+Issue:
+${ref.issue || 'Not applicable'}
+
+Pages / Article number:
+${ref.articleNumber ? `Art. ${ref.articleNumber}` : (ref.fpage ? `${ref.fpage}${ref.lpage ? '-' + ref.lpage : ''}` : 'Not provided')}
+
+DOI:
+${ref.doi || 'Not provided'}
+
+Source type:
+${ref.genre || 'Journal Article'}
+${ref.patentNumber ? `Patent Number: ${ref.patentNumber}` : ''}
+${ref.degree ? `Degree: ${ref.degree}` : ''}
+${editorsStr ? `\nEditors:\n${editorsStr}` : ''}`;
+        }).join('\n\n\n');
     };
 
-    const downloadCSV = () => {
-        if (parsedRefs.length === 0) return;
-        const headers = ['ID', 'Type', 'Authors', 'Year', 'Title', 'Source', 'Volume', 'Issue', 'Pages', 'Original Text'];
-        const rows = parsedRefs.map((ref, idx) => [
-            generateLabel(ref, idx),
-            ref.isChapter ? 'Book Chapter' : (ref.isBook ? 'Monograph' : 'Journal Article'),
-            ref.authors.map(a => `${a.surname}, ${a.initials}`).join('; '),
-            ref.year,
-            ref.title,
-            ref.source || ref.publisher,
-            ref.volume,
-            ref.issue,
-            ref.isBook ? ref.totalPages : `${ref.fpage}-${ref.lpage}`,
-            ref.originalText.replace(/"/g, '""')
-        ]);
+    const generateQCReport = (): QcIssue[] => {
+        const issues: QcIssue[] = [];
         
-        const csvContent = [
-            headers.join(','),
-            ...rows.map(row => row.map(cell => `"${cell || ''}"`).join(','))
-        ].join('\n');
-        
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', 'reference_report.csv');
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        parsedRefs.forEach((ref, idx) => {
+            // General Checks
+            if (!ref.year) {
+                issues.push({ refIndex: idx, type: 'error', field: 'Year', message: 'Missing publication year' });
+            } else if (!/^\d{4}[a-z]?$/.test(ref.year)) {
+                issues.push({ refIndex: idx, type: 'warning', field: 'Year', message: 'Invalid year format' });
+            }
+
+            if (!ref.title) {
+                issues.push({ refIndex: idx, type: 'error', field: 'Title', message: 'Missing title' });
+            }
+
+            if (ref.authors.length === 0 && !ref.editors.length) {
+                issues.push({ refIndex: idx, type: 'error', field: 'Authors', message: 'No authors or editors detected' });
+            }
+
+            // Check for explicit "null" strings that might have slipped through
+            if (ref.publisher && ref.publisher.toLowerCase() === 'null') {
+                issues.push({ refIndex: idx, type: 'error', field: 'Publisher', message: "Value is literal 'null'" });
+            }
+            if (ref.location && ref.location.toLowerCase() === 'null') {
+                issues.push({ refIndex: idx, type: 'error', field: 'Location', message: "Value is literal 'null'" });
+            }
+
+            const lowerGenre = (ref.genre || '').toLowerCase();
+            const isThesis = lowerGenre.includes('thesis') || lowerGenre.includes('dissertation');
+            const isPatent = lowerGenre.includes('patent');
+
+            // Type Specific Checks
+            if (isThesis) {
+                if (!ref.institution && !ref.publisher) {
+                    issues.push({ refIndex: idx, type: 'warning', field: 'Institution', message: 'Missing University/Institution for Thesis' });
+                }
+                if (!ref.degree && !lowerGenre.includes('phd') && !lowerGenre.includes('master')) {
+                    issues.push({ refIndex: idx, type: 'warning', field: 'Degree', message: 'Degree type not specified (e.g., PhD)' });
+                }
+            } else if (isPatent) {
+                if (!ref.patentNumber) {
+                    issues.push({ refIndex: idx, type: 'error', field: 'Patent #', message: 'Missing Patent Number' });
+                }
+            } else if (ref.isBook || ref.isChapter) {
+                if (!ref.publisher && !ref.institution) {
+                    issues.push({ refIndex: idx, type: 'warning', field: 'Publisher', message: 'Missing Publisher name' });
+                }
+                if (!ref.location) {
+                    issues.push({ refIndex: idx, type: 'warning', field: 'Location', message: 'Missing Publisher location' });
+                }
+                if (ref.isChapter && !ref.source) {
+                    issues.push({ refIndex: idx, type: 'error', field: 'Source', message: 'Missing Book Title for chapter' });
+                }
+            } else {
+                // Journal Checks
+                if (!ref.source) {
+                    issues.push({ refIndex: idx, type: 'error', field: 'Journal', message: 'Missing Journal name' });
+                }
+                if (!ref.volume && !ref.doi && !ref.articleNumber) {
+                    issues.push({ refIndex: idx, type: 'warning', field: 'Volume', message: 'Missing Volume' });
+                }
+                if (!ref.fpage && !ref.articleNumber && !ref.doi) {
+                    issues.push({ refIndex: idx, type: 'warning', field: 'Pages', message: 'Missing page numbers or article number' });
+                }
+            }
+        });
+
+        return issues;
     };
 
-    // --- State Update Handlers (for Editing) ---
-
-    const regenerateXmlFromState = () => {
-        setIsLoading(true);
-        setTimeout(() => {
-            const xmlOutput = buildXml(parsedRefs, startId);
-            setOutput(xmlOutput);
-            setToast({ msg: "XML Regenerated from Report edits!", type: "success" });
-            setActiveTab('xml');
-            setIsLoading(false);
-        }, 500);
+    const copyXmlOutput = () => {
+        const xml = buildXml();
+        navigator.clipboard.writeText(xml).then(() => setToast({ msg: "XML Copied!", type: "success" }));
     };
 
+    // --- Grid Editing ---
     const handleRefChange = (index: number, field: keyof ParsedRef, value: any) => {
         const newRefs = [...parsedRefs];
         newRefs[index] = { ...newRefs[index], [field]: value };
         setParsedRefs(newRefs);
     };
 
-    const handleTypeChange = (index: number, type: 'journal' | 'chapter' | 'book') => {
-        const newRefs = [...parsedRefs];
-        const ref = newRefs[index];
-        ref.isChapter = type === 'chapter';
-        ref.isBook = type === 'book';
-        setParsedRefs(newRefs);
-    };
-
-    // Special handler for authors: converts text "Smith, J.; Doe, A." -> Array
     const handleAuthorsChange = (index: number, value: string) => {
         const parts = value.split(';');
         const newAuthors = parts.map(p => {
@@ -492,6 +604,7 @@ const ReferenceGenerator: React.FC = () => {
                 const surname = clean.substring(0, comma).trim();
                 let initials = clean.substring(comma + 1).trim();
                 if (initials && !initials.endsWith('.')) initials += '.';
+                initials = initials.replace(/\s+/g, '');
                 return { surname, initials };
             }
             return { surname: clean, initials: '' };
@@ -502,413 +615,307 @@ const ReferenceGenerator: React.FC = () => {
         setParsedRefs(newRefs);
     };
 
-    // Special handler for editors: converts text "Smith, J.; Doe, A." -> Array
-    const handleEditorsChange = (index: number, value: string) => {
-        const parts = value.split(';');
-        const newEditors = parts.map(p => {
-            const clean = p.trim();
-            const comma = clean.lastIndexOf(','); 
-            if (comma > -1) {
-                const surname = clean.substring(0, comma).trim();
-                let initials = clean.substring(comma + 1).trim();
-                if (initials && !initials.endsWith('.')) initials += '.';
-                return { surname, initials };
-            }
-            return { surname: clean, initials: '' };
-        }).filter(a => a.surname);
-        
-        const newRefs = [...parsedRefs];
-        newRefs[index].editors = newEditors;
-        setParsedRefs(newRefs);
-    };
-
-    // Regenerate when toggling options if output already exists (and user hasn't edited manually yet? Actually just regen based on current state)
-    useEffect(() => {
-        if (parsedRefs.length > 0 && output) {
-            const xmlOutput = buildXml(parsedRefs, startId);
-            setOutput(xmlOutput);
-        }
-    }, [startId, citationStyle]);
-
-    const copyOutput = () => {
-        if (!output) return;
-        navigator.clipboard.writeText(output).then(() => setToast({ msg: "XML Copied!", type: "success" }));
-    };
-
-    const clearAll = () => {
-        setInput('');
-        setOutput('');
-        setParsedRefs([]);
-        setToast({ msg: "Cleared.", type: "warn" });
-    };
-
-    useKeyboardShortcuts({
-        onPrimary: processReferences,
-        onCopy: copyOutput,
-        onClear: clearAll
-    }, [input, output, startId, citationStyle]);
-
-    const stats = {
-        total: parsedRefs.length,
-        journals: parsedRefs.filter(r => !r.isChapter && !r.isBook).length,
-        chapters: parsedRefs.filter(r => r.isChapter).length,
-        books: parsedRefs.filter(r => r.isBook).length,
-        missingData: parsedRefs.filter(r => !r.title || !r.year || r.authors.length === 0).length
-    };
+    const qcIssues = viewMode === 'report' ? generateQCReport() : [];
 
     return (
-        <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-            <div className="mb-10 text-center animate-fade-in">
-                <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3">Structured Reference Generator</h1>
-                <p className="text-lg text-slate-500 max-w-2xl mx-auto">Convert plain text citations into structured NISO/Elsevier XML format.</p>
+        <div className="h-[calc(100vh-64px)] flex flex-col bg-slate-50 overflow-hidden">
+            {isLoading && <LoadingOverlay message="Processing..." color="indigo" />}
+            
+            {/* Top Ribbon / Toolbar */}
+            <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center gap-4 shadow-sm z-20">
+                <div className="flex gap-2 pr-4 border-r border-slate-100">
+                    <RibbonButton 
+                        onClick={parseWithGemini} 
+                        icon={<svg className="w-5 h-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>}
+                        label="Smart Parse (AI)"
+                        disabled={!input}
+                    />
+                </div>
+
+                <div className="flex gap-2 pr-4 border-r border-slate-100">
+                    <RibbonButton 
+                        onClick={() => setViewMode('grid')} 
+                        icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>}
+                        label="Grid View"
+                        active={viewMode === 'grid'}
+                    />
+                    <RibbonButton 
+                        onClick={() => setViewMode('xml')} 
+                        icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg>}
+                        label="XML View"
+                        active={viewMode === 'xml'}
+                    />
+                    <RibbonButton 
+                        onClick={() => setViewMode('report')} 
+                        icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
+                        label="QC Report"
+                        active={viewMode === 'report'}
+                    />
+                    <RibbonButton 
+                        onClick={() => setViewMode('text')} 
+                        icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>}
+                        label="Text Report"
+                        active={viewMode === 'text'}
+                    />
+                </div>
+
+                <div className="flex items-center gap-3">
+                    <div className="flex flex-col text-xs gap-1.5">
+                        <label className="flex items-center gap-2">
+                            <span className="text-slate-500 w-12 font-medium">Style:</span>
+                            <select value={citationStyle} onChange={(e) => setCitationStyle(e.target.value as any)} className="bg-slate-100 border-none rounded px-2 py-1 text-xs font-semibold text-slate-700 outline-none hover:bg-slate-200 transition-colors">
+                                <option value="name-date">Name-Date (A-Z)</option>
+                                <option value="numbered">Numbered [1]</option>
+                            </select>
+                        </label>
+                        <label className="flex items-center gap-2">
+                            <span className="text-slate-500 w-12 font-medium">Start ID:</span>
+                            <input type="number" value={startId} onChange={(e) => setStartId(parseInt(e.target.value) || 5)} className="w-16 bg-slate-100 border-none rounded px-2 py-1 text-xs font-mono font-bold text-slate-700 outline-none hover:bg-slate-200 transition-colors" />
+                        </label>
+                    </div>
+                    <RibbonButton 
+                        onClick={copyXmlOutput} 
+                        icon={<svg className="w-5 h-5 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>}
+                        label="Copy XML"
+                        disabled={parsedRefs.length === 0}
+                    />
+                </div>
+                
+                <div className="flex-grow"></div>
+                <button onClick={() => { setInput(''); setParsedRefs([]); setViewMode('grid'); }} className="text-xs text-red-500 hover:bg-red-50 px-4 py-2 rounded-lg font-bold transition-colors">Reset All</button>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-[600px]">
-                {/* Input */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col group focus-within:ring-2 focus-within:ring-sky-100 transition-all duration-300">
-                    <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center">
-                        <label className="font-bold text-slate-700 text-sm flex items-center gap-2">
-                             <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white border border-slate-200 text-xs text-sky-600 font-mono shadow-sm">1</span>
-                            Raw Citations
-                        </label>
-                        <button onClick={clearAll} title="Alt+Delete" className="text-xs font-semibold text-slate-400 hover:text-red-500 hover:bg-red-50 px-2 py-1 rounded transition-colors">Clear</button>
+            {/* Main Content Area */}
+            <div className="flex-grow flex flex-col overflow-hidden relative">
+                
+                {/* 1. Data Grid (Top Pane) */}
+                <div className={`flex-grow overflow-auto custom-scrollbar bg-slate-50 relative transition-all duration-300 ${showInput ? 'h-[60%]' : 'h-full'} ${viewMode === 'grid' ? 'block' : 'hidden'}`}>
+                    {parsedRefs.length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60 pointer-events-none">
+                            <svg className="w-16 h-16 mb-4 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                            <p className="font-medium text-lg">No Data to Display</p>
+                            <p className="text-sm">Paste text below and click "Parse" to populate the grid.</p>
+                        </div>
+                    ) : (
+                        <div className="p-4">
+                            <table className="w-full border-separate border-spacing-y-2 text-xs text-slate-700">
+                                <thead className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                                    <tr>
+                                        <th className="px-3 pb-2 text-left w-10">#</th>
+                                        <th className="px-3 pb-2 text-left w-20">Type</th>
+                                        <th className="px-3 pb-2 text-left w-56">Authors</th>
+                                        <th className="px-3 pb-2 text-center w-16">Year</th>
+                                        <th className="px-3 pb-2 text-left min-w-[200px]">Title</th>
+                                        <th className="px-3 pb-2 text-left w-40">Source / Pub</th>
+                                        <th className="px-3 pb-2 text-center w-12">Vol</th>
+                                        <th className="px-3 pb-2 text-center w-12">Iss</th>
+                                        <th className="px-3 pb-2 text-center w-24">Pages</th>
+                                        <th className="px-3 pb-2 text-center w-20">DOI/Pat</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="space-y-2">
+                                    {parsedRefs.map((ref, idx) => (
+                                        <tr key={idx} className="bg-white hover:bg-indigo-50/20 transition-colors shadow-sm rounded-lg group">
+                                            <td className="p-1 first:rounded-l-lg border-y border-l border-slate-100 group-hover:border-indigo-100">
+                                                <div className="flex items-center justify-center font-mono text-slate-400 font-bold h-full">{idx + 1}</div>
+                                            </td>
+                                            <td className="p-1 border-y border-slate-100 group-hover:border-indigo-100">
+                                                <select 
+                                                    value={ref.isBook ? 'book' : (ref.isChapter ? 'chapter' : 'journal')} 
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        const newRefs = [...parsedRefs];
+                                                        newRefs[idx].isChapter = val === 'chapter';
+                                                        newRefs[idx].isBook = val === 'book';
+                                                        setParsedRefs(newRefs);
+                                                    }}
+                                                    className={`w-full bg-transparent p-1.5 outline-none rounded focus:bg-indigo-50 cursor-pointer font-bold text-[10px] uppercase
+                                                        ${ref.isBook ? 'text-amber-600' : ref.isChapter ? 'text-purple-600' : 'text-sky-600'}`}
+                                                >
+                                                    <option value="journal">Journal</option>
+                                                    <option value="chapter">Chapter</option>
+                                                    <option value="book">Book/Rep</option>
+                                                </select>
+                                            </td>
+                                            <td className="p-1 border-y border-slate-100 group-hover:border-indigo-100 relative">
+                                                <input 
+                                                    type="text" 
+                                                    value={ref.authors.map(a => a.initials ? `${a.surname}, ${a.initials}` : a.surname).join('; ')} 
+                                                    onChange={(e) => handleAuthorsChange(idx, e.target.value)}
+                                                    className={`w-full p-1.5 outline-none rounded bg-transparent focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all ${ref.authors.length === 0 ? 'bg-red-50' : ''}`}
+                                                />
+                                                {ref.hasEtAl && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] bg-slate-100 px-1 rounded text-slate-500 font-bold pointer-events-none">et al</span>}
+                                            </td>
+                                            <td className="p-1 border-y border-slate-100 group-hover:border-indigo-100">
+                                                <input 
+                                                    type="text" 
+                                                    value={ref.year} 
+                                                    onChange={(e) => handleRefChange(idx, 'year', e.target.value)}
+                                                    className={`w-full text-center p-1.5 outline-none rounded bg-transparent focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all ${!ref.year ? 'bg-amber-50' : ''}`}
+                                                />
+                                            </td>
+                                            <td className="p-1 border-y border-slate-100 group-hover:border-indigo-100">
+                                                <input 
+                                                    type="text" 
+                                                    value={ref.title} 
+                                                    onChange={(e) => handleRefChange(idx, 'title', e.target.value)}
+                                                    className={`w-full p-1.5 outline-none rounded bg-transparent focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all font-medium ${!ref.title ? 'bg-red-50' : ''}`}
+                                                />
+                                            </td>
+                                            <td className="p-1 border-y border-slate-100 group-hover:border-indigo-100">
+                                                <input 
+                                                    type="text" 
+                                                    value={ref.isBook ? (ref.publisher || ref.institution || '') : ref.source} 
+                                                    onChange={(e) => handleRefChange(idx, ref.isBook ? 'publisher' : 'source', e.target.value)}
+                                                    className="w-full p-1.5 outline-none rounded bg-transparent focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all italic text-slate-600"
+                                                    placeholder={ref.isBook ? "Publisher/Inst." : "Journal"}
+                                                />
+                                            </td>
+                                            <td className="p-1 border-y border-slate-100 group-hover:border-indigo-100">
+                                                <input 
+                                                    type="text" 
+                                                    value={ref.volume} 
+                                                    onChange={(e) => handleRefChange(idx, 'volume', e.target.value)}
+                                                    className="w-full text-center p-1.5 outline-none rounded bg-transparent focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all"
+                                                />
+                                            </td>
+                                            <td className="p-1 border-y border-slate-100 group-hover:border-indigo-100">
+                                                <input 
+                                                    type="text" 
+                                                    value={ref.issue} 
+                                                    onChange={(e) => handleRefChange(idx, 'issue', e.target.value)}
+                                                    className="w-full text-center p-1.5 outline-none rounded bg-transparent focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all"
+                                                />
+                                            </td>
+                                            <td className="p-1 border-y border-slate-100 group-hover:border-indigo-100">
+                                                <div className="flex items-center gap-1">
+                                                    <input 
+                                                        type="text" 
+                                                        value={ref.fpage} 
+                                                        onChange={(e) => handleRefChange(idx, 'fpage', e.target.value)}
+                                                        className="w-full text-center p-1.5 outline-none rounded bg-transparent focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all"
+                                                        placeholder="start"
+                                                    />
+                                                    <span className="text-slate-300">-</span>
+                                                    <input 
+                                                        type="text" 
+                                                        value={ref.lpage} 
+                                                        onChange={(e) => handleRefChange(idx, 'lpage', e.target.value)}
+                                                        className="w-full text-center p-1.5 outline-none rounded bg-transparent focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all"
+                                                        placeholder="end"
+                                                    />
+                                                </div>
+                                            </td>
+                                            <td className="p-1 last:rounded-r-lg border-y border-r border-slate-100 group-hover:border-indigo-100">
+                                                <input 
+                                                    type="text" 
+                                                    value={ref.patentNumber || ref.doi || ''} 
+                                                    onChange={(e) => handleRefChange(idx, ref.patentNumber ? 'patentNumber' : 'doi', e.target.value)}
+                                                    className="w-full p-1.5 outline-none rounded bg-transparent focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all text-indigo-600 font-mono text-[10px]"
+                                                    placeholder="DOI/Pat"
+                                                />
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+
+                {/* 2. XML View */}
+                <div className={`flex-grow bg-slate-900 text-slate-300 p-6 font-mono text-sm overflow-auto custom-scrollbar ${viewMode === 'xml' ? 'block' : 'hidden'}`}>
+                    <textarea 
+                        readOnly 
+                        value={buildXml()} 
+                        className="w-full h-full bg-transparent border-none outline-none resize-none" 
+                    />
+                </div>
+
+                {/* 3. Text Report View */}
+                <div className={`flex-grow bg-white text-slate-800 p-6 font-mono text-sm overflow-auto custom-scrollbar ${viewMode === 'text' ? 'block' : 'hidden'}`}>
+                    {parsedRefs.length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60">
+                            <p className="font-medium text-lg">No Data</p>
+                            <p>Parse references to generate a text report.</p>
+                        </div>
+                    ) : (
+                        <textarea 
+                            readOnly 
+                            value={generateTextReport()} 
+                            className="w-full h-full bg-transparent border-none outline-none resize-none whitespace-pre-wrap leading-relaxed" 
+                        />
+                    )}
+                </div>
+
+                {/* 4. QC Report View */}
+                <div className={`flex-grow bg-slate-50 overflow-auto custom-scrollbar p-6 ${viewMode === 'report' ? 'block' : 'hidden'}`}>
+                    {parsedRefs.length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60">
+                            <p className="font-medium text-lg">No Data</p>
+                            <p>Parse references to generate a QC report.</p>
+                        </div>
+                    ) : qcIssues.length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center text-emerald-500 opacity-80">
+                            <svg className="w-16 h-16 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            <p className="font-bold text-lg">All Clean!</p>
+                            <p className="text-slate-500 text-sm mt-2">No critical missing fields or empty tags detected.</p>
+                        </div>
+                    ) : (
+                        <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                            <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                                <h3 className="font-bold text-slate-700">Quality Control Report</h3>
+                                <span className="bg-rose-100 text-rose-700 px-3 py-1 rounded-full text-xs font-bold">{qcIssues.length} Issues Found</span>
+                            </div>
+                            <table className="w-full text-sm text-left">
+                                <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-xs border-b border-slate-100">
+                                    <tr>
+                                        <th className="px-6 py-3 w-16">Ref #</th>
+                                        <th className="px-6 py-3 w-24">Severity</th>
+                                        <th className="px-6 py-3 w-32">Field</th>
+                                        <th className="px-6 py-3">Issue Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {qcIssues.map((issue, i) => (
+                                        <tr key={i} className="hover:bg-slate-50 transition-colors">
+                                            <td className="px-6 py-4 font-mono text-slate-500">{issue.refIndex + 1}</td>
+                                            <td className="px-6 py-4">
+                                                <span className={`px-2 py-1 rounded-md text-xs font-bold uppercase ${issue.type === 'error' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}>
+                                                    {issue.type}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 font-medium text-slate-700">{issue.field}</td>
+                                            <td className="px-6 py-4 text-slate-600">{issue.message}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+
+                {/* 5. Input Panel (Bottom Pane) */}
+                <div className={`border-t border-slate-200 bg-white shadow-[0_-4px_12px_-4px_rgba(0,0,0,0.05)] z-20 flex flex-col transition-all duration-300 ${showInput ? 'h-[35%] min-h-[180px]' : 'h-10 overflow-hidden'}`}>
+                    <div className="bg-white px-4 py-2 border-b border-slate-100 flex justify-between items-center cursor-pointer select-none hover:bg-slate-50 transition-colors" onClick={() => setShowInput(!showInput)}>
+                        <div className="flex items-center gap-2">
+                            <span className={`transition-transform duration-200 text-slate-400 ${showInput ? 'rotate-180' : ''}`}>
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                            </span>
+                            <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Raw Input Source</span>
+                        </div>
+                        {showInput && (
+                            <button onClick={(e) => { e.stopPropagation(); setInput(''); }} className="text-[10px] font-bold text-slate-400 hover:text-red-500 px-2 py-1 rounded hover:bg-red-50 transition-colors">Clear Input</button>
+                        )}
                     </div>
                     <textarea 
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
-                        className="w-full h-full p-6 text-sm font-mono text-slate-800 border-0 focus:ring-0 outline-none bg-white resize-none leading-relaxed placeholder-slate-300" 
-                        placeholder={`Paste one citation per line.\nExample:\nBabedi, L., 2022. Trace elements in pyrite. In: Reich, M. (Eds.), Pyrite: A Special Issue. Geol. Soc. Lond. Spec. Publ. vol. 516, 47–78.`}
+                        className="flex-grow w-full p-4 text-sm font-mono text-slate-700 bg-white border-0 focus:ring-0 outline-none resize-none leading-relaxed placeholder-slate-300" 
+                        placeholder={`Paste citations here (one per line)...\nExample:\nBabedi, L., 2022. Trace elements in pyrite. In: Reich, M. (Eds.), Pyrite: A Special Issue. Geol. Soc. Lond. Spec. Publ. vol. 516, 47–78.`}
                         spellCheck={false}
                     />
                 </div>
-
-                {/* Output */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col relative">
-                    <div className="bg-slate-50 px-5 py-2 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-3">
-                        <label className="font-bold text-slate-700 text-sm flex items-center gap-2">
-                            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white border border-slate-200 text-xs text-emerald-600 font-mono shadow-sm">2</span>
-                            Result
-                        </label>
-                        
-                        <div className="flex flex-wrap items-center gap-3">
-                            <div className="flex items-center gap-2 bg-slate-100 rounded-lg p-1 border border-slate-200">
-                                <button
-                                    onClick={() => setCitationStyle('name-date')}
-                                    className={`px-2 py-1 text-[10px] font-bold uppercase rounded transition-colors ${citationStyle === 'name-date' ? 'bg-white text-sky-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                                >
-                                    Name-Date
-                                </button>
-                                <button
-                                    onClick={() => setCitationStyle('numbered')}
-                                    className={`px-2 py-1 text-[10px] font-bold uppercase rounded transition-colors ${citationStyle === 'numbered' ? 'bg-white text-sky-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                                >
-                                    [1]
-                                </button>
-                            </div>
-
-                            <div className="flex items-center gap-2 bg-slate-100 rounded-lg px-2 py-1 border border-slate-200">
-                                <span className="text-[10px] font-bold text-slate-400">ID:</span>
-                                <input 
-                                    type="number" 
-                                    value={startId} 
-                                    onChange={(e) => setStartId(parseInt(e.target.value) || 5)} 
-                                    className="w-12 bg-transparent text-xs font-mono font-bold text-slate-700 outline-none text-right"
-                                />
-                            </div>
-                            
-                            {output && activeTab === 'xml' && (
-                                <button onClick={copyOutput} className="text-xs font-bold text-emerald-600 hover:bg-emerald-50 px-3 py-1.5 rounded border border-transparent hover:border-emerald-100 transition-colors flex items-center gap-1">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
-                                </button>
-                            )}
-                            
-                             {parsedRefs.length > 0 && activeTab === 'report' && (
-                                <div className="flex gap-2">
-                                    <button onClick={downloadCSV} className="text-xs font-bold text-slate-600 hover:bg-slate-100 px-3 py-1.5 rounded border border-slate-200 transition-colors flex items-center gap-1 shadow-sm">
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                                        Export CSV
-                                    </button>
-                                    <button onClick={regenerateXmlFromState} className="text-xs font-bold text-sky-600 hover:bg-sky-50 px-3 py-1.5 rounded border border-sky-100 hover:border-sky-200 transition-colors flex items-center gap-1 shadow-sm">
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" /></svg>
-                                        Regenerate
-                                    </button>
-                                </div>
-                             )}
-                        </div>
-                    </div>
-                    
-                    <div className="bg-white px-2 pt-2 border-b border-slate-100 flex space-x-1">
-                         <button 
-                            onClick={() => setActiveTab('xml')} 
-                            className={`flex-1 py-2 text-xs font-bold rounded-t-lg transition-all duration-200 border-t border-x ${activeTab === 'xml' 
-                                ? 'bg-slate-50 text-emerald-600 border-slate-200 translate-y-[1px]' 
-                                : 'bg-white text-slate-500 border-transparent hover:bg-slate-50 hover:text-slate-700'}`}
-                         >
-                            XML Output
-                         </button>
-                         <button 
-                            onClick={() => setActiveTab('report')} 
-                            className={`flex-1 py-2 text-xs font-bold rounded-t-lg transition-all duration-200 border-t border-x ${activeTab === 'report' 
-                                ? 'bg-slate-50 text-emerald-600 border-slate-200 translate-y-[1px]' 
-                                : 'bg-white text-slate-500 border-transparent hover:bg-slate-50 hover:text-slate-700'}`}
-                         >
-                            Edit / Report
-                         </button>
-                    </div>
-
-                    <div className="flex-grow relative bg-slate-50 overflow-hidden flex flex-col">
-                        {isLoading && <LoadingOverlay message="Processing..." color="blue" />}
-                        
-                        {activeTab === 'xml' && (
-                            <textarea 
-                                value={output}
-                                readOnly
-                                className="w-full h-full p-6 text-sm font-mono text-slate-800 border-0 focus:ring-0 outline-none bg-transparent resize-none leading-relaxed" 
-                                placeholder="Generated XML will appear here..."
-                            />
-                        )}
-
-                        {activeTab === 'report' && (
-                            <div className="h-full flex flex-col">
-                                {parsedRefs.length > 0 && (
-                                    <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap gap-4 text-xs font-medium text-slate-600">
-                                        <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-slate-400"></span> Total: <b>{stats.total}</b></div>
-                                        <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-sky-400"></span> Journals: <b>{stats.journals}</b></div>
-                                        <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-purple-400"></span> Chapters: <b>{stats.chapters}</b></div>
-                                        <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-indigo-400"></span> Books: <b>{stats.books}</b></div>
-                                        {stats.missingData > 0 && (
-                                            <div className="flex items-center gap-1.5 text-amber-700"><span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span> Incomplete: <b>{stats.missingData}</b></div>
-                                        )}
-                                    </div>
-                                )}
-                                <div className="flex-grow overflow-y-auto custom-scrollbar p-4 space-y-4">
-                                    {parsedRefs.length > 0 ? (
-                                        parsedRefs.map((ref, i) => (
-                                            <div key={i} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow group-focus-within:ring-2 ring-sky-100">
-                                                {/* Header Strip */}
-                                                <div className="bg-slate-50/50 px-4 py-3 border-b border-slate-100 flex justify-between items-center">
-                                                    <div className="flex items-center gap-3">
-                                                        <span className="font-mono text-xs font-bold text-sky-700 bg-sky-50 px-2 py-1 rounded border border-sky-100">
-                                                            {generateLabel(ref, i)}
-                                                        </span>
-                                                        <select 
-                                                            value={ref.isBook ? 'book' : (ref.isChapter ? 'chapter' : 'journal')} 
-                                                            onChange={(e) => handleTypeChange(i, e.target.value as any)}
-                                                            className="text-[10px] uppercase font-bold px-1 py-0.5 rounded border bg-white outline-none cursor-pointer hover:border-slate-300 focus:border-sky-300 text-slate-600"
-                                                        >
-                                                            <option value="journal">Journal Article</option>
-                                                            <option value="chapter">Book Chapter</option>
-                                                            <option value="book">Monograph (Book)</option>
-                                                        </select>
-                                                    </div>
-                                                    {/* Parsing Quality Indicator */}
-                                                    <div className="flex gap-2">
-                                                        {!ref.title && <span className="px-2 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-bold">No Title</span>}
-                                                        {ref.authors.length === 0 && <span className="px-2 py-0.5 rounded bg-orange-100 text-orange-700 text-[10px] font-bold">No Authors</span>}
-                                                        {!ref.year && <span className="px-2 py-0.5 rounded bg-yellow-100 text-yellow-700 text-[10px] font-bold">No Year</span>}
-                                                        {ref.title && ref.authors.length > 0 && ref.year && <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[10px] font-bold">Valid</span>}
-                                                    </div>
-                                                </div>
-                                                
-                                                <div className="p-4 space-y-3">
-                                                    {/* Title Section */}
-                                                    <div>
-                                                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Title</label>
-                                                        <textarea 
-                                                            value={ref.title}
-                                                            onChange={(e) => handleRefChange(i, 'title', e.target.value)}
-                                                            className="w-full text-sm font-semibold text-slate-800 leading-snug border-0 border-b border-dashed border-slate-300 focus:border-sky-500 focus:ring-0 px-0 py-1 bg-transparent resize-y min-h-[2.5rem]"
-                                                            placeholder="Enter title..."
-                                                        />
-                                                    </div>
-
-                                                    {/* Metadata Grid */}
-                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                                                        
-                                                        {/* Authors */}
-                                                        <div className="sm:col-span-2">
-                                                            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Authors (Separated by semicolon)</label>
-                                                            <textarea 
-                                                                value={ref.authors.map(a => a.initials ? `${a.surname}, ${a.initials}` : a.surname).join('; ')}
-                                                                onChange={(e) => handleAuthorsChange(i, e.target.value)}
-                                                                className="w-full text-sm text-slate-600 border border-slate-200 rounded p-2 focus:ring-1 focus:ring-sky-200 focus:border-sky-400 outline-none"
-                                                                rows={2}
-                                                                placeholder="Surname, I.; Surname, I. (or Organization Name)"
-                                                            />
-                                                        </div>
-
-                                                        {/* Source Info - Dynamic based on type */}
-                                                        {ref.isBook ? (
-                                                            <>
-                                                                <div>
-                                                                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Publisher</label>
-                                                                    <input 
-                                                                        type="text" 
-                                                                        value={ref.publisher || ''} 
-                                                                        onChange={(e) => handleRefChange(i, 'publisher', e.target.value)}
-                                                                        className="w-full text-sm font-medium text-slate-700 border-0 border-b border-dashed border-slate-300 focus:border-sky-500 focus:ring-0 px-0 py-1 bg-transparent"
-                                                                        placeholder="e.g. Elsevier"
-                                                                    />
-                                                                </div>
-                                                                <div>
-                                                                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Location</label>
-                                                                    <input 
-                                                                        type="text" 
-                                                                        value={ref.location || ''} 
-                                                                        onChange={(e) => handleRefChange(i, 'location', e.target.value)}
-                                                                        className="w-full text-sm font-medium text-slate-700 border-0 border-b border-dashed border-slate-300 focus:border-sky-500 focus:ring-0 px-0 py-1 bg-transparent"
-                                                                        placeholder="e.g. Amsterdam"
-                                                                    />
-                                                                </div>
-                                                            </>
-                                                        ) : (
-                                                            <div className="sm:col-span-1">
-                                                                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Source / Journal</label>
-                                                                <input 
-                                                                    type="text" 
-                                                                    value={ref.source} 
-                                                                    onChange={(e) => handleRefChange(i, 'source', e.target.value)}
-                                                                    className="w-full text-sm font-medium text-slate-700 border-0 border-b border-dashed border-slate-300 focus:border-sky-500 focus:ring-0 px-0 py-1 bg-transparent"
-                                                                />
-                                                            </div>
-                                                        )}
-
-                                                        {/* Year & Vol/Pages */}
-                                                        <div className={ref.isBook ? "sm:col-span-2" : "sm:col-span-1"}>
-                                                            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Details</label>
-                                                            <div className="flex items-center gap-2">
-                                                                <input 
-                                                                    type="text" 
-                                                                    placeholder="Year"
-                                                                    value={ref.year}
-                                                                    onChange={(e) => handleRefChange(i, 'year', e.target.value)}
-                                                                    className="w-12 text-center text-sm bg-slate-50 border border-slate-200 rounded py-1 focus:ring-1 focus:border-sky-400 outline-none"
-                                                                />
-                                                                
-                                                                {!ref.isBook && (
-                                                                    <>
-                                                                        <input 
-                                                                            type="text" 
-                                                                            placeholder="Vol"
-                                                                            value={ref.volume}
-                                                                            onChange={(e) => handleRefChange(i, 'volume', e.target.value)}
-                                                                            className="w-12 text-center text-sm bg-slate-50 border border-slate-200 rounded py-1 focus:ring-1 focus:border-sky-400 outline-none"
-                                                                        />
-                                                                        <input 
-                                                                            type="text" 
-                                                                            placeholder="Iss"
-                                                                            value={ref.issue}
-                                                                            onChange={(e) => handleRefChange(i, 'issue', e.target.value)}
-                                                                            className="w-10 text-center text-sm bg-slate-50 border border-slate-200 rounded py-1 focus:ring-1 focus:border-sky-400 outline-none"
-                                                                        />
-                                                                        <div className="flex items-center text-slate-400 text-xs">
-                                                                            pp. 
-                                                                            <input 
-                                                                                type="text" 
-                                                                                value={ref.fpage}
-                                                                                onChange={(e) => handleRefChange(i, 'fpage', e.target.value)}
-                                                                                className="w-10 text-center text-sm bg-slate-50 border border-slate-200 rounded py-1 ml-1 focus:ring-1 focus:border-sky-400 outline-none"
-                                                                            />
-                                                                            -
-                                                                            <input 
-                                                                                type="text" 
-                                                                                value={ref.lpage}
-                                                                                onChange={(e) => handleRefChange(i, 'lpage', e.target.value)}
-                                                                                className="w-10 text-center text-sm bg-slate-50 border border-slate-200 rounded py-1 ml-1 focus:ring-1 focus:border-sky-400 outline-none"
-                                                                            />
-                                                                        </div>
-                                                                    </>
-                                                                )}
-
-                                                                {ref.isBook && (
-                                                                    <div className="flex items-center text-slate-400 text-xs">
-                                                                        Total Pages:
-                                                                        <input 
-                                                                            type="text" 
-                                                                            value={ref.totalPages || ''}
-                                                                            onChange={(e) => handleRefChange(i, 'totalPages', e.target.value)}
-                                                                            className="w-16 text-center text-sm bg-slate-50 border border-slate-200 rounded py-1 ml-1 focus:ring-1 focus:border-sky-400 outline-none"
-                                                                            placeholder="e.g. 662"
-                                                                        />
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-
-                                                        {/* Extra Chapter Info */}
-                                                        {ref.isChapter && (
-                                                            <div className="sm:col-span-2 grid grid-cols-2 gap-4 bg-purple-50/30 p-2 rounded border border-purple-50">
-                                                                <div>
-                                                                    <label className="block text-[10px] font-bold text-purple-400 uppercase tracking-wider mb-1">Editors (Surname, I.)</label>
-                                                                    <textarea 
-                                                                        value={ref.editors.map(e => `${e.surname}, ${e.initials}`).join('; ')}
-                                                                        onChange={(e) => handleEditorsChange(i, e.target.value)}
-                                                                        className="w-full text-xs text-slate-600 border border-purple-200 rounded p-1.5 focus:ring-1 focus:ring-purple-200 focus:border-purple-400 outline-none bg-white/50"
-                                                                        rows={2}
-                                                                        placeholder="Smith, J.; Doe, A."
-                                                                    />
-                                                                </div>
-                                                                <div>
-                                                                    <label className="block text-[10px] font-bold text-purple-400 uppercase tracking-wider mb-1">Series</label>
-                                                                    <input 
-                                                                        type="text" 
-                                                                        value={ref.series || ''} 
-                                                                        onChange={(e) => handleRefChange(i, 'series', e.target.value)}
-                                                                        className="w-full text-xs text-slate-700 border-0 border-b border-dashed border-purple-300 focus:border-purple-500 focus:ring-0 px-0 py-1 bg-transparent"
-                                                                    />
-                                                                </div>
-                                                            </div>
-                                                        )}
-
-                                                        {/* Comments Field */}
-                                                        <div className="sm:col-span-2">
-                                                            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Comment / Note</label>
-                                                            <input 
-                                                                type="text" 
-                                                                value={ref.comment || ''} 
-                                                                onChange={(e) => handleRefChange(i, 'comment', e.target.value)}
-                                                                className="w-full text-xs text-slate-500 italic border-0 border-b border-dashed border-slate-300 focus:border-sky-500 focus:ring-0 px-0 py-1 bg-transparent"
-                                                                placeholder="(in Chinese with English abstract)"
-                                                            />
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Comparison Toggle / View */}
-                                                    <div className="pt-3 border-t border-slate-100">
-                                                        <details className="group">
-                                                            <summary className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider cursor-pointer hover:text-sky-600 transition-colors list-none">
-                                                                <svg className="w-3 h-3 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
-                                                                Original Text (Read-Only)
-                                                            </summary>
-                                                            <div className="mt-2 p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs font-mono text-slate-500 leading-relaxed break-words">
-                                                                {ref.originalText}
-                                                            </div>
-                                                        </details>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ))
-                                    ) : (
-                                        <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60">
-                                            <p>Generate references to view capture report.</p>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </div>
-
-            <div className="mt-8 text-center">
-                <button 
-                    onClick={processReferences} 
-                    disabled={isLoading}
-                    title="Ctrl+Enter"
-                    className="group bg-sky-600 hover:bg-sky-700 text-white font-bold py-3.5 px-10 rounded-xl shadow-lg shadow-sky-500/30 transform transition-all active:scale-95 disabled:opacity-70 disabled:cursor-wait hover:-translate-y-0.5"
-                >
-                    Generate Reference XML
-                </button>
             </div>
 
             {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
