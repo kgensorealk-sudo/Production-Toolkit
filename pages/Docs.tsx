@@ -1,6 +1,4 @@
 
-
-
 import React, { useState } from 'react';
 
 const Docs: React.FC = () => {
@@ -22,7 +20,7 @@ const Docs: React.FC = () => {
                     <NavBtn id="overview" label="Overview" />
                     <div className="pt-4 pb-2 px-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Tool Guides</div>
                     <NavBtn id="xml" label="XML Ref Normalizer" />
-                    <NavBtn id="refgen" label="Reference Generator" />
+                    <NavBtn id="refgen" label="Reference Updater" />
                     <NavBtn id="credit" label="CRediT Generator" />
                     <NavBtn id="highlights" label="Highlights Gen" />
                     <NavBtn id="fixer" label="Table Fixer" />
@@ -73,20 +71,23 @@ const Docs: React.FC = () => {
 
                     {section === 'refgen' && (
                         <section className="animate-fade-in">
-                            <h2 className="text-3xl font-extrabold text-slate-900 mb-6">Reference Generator</h2>
+                            <h2 className="text-3xl font-extrabold text-slate-900 mb-6">Reference Updater</h2>
                              <div className="prose prose-slate">
                                 <p className="text-slate-600 mb-4">
-                                    Parses raw text citations (e.g., from Word documents or PDFs) and converts them into structured NISO/Elsevier XML (<code>ce:bib-reference</code>).
+                                    Merges a list of corrected XML references into an existing "Original" XML reference list based on matching labels.
                                 </p>
-                                <h3 className="text-xl font-bold text-slate-800 mt-6 mb-3">Supported Patterns</h3>
+                                <h3 className="text-xl font-bold text-slate-800 mt-6 mb-3">How to Use</h3>
+                                <ol className="list-decimal pl-5 space-y-2 text-slate-600">
+                                    <li>Paste your <strong>Original</strong> XML list (the full list from the current file).</li>
+                                    <li>Paste your <strong>Updated</strong> XML list (the subset or full list containing corrections).</li>
+                                    <li>Click <strong>Merge Updates</strong>.</li>
+                                    <li>The tool replaces original references with updated ones where the label (e.g. <code>[62]</code>) matches.</li>
+                                </ol>
+                                <h3 className="text-xl font-bold text-slate-800 mt-6 mb-3">Features</h3>
                                 <ul className="list-disc pl-5 space-y-2 text-slate-600">
-                                    <li><strong>Standard Journals:</strong> Detects Authors, Year, Title, Journal Name, Volume, Issue, Pages.</li>
-                                    <li><strong>Book Chapters:</strong> Detects "In:" patterns, Editors, and Book Titles.</li>
+                                    <li><strong>Structure Preservation:</strong> Keeps original references that were not in the update list.</li>
+                                    <li><strong>Preserve IDs:</strong> Optionally keeps the <code>id="..."</code> attribute from the Original XML even when replacing content. This prevents breaking internal links (<code>&lt;ce:cross-ref&gt;</code>) in the main article body.</li>
                                 </ul>
-                                <h3 className="text-xl font-bold text-slate-800 mt-6 mb-3">Example Input</h3>
-                                <pre className="bg-slate-800 text-slate-100 p-3 rounded text-sm overflow-x-auto">
-Babedi, L., 2022. Trace elements in pyrite. In: Reich, M. (Eds.), Pyrite: A Special Issue. Geol. Soc. Lond. Spec. Publ. vol. 516, 47–78.
-                                </pre>
                              </div>
                         </section>
                     )}

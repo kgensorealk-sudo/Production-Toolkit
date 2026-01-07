@@ -11,7 +11,7 @@ import TagCleaner from './pages/TagCleaner';
 import TableFixer from './pages/TableFixer';
 import ArticleHighlights from './pages/ArticleHighlights';
 import ViewSync from './pages/ViewSync';
-import ReferenceGenerator from './pages/ReferenceGenerator';
+import ReferenceUpdater from './pages/ReferenceUpdater';
 import Docs from './pages/Docs';
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
@@ -137,7 +137,7 @@ const App: React.FC = () => {
                     <Route path="/referenceGen" element={
                         <ProtectedRoute requireSubscription={true}>
                             <Layout currentTool={ToolId.REFERENCE_GEN}>
-                                <ReferenceGenerator />
+                                <ReferenceUpdater />
                             </Layout>
                         </ProtectedRoute>
                     } />

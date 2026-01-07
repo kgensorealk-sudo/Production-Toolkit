@@ -58,7 +58,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool }) => {
                                     {currentTool === ToolId.TABLE_FIXER && 'Table Fixer'}
                                     {currentTool === ToolId.HIGHLIGHTS_GEN && 'Highlights Gen'}
                                     {currentTool === ToolId.VIEW_SYNC && 'View Sync'}
-                                    {currentTool === ToolId.REFERENCE_GEN && 'Ref Generator'}
+                                    {currentTool === ToolId.REFERENCE_GEN && 'Ref Updater'}
                                 </span>
                             </div>
                         )}
