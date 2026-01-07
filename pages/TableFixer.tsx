@@ -215,21 +215,29 @@ const TableFixer: React.FC = () => {
                 matches.push({ id, label, content, fullTag });
             }
         } else {
-            // Attach Mode: Look for legend items (simple-para with sup/label)
+            // Attach Mode: Look for legend items (simple-para)
+            // We expand this to find labels in bold or plain text too
             const spRegex = /<ce:simple-para\b[^>]*>([\s\S]*?)<\/ce:simple-para>/g;
             let match;
             while ((match = spRegex.exec(input)) !== null) {
                 const fullTag = match[0];
-                const inner = match[1];
+                const inner = match[1].trim();
                 
                 let label = '';
                 
-                // Heuristic: Check for <ce:sup> or <ce:label> at start
+                // 1. Explicit Tags
+                const labelTagMatch = /^\s*<ce:label>(.*?)<\/ce:label>/.exec(inner);
                 const supMatch = /^\s*<ce:sup>(.*?)<\/ce:sup>/.exec(inner);
-                const labelMatch = /^\s*<ce:label>(.*?)<\/ce:label>/.exec(inner);
+                const boldMatch = /^\s*<ce:bold>(.*?)<\/ce:bold>/.exec(inner);
                 
-                if (supMatch) label = supMatch[1];
-                else if (labelMatch) label = labelMatch[1];
+                // 2. Plain Text (e.g. "a. Text", "1) Text", "* Text")
+                // We'll require a space after the dot/paren to avoid matching legitimate text starting with a word.
+                const plainMatch = /^\s*([a-zA-Z0-9\*\†\‡\§]{1,3})[\.\)]\s+/.exec(inner);
+
+                if (labelTagMatch) label = labelTagMatch[1];
+                else if (supMatch) label = supMatch[1];
+                else if (boldMatch) label = boldMatch[1];
+                else if (plainMatch) label = plainMatch[1];
 
                 if (label) {
                     const idMatch = /id="([^"]+)"/.exec(fullTag);
@@ -240,7 +248,8 @@ const TableFixer: React.FC = () => {
         }
 
         setFootnotes(matches);
-        setSelectedIds(new Set()); 
+        // Auto-select all by default for better UX
+        setSelectedIds(new Set(matches.map(m => m.id))); 
         
         if (matches.length > 0) {
             setActiveTab('selection');
@@ -325,21 +334,26 @@ const TableFixer: React.FC = () => {
                 let footnotesToAdd: string[] = [];
                 const sortedSelected = footnotes.filter(fn => selectedIds.has(fn.id));
 
-                // Calc next FN ID
-                const existingFnMatches = input.match(/id="fn(\d+)"/g);
-                let startId = 0;
-                if (existingFnMatches) {
-                     const maxId = existingFnMatches.reduce((max, curr) => {
-                        const m = curr.match(/id="fn(\d+)"/);
+                // Calc next TF ID (used to be FN)
+                // Rule: prefix tf, 4 digit number, start 4000, increment 5
+                const existingTfMatches = input.match(/id="tf(\d+)"/g);
+                let startId = 4000;
+                if (existingTfMatches) {
+                     const maxId = existingTfMatches.reduce((max, curr) => {
+                        const m = curr.match(/id="tf(\d+)"/);
                         return m ? Math.max(max, parseInt(m[1])) : max;
                     }, 0);
-                    startId = maxId;
+                    
+                    if (maxId >= 4000) {
+                        startId = Math.ceil((maxId + 1) / 5) * 5;
+                    }
                 }
-                let fnIdCounter = startId + 1;
+                let tfIdCounter = startId;
 
                 sortedSelected.forEach(fn => {
-                    const newFnId = `fn${String(fnIdCounter).padStart(3, '0')}`;
-                    fnIdCounter++;
+                    // Generate ID: tf + 4 digits
+                    const newFnId = `tf${String(tfIdCounter).padStart(4, '0')}`;
+                    tfIdCounter += 5;
                     
                     // Remove Legend Item
                     processed = processed.split(fn.fullTag).join('');
@@ -353,9 +367,13 @@ const TableFixer: React.FC = () => {
                     
                     // Create Footnote
                     // Strip label markers from content
-                    let cleanContent = fn.content
-                        .replace(new RegExp(`^\\s*<ce:sup>${escapedLabel}<\\/ce:sup>`), '')
-                        .replace(new RegExp(`^\\s*<ce:label>${escapedLabel}<\\/ce:label>`), '')
+                    let cleanContent = fn.content;
+                    
+                    cleanContent = cleanContent
+                        .replace(new RegExp(`^\\s*<ce:label>${escapedLabel}<\\/ce:label>\\s*`), '')
+                        .replace(new RegExp(`^\\s*<ce:sup>${escapedLabel}<\\/ce:sup>\\s*`), '')
+                        .replace(new RegExp(`^\\s*<ce:bold>${escapedLabel}<\\/ce:bold>\\s*`), '')
+                        .replace(new RegExp(`^\\s*${escapedLabel}[\\.\\)]\\s+`), '') // Plain text "a. "
                         .trim();
                     
                     footnotesToAdd.push(`<ce:table-footnote id="${newFnId}"><ce:label>${fn.label}</ce:label><ce:note-para>${cleanContent}</ce:note-para></ce:table-footnote>`);
@@ -556,22 +574,6 @@ const TableFixer: React.FC = () => {
                                                 </label>
                                             ))}
                                         </div>
-                                        <div className="p-4 bg-white border-t border-slate-100">
-                                            <button 
-                                                onClick={processTable} 
-                                                disabled={selectedIds.size === 0}
-                                                title="Ctrl+Enter"
-                                                className={`w-full text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transform transition-all active:scale-95 flex items-center justify-center gap-2 ${
-                                                    selectedIds.size === 0 ? 'bg-slate-300 cursor-not-allowed' :
-                                                    mode === 'detach' 
-                                                        ? 'bg-pink-600 hover:bg-pink-700 shadow-pink-500/20' 
-                                                        : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20'
-                                                }`}
-                                            >
-                                                <span>{mode === 'detach' ? 'Convert to Legend' : 'Attach as Footnotes'} ({selectedIds.size})</span>
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
-                                            </button>
-                                        </div>
                                     </>
                                 )}
                             </div>
@@ -622,6 +624,22 @@ const TableFixer: React.FC = () => {
                         )}
                     </div>
                 </div>
+            </div>
+
+            {/* Added Bottom Action Button for Visibility */}
+            <div className="mt-8 text-center">
+                <button 
+                    onClick={processTable} 
+                    disabled={selectedIds.size === 0 || isLoading}
+                    title="Ctrl+Enter"
+                    className={`group font-bold py-3.5 px-10 rounded-xl shadow-lg transform transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed hover:-translate-y-0.5
+                    ${mode === 'detach' 
+                        ? 'bg-pink-600 hover:bg-pink-700 text-white shadow-pink-500/30' 
+                        : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/30'
+                    }`}
+                >
+                    {mode === 'detach' ? 'Convert Selection to Legend' : 'Attach Selection as Footnotes'}
+                </button>
             </div>
 
             {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
