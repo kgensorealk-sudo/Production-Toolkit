@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import { UserProfile } from '../types';
@@ -194,14 +193,12 @@ const AdminDashboard: React.FC = () => {
     };
 
     // Helper to check online status (within last 5 mins)
-    // We use a safe comparison to handle potential timezone skew or nulls
     const checkIsOnline = (lastSeen?: string) => {
         if (!lastSeen) return false;
         try {
             const last = new Date(lastSeen).getTime();
             const now = new Date().getTime();
             if (isNaN(last)) return false;
-            // 5 minutes buffer
             return (now - last) < 5 * 60 * 1000;
         } catch (e) {
             return false;
@@ -225,24 +222,16 @@ const AdminDashboard: React.FC = () => {
         }
     };
 
-    // --- User Fetching ---
     const fetchUsers = useCallback(async (isBackground = false) => {
         if (!isBackground) setIsLoading(true);
         else setIsRefetching(true);
 
         try {
-            const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Request timed out')), 15000)
-            );
             const dataPromise = supabase.from('profiles').select('*').order('last_seen', { ascending: false });
-            const result = await Promise.race([dataPromise, timeoutPromise]) as any;
-            const { data, error } = result;
-
+            const { data, error } = await dataPromise;
             if (error) throw error;
             setUsers(data || []);
         } catch (error: any) {
-            console.error('Error fetching users:', error);
-            // Only toast on manual fetch failure to avoid spamming background errors
             if (!isBackground) {
                 setToast({ msg: 'Failed to load users: ' + getErrMsg(error), type: 'error' });
             }
@@ -252,7 +241,6 @@ const AdminDashboard: React.FC = () => {
         }
     }, []);
 
-    // --- Announcement Fetching ---
     const fetchAnnouncements = useCallback(async () => {
         setIsLoading(true);
         try {
@@ -264,7 +252,6 @@ const AdminDashboard: React.FC = () => {
             if (error) throw error;
             setAnnouncements(data || []);
         } catch (error: any) {
-            console.error('Error fetching announcements:', error);
             if (error?.code === '42P01') {
                 setToast({ msg: 'Announcements table missing. Check Guide tab.', type: 'warn' });
             } else {
@@ -275,21 +262,16 @@ const AdminDashboard: React.FC = () => {
         }
     }, []);
 
-    // Initial Load & Tab Change
     useEffect(() => {
         if (activeTab === 'users') {
             fetchUsers();
-            // Auto-refresh users every 30 seconds to keep online status live
-            const intervalId = setInterval(() => {
-                fetchUsers(true);
-            }, 30000);
+            const intervalId = setInterval(() => { fetchUsers(true); }, 30000);
             return () => clearInterval(intervalId);
         } else if (activeTab === 'announcements') {
             fetchAnnouncements();
         }
     }, [activeTab, fetchUsers, fetchAnnouncements]);
 
-    // --- User Logic ---
     const calculateExpiry = (type: string) => {
         const date = new Date();
         if (type === '1min') date.setMinutes(date.getMinutes() + 1); 
@@ -305,11 +287,9 @@ const AdminDashboard: React.FC = () => {
     const toggleSubscription = async (user: UserProfile) => {
         const newVal = !user.is_subscribed;
         const updates: any = { is_subscribed: newVal };
-        
         if (newVal) {
             const expiryDate = calculateExpiry(duration);
             updates.subscription_end = expiryDate;
-            
             if (duration === 'trial' || duration === '1min') {
                 updates.trial_start = new Date().toISOString();
                 updates.trial_end = expiryDate;
@@ -317,95 +297,51 @@ const AdminDashboard: React.FC = () => {
                 updates.trial_start = null;
                 updates.trial_end = null;
             }
-        } else {
-            updates.subscription_end = null;
-        }
-
+        } else { updates.subscription_end = null; }
         const { error } = await supabase.from('profiles').update(updates).eq('id', user.id);
-        if (error) {
-            setToast({ msg: 'Update failed: ' + getErrMsg(error), type: 'error' });
-        } else {
-            setUsers(users.map(u => u.id === user.id ? { ...u, ...updates } : u));
-            setToast({ msg: `User ${newVal ? 'activated' : 'deactivated'}`, type: 'success' });
-        }
+        if (error) { setToast({ msg: 'Update failed: ' + getErrMsg(error), type: 'error' }); }
+        else { setUsers(users.map(u => u.id === user.id ? { ...u, ...updates } : u)); setToast({ msg: `User ${newVal ? 'activated' : 'deactivated'}`, type: 'success' }); }
     };
 
     const toggleAdmin = async (user: UserProfile) => {
         const newRole = user.role === 'admin' ? 'user' : 'admin';
         const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', user.id);
-        if (error) {
-            setToast({ msg: 'Role update failed: ' + getErrMsg(error), type: 'error' });
-        } else {
-            setUsers(users.map(u => u.id === user.id ? { ...u, role: newRole } : u));
-            setToast({ msg: `Role updated to ${newRole}`, type: 'success' });
-        }
+        if (error) { setToast({ msg: 'Role update failed: ' + getErrMsg(error), type: 'error' }); }
+        else { setUsers(users.map(u => u.id === user.id ? { ...u, role: newRole } : u)); setToast({ msg: `Role updated to ${newRole}`, type: 'success' }); }
     };
 
-    // --- Announcement Logic ---
-    const resetForm = () => {
-        setNewTitle('');
-        setNewContent('');
-        setNewType('info');
-        setEditingId(null);
-    };
-
-    const startEdit = (ann: Announcement) => {
-        setNewTitle(ann.title);
-        setNewContent(ann.content);
-        setNewType(ann.type);
-        setEditingId(ann.id);
-        setTimeout(() => {
-            titleInputRef.current?.focus();
-        }, 100);
-    };
+    const resetForm = () => { setNewTitle(''); setNewContent(''); setNewType('info'); setEditingId(null); };
+    const startEdit = (ann: Announcement) => { setNewTitle(ann.title); setNewContent(ann.content); setNewType(ann.type); setEditingId(ann.id); setTimeout(() => { titleInputRef.current?.focus(); }, 100); };
 
     const saveAnnouncement = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newTitle || !newContent) return;
-
         setIsLoading(true);
         try {
             if (editingId) {
-                const { error } = await supabase.from('announcements')
-                    .update({ title: newTitle, content: newContent, type: newType })
-                    .eq('id', editingId);
-
+                const { error } = await supabase.from('announcements').update({ title: newTitle, content: newContent, type: newType }).eq('id', editingId);
                 if (error) throw error;
-                setAnnouncements(prev => prev.map(a => 
-                    a.id === editingId ? { ...a, title: newTitle, content: newContent, type: newType } : a
-                ));
+                setAnnouncements(prev => prev.map(a => a.id === editingId ? { ...a, title: newTitle, content: newContent, type: newType } : a));
                 setToast({ msg: 'Template updated successfully', type: 'success' });
             } else {
-                const { data, error } = await supabase.from('announcements').insert([{
-                    title: newTitle, content: newContent, type: newType, is_active: false
-                }]).select();
-
+                const { data, error } = await supabase.from('announcements').insert([{ title: newTitle, content: newContent, type: newType, is_active: false }]).select();
                 if (error) throw error;
                 if (data) setAnnouncements(prev => [data[0], ...prev]);
-                else fetchAnnouncements();
                 setToast({ msg: 'Template created', type: 'success' });
             }
             resetForm();
-        } catch (error: any) {
-            setToast({ msg: 'Save failed: ' + getErrMsg(error), type: 'error' });
-        } finally {
-            setIsLoading(false);
-        }
+        } catch (error: any) { setToast({ msg: 'Save failed: ' + getErrMsg(error), type: 'error' }); }
+        finally { setIsLoading(false); }
     };
 
     const deleteAnnouncement = async (id: string) => {
         if (!confirm('Are you sure you want to delete this template?')) return;
         try {
-            const { data, error } = await supabase.from('announcements').delete().eq('id', id).select();
+            const { error } = await supabase.from('announcements').delete().eq('id', id);
             if (error) throw error;
-            if (!data || data.length === 0) throw new Error('Permission denied. Please run the SQL Repair script.');
-            
             setAnnouncements(announcements.filter(a => a.id !== id));
-            if (editingId === id) resetForm();
             setToast({ msg: 'Deleted', type: 'success' });
-        } catch (error: any) {
-            setToast({ msg: 'Delete failed: ' + getErrMsg(error), type: 'error' });
-        }
+        } catch (error: any) { setToast({ msg: 'Delete failed: ' + getErrMsg(error), type: 'error' }); }
     };
 
     const activateAnnouncement = async (id: string) => {
@@ -416,11 +352,8 @@ const AdminDashboard: React.FC = () => {
             if (error) throw error;
             setAnnouncements(announcements.map(a => ({ ...a, is_active: a.id === id })));
             setToast({ msg: 'Announcement Live!', type: 'success' });
-        } catch (error: any) {
-            setToast({ msg: 'Activation failed: ' + getErrMsg(error), type: 'error' });
-        } finally {
-            setIsLoading(false);
-        }
+        } catch (error: any) { setToast({ msg: 'Activation failed: ' + getErrMsg(error), type: 'error' }); }
+        finally { setIsLoading(false); }
     };
 
     const deactivateAll = async () => {
@@ -430,28 +363,19 @@ const AdminDashboard: React.FC = () => {
             if (error) throw error;
             setAnnouncements(announcements.map(a => ({ ...a, is_active: false })));
             setToast({ msg: 'All announcements disabled', type: 'success' });
-        } catch (error: any) {
-            setToast({ msg: 'Deactivation failed: ' + getErrMsg(error), type: 'error' });
-        } finally {
-            setIsLoading(false);
-        }
+        } catch (error: any) { setToast({ msg: 'Deactivation failed: ' + getErrMsg(error), type: 'error' }); }
+        finally { setIsLoading(false); }
     };
 
-    const copySql = () => {
-        navigator.clipboard.writeText(SQL_SCRIPT);
-        setToast({ msg: 'SQL Copied to Clipboard', type: 'success' });
-    };
+    const copySql = () => { navigator.clipboard.writeText(SQL_SCRIPT); setToast({ msg: 'SQL Copied to Clipboard', type: 'success' }); };
 
     const filteredUsers = users.filter(u => {
         const matchesSearch = u.email.toLowerCase().includes(search.toLowerCase()) || u.id.includes(search);
-        
         const isExpired = u.subscription_end && new Date(u.subscription_end) < new Date();
         const isActive = u.is_subscribed && !isExpired;
         const isOnline = checkIsOnline(u.last_seen);
-
         if (filterStatus === 'active' && !isActive) return false;
         if (filterStatus === 'online' && !isOnline) return false;
-        
         return matchesSearch;
     });
 
@@ -469,10 +393,8 @@ const AdminDashboard: React.FC = () => {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8 animate-fade-in">
                 <div>
                     <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Admin Console</h1>
-                    <p className="text-slate-500 mt-1">System management and configurations.</p>
+                    <p className="text-slate-500 mt-1">System management and technical configurations.</p>
                 </div>
-                
-                {/* Stats / Actions */}
                 <div className="flex gap-4">
                     <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center min-w-[90px]">
                         <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Users</span>
@@ -489,98 +411,46 @@ const AdminDashboard: React.FC = () => {
                             <span className="absolute top-0 -right-2 w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
                         </span>
                     </div>
-                    {activeTab === 'announcements' && (
-                        <button onClick={deactivateAll} className="bg-white hover:bg-rose-50 px-4 py-2 rounded-xl border border-slate-200 hover:border-rose-200 shadow-sm flex flex-col items-center min-w-[90px] text-rose-600 transition-colors">
-                            <span className="text-xs font-bold uppercase tracking-wider">Emergency</span>
-                            <span className="text-sm font-bold mt-1">Stop All</span>
-                        </button>
-                    )}
                 </div>
             </div>
 
-            {/* Tabs */}
             <div className="flex space-x-1 bg-slate-200/50 p-1 rounded-xl mb-6 w-full max-w-xl">
-                <button
-                    onClick={() => setActiveTab('users')}
-                    className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${
-                        activeTab === 'users' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                    }`}
-                >
-                    Users
-                </button>
-                <button
-                    onClick={() => setActiveTab('announcements')}
-                    className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${
-                        activeTab === 'announcements' ? 'bg-white text-indigo-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                    }`}
-                >
-                    Announcements
-                </button>
-                <button
-                    onClick={() => setActiveTab('guide')}
-                    className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${
-                        activeTab === 'guide' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                    }`}
-                >
-                    Developer Guide
-                </button>
+                <button onClick={() => setActiveTab('users')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'users' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Users</button>
+                <button onClick={() => setActiveTab('announcements')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'announcements' ? 'bg-white text-indigo-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Announcements</button>
+                <button onClick={() => setActiveTab('guide')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'guide' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Setup & Guide</button>
             </div>
 
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col min-h-[500px] animate-slide-up relative">
                 {isLoading && <LoadingOverlay message="Processing..." color="slate" />}
                 
-                {/* USERS TAB */}
                 {activeTab === 'users' && (
                     <>
                         <div className="p-4 border-b border-slate-100 bg-slate-50 flex flex-col sm:flex-row justify-between items-center gap-4">
                             <div className="flex items-center gap-4 flex-grow w-full sm:w-auto">
                                 <div className="relative flex-grow sm:max-w-xs">
-                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-                                    </div>
-                                    <input 
-                                        type="text" 
-                                        value={search}
-                                        onChange={(e) => setSearch(e.target.value)}
-                                        placeholder="Search users..."
-                                        className="pl-9 w-full rounded-lg border-slate-200 text-sm focus:ring-indigo-500 focus:border-indigo-500 bg-white"
-                                    />
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg></div>
+                                    <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search users..." className="pl-9 w-full rounded-lg border-slate-200 text-sm focus:ring-indigo-500 focus:border-indigo-500 bg-white" />
                                 </div>
                                 <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
                                     <span className="text-xs font-bold text-slate-500 uppercase">View:</span>
-                                    <select 
-                                        value={filterStatus} 
-                                        onChange={(e) => setFilterStatus(e.target.value as any)}
-                                        className="text-sm font-semibold text-slate-700 bg-transparent border-none outline-none focus:ring-0 cursor-pointer"
-                                    >
+                                    <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)} className="text-sm font-semibold text-slate-700 bg-transparent border-none outline-none focus:ring-0 cursor-pointer">
                                         <option value="all">All Users</option>
                                         <option value="active">Active Only</option>
                                         <option value="online">Online Now</option>
                                     </select>
                                 </div>
                             </div>
-                            
                             <div className="flex items-center gap-3 w-full sm:w-auto">
                                 <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
                                     <span className="text-xs font-bold text-slate-500 uppercase">Grant:</span>
-                                    <select 
-                                        value={duration} 
-                                        onChange={(e) => setDuration(e.target.value)}
-                                        className="text-sm font-semibold text-indigo-600 bg-transparent border-none outline-none focus:ring-0 cursor-pointer"
-                                    >
+                                    <select value={duration} onChange={(e) => setDuration(e.target.value)} className="text-sm font-semibold text-indigo-600 bg-transparent border-none outline-none focus:ring-0 cursor-pointer">
                                         <option value="1min">Test: 1 Min</option>
                                         <option value="trial">Trial (20 Days)</option>
                                         <option value="1m">1 Month</option>
                                         <option value="1y">1 Year</option>
                                     </select>
                                 </div>
-                                <button 
-                                    onClick={() => fetchUsers(false)} 
-                                    className={`p-2 text-slate-500 hover:text-indigo-600 hover:bg-white rounded-lg transition-all ${isRefetching ? 'animate-spin text-indigo-600' : ''}`}
-                                    title="Refresh List"
-                                >
-                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                                </button>
+                                <button onClick={() => fetchUsers(false)} className={`p-2 text-slate-500 hover:text-indigo-600 hover:bg-white rounded-lg transition-all ${isRefetching ? 'animate-spin text-indigo-600' : ''}`} title="Refresh List"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg></button>
                             </div>
                         </div>
                         <div className="overflow-x-auto">
@@ -596,30 +466,20 @@ const AdminDashboard: React.FC = () => {
                                 </thead>
                                 <tbody className="bg-white divide-y divide-slate-100">
                                     {filteredUsers.length === 0 ? (
-                                        <tr>
-                                            <td colSpan={5} className="px-6 py-8 text-center text-slate-400 text-sm">
-                                                No users found matching your criteria.
-                                            </td>
-                                        </tr>
+                                        <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-400 text-sm">No users found.</td></tr>
                                     ) : (
                                         filteredUsers.map(u => {
                                             const isExpired = u.subscription_end && new Date(u.subscription_end) < new Date();
                                             const isActive = u.is_subscribed && !isExpired;
-                                            const isTrial = isActive && u.trial_end && u.subscription_end && 
-                                                new Date(u.trial_end).getTime() === new Date(u.subscription_end).getTime();
+                                            const isTrial = isActive && u.trial_end && u.subscription_end && new Date(u.trial_end).getTime() === new Date(u.subscription_end).getTime();
                                             const isOnline = checkIsOnline(u.last_seen);
-                                            
                                             return (
                                             <tr key={u.id} className="hover:bg-slate-50/80 transition-colors">
                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                     <div className="flex items-center">
                                                         <div className="relative">
-                                                            <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs uppercase mr-3">
-                                                                {u.email ? u.email.substring(0,2) : '??'}
-                                                            </div>
-                                                            {isOnline && (
-                                                                <span className="absolute -top-0.5 -right-0.5 block h-2.5 w-2.5 rounded-full ring-2 ring-white bg-emerald-400"></span>
-                                                            )}
+                                                            <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs uppercase mr-3">{u.email ? u.email.substring(0,2) : '??'}</div>
+                                                            {isOnline && <span className="absolute -top-0.5 -right-0.5 block h-2.5 w-2.5 rounded-full ring-2 ring-white bg-emerald-400"></span>}
                                                         </div>
                                                         <div className="flex flex-col">
                                                             <span className="text-sm font-medium text-slate-900">{u.email}</span>
@@ -627,36 +487,13 @@ const AdminDashboard: React.FC = () => {
                                                         </div>
                                                     </div>
                                                 </td>
+                                                <td className="px-6 py-4 whitespace-nowrap"><span onClick={() => toggleAdmin(u)} className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full cursor-pointer border ${u.role === 'admin' ? 'bg-purple-100 text-purple-800 border-purple-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>{u.role}</span></td>
                                                 <td className="px-6 py-4 whitespace-nowrap">
-                                                    <span onClick={() => toggleAdmin(u)} className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full cursor-pointer border ${u.role === 'admin' ? 'bg-purple-100 text-purple-800 border-purple-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
-                                                        {u.role}
-                                                    </span>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    {isActive ? (
-                                                        isTrial ? (
-                                                            <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-amber-100 text-amber-800 border border-amber-200">Trial</span>
-                                                        ) : (
-                                                            <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">Active</span>
-                                                        )
-                                                    ) : (
-                                                        <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-slate-100 text-slate-500 border border-slate-200">Inactive</span>
-                                                    )}
+                                                    {isActive ? (isTrial ? <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-amber-100 text-amber-800 border border-amber-200">Trial</span> : <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">Active</span>) : <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-slate-100 text-slate-500 border border-slate-200">Inactive</span>}
                                                     {u.subscription_end && <div className="text-[10px] text-slate-400 mt-1">{new Date(u.subscription_end).toLocaleDateString()}</div>}
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="flex items-center gap-1.5">
-                                                        <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`}></span>
-                                                        <span className={`text-xs ${isOnline ? 'font-bold text-slate-700' : 'text-slate-400'}`}>
-                                                            {isOnline ? 'Online' : formatLastSeen(u.last_seen)}
-                                                        </span>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                                    <button onClick={() => toggleSubscription(u)} className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors ${u.is_subscribed ? 'text-rose-600 border-rose-200 hover:bg-rose-50' : 'text-emerald-600 border-emerald-200 hover:bg-emerald-50'}`}>
-                                                        {u.is_subscribed ? 'Revoke' : 'Grant'}
-                                                    </button>
-                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap"><div className="flex items-center gap-1.5"><span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`}></span><span className={`text-xs ${isOnline ? 'font-bold text-slate-700' : 'text-slate-400'}`}>{isOnline ? 'Online' : formatLastSeen(u.last_seen)}</span></div></td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium"><button onClick={() => toggleSubscription(u)} className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors ${u.is_subscribed ? 'text-rose-600 border-rose-200 hover:bg-rose-50' : 'text-emerald-600 border-emerald-200 hover:bg-emerald-50'}`}>{u.is_subscribed ? 'Revoke' : 'Grant'}</button></td>
                                             </tr>
                                         )})
                                     )}
@@ -666,123 +503,35 @@ const AdminDashboard: React.FC = () => {
                     </>
                 )}
 
-                {/* ANNOUNCEMENTS TAB */}
                 {activeTab === 'announcements' && (
                     <div className="flex flex-col h-full">
                         <div className="grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-slate-200 h-full">
-                            {/* Create/Edit Form */}
                             <div className="p-6 bg-slate-50 lg:col-span-1">
                                 <div className="flex justify-between items-center mb-4">
-                                    <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-                                        {editingId ? 'Edit Template' : 'Create Template'}
-                                    </h3>
-                                    {editingId && (
-                                        <button onClick={resetForm} className="text-xs font-bold text-slate-500 hover:text-slate-800 underline">
-                                            Cancel
-                                        </button>
-                                    )}
+                                    <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">{editingId ? 'Edit Template' : 'Create Template'}</h3>
+                                    {editingId && <button onClick={resetForm} className="text-xs font-bold text-slate-500 hover:text-slate-800 underline">Cancel</button>}
                                 </div>
                                 <form onSubmit={saveAnnouncement} className="space-y-4">
-                                    <div>
-                                        <label className="block text-xs font-semibold text-slate-500 mb-1">Title</label>
-                                        <input 
-                                            ref={titleInputRef}
-                                            type="text" 
-                                            required
-                                            value={newTitle}
-                                            onChange={(e) => setNewTitle(e.target.value)}
-                                            className="w-full rounded-lg border-slate-200 text-sm focus:ring-indigo-500 focus:border-indigo-500"
-                                            placeholder="System Maintenance"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-semibold text-slate-500 mb-1">Type</label>
-                                        <select 
-                                            value={newType} 
-                                            onChange={(e) => setNewType(e.target.value as any)}
-                                            className="w-full rounded-lg border-slate-200 text-sm focus:ring-indigo-500 focus:border-indigo-500 bg-white"
-                                        >
-                                            <option value="info">Info (Blue)</option>
-                                            <option value="warning">Warning (Orange)</option>
-                                            <option value="error">Error (Red)</option>
-                                            <option value="success">Success (Green)</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-semibold text-slate-500 mb-1">Message Content</label>
-                                        <textarea 
-                                            required
-                                            value={newContent}
-                                            onChange={(e) => setNewContent(e.target.value)}
-                                            rows={6}
-                                            className="w-full rounded-lg border-slate-200 text-sm focus:ring-indigo-500 focus:border-indigo-500 resize-none"
-                                            placeholder="We are updating the system..."
-                                        />
-                                    </div>
-                                    <button 
-                                        type="submit" 
-                                        className={`w-full text-white font-bold py-2 px-4 rounded-lg shadow-sm transition-colors text-sm ${
-                                            editingId ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-emerald-600 hover:bg-emerald-700'
-                                        }`}
-                                    >
-                                        {editingId ? 'Update Template' : 'Save Template'}
-                                    </button>
+                                    <div><label className="block text-xs font-semibold text-slate-500 mb-1">Title</label><input ref={titleInputRef} type="text" required value={newTitle} onChange={(e) => setNewTitle(e.target.value)} className="w-full rounded-lg border-slate-200 text-sm focus:ring-indigo-500 focus:border-indigo-500" placeholder="System Maintenance" /></div>
+                                    <div><label className="block text-xs font-semibold text-slate-500 mb-1">Type</label><select value={newType} onChange={(e) => setNewType(e.target.value as any)} className="w-full rounded-lg border-slate-200 text-sm focus:ring-indigo-500 focus:border-indigo-500 bg-white"><option value="info">Info (Blue)</option><option value="warning">Warning (Orange)</option><option value="error">Error (Red)</option><option value="success">Success (Green)</option></select></div>
+                                    <div><label className="block text-xs font-semibold text-slate-500 mb-1">Message Content</label><textarea required value={newContent} onChange={(e) => setNewContent(e.target.value)} rows={6} className="w-full rounded-lg border-slate-200 text-sm focus:ring-indigo-500 focus:border-indigo-500 resize-none" placeholder="We are updating the system..." /></div>
+                                    <button type="submit" className={`w-full text-white font-bold py-2 px-4 rounded-lg shadow-sm transition-colors text-sm ${editingId ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-emerald-600 hover:bg-emerald-700'}`}>{editingId ? 'Update Template' : 'Save Template'}</button>
                                 </form>
                             </div>
-
-                            {/* List */}
                             <div className="lg:col-span-2 flex flex-col max-h-[600px]">
-                                <div className="p-4 border-b border-slate-200 bg-white flex justify-between items-center sticky top-0 z-10">
-                                    <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Saved Templates</h3>
-                                    <button onClick={fetchAnnouncements} className="text-slate-400 hover:text-indigo-600"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg></button>
-                                </div>
+                                <div className="p-4 border-b border-slate-200 bg-white flex justify-between items-center sticky top-0 z-10"><h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Saved Templates</h3><button onClick={fetchAnnouncements} className="text-slate-400 hover:text-indigo-600"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg></button></div>
                                 <div className="overflow-y-auto custom-scrollbar p-4 space-y-3 bg-slate-50/30 flex-grow">
-                                    {announcements.length === 0 && <p className="text-center text-slate-400 text-sm mt-10">No templates found.</p>}
                                     {announcements.map(ann => (
-                                        <div key={ann.id} className={`bg-white border rounded-xl p-4 transition-all ${
-                                            editingId === ann.id ? 'border-indigo-400 ring-2 ring-indigo-100 shadow-md' : 
-                                            ann.is_active ? 'border-emerald-400 ring-1 ring-emerald-400 shadow-md' : 'border-slate-200 hover:border-slate-300 shadow-sm'
-                                        }`}>
+                                        <div key={ann.id} className={`bg-white border rounded-xl p-4 transition-all ${editingId === ann.id ? 'border-indigo-400 ring-2 ring-indigo-100 shadow-md' : ann.is_active ? 'border-emerald-400 ring-1 ring-emerald-400 shadow-md' : 'border-slate-200 hover:border-slate-300 shadow-sm'}`}>
                                             <div className="flex justify-between items-start mb-2">
+                                                <div className="flex items-center gap-2"><span className={`w-2 h-2 rounded-full ${ann.type === 'warning' ? 'bg-amber-500' : ann.type === 'error' ? 'bg-rose-500' : ann.type === 'success' ? 'bg-emerald-500' : 'bg-blue-500'}`}></span><h4 className="font-bold text-slate-800 text-sm">{ann.title}</h4>{ann.is_active && <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Active</span>}</div>
                                                 <div className="flex items-center gap-2">
-                                                    <span className={`w-2 h-2 rounded-full ${
-                                                        ann.type === 'warning' ? 'bg-amber-500' :
-                                                        ann.type === 'error' ? 'bg-rose-500' :
-                                                        ann.type === 'success' ? 'bg-emerald-500' : 'bg-blue-500'
-                                                    }`}></span>
-                                                    <h4 className="font-bold text-slate-800 text-sm">{ann.title}</h4>
-                                                    {ann.is_active && <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Active</span>}
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    {!ann.is_active && (
-                                                        <button 
-                                                            onClick={() => activateAnnouncement(ann.id)}
-                                                            className="text-xs font-bold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded transition-colors"
-                                                        >
-                                                            Go Live
-                                                        </button>
-                                                    )}
-                                                    <button 
-                                                        onClick={() => startEdit(ann)}
-                                                        className="text-slate-400 hover:text-indigo-600 p-1.5 hover:bg-indigo-50 rounded transition-colors"
-                                                        title="Edit"
-                                                    >
-                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                                                    </button>
-                                                    <button 
-                                                        onClick={() => deleteAnnouncement(ann.id)}
-                                                        className="text-slate-400 hover:text-rose-500 p-1.5 hover:bg-rose-50 rounded transition-colors"
-                                                        title="Delete"
-                                                    >
-                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                                    </button>
+                                                    {!ann.is_active && <button onClick={() => activateAnnouncement(ann.id)} className="text-xs font-bold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded transition-colors">Go Live</button>}
+                                                    <button onClick={() => startEdit(ann)} className="text-slate-400 hover:text-indigo-600 p-1.5 hover:bg-indigo-50 rounded transition-colors" title="Edit"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button>
+                                                    <button onClick={() => deleteAnnouncement(ann.id)} className="text-slate-400 hover:text-rose-500 p-1.5 hover:bg-rose-50 rounded transition-colors" title="Delete"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
                                                 </div>
                                             </div>
                                             <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-2 rounded border border-slate-100">{ann.content}</p>
-                                            <div className="mt-2 text-[10px] text-slate-400 flex justify-between">
-                                                <span className="uppercase">{ann.type}</span>
-                                                <span>{new Date(ann.created_at).toLocaleDateString()}</span>
-                                            </div>
                                         </div>
                                     ))}
                                 </div>
@@ -791,41 +540,48 @@ const AdminDashboard: React.FC = () => {
                     </div>
                 )}
 
-                {/* GUIDE TAB */}
                 {activeTab === 'guide' && (
-                    <div className="flex flex-col h-full p-6">
-                        <div className="flex justify-between items-center mb-4">
-                            <div>
-                                <h3 className="text-lg font-bold text-slate-800">Database Setup Guide</h3>
-                                <div className="text-slate-500 text-sm mt-1 space-y-2">
-                                    <p>1. Go to your Supabase Project &rarr; SQL Editor.</p>
-                                    <p>2. Paste the script below and run it to initialize tables, policies, and triggers.</p>
-                                    <p>3. <b>Important:</b> After running, sign up in the app, then manually run the final update command to make yourself an admin.</p>
-                                    
-                                    <div className="bg-amber-50 border border-amber-200 rounded p-2 text-amber-800 text-xs font-medium mt-2">
-                                        <strong>EXE / Local Build Requirement:</strong><br/>
-                                        Since you are running this locally/offline, you must create a file named <code>.env</code> in your project root folder and add your Google API Key:
-                                        <br/><code className="bg-amber-100 px-1 rounded block mt-1">API_KEY=your_actual_google_api_key</code>
-                                        Without this, the Reference Generator tool will fail to build or run.
-                                    </div>
+                    <div className="flex flex-col h-full p-8 overflow-y-auto custom-scrollbar">
+                        <div className="max-w-4xl mx-auto space-y-12">
+                            <section>
+                                <h3 className="text-2xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+                                    <svg className="w-6 h-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 12V5.25" /></svg>
+                                    Desktop Deployment (.exe)
+                                </h3>
+                                <p className="text-slate-600 mb-6 leading-relaxed">
+                                    This application is built with Electron and can be compiled into a standalone Windows executable. 
+                                    Follow these steps to generate a local installer:
+                                </p>
+                                <div className="bg-slate-900 rounded-2xl p-6 font-mono text-sm text-indigo-300 space-y-3 shadow-xl">
+                                    <div className="flex gap-4"><span className="text-slate-500">1.</span> <span>npm install</span></div>
+                                    <div className="flex gap-4"><span className="text-slate-500">2.</span> <span>npm run build</span></div>
+                                    <div className="flex gap-4"><span className="text-slate-500">3.</span> <span>npm run electron:build</span></div>
+                                    <div className="pt-4 border-t border-slate-800 text-slate-400 text-xs italic">// The portable installer will be generated in the /release folder.</div>
                                 </div>
-                            </div>
-                            <button onClick={copySql} className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
-                                Copy SQL
-                            </button>
-                        </div>
-                        <div className="flex-grow bg-slate-900 rounded-xl overflow-hidden relative">
-                            <textarea 
-                                readOnly
-                                value={SQL_SCRIPT}
-                                className="w-full h-full bg-transparent text-slate-300 font-mono text-xs p-4 resize-none focus:outline-none"
-                            />
+                            </section>
+
+                            <section>
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="text-2xl font-bold text-slate-900">Database Setup (Supabase)</h3>
+                                    <button onClick={copySql} className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 border border-indigo-100">
+                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
+                                        Copy SQL Script
+                                    </button>
+                                </div>
+                                <div className="bg-amber-50 border-l-4 border-amber-400 p-4 mb-6 rounded-r-xl">
+                                    <p className="text-sm text-amber-800">
+                                        <strong>Admin Setup:</strong> After running the script, sign up in the app, then manually run: <br/>
+                                        <code>update public.profiles set role = 'admin' where email = 'your_email';</code>
+                                    </p>
+                                </div>
+                                <div className="h-96 bg-slate-900 rounded-2xl overflow-hidden shadow-inner border border-slate-800">
+                                    <textarea readOnly value={SQL_SCRIPT} className="w-full h-full bg-transparent text-slate-300 font-mono text-xs p-6 resize-none focus:outline-none" />
+                                </div>
+                            </section>
                         </div>
                     </div>
                 )}
             </div>
-            
             {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
         </div>
     );

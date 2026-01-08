@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { diffLines, diffWordsWithSpace, Change } from 'diff';
 import Toast from '../components/Toast';
@@ -11,27 +10,27 @@ interface RefBlock {
     label: string;
     content: string;
     isSynthetic?: boolean;
-    cleanContent?: string; // Used for comparison
+    cleanContent?: string;
+    fingerprint: string; 
 }
 
 interface ScanItem {
     label: string;
     id: string;
-    status: 'update' | 'unchanged' | 'orphan';
+    status: 'update' | 'unchanged' | 'orphan' | 'smart_match' | 'add';
     preview: string;
+    matchType?: 'Label' | 'Content';
+    matchScore?: number;
     isSynthetic?: boolean;
-    similarityMatch?: {
-        label: string;
-        score: number;
-    };
 }
 
 interface ConflictGroup {
     label: string;
     updateRef: RefBlock;
     candidates: {
-        index: number; // Index in the original array
+        index: number;
         ref: RefBlock;
+        score: number;
     }[];
 }
 
@@ -41,87 +40,87 @@ const ReferenceUpdater: React.FC = () => {
     const [output, setOutput] = useState('');
     const [preserveIds, setPreserveIds] = useState(true);
     const [renumberInternal, setRenumberInternal] = useState(true);
+    const [addOrphans, setAddOrphans] = useState(false);
+    const [isNumberedMode, setIsNumberedMode] = useState(false);
     const [activeTab, setActiveTab] = useState<'report' | 'result' | 'diff'>('result');
     const [isLoading, setIsLoading] = useState(false);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
-    const [stats, setStats] = useState({ total: 0, updated: 0, unchanged: 0, skipped: 0 });
+    const [stats, setStats] = useState({ total: 0, updated: 0, unchanged: 0, skipped: 0, added: 0 });
     const [scanResults, setScanResults] = useState<ScanItem[]>([]);
     const [diffElements, setDiffElements] = useState<React.ReactNode>(null);
-    const [showOrphansOnly, setShowOrphansOnly] = useState(false);
 
-    // Conflict Resolution State
     const [showConflictModal, setShowConflictModal] = useState(false);
     const [conflicts, setConflicts] = useState<ConflictGroup[]>([]);
     const [resolutions, setResolutions] = useState<Map<number, 'update' | 'ignore'>>(new Map());
 
     const escapeHtml = (unsafe: string) => unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-    // Simple Levenshtein for similarity check
     const getSimilarity = (s1: string, s2: string): number => {
+        if (!s1 || !s2) return 0;
+        if (s1 === s2) return 1.0;
         const longer = s1.length > s2.length ? s1 : s2;
         const shorter = s1.length > s2.length ? s2 : s1;
         const longerLength = longer.length;
         if (longerLength === 0) return 1.0;
-        
         const costs = new Array();
         for (let i = 0; i <= longer.length; i++) {
             let lastValue = i;
             for (let j = 0; j <= shorter.length; j++) {
                 if (i === 0) costs[j] = j;
-                else {
-                    if (j > 0) {
-                        let newValue = costs[j - 1];
-                        if (longer.charAt(i - 1) !== shorter.charAt(j - 1))
-                            newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
-                        costs[j - 1] = lastValue;
-                        lastValue = newValue;
-                    }
+                else if (j > 0) {
+                    let newValue = costs[j - 1];
+                    if (longer.charAt(i - 1) !== shorter.charAt(j - 1))
+                        newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
+                    costs[j - 1] = lastValue;
+                    lastValue = newValue;
                 }
             }
             if (i > 0) costs[shorter.length] = lastValue;
         }
-        return (longerLength - costs[shorter.length]) / longerLength;
+        return (longer.length - costs[shorter.length]) / longer.length;
     };
 
     const parseReferences = (xml: string): RefBlock[] => {
         const refs: RefBlock[] = [];
-        // Regex matches the whole ce:bib-reference block
         const regex = /<ce:bib-reference\b([^>]*)>([\s\S]*?)<\/ce:bib-reference>/g;
         let match;
         while ((match = regex.exec(xml)) !== null) {
             const fullTag = match[0];
-            const attrs = match[1];
             const content = match[2];
-            
-            // Extract ID
-            const idMatch = attrs.match(/id="([^"]+)"/);
+            const idMatch = match[1].match(/id="([^"]+)"/);
             const id = idMatch ? idMatch[1] : '';
 
-            // Extract Label
             const labelMatch = content.match(/<ce:label>(.*?)<\/ce:label>/);
-            let label = '';
+            let label = labelMatch ? labelMatch[1].trim() : '';
             let isSynthetic = false;
 
-            if (labelMatch) {
-                label = labelMatch[1].trim();
+            const surnameMatch = content.match(/<(?:ce|sb):surname>(.*?)<\/(?:ce|sb):surname>/);
+            const author = surnameMatch ? surnameMatch[1].toLowerCase().replace(/[^a-z]/g, '') : '';
+            const dateMatch = content.match(/<(?:ce|sb):year>(.*?)<\/(?:ce|sb):year>/) || 
+                             content.match(/<(?:ce|sb):date>(.*?)<\/(?:ce|sb):date>/);
+            const year = dateMatch ? dateMatch[1].replace(/\D/g, '') : '';
+            const titleMatch = content.match(/<(?:ce|sb):title>(.*?)<\/(?:ce|sb):title>/);
+            const title = titleMatch ? titleMatch[1].toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+
+            const cleanContent = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+            
+            // Smart Fingerprinting
+            let fingerprint = '';
+            if (author || year || title) {
+                // Structured Reference Logic
+                fingerprint = `meta|${author}|${year}|${title.substring(0, 50)}`;
             } else {
-                // Fallback for Name-Date: Try to extract Surname + Year
-                const surnameMatch = content.match(/<ce:surname>(.*?)<\/ce:surname>/);
-                // Try simple year or sb:date tag
-                const yearMatch = content.match(/<ce:year>(.*?)<\/ce:year>/) || content.match(/<sb:date>(.*?)<\/sb:date>/);
-                
-                if (surnameMatch && yearMatch) {
-                    label = `${surnameMatch[1]}, ${yearMatch[1]}`;
-                    isSynthetic = true;
-                }
+                // Unstructured (ce:other-ref) Logic: Use normalized text content
+                fingerprint = `text|${cleanContent.replace(/[^a-z0-9]/g, '').substring(0, 150)}`;
             }
 
-            // Clean content for comparison (remove tags, lower case, whitespace)
-            const cleanContent = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+            if (!label && author && year) {
+                label = `${author}, ${year}`;
+                isSynthetic = true;
+            }
 
-            // Only push if we found a way to identify it (Label or Name-Date)
-            if (label) {
-                refs.push({ fullTag, id, label, content, isSynthetic, cleanContent });
+            if (label || author || cleanContent.length > 5) {
+                refs.push({ fullTag, id, label, content, isSynthetic, cleanContent, fingerprint });
             }
         }
         return refs;
@@ -131,7 +130,6 @@ const ReferenceUpdater: React.FC = () => {
         let lines: string[] = [];
         let currentLine = "";
         let activeClass: string | null = null;
-
         const append = (text: string, cls: string | null) => {
             if (!text) return;
             for (let i = 0; i < text.length; i++) {
@@ -151,13 +149,11 @@ const ReferenceUpdater: React.FC = () => {
                 }
             }
         };
-
         diffParts.forEach(part => {
             if (part.removed && isLeft) append(part.value, 'bg-rose-100 text-rose-900 line-through decoration-rose-900/30');
-            else if (part.added && !isLeft) append(part.value, 'bg-emerald-100 text-emerald-900 font-bold');
+            else if (part.added && !isLeft) append(part.value, 'bg-emerald-100 text-emerald-900 font-medium');
             else if (!part.added && !part.removed) append(part.value, null);
         });
-
         if (activeClass) currentLine += '</span>';
         lines.push(currentLine);
         return lines;
@@ -166,36 +162,20 @@ const ReferenceUpdater: React.FC = () => {
     const generateDiff = (original: string, modified: string) => {
         const diff = diffLines(original, modified);
         let rows: React.ReactNode[] = [];
-        let leftLineNum = 1;
-        let rightLineNum = 1;
-
-        let i = 0;
+        let leftLineNum = 1, rightLineNum = 1, i = 0;
         while(i < diff.length) {
             const current = diff[i];
-            let type = 'equal';
-            let leftVal = '', rightVal = '';
-
+            let type = 'equal', leftVal = '', rightVal = '';
             if (current.removed && diff[i+1]?.added) {
-                type = 'replace';
-                leftVal = current.value;
-                rightVal = diff[i+1].value;
-                i += 2;
+                type = 'replace'; leftVal = current.value; rightVal = diff[i+1].value; i += 2;
             } else if (current.removed) {
-                type = 'delete';
-                leftVal = current.value;
-                i++;
+                type = 'delete'; leftVal = current.value; i++;
             } else if (current.added) {
-                type = 'insert';
-                rightVal = current.value;
-                i++;
+                type = 'insert'; rightVal = current.value; i++;
             } else {
-                leftVal = rightVal = current.value;
-                i++;
+                leftVal = rightVal = current.value; i++;
             }
-
-            let leftLines: string[] = [];
-            let rightLines: string[] = [];
-
+            let leftLines: string[] = [], rightLines: string[] = [];
             if (type === 'replace') {
                 const wordDiff = diffWordsWithSpace(leftVal, rightVal);
                 leftLines = buildLines(wordDiff, true);
@@ -205,43 +185,31 @@ const ReferenceUpdater: React.FC = () => {
             } else if (type === 'insert') {
                 rightLines = buildLines([{added: true, value: rightVal} as Change], false);
             } else {
-                 const lines = leftVal.split('\n');
-                 if (lines.length > 0 && lines[lines.length-1] === '') lines.pop(); 
-                 leftLines = lines.map(escapeHtml);
-                 rightLines = [...leftLines];
+                const lines = leftVal.split('\n');
+                if (lines.length > 0 && lines[lines.length-1] === '') lines.pop(); 
+                leftLines = lines.map(escapeHtml);
+                rightLines = [...leftLines];
             }
-
             const maxRows = Math.max(leftLines.length, rightLines.length);
             for (let r = 0; r < maxRows; r++) {
-                 const lContent = leftLines[r];
-                 const rContent = rightLines[r];
-                 const lNum = lContent !== undefined ? leftLineNum++ : '';
-                 const rNum = rContent !== undefined ? rightLineNum++ : '';
-                 
-                 let lClass = lContent !== undefined && type === 'delete' ? 'bg-rose-50/50' : (type === 'replace' ? 'bg-rose-50/30' : '');
-                 let rClass = rContent !== undefined && type === 'insert' ? 'bg-emerald-50/50' : (type === 'replace' ? 'bg-emerald-50/30' : '');
-                 if (type === 'equal') { lClass = ''; rClass = ''; }
-
-                 rows.push(
-                    <tr key={`${i}-${r}`} className="border-b border-slate-100 hover:bg-slate-50 transition-colors duration-75 group">
+                const lContent = leftLines[r], rContent = rightLines[r];
+                const lNum = lContent !== undefined ? leftLineNum++ : '', rNum = rContent !== undefined ? rightLineNum++ : '';
+                let lClass = lContent !== undefined && type === 'delete' ? 'bg-rose-50/50' : (type === 'replace' ? 'bg-rose-50/30' : '');
+                let rClass = rContent !== undefined && type === 'insert' ? 'bg-emerald-50/50' : (type === 'replace' ? 'bg-emerald-50/30' : '');
+                rows.push(
+                    <tr key={`${i}-${r}`} className="border-b border-slate-100 hover:bg-slate-50 transition-colors duration-75">
                         <td className={`w-10 text-right text-[10px] text-slate-400 p-1 border-r border-slate-200 select-none bg-slate-50 font-mono ${lClass}`}>{lNum}</td>
                         <td className={`p-1.5 font-mono text-xs text-slate-600 whitespace-pre-wrap break-all leading-relaxed ${lClass}`} dangerouslySetInnerHTML={{__html: lContent || ''}}></td>
                         <td className={`w-10 text-right text-[10px] text-slate-400 p-1 border-r border-slate-200 border-l select-none bg-slate-50 font-mono ${rClass}`}>{rNum}</td>
                         <td className={`p-1.5 font-mono text-xs text-slate-600 whitespace-pre-wrap break-all leading-relaxed ${rClass}`} dangerouslySetInnerHTML={{__html: rContent || ''}}></td>
                     </tr>
-                 );
+                );
             }
         }
-        
         setDiffElements(
             <div className="rounded-lg border border-slate-200 overflow-hidden bg-white m-2 shadow-sm">
                 <table className="w-full text-sm font-mono border-collapse table-fixed">
-                    <colgroup>
-                        <col className="w-10 bg-slate-50 border-r border-slate-200" />
-                        <col className="w-[calc(50%-2.5rem)]" />
-                        <col className="w-10 bg-slate-50 border-r border-slate-200 border-l border-slate-200" />
-                        <col className="w-[calc(50%-2.5rem)]" />
-                    </colgroup>
+                    <colgroup><col className="w-10 bg-slate-50" /><col className="w-[calc(50%-2.5rem)]" /><col className="w-10 bg-slate-50 border-l" /><col className="w-[calc(50%-2.5rem)]" /></colgroup>
                     <tbody>{rows}</tbody>
                 </table>
             </div>
@@ -249,157 +217,105 @@ const ReferenceUpdater: React.FC = () => {
     };
 
     const runAnalysis = () => {
-        if (!originalXml.trim() || !updatedXml.trim()) {
-            setToast({ msg: "Please provide both Original and Updated XML.", type: "warn" });
-            return;
-        }
-
+        if (!originalXml.trim() || !updatedXml.trim()) { setToast({ msg: "Paste both Original and Updated XML.", type: "warn" }); return; }
         setIsLoading(true);
         setTimeout(() => {
             try {
                 const origRefs = parseReferences(originalXml);
                 const updatedRefs = parseReferences(updatedXml);
-                
-                const updateMap = new Map<string, RefBlock>();
-                updatedRefs.forEach(ref => updateMap.set(ref.label, ref));
-
                 const analysis: ScanItem[] = [];
-                let updateCount = 0;
-                let unchangedCount = 0;
-                const unchangedRefs: RefBlock[] = []; 
-                const usedLabels = new Set<string>();
+                let updateCount = 0, unchangedCount = 0, orphanCount = 0;
+                const usedUpdateIdx = new Set<number>();
 
-                // Check Original vs Updated
                 origRefs.forEach(origRef => {
-                    const update = updateMap.get(origRef.label);
-                    if (update) {
-                        updateCount++;
-                        usedLabels.add(origRef.label);
-                        analysis.push({
-                            label: origRef.label,
-                            id: origRef.id,
-                            status: 'update',
-                            preview: update.content.substring(0, 100).replace(/<[^>]+>/g, '').trim() + '...',
-                            isSynthetic: origRef.isSynthetic
+                    let matchIdx = -1;
+                    let matchType: 'Label' | 'Content' | undefined;
+                    let matchScore = 0;
+
+                    const labelIdx = updatedRefs.findIndex((u, idx) => !usedUpdateIdx.has(idx) && u.label === origRef.label && u.label !== '');
+                    
+                    if (!isNumberedMode && labelIdx !== -1) {
+                        matchIdx = labelIdx;
+                        matchType = 'Label';
+                        matchScore = 100;
+                    } else if (isNumberedMode) {
+                        let bestFuzzyIdx = -1;
+                        let bestFuzzyScore = 0;
+                        updatedRefs.forEach((u, idx) => {
+                            if (!usedUpdateIdx.has(idx)) {
+                                const score = getSimilarity(u.fingerprint, origRef.fingerprint);
+                                if (score > bestFuzzyScore) { 
+                                    bestFuzzyScore = score; 
+                                    bestFuzzyIdx = idx; 
+                                }
+                            }
                         });
+                        
+                        if (bestFuzzyScore > 0.82) { // 82% threshold for high-accuracy smart match
+                            matchIdx = bestFuzzyIdx;
+                            matchType = 'Content';
+                            matchScore = Math.round(bestFuzzyScore * 100);
+                        } else if (labelIdx !== -1) {
+                            matchIdx = labelIdx;
+                            matchType = 'Label';
+                            matchScore = 100;
+                        }
+                    }
+
+                    if (matchIdx !== -1) {
+                        updateCount++; usedUpdateIdx.add(matchIdx);
+                        analysis.push({ label: origRef.label, id: origRef.id, status: matchType === 'Content' ? 'smart_match' : 'update', matchType, matchScore, preview: updatedRefs[matchIdx].content.substring(0, 100).replace(/<[^>]+>/g, '').trim() + '...', isSynthetic: origRef.isSynthetic });
                     } else {
                         unchangedCount++;
-                        unchangedRefs.push(origRef);
-                        analysis.push({
-                            label: origRef.label,
-                            id: origRef.id,
-                            status: 'unchanged',
-                            preview: origRef.content.substring(0, 100).replace(/<[^>]+>/g, '').trim() + '...',
-                            isSynthetic: origRef.isSynthetic
-                        });
+                        analysis.push({ label: origRef.label, id: origRef.id, status: 'unchanged', preview: origRef.content.substring(0, 100).replace(/<[^>]+>/g, '').trim() + '...', isSynthetic: origRef.isSynthetic });
                     }
                 });
 
-                // Check Orphans
-                let skippedCount = 0;
-                updateMap.forEach((val, key) => {
-                    if (!usedLabels.has(key)) {
-                        skippedCount++;
-                        let bestMatchLabel = '';
-                        let bestMatchScore = 0;
-
-                        if (val.cleanContent) {
-                            unchangedRefs.forEach(ur => {
-                                if (ur.cleanContent) {
-                                    const score = getSimilarity(val.cleanContent!, ur.cleanContent!);
-                                    if (score > bestMatchScore) {
-                                        bestMatchScore = score;
-                                        bestMatchLabel = ur.label;
-                                    }
-                                }
-                            });
-                        }
-
-                        analysis.push({
-                            label: val.label,
-                            id: 'N/A',
-                            status: 'orphan',
-                            preview: val.content.substring(0, 100).replace(/<[^>]+>/g, '').trim() + '...',
-                            isSynthetic: val.isSynthetic,
-                            similarityMatch: bestMatchScore > 0.85 ? { label: bestMatchLabel, score: bestMatchScore } : undefined
-                        });
+                updatedRefs.forEach((val, idx) => {
+                    if (!usedUpdateIdx.has(idx)) {
+                        orphanCount++;
+                        analysis.push({ label: val.label || 'Unlabeled', id: 'N/A', status: addOrphans ? 'add' : 'orphan', preview: val.content.substring(0, 100).replace(/<[^>]+>/g, '').trim() + '...', isSynthetic: val.isSynthetic });
                     }
                 });
 
                 setScanResults(analysis);
-                setStats({ 
-                    total: origRefs.length, 
-                    updated: updateCount, 
-                    unchanged: unchangedCount, 
-                    skipped: skippedCount 
-                });
+                setStats({ total: origRefs.length, updated: updateCount, unchanged: unchangedCount, skipped: !addOrphans ? orphanCount : 0, added: addOrphans ? orphanCount : 0 });
                 setActiveTab('report');
                 setToast({ msg: "Analysis complete.", type: "success" });
-
-            } catch (e) {
-                console.error(e);
-                setToast({ msg: "Analysis failed.", type: "error" });
-            } finally {
-                setIsLoading(false);
-            }
+            } catch (e) { setToast({ msg: "Analysis failed.", type: "error" }); } finally { setIsLoading(false); }
         }, 500);
     };
 
-    // Phase 1: Check inputs and potential conflicts
     const initiateUpdate = () => {
-        if (!originalXml.trim() || !updatedXml.trim()) {
-            setToast({ msg: "Please provide both Original and Updated XML.", type: "warn" });
-            return;
-        }
-
+        if (!originalXml.trim() || !updatedXml.trim()) { setToast({ msg: "Paste both Original and Updated XML.", type: "warn" }); return; }
         setIsLoading(true);
         setTimeout(() => {
             const origRefs = parseReferences(originalXml);
             const updatedRefs = parseReferences(updatedXml);
-
-            // Group Original indices by Label
-            const origLabelMap = new Map<string, number[]>();
-            origRefs.forEach((ref, idx) => {
-                const indices = origLabelMap.get(ref.label) || [];
-                indices.push(idx);
-                origLabelMap.set(ref.label, indices);
-            });
-
-            // Detect Conflicts
-            const newConflicts: ConflictGroup[] = [];
-            updatedRefs.forEach(updateRef => {
-                const indices = origLabelMap.get(updateRef.label);
-                if (indices && indices.length > 1) {
-                    newConflicts.push({
-                        label: updateRef.label,
-                        updateRef: updateRef,
-                        candidates: indices.map(idx => ({ index: idx, ref: origRefs[idx] }))
-                    });
-                }
-            });
-
-            if (newConflicts.length > 0) {
-                setConflicts(newConflicts);
-                // Pre-fill resolutions with 'ignore' initially or leave undefined to force choice
-                setResolutions(new Map());
-                setShowConflictModal(true);
-                setIsLoading(false);
-            } else {
-                // No conflicts, proceed immediately
-                executeMerge(origRefs, updatedRefs, new Map());
+            
+            // Conflict Detection only runs in Label mode (OFF)
+            if (!isNumberedMode) {
+                const origLabelMap = new Map<string, number[]>();
+                origRefs.forEach((ref, idx) => { const indices = origLabelMap.get(ref.label) || []; indices.push(idx); origLabelMap.set(ref.label, indices); });
+                const newConflicts: ConflictGroup[] = [];
+                updatedRefs.forEach(updateRef => {
+                    const indices = origLabelMap.get(updateRef.label);
+                    if (indices && indices.length > 1) {
+                        newConflicts.push({ label: updateRef.label, updateRef: updateRef, candidates: indices.map(idx => ({ index: idx, ref: origRefs[idx], score: 100 })) });
+                    }
+                });
+                if (newConflicts.length > 0) { setConflicts(newConflicts); setShowConflictModal(true); setIsLoading(false); return; }
             }
+            executeMerge(origRefs, updatedRefs, new Map());
         }, 400);
     };
 
-    // Phase 2: Execute Merge (called directly or after modal)
     const executeMerge = (origRefs: RefBlock[], updatedRefs: RefBlock[], conflictResolutions: Map<number, 'update' | 'ignore'>) => {
         try {
-            // Helper to find safe start IDs from original text
             const getNextId = (xml: string, prefix: string, start: number) => {
                 const regex = new RegExp(`id="${prefix}(\\d+)"`, 'g');
                 let max = start;
-                let m;
-                while ((m = regex.exec(xml)) !== null) {
+                let m; while ((m = regex.exec(xml)) !== null) {
                     const val = parseInt(m[1]);
                     if (val >= max) max = Math.ceil((val + 5) / 5) * 5;
                 }
@@ -410,496 +326,275 @@ const ReferenceUpdater: React.FC = () => {
             let rfCounter = getNextId(originalXml, 'rf', 3000);
             let stCounter = getNextId(originalXml, 'st', 3000);
             let irCounter = getNextId(originalXml, 'ir', 3000);
+            let orCounter = getNextId(originalXml, 'or', 3000);
+            let trCounter = getNextId(originalXml, 'tr', 3000);
             
-            const updateMap = new Map<string, RefBlock>();
-            updatedRefs.forEach(ref => updateMap.set(ref.label, ref));
-
-            let updateCount = 0;
-            let unchangedCount = 0;
-            const usedUpdateLabels = new Set<string>();
-            
+            const usedUpdateIdx = new Set<number>();
             const finalRefs: string[] = [];
+            let updateCount = 0, unchangedCount = 0, addedCount = 0;
             
             origRefs.forEach((origRef, idx) => {
-                let shouldUpdate = false;
-                let updateContent: RefBlock | undefined = undefined;
-
-                // Check resolution map first (High Priority for conflicts)
+                let matchIdx = -1;
                 if (conflictResolutions.has(idx)) {
-                    if (conflictResolutions.get(idx) === 'update') {
-                        updateContent = updateMap.get(origRef.label);
-                        shouldUpdate = !!updateContent;
+                    if (conflictResolutions.get(idx) === 'update') matchIdx = updatedRefs.findIndex((u, i) => !usedUpdateIdx.has(i) && u.label === origRef.label);
+                } else {
+                    if (!isNumberedMode) {
+                         matchIdx = updatedRefs.findIndex((u, i) => !usedUpdateIdx.has(i) && u.label === origRef.label && u.label !== '');
+                    } else {
+                        let bestIdx = -1, bestScore = 0;
+                        updatedRefs.forEach((u, i) => {
+                            if (!usedUpdateIdx.has(i)) {
+                                const score = getSimilarity(u.fingerprint, origRef.fingerprint);
+                                if (score > bestScore) { bestScore = score; bestIdx = i; }
+                            }
+                        });
+                        if (bestScore > 0.82) matchIdx = bestIdx;
+                        else matchIdx = updatedRefs.findIndex((u, i) => !usedUpdateIdx.has(i) && u.label === origRef.label && u.label !== '');
                     }
-                } 
-                // Default logic for non-conflicting items
-                else {
-                    updateContent = updateMap.get(origRef.label);
-                    shouldUpdate = !!updateContent;
                 }
                 
-                if (shouldUpdate && updateContent) {
-                    updateCount++;
-                    usedUpdateLabels.add(origRef.label);
-                    let finalTag = updateContent.fullTag;
-                    
+                if (matchIdx !== -1) {
+                    updateCount++; usedUpdateIdx.add(matchIdx);
+                    let finalTag = updatedRefs[matchIdx].fullTag;
                     if (preserveIds) {
                         let idToUse = origRef.id;
-                        if (idToUse.startsWith('bib')) {
-                            idToUse = `bb${bbStart}`;
-                            bbStart += 5;
-                        }
-                        if (idToUse) {
-                            finalTag = finalTag.replace(/id="[^"]*"\s*/, '');
-                            finalTag = finalTag.replace('<ce:bib-reference', `<ce:bib-reference id="${idToUse}"`);
-                        }
+                        if (idToUse.startsWith('bib')) { idToUse = `bb${bbStart}`; bbStart += 5; }
+                        finalTag = finalTag.replace(/id="[^"]*"\s*/, '').replace('<ce:bib-reference', `<ce:bib-reference id="${idToUse}"`);
                     }
-
                     if (renumberInternal) {
-                        finalTag = finalTag.replace(/(<sb:reference\b[^>]*?)(\bid="[^"]+")([^>]*?>)/g, (match, p1, idAttr, p2) => {
-                            const newIdAttr = `id="rf${rfCounter}"`;
-                            rfCounter += 5;
-                            return `${p1}${newIdAttr}${p2}`;
-                        });
-                        finalTag = finalTag.replace(/(<ce:source-text\b[^>]*?)(\bid="[^"]+")([^>]*?>)/g, (match, p1, idAttr, p2) => {
-                            const newIdAttr = `id="st${stCounter}"`;
-                            stCounter += 5;
-                            return `${p1}${newIdAttr}${p2}`;
-                        });
-                        finalTag = finalTag.replace(/(<ce:inter-ref\b[^>]*?)(\bid="[^"]+")([^>]*?>)/g, (match, p1, idAttr, p2) => {
-                            const newIdAttr = `id="ir${irCounter}"`;
-                            irCounter += 5;
-                            return `${p1}${newIdAttr}${p2}`;
+                        finalTag = finalTag.replace(/(<(?:sb:reference|ce:source-text|ce:inter-ref|sb:inter-ref|ce:other-ref|ce:textref)\b[^>]*?)(\bid="[^"]+")([^>]*?>)/g, (m, p1, idAttr, p2) => {
+                            let prefix = 'rf';
+                            if (p1.includes('ce:source-text')) prefix = 'st';
+                            else if (p1.includes('inter-ref')) prefix = 'ir';
+                            else if (p1.includes('ce:other-ref')) prefix = 'or';
+                            else if (p1.includes('ce:textref')) prefix = 'tr';
+                            
+                            let counter = rfCounter;
+                            if (prefix === 'st') counter = stCounter;
+                            else if (prefix === 'ir') counter = irCounter;
+                            else if (prefix === 'or') counter = orCounter;
+                            else if (prefix === 'tr') counter = trCounter;
+
+                            const res = `${p1}id="${prefix}${counter}"${p2}`;
+                            
+                            if (prefix === 'st') stCounter += 5;
+                            else if (prefix === 'ir') irCounter += 5;
+                            else if (prefix === 'or') orCounter += 5;
+                            else if (prefix === 'tr') trCounter += 5;
+                            else rfCounter += 5;
+
+                            return res;
                         });
                     }
-
                     finalRefs.push(finalTag);
                 } else {
-                    unchangedCount++;
-                    finalRefs.push(origRef.fullTag);
+                    unchangedCount++; finalRefs.push(origRef.fullTag);
                 }
             });
 
+            if (addOrphans) {
+                updatedRefs.forEach((u, i) => {
+                    if (!usedUpdateIdx.has(i)) {
+                        addedCount++;
+                        let finalTag = u.fullTag;
+                        const idToUse = `bb${bbStart}`;
+                        bbStart += 5;
+                        finalTag = finalTag.replace(/id="[^"]*"\s*/, '').replace('<ce:bib-reference', `<ce:bib-reference id="${idToUse}"`);
+
+                        finalTag = finalTag.replace(/(<(?:sb:reference|ce:source-text|ce:inter-ref|sb:inter-ref|ce:other-ref|ce:textref)\b[^>]*?)(\bid="[^"]+")([^>]*?>)/g, (m, p1, idAttr, p2) => {
+                            let prefix = 'rf';
+                            if (p1.includes('ce:source-text')) prefix = 'st';
+                            else if (p1.includes('inter-ref')) prefix = 'ir';
+                            else if (p1.includes('ce:other-ref')) prefix = 'or';
+                            else if (p1.includes('ce:textref')) prefix = 'tr';
+                            
+                            let counter = rfCounter;
+                            if (prefix === 'st') counter = stCounter;
+                            else if (prefix === 'ir') counter = irCounter;
+                            else if (prefix === 'or') counter = orCounter;
+                            else if (prefix === 'tr') counter = trCounter;
+
+                            const res = `${p1}id="${prefix}${counter}"${p2}`;
+                            
+                            if (prefix === 'st') stCounter += 5;
+                            else if (prefix === 'ir') irCounter += 5;
+                            else if (prefix === 'or') orCounter += 5;
+                            else if (prefix === 'tr') trCounter += 5;
+                            else rfCounter += 5;
+
+                            return res;
+                        });
+                        
+                        finalRefs.push(finalTag);
+                    }
+                });
+            }
+
             const joinedResult = finalRefs.join('\n');
-            
             setOutput(joinedResult);
-            
-            setStats({ 
-                total: origRefs.length, 
-                updated: updateCount, 
-                unchanged: unchangedCount, 
-                skipped: updatedRefs.length - usedUpdateLabels.size 
-            });
-            
+            setStats({ total: origRefs.length, updated: updateCount, unchanged: unchangedCount, skipped: !addOrphans ? updatedRefs.length - usedUpdateIdx.size : 0, added: addedCount });
             generateDiff(originalXml, joinedResult);
             setActiveTab('result');
-            
-            if (updateCount === 0) {
-                setToast({ msg: "No matching labels found to update.", type: "warn" });
-            } else {
-                setToast({ msg: `Merged ${updateCount} references.`, type: "success" });
-            }
-            
-        } catch (e) {
-            console.error(e);
-            setToast({ msg: "An error occurred during processing.", type: "error" });
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleConflictAction = (index: number, action: 'update' | 'ignore') => {
-        setResolutions(prev => new Map(prev).set(index, action));
-    };
-
-    const applyResolutions = () => {
-        // Check if all conflicts are handled? Optional. 
-        // We assume un-handled ones default to 'ignore' logic in executeMerge if not in map.
-        // But better to ensure user made choices.
-        // For now, allow proceeding.
-        setShowConflictModal(false);
-        setIsLoading(true);
-        // Defer to let modal close
-        setTimeout(() => {
-            const origRefs = parseReferences(originalXml);
-            const updatedRefs = parseReferences(updatedXml);
-            executeMerge(origRefs, updatedRefs, resolutions);
-        }, 100);
+            setToast({ msg: `Merged ${updateCount} and added ${addedCount} references.`, type: "success" });
+        } catch (e) { setToast({ msg: "Merge failed.", type: "error" }); } finally { setIsLoading(false); }
     };
 
     useKeyboardShortcuts({
         onPrimary: initiateUpdate,
-        onCopy: () => {
-            if (output && activeTab === 'result') {
-                navigator.clipboard.writeText(output);
-                setToast({ msg: "Copied output!", type: "success" });
-            }
-        },
-        onClear: () => {
-            setOriginalXml('');
-            setUpdatedXml('');
-            setOutput('');
-            setScanResults([]);
-            setResolutions(new Map());
-            setToast({ msg: "Inputs cleared.", type: "warn" });
-        }
-    }, [originalXml, updatedXml, output, renumberInternal]);
-
-    const displayResults = showOrphansOnly ? scanResults.filter(r => r.status === 'orphan') : scanResults;
+        onCopy: () => { if (output && activeTab === 'result') { navigator.clipboard.writeText(output); setToast({ msg: "Copied!", type: "success" }); } },
+        onClear: () => { setOriginalXml(''); setUpdatedXml(''); setOutput(''); setScanResults([]); setResolutions(new Map()); }
+    }, [originalXml, updatedXml, output]);
 
     return (
-        <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8 relative">
+        <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
             <div className="mb-8 text-center animate-fade-in">
-                <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3">Reference Updater</h1>
-                <p className="text-lg text-slate-500 max-w-2xl mx-auto">Merge corrected references into your existing XML list while maintaining ID integrity.</p>
+                <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase">Reference Updater</h1>
+                <p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic">Smart-merge corrections into existing lists using exact labels or fuzzy content fingerprinting.</p>
             </div>
 
-            {/* Config Panel */}
             <div className="flex justify-center mb-8">
                 <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap items-center justify-center gap-6">
-                    <label className="flex items-center gap-2 cursor-pointer select-none group">
+                    <label className="flex items-center gap-3 cursor-pointer group">
                         <div className="relative">
-                            <input 
-                                type="checkbox" 
-                                checked={preserveIds} 
-                                onChange={(e) => setPreserveIds(e.target.checked)}
-                                className="sr-only" 
-                            />
+                            <input type="checkbox" checked={isNumberedMode} onChange={(e) => setIsNumberedMode(e.target.checked)} className="sr-only" />
+                            <div className={`block w-10 h-6 rounded-full transition-colors ${isNumberedMode ? 'bg-blue-600' : 'bg-slate-300'}`}></div>
+                            <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${isNumberedMode ? 'translate-x-4' : ''}`}></div>
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-sm font-bold text-slate-700">Numbered Style</span>
+                            <span className="text-[10px] text-slate-400 font-medium uppercase tracking-tighter">Smart Fingerprinting ON</span>
+                        </div>
+                    </label>
+
+                    <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
+
+                    <label className="flex items-center gap-3 cursor-pointer group">
+                        <div className="relative">
+                            <input type="checkbox" checked={addOrphans} onChange={(e) => setAddOrphans(e.target.checked)} className="sr-only" />
+                            <div className={`block w-10 h-6 rounded-full transition-colors ${addOrphans ? 'bg-emerald-600' : 'bg-slate-300'}`}></div>
+                            <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${addOrphans ? 'translate-x-4' : ''}`}></div>
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-sm font-bold text-slate-700">Add New Orphans</span>
+                            <span className="text-[10px] text-slate-400 font-medium uppercase tracking-tighter">Append non-matches</span>
+                        </div>
+                    </label>
+
+                    <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
+
+                    <label className="flex items-center gap-3 cursor-pointer group">
+                        <div className="relative">
+                            <input type="checkbox" checked={preserveIds} onChange={(e) => setPreserveIds(e.target.checked)} className="sr-only" />
                             <div className={`block w-10 h-6 rounded-full transition-colors ${preserveIds ? 'bg-indigo-600' : 'bg-slate-300'}`}></div>
                             <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${preserveIds ? 'translate-x-4' : ''}`}></div>
                         </div>
                         <div className="flex flex-col">
-                            <span className="text-sm font-bold text-slate-700">Preserve Original IDs</span>
-                            <span className="text-[10px] text-slate-400 font-medium">Prevents broken cross-refs</span>
+                            <span className="text-sm font-bold text-slate-700">Preserve IDs</span>
+                            <span className="text-[10px] text-slate-400 font-medium uppercase tracking-tighter">Fix body links</span>
                         </div>
                     </label>
 
-                    <div className="h-8 w-px bg-slate-200 hidden sm:block"></div>
-
-                    <label className="flex items-center gap-2 cursor-pointer select-none group">
-                        <div className="relative">
-                            <input 
-                                type="checkbox" 
-                                checked={renumberInternal} 
-                                onChange={(e) => setRenumberInternal(e.target.checked)}
-                                className="sr-only" 
-                            />
-                            <div className={`block w-10 h-6 rounded-full transition-colors ${renumberInternal ? 'bg-indigo-600' : 'bg-slate-300'}`}></div>
-                            <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${renumberInternal ? 'translate-x-4' : ''}`}></div>
-                        </div>
-                        <div className="flex flex-col">
-                            <span className="text-sm font-bold text-slate-700">Reset Internal IDs</span>
-                            <span className="text-[10px] text-slate-400 font-medium">Auto-fix IDs in updates</span>
-                        </div>
-                    </label>
-
-                    <div className="h-8 w-px bg-slate-200 hidden sm:block"></div>
-                    
-                    <button 
-                        onClick={runAnalysis}
-                        className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold py-2 px-4 rounded-lg transition-colors flex items-center gap-2"
-                    >
-                        <span>Analyze Changes</span>
-                    </button>
-
-                    <button 
-                        onClick={initiateUpdate}
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded-lg shadow-lg shadow-indigo-500/20 transform transition-all active:scale-95 flex items-center gap-2"
-                    >
-                        <span>Merge Updates</span>
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                    </button>
+                    <button onClick={runAnalysis} className="bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold py-2 px-4 rounded-lg border border-slate-200 transition-colors">Analyze</button>
+                    <button onClick={initiateUpdate} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded-lg shadow-lg active:scale-95 transition-all">Merge Updates</button>
                 </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[600px]">
-                {/* Input Column */}
                 <div className="flex flex-col gap-6 h-full">
-                    {/* Original XML */}
-                    <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col group focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
+                    <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
                         <div className="bg-slate-50 px-4 py-2 border-b border-slate-100 flex justify-between items-center">
-                            <label className="font-bold text-slate-700 text-xs flex items-center gap-2">
-                                <span className="flex h-5 w-5 items-center justify-center rounded bg-white border border-slate-200 text-[10px] text-slate-500 font-mono shadow-sm">1</span>
-                                Current XML (Original)
-                            </label>
+                            <label className="font-bold text-slate-700 text-xs uppercase">Original XML Source</label>
                             {originalXml && <button onClick={() => setOriginalXml('')} className="text-[10px] font-bold text-slate-400 hover:text-red-500">Clear</button>}
                         </div>
-                        <textarea 
-                            value={originalXml}
-                            onChange={(e) => setOriginalXml(e.target.value)}
-                            className="w-full h-full p-4 text-xs font-mono text-slate-700 border-0 focus:ring-0 outline-none resize-none placeholder-slate-300" 
-                            placeholder='<ce:bib-reference id="bib1">...</ce:bib-reference>'
-                            spellCheck={false}
-                        />
+                        <textarea value={originalXml} onChange={e => setOriginalXml(e.target.value)} className="w-full h-full p-4 text-xs font-mono text-slate-700 border-0 focus:ring-0 resize-none" placeholder="Paste full article reference list..." spellCheck={false} />
                     </div>
-
-                    {/* Updated XML */}
                     <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col group focus-within:ring-2 focus-within:ring-emerald-100 transition-all">
                         <div className="bg-slate-50 px-4 py-2 border-b border-slate-100 flex justify-between items-center">
-                            <label className="font-bold text-slate-700 text-xs flex items-center gap-2">
-                                <span className="flex h-5 w-5 items-center justify-center rounded bg-white border border-slate-200 text-[10px] text-emerald-600 font-mono shadow-sm">2</span>
-                                Updated XML (Corrections)
-                            </label>
+                            <label className="font-bold text-slate-700 text-xs uppercase">Updated Corrections</label>
                             {updatedXml && <button onClick={() => setUpdatedXml('')} className="text-[10px] font-bold text-slate-400 hover:text-red-500">Clear</button>}
                         </div>
-                        <textarea 
-                            value={updatedXml}
-                            onChange={(e) => setUpdatedXml(e.target.value)}
-                            className="w-full h-full p-4 text-xs font-mono text-slate-700 border-0 focus:ring-0 outline-none resize-none placeholder-slate-300" 
-                            placeholder='<ce:bib-reference id="bib1">...</ce:bib-reference>'
-                            spellCheck={false}
-                        />
+                        <textarea value={updatedXml} onChange={e => setUpdatedXml(e.target.value)} className="w-full h-full p-4 text-xs font-mono text-slate-700 border-0 focus:ring-0 resize-none" placeholder="Paste corrections or new items..." spellCheck={false} />
                     </div>
                 </div>
 
-                {/* Result Column */}
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col relative h-full">
-                    <div className="bg-slate-50 px-4 py-2 border-b border-slate-100 flex justify-between items-center">
-                        <label className="font-bold text-slate-700 text-xs flex items-center gap-2">
-                            <span className="flex h-5 w-5 items-center justify-center rounded bg-white border border-slate-200 text-[10px] text-indigo-600 font-mono shadow-sm">3</span>
-                            Result
-                        </label>
-                        <div className="flex gap-2">
-                            {output && activeTab === 'result' && (
-                                <button onClick={() => {navigator.clipboard.writeText(output); setToast({msg:'Copied!',type:'success'})}} className="text-[10px] font-bold text-indigo-600 hover:bg-indigo-50 px-2 py-1 rounded border border-transparent hover:border-indigo-100 transition-colors">
-                                    Copy Result
-                                </button>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Tabs */}
                     <div className="bg-white px-2 pt-2 border-b border-slate-100 flex space-x-1">
-                         <button 
-                            onClick={() => setActiveTab('report')} 
-                            className={`flex-1 py-2 text-xs font-bold rounded-t-lg transition-all duration-200 border-t border-x ${activeTab === 'report' 
-                                ? 'bg-slate-50 text-indigo-600 border-slate-200 translate-y-[1px]' 
-                                : 'bg-white text-slate-500 border-transparent hover:bg-slate-50 hover:text-slate-700'}`}
-                         >
-                            Scan Report {stats.updated > 0 && activeTab !== 'report' && <span className="ml-1 bg-amber-100 text-amber-700 px-1.5 rounded-full text-[9px]">!</span>}
-                         </button>
-                         <button 
-                            onClick={() => setActiveTab('result')} 
-                            className={`flex-1 py-2 text-xs font-bold rounded-t-lg transition-all duration-200 border-t border-x ${activeTab === 'result' 
-                                ? 'bg-slate-50 text-indigo-600 border-slate-200 translate-y-[1px]' 
-                                : 'bg-white text-slate-500 border-transparent hover:bg-slate-50 hover:text-slate-700'}`}
-                         >
-                            Merged XML {stats.updated > 0 && output && <span className="ml-1 bg-emerald-100 text-emerald-700 px-1.5 rounded-full text-[9px]">{stats.updated} Updated</span>}
-                         </button>
-                         <button 
-                            onClick={() => setActiveTab('diff')} 
-                            className={`flex-1 py-2 text-xs font-bold rounded-t-lg transition-all duration-200 border-t border-x ${activeTab === 'diff' 
-                                ? 'bg-slate-50 text-indigo-600 border-slate-200 translate-y-[1px]' 
-                                : 'bg-white text-slate-500 border-transparent hover:bg-slate-50 hover:text-slate-700'}`}
-                         >
-                            Diff View
-                         </button>
+                        {['report', 'result', 'diff'].map(tab => (
+                            <button key={tab} onClick={() => setActiveTab(tab as any)} className={`flex-1 py-2 text-xs font-bold rounded-t-lg transition-all border-t border-x ${activeTab === tab ? 'bg-slate-50 text-indigo-600 border-slate-200 translate-y-[1px]' : 'bg-white text-slate-500 border-transparent hover:bg-slate-50'}`}>
+                                {tab === 'report' ? 'Scan Log' : tab === 'result' ? 'Merged XML' : 'Diff View'}
+                            </button>
+                        ))}
                     </div>
-
                     <div className="flex-grow relative bg-slate-50 overflow-hidden flex flex-col">
-                        {isLoading && <LoadingOverlay message="Processing References..." color="indigo" />}
-                        
+                        {isLoading && <LoadingOverlay message="Processing..." color="indigo" />}
                         {activeTab === 'report' && (
-                            <div className="flex flex-col h-full bg-white">
-                                {scanResults.length > 0 ? (
-                                    <>
-                                        <div className="grid grid-cols-3 gap-2 p-3 border-b border-slate-100 bg-slate-50">
-                                            <div className="bg-white border border-slate-200 rounded p-2 text-center shadow-sm">
-                                                <div className="text-[10px] font-bold text-slate-400 uppercase">Updates</div>
-                                                <div className="text-lg font-bold text-amber-600">{stats.updated}</div>
-                                            </div>
-                                            <div className="bg-white border border-slate-200 rounded p-2 text-center shadow-sm">
-                                                <div className="text-[10px] font-bold text-slate-400 uppercase">Unchanged</div>
-                                                <div className="text-lg font-bold text-slate-600">{stats.unchanged}</div>
-                                            </div>
-                                            <div className="bg-white border border-slate-200 rounded p-2 text-center shadow-sm">
-                                                <div className="text-[10px] font-bold text-slate-400 uppercase">Orphans</div>
-                                                <div className={`text-lg font-bold ${stats.skipped > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{stats.skipped}</div>
-                                            </div>
-                                        </div>
-                                        
-                                        <div className="px-3 py-2 bg-white border-b border-slate-100 flex justify-between items-center">
-                                            <label className="flex items-center gap-2 text-xs font-medium text-slate-600 cursor-pointer select-none">
-                                                <input 
-                                                    type="checkbox" 
-                                                    checked={showOrphansOnly} 
-                                                    onChange={(e) => setShowOrphansOnly(e.target.checked)}
-                                                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                                                />
-                                                Show Orphans Only
-                                            </label>
-                                            <span className="text-[10px] text-slate-400 italic">
-                                                Orphans are references in Update list not found in Original.
-                                            </span>
-                                        </div>
-
-                                        <div className="flex-grow overflow-auto custom-scrollbar">
-                                            <table className="w-full text-left text-xs">
-                                                <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm">
-                                                    <tr>
-                                                        <th className="p-3 font-semibold text-slate-500 border-b border-slate-200">Label (Key)</th>
-                                                        <th className="p-3 font-semibold text-slate-500 border-b border-slate-200">ID</th>
-                                                        <th className="p-3 font-semibold text-slate-500 border-b border-slate-200">Status</th>
-                                                        <th className="p-3 font-semibold text-slate-500 border-b border-slate-200">New Content Preview</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-slate-100">
-                                                    {displayResults.map((item, idx) => (
-                                                        <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                                                            <td className="p-3 font-mono font-bold text-slate-700 align-top">
-                                                                {item.label}
-                                                                {item.isSynthetic && (
-                                                                    <span className="ml-2 bg-indigo-50 text-indigo-600 px-1 py-0.5 rounded text-[9px] border border-indigo-100 font-normal">Name-Date</span>
-                                                                )}
-                                                                {item.similarityMatch && (
-                                                                    <div className="mt-1 flex items-center gap-1 text-[10px] bg-amber-50 text-amber-700 px-1.5 py-1 rounded border border-amber-200">
-                                                                        <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                                                                        <span>
-                                                                            Similar to: <span className="font-bold">{item.similarityMatch.label}</span> ({Math.round(item.similarityMatch.score * 100)}%)
-                                                                        </span>
-                                                                    </div>
-                                                                )}
-                                                            </td>
-                                                            <td className="p-3 font-mono text-slate-500 align-top">{item.id}</td>
-                                                            <td className="p-3 align-top">
-                                                                <span className={`px-2 py-1 rounded border font-bold text-[10px] uppercase ${
-                                                                    item.status === 'update' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                                                                    item.status === 'orphan' ? 'bg-rose-50 text-rose-700 border-rose-200' :
-                                                                    'bg-slate-100 text-slate-500 border-slate-200'
-                                                                }`}>
-                                                                    {item.status}
-                                                                </span>
-                                                            </td>
-                                                            <td className="p-3 text-slate-600 truncate max-w-[150px] align-top" title={item.preview}>
-                                                                {item.preview}
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </>
-                                ) : (
-                                    <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60">
-                                        <p className="text-sm">Click "Analyze Changes" to see a report.</p>
-                                    </div>
-                                )}
+                            <div className="h-full overflow-auto custom-scrollbar bg-white">
+                                <table className="w-full text-left text-[11px]">
+                                    <thead className="bg-slate-50 sticky top-0 border-b border-slate-200">
+                                        <tr><th className="p-3 font-bold text-slate-500 uppercase">Ref</th><th className="p-3 font-bold text-slate-500 uppercase">Method</th><th className="p-3 font-bold text-slate-500 uppercase">Status</th><th className="p-3 font-bold text-slate-500 uppercase">Preview</th></tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {scanResults.map((item, idx) => (
+                                            <tr key={idx} className="hover:bg-slate-50">
+                                                <td className="p-3 font-mono font-bold text-slate-700">{item.label}</td>
+                                                <td className="p-3">
+                                                    {item.matchType && <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${item.matchType === 'Label' ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-purple-50 text-purple-600 border-purple-100'}`}>{item.matchType === 'Label' ? 'Strict' : `Smart (${item.matchScore}%)`}</span>}
+                                                </td>
+                                                <td className="p-3">
+                                                    <span className={`px-2 py-1 rounded text-[9px] font-bold uppercase border ${
+                                                        item.status === 'update' || item.status === 'smart_match' ? 'bg-amber-100 text-amber-700 border-amber-200' : 
+                                                        item.status === 'add' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
+                                                        item.status === 'orphan' ? 'bg-rose-100 text-rose-700 border-rose-200' : 
+                                                        'bg-slate-100 text-slate-500 border border-slate-200'
+                                                    }`}>{item.status.replace('_', ' ')}</span>
+                                                </td>
+                                                <td className="p-3 truncate max-w-[120px] text-slate-500 italic">{item.preview}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
                             </div>
                         )}
-
-                        {activeTab === 'result' && (
-                             <textarea 
-                                value={output}
-                                readOnly
-                                className="w-full h-full p-4 text-xs font-mono text-slate-800 border-0 focus:ring-0 outline-none bg-transparent resize-none leading-relaxed placeholder-slate-400" 
-                                placeholder="Merged output will appear here..."
-                            />
-                        )}
-
-                        {activeTab === 'diff' && (
-                             <div className="absolute inset-0 overflow-auto custom-scrollbar bg-white">
-                                 {diffElements ? diffElements : (
-                                    <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60">
-                                        <p className="text-sm">Run update to view differences</p>
-                                    </div>
-                                 )}
-                             </div>
-                        )}
+                        {activeTab === 'result' && <textarea value={output} readOnly className="w-full h-full p-4 text-xs font-mono bg-transparent border-0 focus:ring-0 outline-none" placeholder="Results will appear here..." />}
+                        {activeTab === 'diff' && <div className="absolute inset-0 overflow-auto bg-white p-2">{diffElements || <div className="h-full flex items-center justify-center text-slate-400">Run merge to see diff.</div>}</div>}
                     </div>
                 </div>
             </div>
 
-            {/* Conflict Resolution Modal */}
             {showConflictModal && (
                 <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-[2px] flex items-center justify-center p-4">
                     <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full border border-slate-200 overflow-hidden flex flex-col max-h-[85vh] animate-scale-in">
                         <div className="bg-amber-50 p-6 border-b border-amber-100 flex items-start gap-4">
-                            <div className="p-3 bg-white rounded-xl text-amber-500 shadow-sm border border-amber-100">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                </svg>
-                            </div>
-                            <div>
-                                <h3 className="text-lg font-bold text-slate-800">Duplicate References Detected</h3>
-                                <p className="text-sm text-slate-600 mt-1">Some labels in your Original XML appear multiple times. Please choose which instances to update.</p>
-                            </div>
+                            <div className="p-3 bg-white rounded-xl text-amber-500 shadow-sm border border-amber-100"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg></div>
+                            <div><h3 className="text-lg font-bold text-slate-800">Resolve Ambiguous Matches</h3><p className="text-sm text-slate-600 mt-1">Found multiple original references sharing the same label. Choose which one to update.</p></div>
                         </div>
-                        
                         <div className="flex-grow overflow-y-auto p-6 bg-slate-50 space-y-6">
-                            {conflicts.map((conflict, groupIdx) => (
-                                <div key={groupIdx} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                                    <div className="bg-slate-100 px-4 py-2 border-b border-slate-200 flex justify-between items-center">
-                                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Label Conflict: <span className="text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200 ml-1">{conflict.label}</span></span>
-                                    </div>
-                                    
-                                    <div className="p-4 grid gap-6">
-                                        <div className="space-y-2">
-                                            <span className="text-xs font-bold text-emerald-600 uppercase flex items-center gap-2">
-                                                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                                                New Content (Update Source)
-                                            </span>
-                                            <div className="text-xs font-mono text-slate-700 bg-emerald-50/50 p-3 rounded border border-emerald-100 leading-relaxed">
-                                                {conflict.updateRef.content.replace(/<[^>]+>/g, '').substring(0, 300)}...
+                            {conflicts.map((conflict, gIdx) => (
+                                <div key={gIdx} className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+                                    <div className="mb-4 font-bold text-indigo-600 text-xs tracking-widest uppercase">Target Update: {conflict.label}</div>
+                                    <div className="space-y-3">
+                                        {conflict.candidates.map((cand, cIdx) => (
+                                            <div key={cIdx} className={`p-4 rounded-lg border transition-all flex items-center justify-between ${resolutions.get(cand.index) === 'update' ? 'bg-emerald-50 border-emerald-300 ring-1 ring-emerald-300' : 'bg-white border-slate-200'}`}>
+                                                <div className="flex-grow pr-4">
+                                                    <div className="text-[10px] font-mono text-slate-400 mb-1">ID: {cand.ref.id} | Match: {Math.round(cand.score * 100)}%</div>
+                                                    <div className="text-xs text-slate-700 italic line-clamp-2">{cand.ref.content.replace(/<[^>]+>/g, '')}</div>
+                                                </div>
+                                                <button onClick={() => setResolutions(new Map(resolutions).set(cand.index, resolutions.get(cand.index) === 'update' ? 'ignore' : 'update'))} className={`px-4 py-2 rounded-lg text-[10px] font-bold transition-all shadow-sm ${resolutions.get(cand.index) === 'update' ? 'bg-emerald-600 text-white' : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'}`}>
+                                                    {resolutions.get(cand.index) === 'update' ? 'SELECTED' : 'SELECT TARGET'}
+                                                </button>
                                             </div>
-                                        </div>
-
-                                        <div className="space-y-3">
-                                            <span className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2">
-                                                <span className="w-2 h-2 rounded-full bg-slate-400"></span>
-                                                Original Candidates ({conflict.candidates.length} found)
-                                            </span>
-                                            {conflict.candidates.map((cand, cIdx) => {
-                                                const currentAction = resolutions.get(cand.index);
-                                                return (
-                                                    <div key={cIdx} className={`p-3 rounded-lg border transition-all ${currentAction === 'update' ? 'bg-amber-50 border-amber-300 ring-1 ring-amber-300' : 'bg-white border-slate-200'}`}>
-                                                        <div className="flex items-start gap-4">
-                                                            <div className="flex flex-col gap-2 pt-1">
-                                                                <button 
-                                                                    onClick={() => handleConflictAction(cand.index, 'update')}
-                                                                    className={`px-3 py-1.5 rounded text-xs font-bold border transition-colors ${currentAction === 'update' ? 'bg-amber-500 text-white border-amber-600' : 'bg-white text-slate-500 border-slate-200 hover:border-amber-300 hover:text-amber-600'}`}
-                                                                >
-                                                                    Update This
-                                                                </button>
-                                                                <button 
-                                                                    onClick={() => handleConflictAction(cand.index, 'ignore')}
-                                                                    className={`px-3 py-1.5 rounded text-xs font-bold border transition-colors ${currentAction === 'ignore' ? 'bg-slate-200 text-slate-600 border-slate-300' : 'bg-white text-slate-400 border-slate-100 hover:text-slate-600'}`}
-                                                                >
-                                                                    Keep Original
-                                                                </button>
-                                                            </div>
-                                                            <div className="flex-grow">
-                                                                <div className="text-[10px] text-slate-400 font-mono mb-1">ID: {cand.ref.id}</div>
-                                                                <div className="text-xs font-mono text-slate-600 leading-relaxed">
-                                                                    {cand.ref.content.replace(/<[^>]+>/g, '').substring(0, 200)}...
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
+                                        ))}
                                     </div>
                                 </div>
                             ))}
                         </div>
-
                         <div className="p-6 bg-white border-t border-slate-200 flex justify-end gap-3">
-                            <button 
-                                onClick={() => { setShowConflictModal(false); setIsLoading(false); }}
-                                className="px-6 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-50 transition-colors text-sm"
-                            >
-                                Cancel Merge
-                            </button>
-                            <button 
-                                onClick={applyResolutions}
-                                className="px-8 py-3 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-500/20 transition-all transform active:scale-95 text-sm"
-                            >
-                                Confirm & Merge
-                            </button>
+                            <button onClick={() => {setShowConflictModal(false); setIsLoading(false);}} className="px-6 py-2 text-slate-500 font-bold hover:text-slate-700">Cancel</button>
+                            <button onClick={() => {setShowConflictModal(false); executeMerge(parseReferences(originalXml), parseReferences(updatedXml), resolutions);}} className="bg-indigo-600 text-white px-8 py-2 rounded-xl font-bold shadow-lg active:scale-95 transition-all">Apply Choices & Merge</button>
                         </div>
                     </div>
                 </div>
             )}
-
             {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
         </div>
     );

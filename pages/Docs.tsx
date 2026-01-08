@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 
 const Docs: React.FC = () => {
@@ -7,7 +6,7 @@ const Docs: React.FC = () => {
     const NavBtn = ({ id, label }: { id: string, label: string }) => (
         <button 
             onClick={() => setSection(id)} 
-            className={`w-full text-left px-4 py-2 rounded-lg text-sm transition-colors ${section === id ? 'bg-blue-50 text-blue-700 font-semibold border-r-4 border-blue-600' : 'text-slate-600 hover:bg-slate-50'}`}
+            className={`w-full text-left px-4 py-2 rounded-lg text-sm transition-colors ${section === id ? 'bg-indigo-50 text-indigo-700 font-semibold border-r-4 border-indigo-600' : 'text-slate-600 hover:bg-slate-50'}`}
         >
             {label}
         </button>
@@ -34,37 +33,56 @@ const Docs: React.FC = () => {
                 <div className="max-w-3xl mx-auto space-y-12 pb-20">
                     {section === 'overview' && (
                         <section className="animate-fade-in">
-                            <h2 className="text-3xl font-extrabold text-slate-900 mb-6">Production Toolkit Overview</h2>
-                            <p className="text-lg text-slate-600 mb-4">
-                                A secure, offline-capable suite of utilities designed specifically for editorial production workflows. 
-                                This application runs entirely locally on your machine, ensuring no sensitive content is sent to external servers.
+                            <h2 className="text-3xl font-extrabold text-slate-900 mb-6">Production Toolkit</h2>
+                            <p className="text-lg text-slate-600 mb-8 font-light leading-relaxed">
+                                A specialized suite of editorial workflow tools designed to process high-volume XML documents. All processing is performed locally in your browser/application, ensuring maximum security and data privacy.
                             </p>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8">
-                                <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
-                                    <h3 className="font-bold text-slate-800 mb-2">XML Processing</h3>
-                                    <p className="text-sm text-slate-500">Specialized tools for manipulating Elsevier/NISO standard XML tags, citations, and tables.</p>
+                            
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                <div className="p-6 bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                                    <div className="w-10 h-10 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600 mb-4">
+                                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                    </div>
+                                    <h3 className="font-bold text-slate-800 mb-2">Internal Renumbering</h3>
+                                    <p className="text-sm text-slate-500 leading-relaxed">Every tool supports advanced renumbering for <code>rf</code>, <code>st</code>, <code>ir</code>, <code>or</code>, and <code>tr</code> tag sequences to maintain XML schema validity.</p>
                                 </div>
-                                <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
-                                    <h3 className="font-bold text-slate-800 mb-2">Content Analysis</h3>
-                                    <p className="text-sm text-slate-500">Diff tools and role parsers to validate and correct editorial content efficiently.</p>
+                                <div className="p-6 bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                                    <div className="w-10 h-10 bg-emerald-50 rounded-lg flex items-center justify-center text-emerald-600 mb-4">
+                                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                    </div>
+                                    <h3 className="font-bold text-slate-800 mb-2">Smart Fingerprinting</h3>
+                                    <p className="text-sm text-slate-500 leading-relaxed">Our matching engine uses content-based fingerprints (Author + Year + Title) to identify references even when labels have changed.</p>
                                 </div>
+                            </div>
+
+                            <div className="mt-12 p-8 bg-slate-900 rounded-[2rem] text-white">
+                                <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                                    Security & Privacy
+                                </h3>
+                                <p className="text-slate-400 text-sm leading-relaxed mb-0">
+                                    This toolkit does not store your manuscript content on any server. All XML transformations happen within the local execution context. Database interactions are limited to user authentication and subscription management.
+                                </p>
                             </div>
                         </section>
                     )}
 
                     {section === 'xml' && (
                         <section className="animate-fade-in">
-                            <h2 className="text-3xl font-extrabold text-slate-900 mb-6">XML Reference Normalizer</h2>
-                            <div className="prose prose-slate">
+                            <h2 className="text-3xl font-extrabold text-slate-900 mb-6 uppercase tracking-tight">XML Reference Normalizer</h2>
+                            <div className="prose prose-slate max-w-none">
                                 <p className="text-slate-600 mb-4">
-                                    Automatically renumbers bibliography citations and updates all corresponding cross-references in the text.
+                                    Used when a bibliography has been manually edited or scrambled. It restores sequential numbering and updates the body of the article to match.
                                 </p>
-                                <h3 className="text-xl font-bold text-slate-800 mt-6 mb-3">Key Features</h3>
+                                <div className="bg-amber-50 border-l-4 border-amber-400 p-4 mb-6">
+                                    <p className="text-sm text-amber-800 font-medium">
+                                        <strong>Note:</strong> This tool will collapse ranges automatically. e.g., <code>[1, 2, 3]</code> becomes <code>[1–3]</code>.
+                                    </p>
+                                </div>
+                                <h3 className="text-xl font-bold text-slate-800 mt-6 mb-3">Workflow</h3>
                                 <ul className="list-disc pl-5 space-y-2 text-slate-600">
-                                    <li><strong>Renumbering:</strong> Scans for <code>&lt;ce:bib-reference&gt;</code> tags and applies sequential numbering (e.g., [1], [2]).</li>
-                                    <li><strong>Cross-Ref Updates:</strong> Updates <code>&lt;ce:cross-ref&gt;</code> tags to match the new bibliography numbers.</li>
-                                    <li><strong>Range Collapsing:</strong> Automatically converts sequences like "1, 2, 3" into ranges like "1–3" inside <code>&lt;ce:cross-refs&gt;</code>.</li>
-                                    <li><strong>Other-Ref Extraction:</strong> Detects and extracts unnumbered references (<code>&lt;ce:other-ref&gt;</code>) for manual review.</li>
+                                    <li><strong>Prefix/Suffix:</strong> Set your preferred bracket style (e.g., [ ], ( ), or none).</li>
+                                    <li><strong>Scan:</strong> The tool finds every <code>&lt;ce:label&gt;</code> and assigns it a new number.</li>
+                                    <li><strong>Update:</strong> Every <code>&lt;ce:cross-ref&gt;</code> in the document is re-mapped to the new numbers based on the original <code>refid</code>.</li>
                                 </ul>
                             </div>
                         </section>
@@ -72,142 +90,133 @@ const Docs: React.FC = () => {
 
                     {section === 'refgen' && (
                         <section className="animate-fade-in">
-                            <h2 className="text-3xl font-extrabold text-slate-900 mb-6">Reference Updater</h2>
-                             <div className="prose prose-slate">
+                            <h2 className="text-3xl font-extrabold text-slate-900 mb-6 uppercase tracking-tight">Reference Updater</h2>
+                             <div className="prose prose-slate max-w-none">
                                 <p className="text-slate-600 mb-4">
-                                    Merges a list of corrected XML references into an existing "Original" XML reference list based on matching labels.
+                                    Surgically merges corrected references into an existing bibliography while <strong>preserving original IDs</strong>.
                                 </p>
-                                <h3 className="text-xl font-bold text-slate-800 mt-6 mb-3">How to Use</h3>
-                                <ol className="list-decimal pl-5 space-y-2 text-slate-600">
-                                    <li>Paste your <strong>Original</strong> XML list (the full list from the current file).</li>
-                                    <li>Paste your <strong>Updated</strong> XML list (the subset or full list containing corrections).</li>
-                                    <li>Click <strong>Merge Updates</strong>.</li>
-                                    <li>The tool replaces original references with updated ones where the label (e.g. <code>[62]</code>) matches.</li>
-                                </ol>
-                                <h3 className="text-xl font-bold text-slate-800 mt-6 mb-3">Features</h3>
+                                <h3 className="text-xl font-bold text-slate-800 mt-6 mb-3">Matching Logic</h3>
                                 <ul className="list-disc pl-5 space-y-2 text-slate-600">
-                                    <li><strong>Structure Preservation:</strong> Keeps original references that were not in the update list.</li>
-                                    <li><strong>Preserve IDs:</strong> Optionally keeps the <code>id="..."</code> attribute from the Original XML even when replacing content. This prevents breaking internal links (<code>&lt;ce:cross-ref&gt;</code>) in the main article body.</li>
+                                    <li><strong>Label Mode (Strict):</strong> Matches based on exact label text (e.g., "Doe, 2020").</li>
+                                    <li><strong>Numbered Mode (Smart):</strong> Uses a fingerprint of <code>Author + Year + Title fragment</code>. This allows you to update a bibliography even if you are changing styles (e.g., Author-Date to Vancouver).</li>
                                 </ul>
+                                <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-5 mt-6">
+                                    <h4 className="font-bold text-emerald-800 mb-2">Key Benefit</h4>
+                                    <p className="text-sm text-emerald-700">By preserving the original <code>bib-reference id="..."</code>, you ensure that every existing cross-reference in the main article remains functional, saving hours of manual re-linking.</p>
+                                </div>
                              </div>
                         </section>
                     )}
 
                     {section === 'dupe' && (
                         <section className="animate-fade-in">
-                            <h2 className="text-3xl font-extrabold text-slate-900 mb-6">Duplicate Reference Remover</h2>
-                             <div className="prose prose-slate">
+                            <h2 className="text-3xl font-extrabold text-slate-900 mb-6 uppercase tracking-tight">Duplicate Reference Remover</h2>
+                             <div className="prose prose-slate max-w-none">
                                 <p className="text-slate-600 mb-4">
-                                    Scans a bibliography for citations with identical or very similar titles, allowing you to select one to keep and automatically re-linking text citations to the keeper.
+                                    Identify redundant bibliography entries and merge them into a single unique item while automatically fixing all body links.
                                 </p>
-                                <h3 className="text-xl font-bold text-slate-800 mt-6 mb-3">Workflow</h3>
-                                <ol className="list-decimal pl-5 space-y-2 text-slate-600">
-                                    <li>Paste the full XML content (including text citations and the reference list).</li>
-                                    <li>Click <strong>Find Duplicates</strong>. The tool groups references with >85% title similarity.</li>
-                                    <li>Review each group and select the "Keeper" (the correct version).</li>
-                                    <li>Click <strong>Merge & Fix</strong>.</li>
-                                </ol>
-                                <h3 className="text-xl font-bold text-slate-800 mt-6 mb-3">What happens during Merge?</h3>
-                                <ul className="list-disc pl-5 space-y-2 text-slate-600">
-                                    <li><strong>Remapping:</strong> The tool scans the text for <code>&lt;ce:cross-ref&gt;</code> tags pointing to the deleted duplicates and updates their <code>refid</code> to point to the selected "Keeper".</li>
-                                    <li><strong>Deletion:</strong> The XML blocks for the rejected duplicates are completely removed from the file.</li>
-                                </ul>
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 my-8">
+                                    <div className="p-4 bg-slate-100 rounded-xl">
+                                        <h4 className="font-bold text-slate-800 mb-2 flex items-center gap-2">
+                                            <svg className="w-4 h-4 text-indigo-600" fill="currentColor" viewBox="0 0 20 20"><path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" /><path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h.01a1 1 0 100-2H10zm3 0a1 1 0 000 2h.01a1 1 0 100-2H13zM7 13a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h.01a1 1 0 100-2H10zm3 0a1 1 0 000 2h.01a1 1 0 100-2H13z" clipRule="evenodd" /></svg>
+                                            Numbered Style
+                                        </h4>
+                                        <p className="text-xs text-slate-500">The tool detects deleted references and recalculates ranges (e.g., [1, 3, 4] becomes [1, 3-4]).</p>
+                                    </div>
+                                    <div className="p-4 bg-slate-100 rounded-xl">
+                                        <h4 className="font-bold text-slate-800 mb-2 flex items-center gap-2">
+                                            <svg className="w-4 h-4 text-emerald-600" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+                                            Author-Date Safety
+                                        </h4>
+                                        <p className="text-xs text-slate-500">Completely safe. It re-links internal refids while leaving the visible text (e.g., "Doe, 2020") intact.</p>
+                                    </div>
+                                </div>
+
+                                <h3 className="text-xl font-bold text-slate-800 mt-6 mb-3">Resolution Matrix</h3>
+                                <p className="text-slate-600">The tool provides a conflict list. For every duplicate group, you select the <strong>KEEPER</strong>. Upon execution, the other items are deleted and every citation in the article is checked for those IDs and pointed to the keeper.</p>
                              </div>
                         </section>
                     )}
 
                     {section === 'credit' && (
                         <section className="animate-fade-in">
-                             <h2 className="text-3xl font-extrabold text-slate-900 mb-6">CRediT Author Tagging</h2>
-                             <div className="prose prose-slate">
+                             <h2 className="text-3xl font-extrabold text-slate-900 mb-6 uppercase tracking-tight">CRediT Author Tagging</h2>
+                             <div className="prose prose-slate max-w-none">
                                 <p className="text-slate-600 mb-4">
-                                    Parses unstructured author contribution statements and converts them into standardized NISO CRediT XML.
+                                    Converts natural language contribution statements into the standardized NISO CRediT XML schema.
                                 </p>
-                                <h3 className="text-xl font-bold text-slate-800 mt-6 mb-3">How to Use</h3>
-                                <ol className="list-decimal pl-5 space-y-2 text-slate-600">
-                                    <li>Paste the contribution statement (e.g., "John Doe: Writing. Jane Smith: Editing.").</li>
-                                    <li>The tool auto-detects author names and roles.</li>
-                                    <li><strong>Typos</strong> are auto-suggested (e.g., "Writting" &rarr; "Writing - Original Draft").</li>
-                                    <li><strong>Duplicates</strong> are flagged and removed.</li>
-                                    <li>Copy the generated XML or the formatted text for Word.</li>
-                                </ol>
+                                <h3 className="text-xl font-bold text-slate-800 mt-6 mb-3">Smart Correction</h3>
+                                <p className="text-slate-600">The tool uses a fuzzy logic dictionary to fix common misspellings (e.g., "Writting" &rarr; "Writing - Original Draft") and automatically filters out non-standard roles.</p>
                              </div>
                         </section>
                     )}
 
                     {section === 'highlights' && (
                         <section className="animate-fade-in">
-                             <h2 className="text-3xl font-extrabold text-slate-900 mb-6">Article Highlights Generator</h2>
-                             <div className="prose prose-slate">
+                             <h2 className="text-3xl font-extrabold text-slate-900 mb-6 uppercase tracking-tight">Article Highlights Generator</h2>
+                             <div className="prose prose-slate max-w-none">
                                 <p className="text-slate-600 mb-4">
-                                    Converts rich text (pasted from Word, etc.) into the structured <code>author-highlights</code> XML format.
+                                    Translates formatted bullet points from Microsoft Word into structural <code>author-highlights</code> XML.
                                 </p>
-                                <h3 className="text-xl font-bold text-slate-800 mt-6 mb-3">Supported Formatting</h3>
                                 <ul className="list-disc pl-5 space-y-2 text-slate-600">
-                                    <li><strong>Bold:</strong> Converted to <code>&lt;ce:bold&gt;</code></li>
-                                    <li><strong>Italic:</strong> Converted to <code>&lt;ce:italic&gt;</code></li>
-                                    <li><strong>Superscript:</strong> Converted to <code>&lt;ce:sup&gt;</code></li>
-                                    <li><strong>Subscript:</strong> Converted to <code>&lt;ce:inf&gt;</code></li>
+                                    <li>Preserves <b>bold</b> and <i>italic</i> formatting tags.</li>
+                                    <li>Auto-strips manual numbering and bullet characters.</li>
+                                    <li>Validates highlight length against standard 255-character limits.</li>
                                 </ul>
-                                <h3 className="text-xl font-bold text-slate-800 mt-6 mb-3">Usage</h3>
-                                <p>Simply paste your bulleted or numbered list into the visual editor. The tool will parse each line as a <code>&lt;ce:list-item&gt;</code> and wrap formatting appropriately.</p>
                              </div>
                         </section>
                     )}
 
                     {section === 'fixer' && (
                         <section className="animate-fade-in">
-                             <h2 className="text-3xl font-extrabold text-slate-900 mb-6">XML Table Fixer</h2>
-                             <div className="prose prose-slate">
+                             <h2 className="text-3xl font-extrabold text-slate-900 mb-6 uppercase tracking-tight">XML Table Fixer</h2>
+                             <div className="prose prose-slate max-w-none">
                                 <p className="text-slate-600 mb-4">
-                                    Corrects a common issue where general table notes are incorrectly tagged as specific footnotes attached to cells.
+                                    Fixes "Stuck Footnotes"—where general table notes were incorrectly tagged as specific cell footnotes.
                                 </p>
-                                <h3 className="text-xl font-bold text-slate-800 mt-6 mb-3">Workflow</h3>
-                                <ol className="list-decimal pl-5 space-y-2 text-slate-600">
-                                    <li>Paste XML containing <code>&lt;ce:table&gt;</code>.</li>
-                                    <li>The tool identifies all <code>&lt;ce:table-footnote&gt;</code> elements.</li>
-                                    <li>Select footnotes that should be general legends.</li>
-                                    <li>The tool removes the footnote reference from the cell and moves the content to a <code>&lt;ce:legend&gt;</code> block at the bottom of the table.</li>
-                                </ol>
+                                <h3 className="text-xl font-bold text-slate-800 mt-6 mb-3">Two Modes</h3>
+                                <ul className="list-disc pl-5 space-y-2 text-slate-600">
+                                    <li><strong>Detach:</strong> Moves <code>table-footnote</code> content into a <code>legend</code> block and removes the citation from the table cell.</li>
+                                    <li><strong>Attach:</strong> Converts <code>simple-para</code> legends into structured <code>table-footnote</code> items and inserts the citation into the table body.</li>
+                                </ul>
                              </div>
                         </section>
                     )}
 
                     {section === 'sync' && (
                         <section className="animate-fade-in">
-                             <h2 className="text-3xl font-extrabold text-slate-900 mb-6">View Synchronizer</h2>
-                             <div className="prose prose-slate">
+                             <h2 className="text-3xl font-extrabold text-slate-900 mb-6 uppercase tracking-tight">View Synchronizer</h2>
+                             <div className="prose prose-slate max-w-none">
                                 <p className="text-slate-600 mb-4">
-                                    Automatically updates <code>Extended</code> view paragraphs to match <code>Compact</code> view content, solving content mismatch issues in dual-view XML files.
+                                    Ensures <code>Compact</code> and <code>Extended</code> paragraph views are identical in content.
                                 </p>
-                                <h3 className="text-xl font-bold text-slate-800 mt-6 mb-3">Features</h3>
-                                <ul className="list-disc pl-5 space-y-2 text-slate-600">
-                                    <li><strong>Content Sync:</strong> Replaces Extended content with Compact content.</li>
-                                    <li><strong>ID Safety:</strong> Automatically regenerates unique IDs for internal tags (like <code>&lt;ce:cross-ref&gt;</code>) to prevent duplicate ID errors.</li>
-                                    <li><strong>Bulk Processing:</strong> Handles multiple paragraph pairs at once.</li>
-                                </ul>
+                                <p className="text-slate-600">
+                                    When you sync content into the Extended view, the tool automatically re-generates unique <code>id</code> attributes for all internal tags to ensure the XML remains valid for submission.
+                                </p>
                              </div>
                         </section>
                     )}
 
                      {section === 'diff' && (
                         <section className="animate-fade-in">
-                             <h2 className="text-3xl font-extrabold text-slate-900 mb-6">Quick Text Diff</h2>
+                             <h2 className="text-3xl font-extrabold text-slate-900 mb-6 uppercase tracking-tight">Quick Text Diff</h2>
                              <p className="text-slate-600 mb-4">
-                                A side-by-side comparison tool to identify changes between two text blocks. It highlights character-level differences, making it easy to spot subtle typo corrections or inserted XML tags.
+                                Provides a surgical, character-level comparison of two text blocks. Useful for verifying small typo corrections or checking that XML tag nesting wasn't broken during an edit.
                              </p>
                         </section>
                     )}
 
                     {section === 'tag' && (
                         <section className="animate-fade-in">
-                             <h2 className="text-3xl font-extrabold text-slate-900 mb-6">XML Tag Cleaner</h2>
+                             <h2 className="text-3xl font-extrabold text-slate-900 mb-6 uppercase tracking-tight">XML Tag Cleaner</h2>
                              <p className="text-slate-600 mb-4">
-                                Bulk-process editorial tracking tags. This tool scans for proprietary <code>&lt;opt_INS&gt;</code>, <code>&lt;opt_DEL&gt;</code>, and <code>&lt;opt_comment&gt;</code> tags.
+                                A cleanup utility to process editorial tracking tags like <code>&lt;opt_INS&gt;</code> and <code>&lt;opt_DEL&gt;</code>.
                              </p>
                              <ul className="list-disc pl-5 space-y-2 text-slate-600">
-                                <li><strong>Accept All:</strong> Keeps insertion content, removes deletion tags/content, removes comments.</li>
-                                <li><strong>Reject All:</strong> Removes insertion tags/content, restores deletion content, removes comments.</li>
+                                <li><strong>Accept All:</strong> Keeps insertions and removes the markup.</li>
+                                <li><strong>Reject All:</strong> Restores deletions and removes insertions.</li>
+                                <li><strong>Comments:</strong> Proprietary comment tags are always removed during cleaning.</li>
                              </ul>
                         </section>
                     )}
