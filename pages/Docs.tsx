@@ -21,6 +21,7 @@ const Docs: React.FC = () => {
                     <div className="pt-4 pb-2 px-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Tool Guides</div>
                     <NavBtn id="xml" label="XML Ref Normalizer" />
                     <NavBtn id="refgen" label="Reference Updater" />
+                    <NavBtn id="dupe" label="Duplicate Ref Remover" />
                     <NavBtn id="credit" label="CRediT Generator" />
                     <NavBtn id="highlights" label="Highlights Gen" />
                     <NavBtn id="fixer" label="Table Fixer" />
@@ -87,6 +88,29 @@ const Docs: React.FC = () => {
                                 <ul className="list-disc pl-5 space-y-2 text-slate-600">
                                     <li><strong>Structure Preservation:</strong> Keeps original references that were not in the update list.</li>
                                     <li><strong>Preserve IDs:</strong> Optionally keeps the <code>id="..."</code> attribute from the Original XML even when replacing content. This prevents breaking internal links (<code>&lt;ce:cross-ref&gt;</code>) in the main article body.</li>
+                                </ul>
+                             </div>
+                        </section>
+                    )}
+
+                    {section === 'dupe' && (
+                        <section className="animate-fade-in">
+                            <h2 className="text-3xl font-extrabold text-slate-900 mb-6">Duplicate Reference Remover</h2>
+                             <div className="prose prose-slate">
+                                <p className="text-slate-600 mb-4">
+                                    Scans a bibliography for citations with identical or very similar titles, allowing you to select one to keep and automatically re-linking text citations to the keeper.
+                                </p>
+                                <h3 className="text-xl font-bold text-slate-800 mt-6 mb-3">Workflow</h3>
+                                <ol className="list-decimal pl-5 space-y-2 text-slate-600">
+                                    <li>Paste the full XML content (including text citations and the reference list).</li>
+                                    <li>Click <strong>Find Duplicates</strong>. The tool groups references with >85% title similarity.</li>
+                                    <li>Review each group and select the "Keeper" (the correct version).</li>
+                                    <li>Click <strong>Merge & Fix</strong>.</li>
+                                </ol>
+                                <h3 className="text-xl font-bold text-slate-800 mt-6 mb-3">What happens during Merge?</h3>
+                                <ul className="list-disc pl-5 space-y-2 text-slate-600">
+                                    <li><strong>Remapping:</strong> The tool scans the text for <code>&lt;ce:cross-ref&gt;</code> tags pointing to the deleted duplicates and updates their <code>refid</code> to point to the selected "Keeper".</li>
+                                    <li><strong>Deletion:</strong> The XML blocks for the rejected duplicates are completely removed from the file.</li>
                                 </ul>
                              </div>
                         </section>

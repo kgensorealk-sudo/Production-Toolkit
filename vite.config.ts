@@ -4,17 +4,16 @@ import react from '@vitejs/plugin-react';
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   // Load env file based on `mode` in the current working directory.
-  // Set the third parameter to '' to load all env regardless of the `VITE_` prefix.
   const env = loadEnv(mode, (process as any).cwd(), '');
   
-  // Vercel automatically sets the VERCEL environment variable to '1'
-  const isVercel = process.env.VERCEL === '1';
+  // Check if running in Electron mode via environment variable
+  const isElectron = process.env.ELECTRON_BUILD === '1' || mode === 'production';
 
   return {
     plugins: [react()],
-    // Electron requires relative paths ('./') to load assets from the file system.
-    // Vercel/Web hosting typically behaves better with absolute paths ('/').
-    base: isVercel ? '/' : './', 
+    // For Electron (.exe), assets MUST use relative paths './' to work on filesystem.
+    // For standard web hosting, use '/'.
+    base: isElectron ? './' : '/', 
     build: {
       outDir: 'dist',
       emptyOutDir: true,
@@ -23,7 +22,6 @@ export default defineConfig(({ mode }) => {
       port: 5173
     },
     // Expose env variables to the client-side code
-    // On Vercel, ensure you add API_KEY in the Project Settings > Environment Variables
     define: {
       'process.env.API_KEY': JSON.stringify(env.API_KEY || process.env.API_KEY || ""),
     },

@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
@@ -12,6 +11,7 @@ import TableFixer from './pages/TableFixer';
 import ArticleHighlights from './pages/ArticleHighlights';
 import ViewSync from './pages/ViewSync';
 import ReferenceUpdater from './pages/ReferenceUpdater';
+import ReferenceDupeChecker from './pages/ReferenceDupeChecker';
 import Docs from './pages/Docs';
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
@@ -138,6 +138,14 @@ const App: React.FC = () => {
                         <ProtectedRoute requireSubscription={true}>
                             <Layout currentTool={ToolId.REFERENCE_GEN}>
                                 <ReferenceUpdater />
+                            </Layout>
+                        </ProtectedRoute>
+                    } />
+
+                    <Route path="/refDupeCheck" element={
+                        <ProtectedRoute requireSubscription={true}>
+                            <Layout currentTool={ToolId.REF_DUPE_CHECK}>
+                                <ReferenceDupeChecker />
                             </Layout>
                         </ProtectedRoute>
                     } />

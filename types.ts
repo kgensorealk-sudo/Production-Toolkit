@@ -45,6 +45,7 @@ export enum ToolId {
     HIGHLIGHTS_GEN = 'highlightsGen',
     VIEW_SYNC = 'viewSync',
     REFERENCE_GEN = 'referenceGen',
+    REF_DUPE_CHECK = 'refDupeCheck',
     DOCS = 'docs',
     DASHBOARD = 'dashboard'
 }
