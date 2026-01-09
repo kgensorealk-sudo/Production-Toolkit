@@ -1,4 +1,4 @@
-import React, { ErrorInfo, ReactNode } from "react";
+import React, { Component, ErrorInfo, ReactNode } from "react";
 
 interface Props {
   children?: ReactNode;
@@ -9,12 +9,16 @@ interface State {
   error: Error | null;
 }
 
-// Fixed type recognition error for 'this.props' by using React.Component explicitly which better handles generic parameter resolution in this environment
+// Explicitly importing and extending Component helps with generic parameter resolution for this.props and this.state in this environment
+// Fix: Use React.Component and ensure props are recognized via constructor for this environment
 class ErrorBoundary extends React.Component<Props, State> {
-  public state: State = {
-    hasError: false,
-    error: null,
-  };
+  constructor(props: Props) {
+    super(props);
+    this.state = {
+      hasError: false,
+      error: null,
+    };
+  }
 
   public static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
@@ -67,7 +71,7 @@ class ErrorBoundary extends React.Component<Props, State> {
       );
     }
 
-    // Correctly accessing props via this.props which is now recognized by the compiler due to explicit inheritance from React.Component
+    // Fix: Accessing children from props which is now correctly recognized via inheritance from React.Component<Props, State>
     return this.props.children || null;
   }
 }

@@ -2,23 +2,23 @@
 {
   "name": "production-toolkit",
   "version": "1.4.2",
-  "description": "Editorial workflow suite",
+  "description": "A secure, offline-capable suite of editorial workflow tools including XML normalization, CRediT role tagging, and more.",
   "main": "electron/main.js",
-  "homepage": "./",
-  "author": "Kevin",
+  "author": "Production Systems Team",
+  "license": "MIT",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "electron:dev": "concurrently \"npm run dev\" \"wait-on tcp:5173 && electron .\"",
-    "electron:build": "npm run build && electron-builder -w"
+    "electron:build": "npm run build && electron-builder build --windows --dir",
+    "electron:dist": "npm run build && electron-builder build --windows"
   },
   "dependencies": {
     "diff": "^5.2.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-router-dom": "^6.22.0",
-    "@google/genai": "*",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "react-router-dom": "^7.12.0",
     "@supabase/supabase-js": "^2.39.0"
   },
   "devDependencies": {
@@ -37,6 +37,7 @@
   "build": {
     "appId": "com.production.toolkit",
     "productName": "Production Toolkit",
+    "copyright": "Copyright © 2025",
     "files": [
       "dist/**/*",
       "electron/**/*"
@@ -45,7 +46,27 @@
       "output": "release"
     },
     "win": {
-      "target": "nsis"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "runAfterFinish": true
     }
   }
 }
