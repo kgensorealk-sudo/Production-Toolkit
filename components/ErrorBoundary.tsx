@@ -1,4 +1,5 @@
-import React, { Component, ErrorInfo, ReactNode } from "react";
+
+import React, { ErrorInfo, ReactNode } from "react";
 
 interface Props {
   children?: ReactNode;
@@ -9,17 +10,24 @@ interface State {
   error: Error | null;
 }
 
-// Explicitly importing and extending Component helps with generic parameter resolution for this.props and this.state in this environment
-// Fix: Use React.Component and ensure props are recognized via constructor for this environment
+/**
+ * ErrorBoundary component to catch JavaScript errors anywhere in their child component tree,
+ * log those errors, and display a fallback UI instead of the component tree that crashed.
+ */
+// Fix: Directly extending React.Component with explicit generics ensures that state and props are correctly typed.
 class ErrorBoundary extends React.Component<Props, State> {
-  constructor(props: Props) {
+  // Fix: Using class property for state initialization avoids issues with state property detection in certain TypeScript environments.
+  public state: State = {
+    hasError: false,
+    error: null,
+  };
+
+  // Fix: Explicitly calling super in constructor is standard but property initialization (above) is used for state.
+  public constructor(props: Props) {
     super(props);
-    this.state = {
-      hasError: false,
-      error: null,
-    };
   }
 
+  // Fix: Proper static method for derived state from error.
   public static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
   }
@@ -29,6 +37,7 @@ class ErrorBoundary extends React.Component<Props, State> {
   }
 
   public render(): ReactNode {
+    // Fix: Accessing this.state now correctly recognized by the compiler through React.Component inheritance.
     if (this.state.hasError) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
@@ -52,6 +61,7 @@ class ErrorBoundary extends React.Component<Props, State> {
                     
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6 overflow-auto max-h-48 custom-scrollbar">
                         <code className="text-xs font-mono text-slate-700 break-words block">
+                            {/* Fix: Accessing error from state with proper generic recognition. */}
                             {this.state.error?.toString() || "Unknown Error"}
                         </code>
                     </div>
@@ -71,7 +81,7 @@ class ErrorBoundary extends React.Component<Props, State> {
       );
     }
 
-    // Fix: Accessing children from props which is now correctly recognized via inheritance from React.Component<Props, State>
+    {/* Fix: Accessing this.props.children correctly identified through React.Component inheritance. */}
     return this.props.children || null;
   }
 }

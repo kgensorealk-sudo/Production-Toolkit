@@ -5,7 +5,7 @@ const isDev = !app.isPackaged;
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
-    width: 1280,
+    width: 1366,
     height: 900,
     minWidth: 1024,
     minHeight: 768,
@@ -17,7 +17,7 @@ function createWindow() {
       contextIsolation: true,
       webSecurity: true
     },
-    autoHideMenuBar: true,
+    autoHideMenuBar: false,
     backgroundColor: '#f8fafc',
   });
 
@@ -72,6 +72,18 @@ function createWindow() {
           { role: 'close' }
         ])
       ]
+    },
+    {
+        label: 'Help',
+        submenu: [
+            {
+                label: 'Documentation',
+                click: async () => {
+                    // This will open the external documentation if needed, 
+                    // or we could point to internal route.
+                }
+            }
+        ]
     }
   ];
 
@@ -80,9 +92,8 @@ function createWindow() {
 
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools();
   } else {
-    // Correctly resolve the path to index.html in the dist folder
+    // Correctly resolve the path to index.html in the dist folder for standalone .exe
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 

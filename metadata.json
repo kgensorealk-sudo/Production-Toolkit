@@ -1,5 +1,5 @@
 {
-  "name": "Copy of Production Toolkit: Browser Version",
-  "description": "A secure, offline-capable suite of editorial workflow tools including XML normalization, CRediT role tagging, text comparison, and tag cleaning. Built for windows and Browser",
+  "name": "Production Toolkit Pro: Desktop & Web",
+  "description": "Enterprise editorial suite. Standalone .exe capable with offline-first XML processing, CRediT tagging, and reference management. Optimized for Windows deployment.",
   "requestFramePermissions": []
 }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import Toast from '../components/Toast';
 
 const TOOLS_INFO = [
     {
@@ -65,6 +66,8 @@ const Landing: React.FC = () => {
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const [activeIndex, setActiveIndex] = useState(0);
     const [isPaused, setIsPaused] = useState(false);
+    const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'|'info'} | null>(null);
+    const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
 
     const isSubscribed = profile?.is_subscribed;
 
@@ -173,7 +176,12 @@ const Landing: React.FC = () => {
                                 </button>
                             ) : (
                                 <div className="space-y-4">
-                                    <button onClick={() => window.location.href = `mailto:admin@productiontoolkit.com?subject=Access Request&body=User: ${user?.email}`} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-5 px-10 rounded-2xl shadow-2xl shadow-indigo-100 transform transition-all hover:-translate-y-1 active:scale-95 uppercase tracking-widest text-sm">Request Access</button>
+                                    <button 
+                                        onClick={() => setIsRequestModalOpen(true)} 
+                                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-5 px-10 rounded-2xl shadow-2xl shadow-indigo-100 transform transition-all hover:-translate-y-1 active:scale-95 uppercase tracking-widest text-sm"
+                                    >
+                                        Request Access
+                                    </button>
                                     <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Provisioning required by administrator</p>
                                 </div>
                             )}
@@ -220,6 +228,62 @@ const Landing: React.FC = () => {
                  <div className="absolute top-[-10%] left-[-5%] w-[50%] h-[50%] bg-indigo-50/50 rounded-full blur-3xl opacity-50"></div>
                  <div className="absolute bottom-[-10%] right-[-5%] w-[40%] h-[40%] bg-slate-100/50 rounded-full blur-3xl opacity-50"></div>
             </div>
+
+            {/* Request Access Modal */}
+            {isRequestModalOpen && (
+                <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
+                    <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden animate-scale-in relative ring-4 ring-slate-900/5">
+                        <div className="bg-gradient-to-br from-indigo-600 to-violet-700 p-8 text-center relative overflow-hidden">
+                            <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-bl-full -mr-8 -mt-8"></div>
+                            <div className="relative z-10">
+                                <div className="w-20 h-20 bg-white/20 backdrop-blur-xl rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl border border-white/30">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                                    </svg>
+                                </div>
+                                <h3 className="text-2xl font-black text-white uppercase tracking-tight">Request Access</h3>
+                                <div className="text-indigo-200 text-xs font-bold mt-2 uppercase tracking-[0.2em]">Provisioning Required</div>
+                            </div>
+                        </div>
+
+                        <div className="p-10 space-y-6">
+                            <p className="text-slate-600 leading-relaxed text-center font-medium">
+                                To request system access, please contact the <span className="text-indigo-600 font-bold">Administrator</span> directly through <span className="font-bold">Facebook Messenger</span>.
+                            </p>
+                            
+                            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                                <div className="flex items-center gap-3 text-xs text-slate-400 font-black uppercase tracking-widest mb-3">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
+                                    Next Steps
+                                </div>
+                                <ul className="space-y-3">
+                                    <li className="flex items-start gap-3 text-sm text-slate-600">
+                                        <div className="mt-1 w-4 h-4 rounded-full bg-indigo-100 flex-shrink-0 flex items-center justify-center text-[10px] font-bold text-indigo-600">1</div>
+                                        <span>Open Facebook Messenger</span>
+                                    </li>
+                                    <li className="flex items-start gap-3 text-sm text-slate-600">
+                                        <div className="mt-1 w-4 h-4 rounded-full bg-indigo-100 flex-shrink-0 flex items-center justify-center text-[10px] font-bold text-indigo-600">2</div>
+                                        <span>Message the Administrator</span>
+                                    </li>
+                                    <li className="flex items-start gap-3 text-sm text-slate-600">
+                                        <div className="mt-1 w-4 h-4 rounded-full bg-indigo-100 flex-shrink-0 flex items-center justify-center text-[10px] font-bold text-indigo-600">3</div>
+                                        <span>Provide your registration email</span>
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <button 
+                                onClick={() => setIsRequestModalOpen(false)}
+                                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-4 px-8 rounded-2xl transition-all active:scale-95 shadow-xl shadow-slate-200 uppercase tracking-widest text-xs"
+                            >
+                                I Understand
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
         </div>
     );
 };

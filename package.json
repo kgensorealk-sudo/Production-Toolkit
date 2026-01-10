@@ -1,10 +1,10 @@
 
 {
   "name": "production-toolkit",
-  "version": "1.4.2",
-  "description": "A secure, offline-capable suite of editorial workflow tools including XML normalization, CRediT role tagging, and more.",
+  "version": "1.5.0",
+  "description": "Professional Editorial Workflow Suite",
   "main": "electron/main.js",
-  "author": "Production Systems Team",
+  "author": "Editorial Systems Team",
   "license": "MIT",
   "scripts": {
     "dev": "vite",
@@ -35,7 +35,7 @@
     "wait-on": "^7.2.0"
   },
   "build": {
-    "appId": "com.production.toolkit",
+    "appId": "com.editorial.toolkit",
     "productName": "Production Toolkit",
     "copyright": "Copyright © 2025",
     "files": [
@@ -60,13 +60,15 @@
           ]
         }
       ],
-      "artifactName": "${productName}-Setup-${version}.${ext}"
+      "icon": "public/favicon.ico",
+      "artifactName": "${productName}-v${version}-Setup.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "runAfterFinish": true
+      "runAfterFinish": true,
+      "installerHeaderIcon": "public/favicon.ico"
     }
   }
 }
