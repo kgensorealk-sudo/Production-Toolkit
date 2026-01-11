@@ -47,6 +47,7 @@ export enum ToolId {
     REFERENCE_GEN = 'referenceGen',
     REF_DUPE_CHECK = 'refDupeCheck',
     UNCITED_CLEANER = 'uncitedCleaner',
+    OTHER_REF_SCANNER = 'otherRefScanner',
     DOCS = 'docs',
     DASHBOARD = 'dashboard'
 }

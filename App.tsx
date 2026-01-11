@@ -14,6 +14,7 @@ import ViewSync from './pages/ViewSync';
 import ReferenceUpdater from './pages/ReferenceUpdater';
 import ReferenceDupeChecker from './pages/ReferenceDupeChecker';
 import UncitedRefCleaner from './pages/UncitedRefCleaner';
+import OtherRefScanner from './pages/OtherRefScanner';
 import Docs from './pages/Docs';
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
@@ -80,6 +81,14 @@ const App: React.FC = () => {
                         <ProtectedRoute requireSubscription={true}>
                             <Layout currentTool={ToolId.UNCITED_CLEANER}>
                                 <UncitedRefCleaner />
+                            </Layout>
+                        </ProtectedRoute>
+                    } />
+
+                    <Route path="/otherRefScanner" element={
+                        <ProtectedRoute requireSubscription={true}>
+                            <Layout currentTool={ToolId.OTHER_REF_SCANNER}>
+                                <OtherRefScanner />
                             </Layout>
                         </ProtectedRoute>
                     } />

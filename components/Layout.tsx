@@ -20,8 +20,6 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool }) => {
     };
 
     // Determine if the current subscription is a trial
-    // Logic: If trial_end exists and matches the subscription_end exactly, it's a trial.
-    // If they differ (or trial_end is null), it means a full subscription was granted which updated subscription_end only.
     const isTrial = profile?.trial_end && profile?.subscription_end && 
                     new Date(profile.trial_end).getTime() === new Date(profile.subscription_end).getTime();
 
@@ -60,6 +58,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool }) => {
                                     {currentTool === ToolId.VIEW_SYNC && 'View Sync'}
                                     {currentTool === ToolId.REFERENCE_GEN && 'Ref Updater'}
                                     {currentTool === ToolId.REF_DUPE_CHECK && 'Ref Dupe Checker'}
+                                    {currentTool === ToolId.UNCITED_CLEANER && 'Uncited Cleaner'}
+                                    {currentTool === ToolId.OTHER_REF_SCANNER && 'Other-Ref Scanner'}
                                 </span>
                             </div>
                         )}

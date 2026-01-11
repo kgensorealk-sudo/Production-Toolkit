@@ -86,6 +86,17 @@ const Dashboard: React.FC = () => {
                 />
 
                 <ToolCard 
+                    title="Other-Ref Scanner"
+                    desc="Isolate unstructured references for external transfer. Supports formatted HTML copy for MS Word compatibility."
+                    iconBg="bg-amber-50"
+                    iconText="text-amber-600"
+                    borderColor="bg-amber-500"
+                    delay={135}
+                    Icon={(props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>}
+                    onClick={() => handleLaunch(ToolId.OTHER_REF_SCANNER)}
+                />
+
+                <ToolCard 
                     title="Reference Updater"
                     desc="Merge updated/corrected references into existing XML lists while optionally preserving ID integrity."
                     iconBg="bg-cyan-50"
@@ -149,17 +160,6 @@ const Dashboard: React.FC = () => {
                     delay={500}
                     Icon={(props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>}
                     onClick={() => handleLaunch(ToolId.TAG_CLEANER)}
-                />
-
-                <ToolCard 
-                    title="XML Table Fixer"
-                    desc="Detach footnotes from table cells and convert them into table legends automatically."
-                    iconBg="bg-pink-50"
-                    iconText="text-pink-600"
-                    borderColor="bg-pink-500"
-                    delay={600}
-                    Icon={(props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>}
-                    onClick={() => handleLaunch(ToolId.TABLE_FIXER)}
                 />
             </div>
         </div>

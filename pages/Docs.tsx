@@ -13,7 +13,6 @@ const Docs: React.FC = () => {
         </button>
     );
 
-    // Fix: Removed invalid text placeholder in return statement
     return (
         <div className="flex flex-grow h-[calc(100vh-64px)] overflow-hidden max-w-7xl mx-auto w-full">
             <aside className="w-64 bg-white border-r border-slate-200 overflow-y-auto hidden md:block pt-6">
@@ -22,6 +21,7 @@ const Docs: React.FC = () => {
                     <div className="pt-4 pb-2 px-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Tool Guides</div>
                     <NavBtn id="xml" label="XML Ref Normalizer" />
                     <NavBtn id="uncited" label="Uncited Ref Cleaner" />
+                    <NavBtn id="otherref" label="Other-Ref Scanner" />
                     <NavBtn id="refgen" label="Reference Updater" />
                     <NavBtn id="dupe" label="Duplicate Ref Remover" />
                     <NavBtn id="credit" label="CRediT Generator" />
@@ -55,6 +55,22 @@ const Docs: React.FC = () => {
                                     </div>
                                     <h3 className="font-bold text-slate-800 mb-2">Smart Fingerprinting</h3>
                                     <p className="text-sm text-slate-500 leading-relaxed">Our matching engine uses content-based fingerprints (Author + Year + Title) to identify references even when labels have changed.</p>
+                                </div>
+                            </div>
+                        </section>
+                    )}
+
+                    {section === 'otherref' && (
+                        <section className="animate-fade-in">
+                            <h2 className="text-3xl font-extrabold text-slate-900 mb-6 uppercase tracking-tight">Other-Ref Scanner</h2>
+                            <div className="prose prose-slate max-w-none">
+                                <p className="text-slate-600 mb-4">
+                                    Identifies and isolates all references within the bibliography that use the <code>&lt;ce:other-ref&gt;</code> structure. These are typically unstructured citations requiring manual cleanup or conversion.
+                                </p>
+                                <div className="bg-amber-50 border-l-4 border-amber-400 p-4 mb-6">
+                                    <p className="text-sm text-amber-800 font-medium">
+                                        <strong>Word Integration:</strong> Use the "Copy for MS Word" feature to transfer items with formatting intact. This preserves italics and bold tags for external retagging workflows.
+                                    </p>
                                 </div>
                             </div>
                         </section>
