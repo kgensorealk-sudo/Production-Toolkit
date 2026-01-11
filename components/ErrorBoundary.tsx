@@ -1,4 +1,3 @@
-
 import React, { Component, ErrorInfo, ReactNode } from "react";
 
 interface Props {
@@ -14,18 +13,18 @@ interface State {
  * ErrorBoundary component to catch JavaScript errors anywhere in their child component tree,
  * log those errors, and display a fallback UI instead of the component tree that crashed.
  */
-// Fix: Explicitly extending Component ensures 'props' and 'state' are correctly recognized as inherited members by the TypeScript compiler.
+// Fix: Use Component from 'react' and pass generic types explicitly.
 class ErrorBoundary extends Component<Props, State> {
-  // Fix: Explicitly defining the constructor and calling super(props) ensures that 'this.props' is correctly initialized and typed within the class context.
-  constructor(props: Props) {
-    super(props);
-  }
-
-  // Fix: Class property initialization for state is standard and ensures type safety within the React lifecycle.
+  // Fix: Explicitly declare and initialize state property to resolve property existence errors.
   public state: State = {
     hasError: false,
     error: null,
   };
+
+  // Fix: Explicitly define the constructor and call super(props) to ensure props are correctly initialized.
+  constructor(props: Props) {
+    super(props);
+  }
 
   // Fix: getDerivedStateFromError is a static method that allows updating state after an error is thrown in a child component.
   public static getDerivedStateFromError(error: Error): State {
@@ -37,7 +36,7 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   public render(): ReactNode {
-    // Fix: Accessing this.state is safe within the React.Component class.
+    // Fix: Accessing this.state is safe within the Component class context.
     if (this.state.hasError) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
@@ -61,7 +60,7 @@ class ErrorBoundary extends Component<Props, State> {
                     
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6 overflow-auto max-h-48 custom-scrollbar">
                         <code className="text-xs font-mono text-slate-700 break-words block">
-                            {/* Fix: Access error state with safe navigation to prevent further crashes. */}
+                            {/* Fix: Access error state with safe navigation to prevent further crashes during fallback render. */}
                             {this.state.error?.toString() || "Unknown Error"}
                         </code>
                     </div>
@@ -81,9 +80,8 @@ class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    // Fix: Using destructuring on this.props, which is now correctly inherited and recognized by the compiler.
-    const { children } = this.props;
-    return children || null;
+    // Fix: Access children directly from 'this.props', which is inherited from Component.
+    return this.props.children || null;
   }
 }
 

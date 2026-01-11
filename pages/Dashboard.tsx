@@ -161,6 +161,28 @@ const Dashboard: React.FC = () => {
                     Icon={(props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>}
                     onClick={() => handleLaunch(ToolId.TAG_CLEANER)}
                 />
+
+                <ToolCard 
+                    title="XML Table Fixer"
+                    desc="Manage table footnotes by detaching them to legends or attaching legends back to cells with correct referencing."
+                    iconBg="bg-pink-50"
+                    iconText="text-pink-600"
+                    borderColor="bg-pink-500"
+                    delay={550}
+                    Icon={(props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>}
+                    onClick={() => handleLaunch(ToolId.TABLE_FIXER)}
+                />
+
+                <ToolCard 
+                    title="View Synchronizer"
+                    desc="Mirror content between paragraph views (compact/extended) while maintaining ID integrity and references."
+                    iconBg="bg-indigo-50"
+                    iconText="text-indigo-600"
+                    borderColor="bg-indigo-500"
+                    delay={600}
+                    Icon={(props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>}
+                    onClick={() => handleLaunch(ToolId.VIEW_SYNC)}
+                />
             </div>
         </div>
     );
