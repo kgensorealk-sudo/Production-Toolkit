@@ -24,7 +24,6 @@ const ToolCard: React.FC<ToolCardProps> = ({ title, desc, iconBg, iconText, bord
         <div className="h-full bg-white rounded-xl p-8 flex flex-col border border-slate-100 relative overflow-hidden">
             <div className={`absolute top-0 left-0 w-full h-1 ${borderColor}`}></div>
             
-            {/* Background Blob Decoration */}
             <div className={`absolute -right-10 -top-10 w-32 h-32 rounded-full opacity-0 group-hover:opacity-10 transition-opacity duration-500 ${borderColor.replace('bg-', 'bg-opacity-20 ')}`}></div>
 
             <div className="flex items-start justify-between mb-6">
@@ -73,6 +72,17 @@ const Dashboard: React.FC = () => {
                     delay={100}
                     Icon={(props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>}
                     onClick={() => handleLaunch(ToolId.XML_RENUMBER)}
+                />
+
+                <ToolCard 
+                    title="Uncited Ref Cleaner"
+                    desc="Detect references with no body citations. Perform bulk purging while preserving document integrity."
+                    iconBg="bg-rose-50"
+                    iconText="text-rose-600"
+                    borderColor="bg-rose-600"
+                    delay={125}
+                    Icon={(props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>}
+                    onClick={() => handleLaunch(ToolId.UNCITED_CLEANER)}
                 />
 
                 <ToolCard 
@@ -150,17 +160,6 @@ const Dashboard: React.FC = () => {
                     delay={600}
                     Icon={(props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>}
                     onClick={() => handleLaunch(ToolId.TABLE_FIXER)}
-                />
-
-                <ToolCard 
-                    title="View Synchronizer"
-                    desc="Synchronize content from Compact to Extended views while generating unique IDs for integrity."
-                    iconBg="bg-indigo-50"
-                    iconText="text-indigo-600"
-                    borderColor="bg-indigo-500"
-                    delay={700}
-                    Icon={(props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" /></svg>}
-                    onClick={() => handleLaunch(ToolId.VIEW_SYNC)}
                 />
             </div>
         </div>

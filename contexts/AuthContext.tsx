@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
-import { Session, User } from '@supabase/supabase-js';
+import { Session, User, AuthError } from '@supabase/supabase-js';
 import { supabase } from '../supabaseClient';
 import { UserProfile } from '../types';
 
@@ -20,14 +20,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState(true);
     
-    // Ref to track the last user ID we fetched profile for.
     const lastUserId = useRef<string | null>(null);
+
+    // Storage Sanitizer: Clears Supabase specific local storage if it's corrupted
+    const clearCorruptedAuth = () => {
+        console.warn("Clearing corrupted auth storage...");
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && (key.startsWith('sb-') || key.includes('supabase.auth.token'))) {
+                localStorage.removeItem(key);
+            }
+        }
+    };
 
     const fetchProfile = async (userId: string) => {
         try {
-            // Create a promise that rejects after 15 seconds to prevent hanging
             const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Profile fetch timeout')), 15000)
+                setTimeout(() => reject(new Error('Profile fetch timeout')), 10000)
             );
 
             const fetchPromise = supabase
@@ -36,125 +45,71 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 .eq('id', userId)
                 .single();
 
-            // Race the fetch against the timeout
             const result = await Promise.race([fetchPromise, timeoutPromise]) as any;
             const { data, error } = result;
             
             if (error) throw error;
 
-            // Logic to check validity: Trust DB boolean BUT override if expired
             let isActive = data.is_subscribed;
             let shouldUpdateDb = false;
             
             if (data.subscription_end) {
                 const endDate = new Date(data.subscription_end);
-                const now = new Date();
-                // STRICT CHECK: If expired, revoke access regardless of boolean
-                if (endDate < now) {
+                if (endDate < new Date()) {
                     isActive = false;
-                    // If DB thinks they are active but date is past, sync DB state
-                    if (data.is_subscribed) {
-                        shouldUpdateDb = true;
-                    }
+                    if (data.is_subscribed) shouldUpdateDb = true;
                 }
             }
 
             if (shouldUpdateDb) {
-                supabase.from('profiles')
-                    .update({ is_subscribed: false })
-                    .eq('id', userId)
-                    .then(({ error }) => {
-                        if (error) console.warn("Could not sync expired status to DB:", error.message);
-                    });
+                supabase.from('profiles').update({ is_subscribed: false }).eq('id', userId)
+                    .then(({ error }) => { if (error) console.warn("Sync failed:", error.message); });
             }
 
             const finalProfile = { ...data, is_subscribed: isActive };
             setProfile(finalProfile);
-            
-            // CACHE PROFILE FOR OFFLINE USAGE
-            try {
-                localStorage.setItem(`profile_cache_${userId}`, JSON.stringify(finalProfile));
-            } catch (e) {
-                console.warn("Failed to cache profile locally");
-            }
+            localStorage.setItem(`profile_cache_${userId}`, JSON.stringify(finalProfile));
 
         } catch (err: any) {
-            console.warn("Profile fetch failed (possibly offline). Attempting to load from cache.", err);
-            
-            // ATTEMPT TO LOAD FROM CACHE
+            console.warn("Using cached profile due to network/fetch error:", err.message);
             const cachedStr = localStorage.getItem(`profile_cache_${userId}`);
             if (cachedStr) {
-                try {
-                    const cachedProfile = JSON.parse(cachedStr);
-                    // Re-validate expiry on cached data
-                    let isActive = cachedProfile.is_subscribed;
-                    if (cachedProfile.subscription_end) {
-                        const endDate = new Date(cachedProfile.subscription_end);
-                        if (endDate < new Date()) isActive = false;
-                    }
-                    setProfile({ ...cachedProfile, is_subscribed: isActive });
-                    console.log("Loaded profile from local cache.");
-                } catch (parseErr) {
-                    console.error("Failed to parse cached profile", parseErr);
-                    setProfile({ id: userId, email: '', role: 'user', is_subscribed: false });
-                }
+                const cachedProfile = JSON.parse(cachedStr);
+                setProfile(cachedProfile);
             } else {
-                // No cache, default to safe fallback
                 setProfile({ id: userId, email: '', role: 'user', is_subscribed: false });
             }
         }
     };
 
-    // Watch for trial expiration and force refresh
     useEffect(() => {
         if (profile?.is_subscribed && profile.subscription_end) {
             const endDate = new Date(profile.subscription_end).getTime();
             const now = new Date().getTime();
             const timeLeft = endDate - now;
-
-            if (timeLeft > 0 && timeLeft < 2147483647) { // Ensure valid timeout range
-                const timerId = setTimeout(() => {
-                    console.log("Subscription expired during active session. Forcing refresh...");
-                    window.location.reload(); 
-                }, timeLeft);
+            if (timeLeft > 0 && timeLeft < 2147483647) {
+                const timerId = setTimeout(() => { window.location.reload(); }, timeLeft);
                 return () => clearTimeout(timerId);
             }
         }
     }, [profile]);
 
-    // Heartbeat for Online Status (Last Seen)
-    useEffect(() => {
-        if (!user) return;
-
-        const updateLastSeen = async () => {
-            await supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', user.id);
-        };
-
-        // Initial update
-        updateLastSeen();
-
-        // Update every 2 minutes
-        const interval = setInterval(updateLastSeen, 120000); 
-
-        return () => clearInterval(interval);
-    }, [user]);
-
     useEffect(() => {
         let mounted = true;
 
-        const safetyTimeout = setTimeout(() => {
-            if (mounted && loading) {
-                console.warn("Auth initialization timed out. Forcing app load.");
-                setLoading(false);
-            }
-        }, 16000);
-
         const initSession = async () => {
             try {
-                // getSession() retrieves session from localStorage, works offline
                 const { data: { session }, error } = await supabase.auth.getSession();
                 
-                if (error) throw error;
+                if (error) {
+                    // Fix: If we get a "Refresh Token Not Found" or similar, clear storage and proceed to login
+                    if (error.message.includes('Refresh Token') || error.message.includes('not found')) {
+                        clearCorruptedAuth();
+                        if (mounted) setLoading(false);
+                        return;
+                    }
+                    throw error;
+                }
 
                 if (mounted) {
                     setSession(session);
@@ -167,37 +122,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             } catch (err) {
                 console.error("Session initialization failed:", err);
             } finally {
-                if (mounted) {
-                    setLoading(false);
-                    clearTimeout(safetyTimeout);
-                }
+                if (mounted) setLoading(false);
             }
         };
 
         initSession();
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
             if (!mounted) return;
             
-            setSession(session);
-            setUser(session?.user ?? null);
-            
-            if (session?.user) {
-                // Prevent redundant profile fetches on token refreshes
+            // Handle fatal auth events
+            if (event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
+                setProfile(null);
+                setUser(null);
+                setSession(null);
+                lastUserId.current = null;
+            } else if (session?.user) {
+                setSession(session);
+                setUser(session.user);
                 if (session.user.id !== lastUserId.current) {
                     lastUserId.current = session.user.id;
                     await fetchProfile(session.user.id);
                 }
-            } else {
-                setProfile(null);
-                lastUserId.current = null;
             }
             setLoading(false);
         });
 
         return () => {
             mounted = false;
-            clearTimeout(safetyTimeout);
             subscription.unsubscribe();
         };
     }, []);
@@ -205,36 +157,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const signOut = async () => {
         try {
             setLoading(true); 
-            // Clear cache on sign out
             if (user?.id) localStorage.removeItem(`profile_cache_${user.id}`);
-            
             await supabase.auth.signOut();
+            clearCorruptedAuth(); // Ensure a clean slate on logout
             setProfile(null);
             setSession(null);
             setUser(null);
             lastUserId.current = null;
         } catch (error) {
             console.error("Sign out error:", error);
+            clearCorruptedAuth(); // Force clear if API call fails
         } finally {
             setLoading(false);
         }
     };
 
-    const value = {
-        session,
-        user,
-        profile,
-        loading,
-        signOut
-    };
-
+    const value = { session, user, profile, loading, signOut };
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = () => {
     const context = useContext(AuthContext);
-    if (context === undefined) {
-        throw new Error('useAuth must be used within an AuthProvider');
-    }
+    if (context === undefined) throw new Error('useAuth must be used within an AuthProvider');
     return context;
 };

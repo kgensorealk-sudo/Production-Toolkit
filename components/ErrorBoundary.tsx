@@ -81,7 +81,7 @@ class ErrorBoundary extends React.Component<Props, State> {
       );
     }
 
-    {/* Fix: Accessing this.props.children correctly identified through React.Component inheritance. */}
+    // Fix: Replaced invalid JSX comment with standard comment to ensure 'props' access is correctly typed.
     return this.props.children || null;
   }
 }

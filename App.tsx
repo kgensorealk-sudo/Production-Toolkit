@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
@@ -12,6 +13,7 @@ import ArticleHighlights from './pages/ArticleHighlights';
 import ViewSync from './pages/ViewSync';
 import ReferenceUpdater from './pages/ReferenceUpdater';
 import ReferenceDupeChecker from './pages/ReferenceDupeChecker';
+import UncitedRefCleaner from './pages/UncitedRefCleaner';
 import Docs from './pages/Docs';
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
@@ -19,7 +21,6 @@ import { ToolId } from './types';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import LoadingOverlay from './components/LoadingOverlay';
 
-// Protected Route Wrapper
 const ProtectedRoute: React.FC<{ children: React.ReactNode; requireSubscription?: boolean }> = ({ children, requireSubscription = false }) => {
     const { session, profile, loading } = useAuth();
     
@@ -35,7 +36,6 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; requireSubscription?
         return <Navigate to="/login" replace />;
     }
 
-    // If subscription is required but profile says not subscribed, redirect to Landing (Home)
     if (requireSubscription && !profile?.is_subscribed) {
         return <Navigate to="/" replace />;
     }
@@ -43,7 +43,6 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; requireSubscription?
     return <>{children}</>;
 };
 
-// Admin Route Wrapper
 const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { session, profile, loading } = useAuth();
     
@@ -64,24 +63,23 @@ const App: React.FC = () => {
             <HashRouter>
                 <Routes>
                     <Route path="/login" element={<Login />} />
-                    
-                    {/* Landing Page (Protected only by Auth, shows status) */}
                     <Route path="/" element={<ProtectedRoute><Landing /></ProtectedRoute>} />
-                    
-                    {/* Admin Dashboard */}
                     <Route path="/admin" element={<AdminRoute><Layout><AdminDashboard /></Layout></AdminRoute>} />
-
-                    {/* Dashboard (Protected by Auth AND Subscription) */}
                     <Route path="/dashboard" element={<ProtectedRoute requireSubscription={true}><Layout><Dashboard /></Layout></ProtectedRoute>} />
-                    
-                    {/* Documentation (Protected by Auth, maybe doesn't need sub?) Let's keep it safe. */}
                     <Route path="/docs" element={<ProtectedRoute requireSubscription={true}><Layout><Docs /></Layout></ProtectedRoute>} />
                     
-                    {/* Tools (Protected by Auth AND Subscription) */}
                     <Route path="/xmlRenumber" element={
                         <ProtectedRoute requireSubscription={true}>
                             <Layout currentTool={ToolId.XML_RENUMBER}>
                                 <XmlRenumber />
+                            </Layout>
+                        </ProtectedRoute>
+                    } />
+
+                    <Route path="/uncitedCleaner" element={
+                        <ProtectedRoute requireSubscription={true}>
+                            <Layout currentTool={ToolId.UNCITED_CLEANER}>
+                                <UncitedRefCleaner />
                             </Layout>
                         </ProtectedRoute>
                     } />

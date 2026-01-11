@@ -46,6 +46,7 @@ export enum ToolId {
     VIEW_SYNC = 'viewSync',
     REFERENCE_GEN = 'referenceGen',
     REF_DUPE_CHECK = 'refDupeCheck',
+    UNCITED_CLEANER = 'uncitedCleaner',
     DOCS = 'docs',
     DASHBOARD = 'dashboard'
 }
