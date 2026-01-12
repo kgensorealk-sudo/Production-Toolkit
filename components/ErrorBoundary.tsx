@@ -1,3 +1,4 @@
+
 import React, { Component, ErrorInfo, ReactNode } from "react";
 
 interface Props {
@@ -13,20 +14,15 @@ interface State {
  * ErrorBoundary component to catch JavaScript errors anywhere in their child component tree,
  * log those errors, and display a fallback UI instead of the component tree that crashed.
  */
-// Fix: Use Component from 'react' and pass generic types explicitly.
+// Fix: Use Component directly from react and ensure generics are properly bound
 class ErrorBoundary extends Component<Props, State> {
-  // Fix: Explicitly declare and initialize state property to resolve property existence errors.
+  // Fix: Explicitly define state and remove constructor to aid generic type resolution
   public state: State = {
     hasError: false,
     error: null,
   };
 
-  // Fix: Explicitly define the constructor and call super(props) to ensure props are correctly initialized.
-  constructor(props: Props) {
-    super(props);
-  }
-
-  // Fix: getDerivedStateFromError is a static method that allows updating state after an error is thrown in a child component.
+  // getDerivedStateFromError is a static method that allows updating state after an error is thrown in a child component.
   public static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
   }
@@ -36,8 +32,12 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   public render(): ReactNode {
-    // Fix: Accessing this.state is safe within the Component class context.
-    if (this.state.hasError) {
+    // Fix: Access state and props from the instance 'this'
+    const { hasError, error } = this.state;
+    const { children } = this.props;
+
+    // Check if an error has occurred and render fallback UI.
+    if (hasError) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
             <div className="max-w-md w-full bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden animate-scale-in">
@@ -60,8 +60,7 @@ class ErrorBoundary extends Component<Props, State> {
                     
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6 overflow-auto max-h-48 custom-scrollbar">
                         <code className="text-xs font-mono text-slate-700 break-words block">
-                            {/* Fix: Access error state with safe navigation to prevent further crashes during fallback render. */}
-                            {this.state.error?.toString() || "Unknown Error"}
+                            {error?.toString() || "Unknown Error"}
                         </code>
                     </div>
 
@@ -80,8 +79,7 @@ class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    // Fix: Access children directly from 'this.props', which is inherited from Component.
-    return this.props.children || null;
+    return children || null;
   }
 }
 
