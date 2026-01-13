@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
-import { Session, User, AuthError } from '@supabase/supabase-js';
+import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../supabaseClient';
 import { UserProfile } from '../types';
 
@@ -21,6 +21,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [loading, setLoading] = useState(true);
     
     const lastUserId = useRef<string | null>(null);
+    const lastUpdateRef = useRef<number>(0);
+
+    // Heartbeat: Updates 'last_seen' in the DB to keep Online status accurate
+    const updatePresence = async (userId: string) => {
+        const now = Date.now();
+        // Throttle updates to once every 4 minutes to save database resources
+        // Admin console considers users online if seen within last 5 mins.
+        if (now - lastUpdateRef.current < 4 * 60 * 1000) return;
+
+        try {
+            await supabase
+                .from('profiles')
+                .update({ last_seen: new Date().toISOString() })
+                .eq('id', userId);
+            
+            lastUpdateRef.current = now;
+        } catch (err) {
+            console.warn("Presence update failed silently:", err);
+        }
+    };
 
     // Storage Sanitizer: Clears Supabase specific local storage if it's corrupted
     const clearCorruptedAuth = () => {
@@ -70,6 +90,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setProfile(finalProfile);
             localStorage.setItem(`profile_cache_${userId}`, JSON.stringify(finalProfile));
 
+            // Initial presence update upon login/load
+            updatePresence(userId);
+
         } catch (err: any) {
             console.warn("Using cached profile due to network/fetch error:", err.message);
             const cachedStr = localStorage.getItem(`profile_cache_${userId}`);
@@ -81,6 +104,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
         }
     };
+
+    // Presence Heartbeat Loop
+    useEffect(() => {
+        if (!user?.id) return;
+
+        const intervalId = setInterval(() => {
+            updatePresence(user.id);
+        }, 60 * 1000); // Check every minute, updatePresence throttles it to 4 mins
+
+        return () => clearInterval(intervalId);
+    }, [user?.id]);
 
     useEffect(() => {
         if (profile?.is_subscribed && profile.subscription_end) {
@@ -102,7 +136,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const { data: { session }, error } = await supabase.auth.getSession();
                 
                 if (error) {
-                    // Fix: If we get a "Refresh Token Not Found" or similar, clear storage and proceed to login
                     if (error.message.includes('Refresh Token') || error.message.includes('not found')) {
                         clearCorruptedAuth();
                         if (mounted) setLoading(false);
@@ -131,12 +164,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
             if (!mounted) return;
             
-            // Handle fatal auth events
             if (event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
                 setProfile(null);
                 setUser(null);
                 setSession(null);
                 lastUserId.current = null;
+                lastUpdateRef.current = 0;
             } else if (session?.user) {
                 setSession(session);
                 setUser(session.user);
@@ -159,14 +192,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setLoading(true); 
             if (user?.id) localStorage.removeItem(`profile_cache_${user.id}`);
             await supabase.auth.signOut();
-            clearCorruptedAuth(); // Ensure a clean slate on logout
+            clearCorruptedAuth();
             setProfile(null);
             setSession(null);
             setUser(null);
             lastUserId.current = null;
+            lastUpdateRef.current = 0;
         } catch (error) {
             console.error("Sign out error:", error);
-            clearCorruptedAuth(); // Force clear if API call fails
+            clearCorruptedAuth();
         } finally {
             setLoading(false);
         }
