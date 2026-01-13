@@ -60,6 +60,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool }) => {
                                     {currentTool === ToolId.REF_DUPE_CHECK && 'Ref Dupe Checker'}
                                     {currentTool === ToolId.UNCITED_CLEANER && 'Uncited Cleaner'}
                                     {currentTool === ToolId.OTHER_REF_SCANNER && 'Other-Ref Scanner'}
+                                    {currentTool === ToolId.REFERENCE_EXTRACTOR && 'Bibliography Extractor'}
                                 </span>
                             </div>
                         )}

@@ -15,6 +15,7 @@ import ReferenceUpdater from './pages/ReferenceUpdater';
 import ReferenceDupeChecker from './pages/ReferenceDupeChecker';
 import UncitedRefCleaner from './pages/UncitedRefCleaner';
 import OtherRefScanner from './pages/OtherRefScanner';
+import ReferenceExtractor from './pages/ReferenceExtractor';
 import Docs from './pages/Docs';
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
@@ -89,6 +90,14 @@ const App: React.FC = () => {
                         <ProtectedRoute requireSubscription={true}>
                             <Layout currentTool={ToolId.OTHER_REF_SCANNER}>
                                 <OtherRefScanner />
+                            </Layout>
+                        </ProtectedRoute>
+                    } />
+
+                    <Route path="/refExtractor" element={
+                        <ProtectedRoute requireSubscription={true}>
+                            <Layout currentTool={ToolId.REFERENCE_EXTRACTOR}>
+                                <ReferenceExtractor />
                             </Layout>
                         </ProtectedRoute>
                     } />

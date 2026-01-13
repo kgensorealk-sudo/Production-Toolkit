@@ -1,5 +1,4 @@
-
-import React, { Component, ErrorInfo, ReactNode } from "react";
+import React, { ErrorInfo, ReactNode } from "react";
 
 interface Props {
   children?: ReactNode;
@@ -14,16 +13,12 @@ interface State {
  * ErrorBoundary component to catch JavaScript errors anywhere in their child component tree,
  * log those errors, and display a fallback UI instead of the component tree that crashed.
  */
-// Fix: Use direct Component inheritance and constructor to ensure 'props' is recognized by the TypeScript compiler
-class ErrorBoundary extends Component<Props, State> {
-  // Fix: Use constructor to initialize state and handle props correctly
-  constructor(props: Props) {
-    super(props);
-    this.state = {
-      hasError: false,
-      error: null,
-    };
-  }
+class ErrorBoundary extends React.Component<Props, State> {
+  // Use class property for state initialization to fix 'Property state does not exist' errors
+  public state: State = {
+    hasError: false,
+    error: null,
+  };
 
   // getDerivedStateFromError is a static method that allows updating state after an error is thrown in a child component.
   public static getDerivedStateFromError(error: Error): State {
@@ -35,7 +30,7 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   public render(): ReactNode {
-    // Fix: Access state and props from 'this' which are now correctly typed
+    // Access state and props from the inherited React.Component properties
     const { hasError, error } = this.state;
     const { children } = this.props;
 
