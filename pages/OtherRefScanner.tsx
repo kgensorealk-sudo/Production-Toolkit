@@ -21,23 +21,17 @@ const OtherRefScanner: React.FC = () => {
     const [toast, setToast] = useState<{ msg: string, type: 'success' | 'warn' | 'error' | 'info' } | null>(null);
 
     /**
-     * NUCLEAR SANITATION LOGIC
-     * Removes hidden gremlins that break the CED and other external tools.
+     * CLEANEST TEXT PROTOCOL
+     * Strips non-breaking spaces, zero-width markers, and control characters
+     * to ensure text behaves like standard typed input in external software.
      */
-    const sanitizeForCED = (text: string): string => {
+    const sanitizeForWord = (text: string): string => {
         if (!text) return '';
-        
         return text
-            // 1. Normalize Unicode (NFKC) - resolves combined characters into standard forms
             .normalize('NFKC')
-            // 2. Replace Non-breaking spaces and other varied whitespace with standard ASCII space
             .replace(/[\u00A0\u1680\u180e\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]/g, ' ')
-            // 3. Remove Control Characters (0-31) and Delete (127), excluding standard line breaks if needed
-            // However, for CED text content, we usually want to flatten everything.
-            .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '')
-            // 4. Remove Zero-width spaces and other invisible markers
-            .replace(/[\u200B-\u200D\uFEFF]/g, '')
-            // 5. Collapse multiple spaces into one
+            .replace(/[\u200B-\u200D\uFEFF\u00AD\u2060]/g, '')
+            .replace(/[\x00-\x1F\x7F]/g, '')
             .replace(/\s+/g, ' ')
             .trim();
     };
@@ -64,16 +58,15 @@ const OtherRefScanner: React.FC = () => {
                         const originalLabel = labelMatch ? labelMatch[1].trim() : '';
                         
                         const isNumericLabel = originalLabel.length > 0 && !/[a-zA-Z]/.test(originalLabel);
-                        const displayLabel = isNumericLabel ? sanitizeForCED(originalLabel) : '';
+                        const displayLabel = isNumericLabel ? sanitizeForWord(originalLabel) : '';
 
                         const otherRefContentMatch = content.match(/<ce:other-ref[^>]*>([\s\S]*?)<\/ce:other-ref>/);
                         let rawInner = otherRefContentMatch ? otherRefContentMatch[1] : content;
 
-                        // 1. Sanitize the raw text version rigorously
-                        const cleanText = sanitizeForCED(rawInner.replace(/<[^>]+>/g, ' '));
+                        // 1. Rigorous tag strip + sanitize
+                        const cleanText = sanitizeForWord(rawInner.replace(/<[^>]+>/g, ' '));
 
-                        // 2. Formatted version for Word (preserve basics)
-                        // We sanitize the text bits INSIDE the tags
+                        // 2. Formatting markers for clipboard recovery
                         let formattedHtml = rawInner
                             .replace(/<ce:italic[^>]*>/gi, '|ITALIC_OPEN|')
                             .replace(/<\/ce:italic>/gi, '|ITALIC_CLOSE|')
@@ -84,13 +77,9 @@ const OtherRefScanner: React.FC = () => {
                             .replace(/<ce:inf[^>]*>/gi, '|SUB_OPEN|')
                             .replace(/<\/ce:inf>/gi, '|SUB_CLOSE|');
                         
-                        // Strip remaining tags
                         formattedHtml = formattedHtml.replace(/<[^>]+>/g, ' ');
-                        
-                        // Sanitize the remaining text (gremlin removal)
-                        formattedHtml = sanitizeForCED(formattedHtml);
+                        formattedHtml = sanitizeForWord(formattedHtml);
 
-                        // Restore HTML tags safely
                         formattedHtml = formattedHtml
                             .replace(/\|ITALIC_OPEN\|/g, '<i>').replace(/\|ITALIC_CLOSE\|/g, '</i>')
                             .replace(/\|BOLD_OPEN\|/g, '<b>').replace(/\|BOLD_CLOSE\|/g, '</b>')
@@ -114,11 +103,11 @@ const OtherRefScanner: React.FC = () => {
                     setResults(found);
                     setSelectedIndices(new Set(found.map((_, i) => i)));
                     setStep('report');
-                    setToast({ msg: `Isolated ${found.length} items (Sanitized for CED).`, type: "success" });
+                    setToast({ msg: `Isolated ${found.length} clean items.`, type: "success" });
                     setIsLoading(false);
                 }
             } catch (err) {
-                setToast({ msg: "Extraction failed. Check XML validity.", type: "error" });
+                setToast({ msg: "Deep scan failed.", type: "error" });
                 setIsLoading(false);
             }
         }, 600);
@@ -138,12 +127,12 @@ const OtherRefScanner: React.FC = () => {
 
     const copyToWord = (items: OtherRefItem[]) => {
         if (items.length === 0) {
-            setToast({ msg: "No items selected to copy.", type: "warn" });
+            setToast({ msg: "No items selected.", type: "warn" });
             return;
         }
         try {
-            // Note: even the HTML content needs to be gremlin-free
-            const htmlContent = items.map(item => `<p>${item.formattedHtml}</p>`).join('\n');
+            // Minimal HTML wrapper for Word inheritance
+            const htmlContent = items.map(item => `<p>${item.formattedHtml}</p>`).join('');
             const plainText = items.map(item => `${item.label ? item.label + ' ' : ''}${item.rawText}`).join('\n');
 
             const htmlBlob = new Blob([htmlContent], { type: 'text/html' });
@@ -152,14 +141,14 @@ const OtherRefScanner: React.FC = () => {
             if (typeof ClipboardItem !== 'undefined') {
                 const data = [new ClipboardItem({ "text/html": htmlBlob, "text/plain": textBlob })];
                 navigator.clipboard.write(data).then(() => {
-                    setToast({ msg: `Copied ${items.length} items. All hidden characters removed.`, type: "success" });
+                    setToast({ msg: `Copied ${items.length} clean items.`, type: "success" });
                 });
             } else {
                 navigator.clipboard.writeText(plainText);
-                setToast({ msg: "Text copied (Rich text unavailable).", type: "warn" });
+                setToast({ msg: "Rich text unsupported.", type: "warn" });
             }
         } catch (e) {
-            setToast({ msg: "Copy failed.", type: "error" });
+            setToast({ msg: "Copy operation failed.", type: "error" });
         }
     };
 
@@ -176,14 +165,14 @@ const OtherRefScanner: React.FC = () => {
     return (
         <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
             <div className="mb-10 text-center animate-fade-in">
-                <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase">Other-Ref Scanner</h1>
+                <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase tracking-tighter">Other-Ref Scanner</h1>
                 <p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic">
-                    Isolate unstructured citations. Automated sanitation of non-breaking spaces and control characters for CED compatibility.
+                    Isolate unstructured citations. Automated removal of hidden gremlins ensures "manually typed" behavior in MS Word.
                 </p>
             </div>
 
             <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-200 overflow-hidden h-[700px] flex flex-col relative">
-                {isLoading && <LoadingOverlay message="Purging Hidden Gremlins..." color="orange" />}
+                {isLoading && <LoadingOverlay message="Purging hidden artifacts..." color="orange" />}
 
                 {step === 'input' && (
                     <div className="flex flex-col h-full animate-fade-in">
@@ -195,7 +184,7 @@ const OtherRefScanner: React.FC = () => {
                             value={input} 
                             onChange={e => setInput(e.target.value)} 
                             className="flex-grow p-10 font-mono text-sm border-0 focus:ring-0 resize-none bg-transparent leading-relaxed" 
-                            placeholder="Paste your XML document here. The tool will aggressively clean invisible characters that break external tools..."
+                            placeholder="Paste your XML document here. The tool will purge all invisible characters that disrupt Word pasting..."
                             spellCheck={false}
                         />
                         <div className="p-8 border-t border-slate-100 flex justify-center bg-slate-50/50">

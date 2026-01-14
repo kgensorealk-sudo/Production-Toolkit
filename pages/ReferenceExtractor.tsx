@@ -20,16 +20,32 @@ const ReferenceExtractor: React.FC = () => {
     const [toast, setToast] = useState<{ msg: string, type: 'success' | 'warn' | 'error' | 'info' } | null>(null);
 
     /**
-     * NUCLEAR SANITATION protocol
-     * Removes control characters, normalizes Unicode, and fixes whitespace.
+     * NUCLEAR CLEANLINESS PROTOCOL
+     * Purges all hidden Unicode artifacts (ZWSP, NBSP, Soft Hyphens, Control Codes)
+     * and fixes punctuation spacing to ensure Word treats it as manual input.
      */
-    const sanitizeForCED = (text: string): string => {
+    const sanitizeForWord = (text: string): string => {
         if (!text) return '';
         return text
+            // 1. Normalize Unicode
             .normalize('NFKC')
+            // 2. Replace all special spaces with standard space
             .replace(/[\u00A0\u1680\u180e\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]/g, ' ')
-            .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '')
-            .replace(/[\u200B-\u200D\uFEFF]/g, '')
+            // 3. Purge invisible gremlins (ZWSP, Soft Hyphen, etc.)
+            .replace(/[\u200B-\u200D\uFEFF\u00AD\u2060\u200E\u200F]/g, '')
+            // 4. Remove ASCII control chars
+            .replace(/[\x00-\x1F\x7F]/g, '')
+            // 5. SURGICAL PUNCTUATION CLEANUP (Fixes the "Space + Period" issue)
+            .replace(/\s+,/g, ',')           // "word ," -> "word,"
+            .replace(/\s+\./g, '.')           // "word ." -> "word."
+            .replace(/\s+:/g, ':')           // "word :" -> "word:"
+            .replace(/\s+;/g, ';')           // "word ;" -> "word;"
+            .replace(/,\s*,/g, ', ')         // ", ," -> ", "
+            .replace(/,\s*\./g, '.')         // ", ." -> "."
+            .replace(/\.\s*,/g, '.')         // ". ," -> "."
+            .replace(/\(\s+/g, '(')          // "( " -> "("
+            .replace(/\s+\)/g, ')')          // " )" -> ")"
+            // 6. Collapse multiple spaces
             .replace(/\s+/g, ' ')
             .trim();
     };
@@ -55,17 +71,16 @@ const ReferenceExtractor: React.FC = () => {
                     const id = match[1];
                     const originalFullContent = match[2];
 
-                    // 1. DEDUPLICATION: Explicitly remove source-text to prevent doubled content
+                    // 1. DEDUPLICATION: Remove source-text
                     const contentWithoutSource = originalFullContent.replace(/<ce:source-text\b[^>]*>([\s\S]*?)<\/ce:source-text>/gi, '');
                     
-                    // 2. Extract Label from the original block
+                    // 2. Extract Label
                     const labelMatch = originalFullContent.match(/<ce:label>(.*?)<\/ce:label>/);
                     const label = labelMatch ? labelMatch[1].trim() : '';
 
-                    // 3. Determine Best Content Source & Type
+                    // 3. Determine Source
                     let bestSource = '';
                     let sourceType: 'other-ref' | 'structured' | 'fallback' = 'fallback';
-
                     const otherRefMatch = contentWithoutSource.match(/<ce:other-ref[^>]*>([\s\S]*?)<\/ce:other-ref>/i);
                     const structuredMatch = contentWithoutSource.match(/<(?:sb|ce):reference[^>]*>([\s\S]*?)<\/(?:sb|ce):reference>/i);
 
@@ -76,46 +91,48 @@ const ReferenceExtractor: React.FC = () => {
                         bestSource = structuredMatch[1];
                         sourceType = 'structured';
                     } else {
-                        // Fallback: use remaining content but strip the label tag
                         bestSource = contentWithoutSource.replace(/<ce:label>.*?<\/ce:label>/i, '');
                         sourceType = 'fallback';
                     }
 
-                    // 4. Pre-process metadata and structure before tag stripping
+                    // 4. Pre-process formatting and punctuation
                     let processingHtml = bestSource
-                        // A. Handle Author formatting: comma between surname and given-name, comma after every author
+                        // Authors: comma between name parts, comma after blocks
                         .replace(/\s*<\/c[be]:surname>\s*<c[be]:given-name>/gi, ', ')
                         .replace(/\s*<\/s[be]:author>/gi, ',</sb:author>')
                         .replace(/\s*<\/ce:author>/gi, ',</ce:author>')
                         
-                        // B. Handle Main Title: comma after every maintitle
+                        // Main Title: trailing comma
                         .replace(/\s*<\/s[be]:maintitle>/gi, ',</sb:maintitle>')
                         .replace(/\s*<\/ce:maintitle>/gi, ',</ce:maintitle>')
 
-                        // C. Handle Volume and Issue: ABSOLUTELY NO space between them.
-                        // We must resolve this before general stripping to avoid the stripper adding spaces.
-                        .replace(/<s[be]:volume-nr>([\s\S]*?)<\/s[be]:volume-nr>\s*<s[be]:issue-nr>([\s\S]*?)<\/s[be]:issue-nr>/gi, (m, vol, iss) => {
-                             // Clean nested tags inside volume/issue if any
+                        // VOLUME AND ISSUE: ABSOLUTELY NO SPACE
+                        // Use a regex that allows attributes and join immediately to prevent stripper spacing
+                        .replace(/<s[be]:volume-nr\b[^>]*>([\s\S]*?)<\/s[be]:volume-nr>\s*<s[be]:issue-nr\b[^>]*>([\s\S]*?)<\/s[be]:issue-nr>/gi, (m, vol, iss) => {
                              const v = vol.replace(/<[^>]+>/g, '').trim();
                              const i = iss.replace(/<[^>]+>/g, '').trim();
                              return `${v}(${i})`;
                         })
-                        // Handle standalone issue-nr just in case
-                        .replace(/<s[be]:issue-nr>([\s\S]*?)<\/s[be]:issue-nr>/gi, '($1)')
+                        // Fallback for standalone issue
+                        .replace(/<s[be]:issue-nr\b[^>]*>([\s\S]*?)<\/s[be]:issue-nr>/gi, '($1)')
 
-                        // D. Handle Date: Enclose in parentheses with a space before it
-                        .replace(/<s[be]:date>([\s\S]*?)<\/s[be]:date>/gi, (m, content) => {
+                        // Date: Enclose in parentheses with leading space
+                        .replace(/<s[be]:date\b[^>]*>([\s\S]*?)<\/s[be]:date>/gi, (m, content) => {
                              const cleanDate = content.replace(/<[^>]+>/g, '').trim();
                              return cleanDate ? ` (${cleanDate})` : '';
                         })
 
-                        // E. Handle Pages: en-dash between first and last
-                        .replace(/<s[be]:first-page>([\s\S]*?)<\/s[be]:first-page>\s*<s[be]:last-page>([\s\S]*?)<\/s[be]:last-page>/gi, '$1\u2013$2')
+                        // Pages: en-dash between first/last and add comma
+                        .replace(/<s[be]:first-page\b[^>]*>([\s\S]*?)<\/s[be]:first-page>\s*<s[be]:last-page\b[^>]*>([\s\S]*?)<\/s[be]:last-page>/gi, '$1\u2013$2,')
+                        
+                        // Article Number: add comma
+                        .replace(/<s[be]:article-number\b[^>]*>([\s\S]*?)<\/s[be]:article-number>/gi, '$1,')
 
-                        // F. Handle DOI: Prefix with "doi: "
-                        .replace(/<ce:doi\b[^>]*>([\s\S]*?)<\/ce:doi>/gi, 'doi: $1')
+                        // DOI: PREPEND COMMA and space, prefix with "doi: "
+                        // Tightened string for better cleanup later
+                        .replace(/<ce:doi\b[^>]*>([\s\S]*?)<\/ce:doi>/gi, ', doi: $1')
 
-                        // G. Handle Metadata tags like sb:date-accessed
+                        // Metadata tags like sb:date-accessed
                         .replace(/<sb:date-accessed\b([^>]*?)\/?>/gi, (m, attrs) => {
                             const d = attrs.match(/day="(\d+)"/)?.[1];
                             const mNum = attrs.match(/month="(\d+)"/)?.[1];
@@ -138,26 +155,25 @@ const ReferenceExtractor: React.FC = () => {
                         .replace(/<ce:inf[^>]*>/gi, '|SUB_OPEN|')
                         .replace(/<\/ce:inf>/gi, '|SUB_CLOSE|');
 
-                    // 6. Strip all other XML tags and apply nuclear sanitation
+                    // 6. Strip Tags & Clean Punctuation
+                    // We use a space to separate words when tags are removed, 
+                    // but sanitizeForWord will collapse them surgically.
                     let cleanRaw = processingHtml.replace(/<[^>]+>/g, ' ');
-                    cleanRaw = sanitizeForCED(cleanRaw);
-                    
-                    // Surgical cleanup: "Word ," to "Word," (no space before comma)
-                    cleanRaw = cleanRaw.replace(/\s+,/g, ',');
+                    cleanRaw = sanitizeForWord(cleanRaw);
 
-                    // 7. Restore Word-compatible HTML tags
+                    // 7. Restore Clean HTML tags for Clipboard
                     let formattedHtml = cleanRaw
                         .replace(/\|ITALIC_OPEN\|/g, '<i>').replace(/\|ITALIC_CLOSE\|/g, '</i>')
                         .replace(/\|BOLD_OPEN\|/g, '<b>').replace(/\|BOLD_CLOSE\|/g, '</b>')
                         .replace(/\|SUP_OPEN\|/g, '<sup>').replace(/\|SUP_CLOSE\|/g, '</sup>')
                         .replace(/\|SUB_OPEN\|/g, '<sub>').replace(/\|SUB_CLOSE\|/g, '</sub>')
-                        .replace(/\|[A-Z_]+\|/g, ''); // Safety cleanup of markers
+                        .replace(/\|[A-Z_]+\|/g, '');
 
                     found.push({
                         id,
-                        label: sanitizeForCED(label),
+                        label: sanitizeForWord(label),
                         rawText: cleanRaw.replace(/\|[A-Z_]+\|/g, ''),
-                        formattedHtml: label ? `<b>${sanitizeForCED(label)}</b> ${formattedHtml}` : formattedHtml,
+                        formattedHtml: label ? `<b>${sanitizeForWord(label)}</b> ${formattedHtml}` : formattedHtml,
                         sourceType
                     });
                 }
@@ -169,11 +185,11 @@ const ReferenceExtractor: React.FC = () => {
                     setResults(found);
                     setSelectedIndices(new Set(found.map((_, i) => i)));
                     setStep('report');
-                    setToast({ msg: `Extracted ${found.length} items. Ready for Word.`, type: "success" });
+                    setToast({ msg: `Extracted ${found.length} clean items.`, type: "success" });
                     setIsLoading(false);
                 }
             } catch (err) {
-                setToast({ msg: "Extraction failed. Check XML structure.", type: "error" });
+                setToast({ msg: "Extraction failed.", type: "error" });
                 setIsLoading(false);
             }
         }, 600);
@@ -197,7 +213,8 @@ const ReferenceExtractor: React.FC = () => {
             return;
         }
         try {
-            const htmlContent = items.map(item => `<p style="margin-bottom: 8px;">${item.formattedHtml}</p>`).join('\n');
+            // Using pure <p> tags with NO STYLING ensures Word uses its own defaults.
+            const htmlContent = items.map(item => `<p>${item.formattedHtml}</p>`).join('');
             const plainText = items.map(item => `${item.label ? item.label + ' ' : ''}${item.rawText}`).join('\n');
 
             const htmlBlob = new Blob([htmlContent], { type: 'text/html' });
@@ -206,14 +223,14 @@ const ReferenceExtractor: React.FC = () => {
             if (typeof ClipboardItem !== 'undefined') {
                 const data = [new ClipboardItem({ "text/html": htmlBlob, "text/plain": textBlob })];
                 navigator.clipboard.write(data).then(() => {
-                    setToast({ msg: `Copied ${items.length} items. Ready for Word.`, type: "success" });
+                    setToast({ msg: `Copied ${items.length} clean items.`, type: "success" });
                 });
             } else {
                 navigator.clipboard.writeText(plainText);
                 setToast({ msg: "Text copied (Formatting lost).", type: "warn" });
             }
         } catch (e) {
-            setToast({ msg: "System Clipboard error.", type: "error" });
+            setToast({ msg: "Clipboard error.", type: "error" });
         }
     };
 
@@ -232,12 +249,12 @@ const ReferenceExtractor: React.FC = () => {
             <div className="mb-10 text-center animate-fade-in">
                 <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase tracking-tighter">Bibliography Extractor</h1>
                 <p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic">
-                    Precision reference isolation. Supports standalone .exe deployment with advanced XML punctuation logic.
+                    Pure-text bibliography isolation. Punctuation rules now enforce zero-space between volume/issue and clean URL endings.
                 </p>
             </div>
 
             <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-200 overflow-hidden h-[700px] flex flex-col relative">
-                {isLoading && <LoadingOverlay message="Executing De-duplication Logic..." color="indigo" />}
+                {isLoading && <LoadingOverlay message="Purging Unicode artifacts..." color="indigo" />}
 
                 {step === 'input' && (
                     <div className="flex flex-col h-full animate-fade-in">
@@ -249,7 +266,7 @@ const ReferenceExtractor: React.FC = () => {
                             value={input} 
                             onChange={e => setInput(e.target.value)} 
                             className="flex-grow p-10 font-mono text-sm border-0 focus:ring-0 resize-none bg-transparent leading-relaxed" 
-                            placeholder="Paste your XML document here. The tool will process structured references and output Word-ready lists..."
+                            placeholder="Paste your XML document here. Volume/Issue spacing and URL punctuation will be auto-corrected..."
                             spellCheck={false}
                         />
                         <div className="p-8 border-t border-slate-100 flex justify-center bg-slate-50/50">
