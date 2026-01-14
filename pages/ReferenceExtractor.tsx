@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
@@ -82,17 +81,51 @@ const ReferenceExtractor: React.FC = () => {
                         sourceType = 'fallback';
                     }
 
-                    // 4. Handle Metadata tags like sb:date-accessed before stripping
-                    let processingHtml = bestSource.replace(/<sb:date-accessed\b([^>]*?)\/?>/gi, (m, attrs) => {
-                        const d = attrs.match(/day="(\d+)"/)?.[1];
-                        const mNum = attrs.match(/month="(\d+)"/)?.[1];
-                        const y = attrs.match(/year="(\d+)"/)?.[1];
-                        if (d && mNum && y) {
-                            const monthName = monthNames[parseInt(mNum) - 1] || mNum;
-                            return ` (Accessed ${d} ${monthName} ${y})`;
-                        }
-                        return m;
-                    });
+                    // 4. Pre-process metadata and structure before tag stripping
+                    let processingHtml = bestSource
+                        // A. Handle Author formatting: comma between surname and given-name, comma after every author
+                        .replace(/\s*<\/c[be]:surname>\s*<c[be]:given-name>/gi, ', ')
+                        .replace(/\s*<\/s[be]:author>/gi, ',</sb:author>')
+                        .replace(/\s*<\/ce:author>/gi, ',</ce:author>')
+                        
+                        // B. Handle Main Title: comma after every maintitle
+                        .replace(/\s*<\/s[be]:maintitle>/gi, ',</sb:maintitle>')
+                        .replace(/\s*<\/ce:maintitle>/gi, ',</ce:maintitle>')
+
+                        // C. Handle Volume and Issue: ABSOLUTELY NO space between them.
+                        // We must resolve this before general stripping to avoid the stripper adding spaces.
+                        .replace(/<s[be]:volume-nr>([\s\S]*?)<\/s[be]:volume-nr>\s*<s[be]:issue-nr>([\s\S]*?)<\/s[be]:issue-nr>/gi, (m, vol, iss) => {
+                             // Clean nested tags inside volume/issue if any
+                             const v = vol.replace(/<[^>]+>/g, '').trim();
+                             const i = iss.replace(/<[^>]+>/g, '').trim();
+                             return `${v}(${i})`;
+                        })
+                        // Handle standalone issue-nr just in case
+                        .replace(/<s[be]:issue-nr>([\s\S]*?)<\/s[be]:issue-nr>/gi, '($1)')
+
+                        // D. Handle Date: Enclose in parentheses with a space before it
+                        .replace(/<s[be]:date>([\s\S]*?)<\/s[be]:date>/gi, (m, content) => {
+                             const cleanDate = content.replace(/<[^>]+>/g, '').trim();
+                             return cleanDate ? ` (${cleanDate})` : '';
+                        })
+
+                        // E. Handle Pages: en-dash between first and last
+                        .replace(/<s[be]:first-page>([\s\S]*?)<\/s[be]:first-page>\s*<s[be]:last-page>([\s\S]*?)<\/s[be]:last-page>/gi, '$1\u2013$2')
+
+                        // F. Handle DOI: Prefix with "doi: "
+                        .replace(/<ce:doi\b[^>]*>([\s\S]*?)<\/ce:doi>/gi, 'doi: $1')
+
+                        // G. Handle Metadata tags like sb:date-accessed
+                        .replace(/<sb:date-accessed\b([^>]*?)\/?>/gi, (m, attrs) => {
+                            const d = attrs.match(/day="(\d+)"/)?.[1];
+                            const mNum = attrs.match(/month="(\d+)"/)?.[1];
+                            const y = attrs.match(/year="(\d+)"/)?.[1];
+                            if (d && mNum && y) {
+                                const monthName = monthNames[parseInt(mNum) - 1] || mNum;
+                                return ` (Accessed ${d} ${monthName} ${y})`;
+                            }
+                            return m;
+                        });
 
                     // 5. Preserve Formatting Markers
                     processingHtml = processingHtml
@@ -108,6 +141,9 @@ const ReferenceExtractor: React.FC = () => {
                     // 6. Strip all other XML tags and apply nuclear sanitation
                     let cleanRaw = processingHtml.replace(/<[^>]+>/g, ' ');
                     cleanRaw = sanitizeForCED(cleanRaw);
+                    
+                    // Surgical cleanup: "Word ," to "Word," (no space before comma)
+                    cleanRaw = cleanRaw.replace(/\s+,/g, ',');
 
                     // 7. Restore Word-compatible HTML tags
                     let formattedHtml = cleanRaw
@@ -133,7 +169,7 @@ const ReferenceExtractor: React.FC = () => {
                     setResults(found);
                     setSelectedIndices(new Set(found.map((_, i) => i)));
                     setStep('report');
-                    setToast({ msg: `Extracted ${found.length} items. Duplicates removed.`, type: "success" });
+                    setToast({ msg: `Extracted ${found.length} items. Ready for Word.`, type: "success" });
                     setIsLoading(false);
                 }
             } catch (err) {
@@ -196,7 +232,7 @@ const ReferenceExtractor: React.FC = () => {
             <div className="mb-10 text-center animate-fade-in">
                 <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase tracking-tighter">Bibliography Extractor</h1>
                 <p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic">
-                    Precision reference isolation. Source identification via ribbons ensures easy auditing of structured vs. unstructured data.
+                    Precision reference isolation. Supports standalone .exe deployment with advanced XML punctuation logic.
                 </p>
             </div>
 
@@ -213,7 +249,7 @@ const ReferenceExtractor: React.FC = () => {
                             value={input} 
                             onChange={e => setInput(e.target.value)} 
                             className="flex-grow p-10 font-mono text-sm border-0 focus:ring-0 resize-none bg-transparent leading-relaxed" 
-                            placeholder="Paste your XML document here. The tool will ignore <ce:source-text> to ensure a clean, non-duplicated list of references..."
+                            placeholder="Paste your XML document here. The tool will process structured references and output Word-ready lists..."
                             spellCheck={false}
                         />
                         <div className="p-8 border-t border-slate-100 flex justify-center bg-slate-50/50">

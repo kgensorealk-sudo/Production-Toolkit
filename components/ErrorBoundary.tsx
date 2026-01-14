@@ -14,11 +14,20 @@ interface State {
  * log those errors, and display a fallback UI instead of the component tree that crashed.
  */
 class ErrorBoundary extends React.Component<Props, State> {
-  // Use class property for state initialization to fix 'Property state does not exist' errors
-  public state: State = {
-    hasError: false,
-    error: null,
-  };
+  // Fix: Explicitly declare state and props properties to fix 'Property does not exist on type ErrorBoundary' errors
+  public state: State;
+  public props: Props;
+
+  // Use constructor for proper initialization to fix 'Property state does not exist' and 'Property props does not exist' errors
+  constructor(props: Props) {
+    super(props);
+    // Fix: Explicit initialization of state and props to ensure they are recognized by the TypeScript compiler
+    this.state = {
+      hasError: false,
+      error: null,
+    };
+    this.props = props;
+  }
 
   // getDerivedStateFromError is a static method that allows updating state after an error is thrown in a child component.
   public static getDerivedStateFromError(error: Error): State {
@@ -31,6 +40,7 @@ class ErrorBoundary extends React.Component<Props, State> {
 
   public render(): ReactNode {
     // Access state and props from the inherited React.Component properties
+    // Fix: Using explicitly declared class members to avoid undefined property access errors
     const { hasError, error } = this.state;
     const { children } = this.props;
 
