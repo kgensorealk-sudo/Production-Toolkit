@@ -16,6 +16,7 @@ import ReferenceDupeChecker from './pages/ReferenceDupeChecker';
 import UncitedRefCleaner from './pages/UncitedRefCleaner';
 import OtherRefScanner from './pages/OtherRefScanner';
 import ReferenceExtractor from './pages/ReferenceExtractor';
+import RefListPurger from './pages/RefListPurger';
 import Docs from './pages/Docs';
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
@@ -98,6 +99,14 @@ const App: React.FC = () => {
                         <ProtectedRoute requireSubscription={true}>
                             <Layout currentTool={ToolId.REFERENCE_EXTRACTOR}>
                                 <ReferenceExtractor />
+                            </Layout>
+                        </ProtectedRoute>
+                    } />
+
+                    <Route path="/refListPurger" element={
+                        <ProtectedRoute requireSubscription={true}>
+                            <Layout currentTool={ToolId.REF_LIST_PURGER}>
+                                <RefListPurger />
                             </Layout>
                         </ProtectedRoute>
                     } />

@@ -49,6 +49,7 @@ export enum ToolId {
     UNCITED_CLEANER = 'uncitedCleaner',
     OTHER_REF_SCANNER = 'otherRefScanner',
     REFERENCE_EXTRACTOR = 'refExtractor',
+    REF_LIST_PURGER = 'refListPurger',
     DOCS = 'docs',
     DASHBOARD = 'dashboard'
 }
