@@ -19,6 +19,14 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const ACTIVITY_STORAGE_KEY = 'prod_toolkit_last_active';
 
+// Helper to wrap Supabase calls in a timeout
+const withTimeout = <T,>(promise: Promise<T>, ms: number, timeoutValue: T): Promise<T> => {
+    return Promise.race([
+        promise,
+        new Promise<T>((resolve) => setTimeout(() => resolve(timeoutValue), ms))
+    ]);
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [session, setSession] = useState<Session | null>(null);
     const [user, setUser] = useState<User | null>(null);
@@ -31,13 +39,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const fetchFreeTools = async () => {
         try {
+            console.info("Auth: Fetching system config...");
             const { data, error } = await supabase
                 .from('system_settings')
                 .select('free_tools_data')
                 .eq('id', 'global')
                 .maybeSingle();
             
-            if (error) return;
+            if (error) throw error;
 
             if (data?.free_tools_data) {
                 const now = new Date();
@@ -54,23 +63,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
                 setFreeTools(activeIds);
                 setFreeToolsData(activeMap);
+                console.info(`Auth: Config loaded. ${activeIds.length} free tools.`);
             }
         } catch (err) {
-            console.warn("Free tools fetch suppressed");
+            console.warn("Auth: Free tools fetch suppressed", err);
         }
     };
 
     const fetchProfile = async (userId: string) => {
         try {
+            console.info(`Auth: Loading profile for ${userId}...`);
             const { data: profileData, error: profileError } = await supabase
                 .from('profiles')
                 .select('*')
                 .eq('id', userId)
                 .maybeSingle();
             
-            if (profileError) return;
+            if (profileError) throw profileError;
 
             if (!profileData) {
+                console.info("Auth: No profile record found. Using guest defaults.");
                 setProfile({ id: userId, email: user?.email || '', role: 'user', is_subscribed: false, unlocked_tools: [] });
                 return;
             }
@@ -92,14 +104,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 is_subscribed: isActive,
                 unlocked_tools: unlockedTools 
             });
+            console.info("Auth: Profile fully resolved.");
         } catch (err) {
-            console.warn("Profile fetch suppressed");
+            console.warn("Auth: Profile fetch suppressed", err);
         }
     };
 
     const signOut = async (isAuto: boolean = false) => {
         try {
             setLoading(true); 
+            console.info("Auth: Signing out...");
             await supabase.auth.signOut();
             localStorage.removeItem(ACTIVITY_STORAGE_KEY);
             if (isAuto) sessionStorage.setItem('session_expired', 'true');
@@ -115,35 +129,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     useEffect(() => {
         let mounted = true;
+        console.info("Auth: Starting system initialization...");
         
-        // 1. Fail-safe Watchdog
-        // If auth initialization hasn't finished in 6 seconds, force stop the loading state.
+        // 1. Fail-safe Watchdog (Aggressive 5 seconds)
         const watchdog = setTimeout(() => {
             if (mounted && loading) {
-                console.warn("Auth initialization watchdog triggered - resolving loading state manually.");
+                console.error("Auth: Initialization watchdog triggered! Forcing UI unlock.");
                 setLoading(false);
             }
-        }, 6000);
+        }, 5000);
 
         const init = async () => {
             try {
-                // Fetch basic state and session in parallel to avoid blocking
-                const [freeToolsRes, sessionRes] = await Promise.allSettled([
-                    fetchFreeTools(),
-                    supabase.auth.getSession()
-                ]);
+                // Fetch basic state and session in parallel with a 4s timeout
+                console.info("Auth: Requesting session...");
+                const results = await withTimeout(
+                    Promise.allSettled([
+                        fetchFreeTools(),
+                        supabase.auth.getSession()
+                    ]),
+                    4000,
+                    'timeout' as any
+                );
 
+                if (results === 'timeout') {
+                    console.error("Auth: Supabase connection timed out.");
+                    if (mounted) setLoading(false);
+                    return;
+                }
+
+                const sessionRes = results[1];
                 if (sessionRes.status === 'fulfilled' && sessionRes.value.data.session) {
                     const currentSession = sessionRes.value.data.session;
+                    console.info("Auth: Valid session found.");
                     if (mounted) {
                         setSession(currentSession);
                         setUser(currentSession.user);
                         lastUserId.current = currentSession.user.id;
                         await fetchProfile(currentSession.user.id);
                     }
+                } else {
+                    console.info("Auth: No active session.");
                 }
             } catch (err) {
-                console.error("Auth init fatal error:", err);
+                console.error("Auth: Initialization error", err);
             } finally {
                 if (mounted) {
                     clearTimeout(watchdog);
@@ -155,6 +184,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         init();
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+            console.info(`Auth: State change event: ${event}`);
             if (!mounted) return;
             
             if (event === 'SIGNED_OUT') {

@@ -1,5 +1,4 @@
-
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import Landing from './pages/Landing';
@@ -27,7 +26,41 @@ import LoadingOverlay from './components/LoadingOverlay';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { session, loading } = useAuth();
-    if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><LoadingOverlay message="Authenticating..." color="indigo" /></div>;
+    const [showRecovery, setShowRecovery] = useState(false);
+
+    useEffect(() => {
+        let timer: any;
+        if (loading) {
+            timer = setTimeout(() => setShowRecovery(true), 6000);
+        }
+        return () => clearTimeout(timer);
+    }, [loading]);
+
+    const handleReset = () => {
+        localStorage.clear();
+        sessionStorage.clear();
+        window.location.reload();
+    };
+
+    if (loading) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-6">
+                <LoadingOverlay message="Establishing Node Connection..." color="indigo" />
+                {showRecovery && (
+                    <div className="animate-fade-in flex flex-col items-center gap-4 z-[100] mt-32">
+                        <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">Connection taking longer than expected</p>
+                        <button 
+                            onClick={handleReset}
+                            className="px-6 py-2 bg-white border border-slate-200 text-slate-600 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm hover:bg-slate-50 transition-all active:scale-95"
+                        >
+                            Reset System Cache
+                        </button>
+                    </div>
+                )}
+            </div>
+        );
+    }
+    
     if (!session) return <Navigate to="/login" replace />;
     return <>{children}</>;
 };
@@ -39,26 +72,13 @@ const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     return <>{children}</>;
 };
 
-/**
- * For tools that can be unlocked via Key OR Subscription
- */
 const LockedToolGuard: React.FC<{ children: React.ReactElement, toolId: ToolId, displayName: string }> = ({ children, toolId, displayName }) => {
     const { profile, freeTools } = useAuth();
-    
-    // 0. Free Tool Bypass
     if (freeTools.includes(toolId)) return children;
-
-    // 1. Admin Bypass
     if (profile?.role === 'admin') return children;
-    
-    // 2. Subscription Bypass
     if (profile?.is_subscribed) return children;
-
-    // 3. Key Bypass
     const isUnlocked = profile?.unlocked_tools?.includes(toolId) || profile?.unlocked_tools?.includes('universal');
     if (isUnlocked) return children;
-
-    // 4. Require Key
     return (
         <div className="relative h-full w-full overflow-hidden">
             <div className="blur-sm pointer-events-none grayscale opacity-40 select-none">{children}</div>
@@ -67,17 +87,10 @@ const LockedToolGuard: React.FC<{ children: React.ReactElement, toolId: ToolId, 
     );
 };
 
-/**
- * For tools that strictly require a Subscription
- */
 const SubscriptionGuard: React.FC<{ children: React.ReactElement, toolId: ToolId, displayName: string }> = ({ children, toolId, displayName }) => {
     const { profile, freeTools } = useAuth();
     const navigate = useNavigate();
-
-    // 0. Free Tool Bypass
     if (freeTools.includes(toolId)) return children;
-
-    // 1. Admin/Sub Bypass
     if (profile?.role === 'admin' || profile?.is_subscribed) return children;
 
     return (
