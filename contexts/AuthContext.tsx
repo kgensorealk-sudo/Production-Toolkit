@@ -131,29 +131,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         let mounted = true;
         console.info("Auth: Starting system initialization...");
         
-        // 1. Fail-safe Watchdog (Aggressive 5 seconds)
+        // Fail-safe Watchdog
         const watchdog = setTimeout(() => {
             if (mounted && loading) {
                 console.error("Auth: Initialization watchdog triggered! Forcing UI unlock.");
                 setLoading(false);
             }
-        }, 5000);
+        }, 8000);
 
         const init = async () => {
             try {
-                // Fetch basic state and session in parallel with a 4s timeout
+                // Parallelized start with 10s timeout for cloud environments
                 console.info("Auth: Requesting session...");
                 const results = await withTimeout(
                     Promise.allSettled([
                         fetchFreeTools(),
                         supabase.auth.getSession()
                     ]),
-                    4000,
+                    10000,
                     'timeout' as any
                 );
 
                 if (results === 'timeout') {
-                    console.error("Auth: Supabase connection timed out.");
+                    console.error("Auth: Supabase initial check timed out.");
                     if (mounted) setLoading(false);
                     return;
                 }
@@ -161,18 +161,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const sessionRes = results[1];
                 if (sessionRes.status === 'fulfilled' && sessionRes.value.data.session) {
                     const currentSession = sessionRes.value.data.session;
-                    console.info("Auth: Valid session found.");
+                    console.info("Auth: Session confirmed in init.");
                     if (mounted) {
                         setSession(currentSession);
                         setUser(currentSession.user);
                         lastUserId.current = currentSession.user.id;
-                        await fetchProfile(currentSession.user.id);
+                        // Fetch profile without blocking the 'loading' state resolve
+                        fetchProfile(currentSession.user.id);
                     }
-                } else {
-                    console.info("Auth: No active session.");
                 }
             } catch (err) {
-                console.error("Auth: Initialization error", err);
+                console.error("Auth: Initialization exception", err);
             } finally {
                 if (mounted) {
                     clearTimeout(watchdog);
@@ -183,20 +182,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         init();
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
             console.info(`Auth: State change event: ${event}`);
             if (!mounted) return;
             
             if (event === 'SIGNED_OUT') {
                 setProfile(null); setUser(null); setSession(null);
+                setLoading(false);
             } else if (newSession?.user) {
-                setSession(newSession); setUser(newSession.user);
+                setSession(newSession); 
+                setUser(newSession.user);
+                
+                // UNLOCK UI IMMEDIATELY
+                setLoading(false); 
+                
+                // Load detailed profile in background
                 if (newSession.user.id !== lastUserId.current) {
                     lastUserId.current = newSession.user.id;
-                    await fetchProfile(newSession.user.id);
+                    fetchProfile(newSession.user.id);
                 }
+            } else {
+                setLoading(false);
             }
-            setLoading(false);
         });
 
         return () => { 

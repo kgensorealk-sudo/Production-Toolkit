@@ -7,9 +7,7 @@ export default defineConfig(({ mode }) => {
   
   return {
     plugins: [react()],
-    // Using an empty string for base ensures that assets are linked relatively.
-    // This is the "magic" setting that allows the same build to work on both
-    // standard web servers (Vercel) and local filesystems (Electron .exe).
+    // Base '' ensures relative paths for .exe compatibility
     base: '', 
     build: {
       outDir: 'dist',
