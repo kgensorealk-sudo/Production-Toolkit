@@ -1,8 +1,11 @@
+
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
-import { UserProfile } from '../types';
+import { UserProfile, ToolId } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
+import ConfirmationModal from '../components/ConfirmationModal';
 
 interface Announcement {
     id: string;
@@ -13,572 +16,495 @@ interface Announcement {
     created_at: string;
 }
 
-const SQL_SCRIPT = `-- PRODUCTION TOOLKIT: DATABASE REPAIR & SETUP
--- Execute this in Supabase SQL Editor to fix permissions and tables.
+interface AccessKeyRecord {
+    id: string;
+    key: string;
+    tool: string;
+    is_used: boolean;
+    used_at?: string;
+    user_id?: string;
+    device_id?: string;
+    created_at: string;
+}
 
--- ==========================================
--- 1. HELPER FUNCTION (Fixes Admin Permissions)
--- ==========================================
-create or replace function public.is_admin()
-returns boolean as $$
-begin
-  return exists (
-    select 1 
-    from public.profiles 
-    where id = auth.uid() 
-    and role = 'admin'
-  );
-end;
-$$ language plpgsql security definer;
+const DURATION_OPTIONS = [
+    { label: '1 Min (Testing)', value: 'trial_1m', type: 'trial' },
+    { label: '3 Days', value: 'trial_3d', type: 'trial' },
+    { label: '7 Days', value: 'trial_7d', type: 'trial' },
+    { label: '15 Days', value: 'trial_15d', type: 'trial' },
+    { label: '20 Days', value: 'trial_20d', type: 'trial' },
+    { label: '1 Month', value: 'sub_1mo', type: 'sub' },
+    { label: '3 Months', value: 'sub_3mo', type: 'sub' },
+    { label: '6 Months', value: 'sub_6mo', type: 'sub' },
+    { label: '1 Year', value: 'sub_1y', type: 'sub' },
+];
 
--- ==========================================
--- 2. PROFILES TABLE
--- ==========================================
-create table if not exists public.profiles (
-  id uuid references auth.users on delete cascade primary key,
-  email text,
-  role text default 'user',
-  is_subscribed boolean default false,
-  subscription_end timestamp with time zone,
-  trial_start timestamp with time zone,
-  trial_end timestamp with time zone,
-  last_seen timestamp with time zone default now()
-);
-
--- ADDING LAST_SEEN COLUMN IF MISSING (For Migration)
-do $$
-begin
-  if not exists (select 1 from information_schema.columns where table_name='profiles' and column_name='last_seen') then
-    alter table public.profiles add column last_seen timestamp with time zone default now();
-  end if;
-end $$;
-
-alter table profiles enable row level security;
-
-drop policy if exists "Users view own profile" on profiles;
-create policy "Users view own profile" on profiles for select using ( auth.uid() = id );
-
-drop policy if exists "Users update own profile" on profiles;
-create policy "Users update own profile" on profiles for update using ( auth.uid() = id );
-
-drop policy if exists "Admins view all profiles" on profiles;
-create policy "Admins view all profiles" on profiles for select using ( is_admin() );
-
-drop policy if exists "Admins update all profiles" on profiles;
-create policy "Admins update all profiles" on profiles for update using ( is_admin() );
-
--- ==========================================
--- 3. ANNOUNCEMENTS TABLE
--- ==========================================
-create table if not exists public.announcements (
-  id uuid default gen_random_uuid() primary key,
-  title text not null,
-  content text not null,
-  type text default 'info',
-  is_active boolean default false,
-  created_at timestamp with time zone default timezone('utc'::text, now())
-);
-
-alter table announcements enable row level security;
-
--- Public Access
-drop policy if exists "Public read active announcements" on announcements;
-create policy "Public read active announcements" 
-on announcements for select 
-using ( is_active = true );
-
--- Admin Access (Explicit Policies)
-drop policy if exists "Admins manage announcements" on announcements;
-drop policy if exists "Admins select announcements" on announcements;
-drop policy if exists "Admins insert announcements" on announcements;
-drop policy if exists "Admins update announcements" on announcements;
-drop policy if exists "Admins delete announcements" on announcements;
-
-create policy "Admins select announcements" on announcements for select using ( is_admin() );
-create policy "Admins insert announcements" on announcements for insert with check ( is_admin() );
-create policy "Admins update announcements" on announcements for update using ( is_admin() );
-create policy "Admins delete announcements" on announcements for delete using ( is_admin() );
-
--- ==========================================
--- 4. ACCESS KEYS
--- ==========================================
-create table if not exists public.access_keys (
-  id uuid default gen_random_uuid() primary key,
-  key text unique not null,
-  tool text not null,
-  is_used boolean default false,
-  used_at timestamp with time zone,
-  created_at timestamp with time zone default timezone('utc'::text, now())
-);
-
-alter table access_keys enable row level security;
-
-drop policy if exists "Read keys" on access_keys;
-create policy "Read keys" on access_keys for select using (true);
-
-drop policy if exists "Admins manage keys" on access_keys;
-create policy "Admins manage keys" on access_keys for all using (is_admin());
-
--- ==========================================
--- 5. TRIGGER FOR NEW USERS
--- ==========================================
-create or replace function public.handle_new_user()
-returns trigger as $$
-begin
-  insert into public.profiles (id, email, is_subscribed, trial_start, trial_end, subscription_end, last_seen)
-  values (
-    new.id,
-    new.email,
-    true,
-    now(),
-    now() + interval '20 days',
-    now() + interval '20 days',
-    now()
-  );
-  return new;
-end;
-$$ language plpgsql security definer;
-
-drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute procedure public.handle_new_user();
-
--- ==========================================
--- 6. SEED & ADMIN SETUP
--- ==========================================
-insert into announcements (title, content, type, is_active)
-select 'Welcome', 'System operational.', 'success', true
-where not exists (select 1 from announcements);
-
--- RUN THIS MANUALLY AFTER SIGNING UP:
--- update public.profiles set role = 'admin' where email = 'YOUR_EMAIL';
-`;
+const getDurationMs = (val: string) => {
+    switch (val) {
+        case 'trial_1m': return 60 * 1000;
+        case 'trial_3d': return 3 * 24 * 60 * 60 * 1000;
+        case 'trial_7d': return 7 * 24 * 60 * 60 * 1000;
+        case 'trial_15d': return 15 * 24 * 60 * 60 * 1000;
+        case 'trial_20d': return 20 * 24 * 60 * 60 * 1000;
+        case 'sub_1mo': return 30 * 24 * 60 * 60 * 1000;
+        case 'sub_3mo': return 90 * 24 * 60 * 60 * 1000;
+        case 'sub_6mo': return 180 * 24 * 60 * 60 * 1000;
+        case 'sub_1y': return 365 * 24 * 60 * 60 * 1000;
+        default: return 365 * 24 * 60 * 60 * 1000;
+    }
+};
 
 const AdminDashboard: React.FC = () => {
-    // Tab State
-    const [activeTab, setActiveTab] = useState<'users' | 'announcements' | 'guide'>('users');
-    const [isLoading, setIsLoading] = useState(false); // Initial full-screen load
-    const [isRefetching, setIsRefetching] = useState(false); // Background refresh
+    const [activeTab, setActiveTab] = useState<'users' | 'keys' | 'announcements' | 'config'>('users');
+    const [isLoading, setIsLoading] = useState(false);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
+    const { freeTools, freeToolsData, refreshFreeTools } = useAuth();
 
-    // User Management State
     const [users, setUsers] = useState<UserProfile[]>([]);
     const [search, setSearch] = useState('');
-    const [duration, setDuration] = useState('1y'); 
-    const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'online'>('all');
+    const [selectedDurations, setSelectedDurations] = useState<Record<string, string>>({});
 
-    // Announcement State
     const [announcements, setAnnouncements] = useState<Announcement[]>([]);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [newTitle, setNewTitle] = useState('');
     const [newContent, setNewContent] = useState('');
     const [newType, setNewType] = useState<'info' | 'warning' | 'success' | 'error'>('info');
-    
-    // Refs
-    const titleInputRef = useRef<HTMLInputElement>(null);
 
-    // Helper to safely get error message
-    const getErrMsg = (error: any) => {
-        if (!error) return 'Unknown error occurred';
-        if (typeof error === 'string') return error;
-        if (error instanceof Error) return error.message;
-        if (typeof error === 'object') {
-            if (error.message) return String(error.message);
-            if (error.error_description) return String(error.error_description);
-            if (error.details) return String(error.details);
-            try { return JSON.stringify(error); } catch (e) { return 'Object Error'; }
-        }
-        return String(error);
-    };
+    const [accessKeys, setAccessKeys] = useState<AccessKeyRecord[]>([]);
+    const [keyTool, setKeyTool] = useState<string>('universal');
+    const [keyQty, setKeyQty] = useState<number>(1);
 
-    // Helper to check online status (within last 5 mins)
-    const checkIsOnline = (lastSeen?: string) => {
-        if (!lastSeen) return false;
-        try {
-            const last = new Date(lastSeen).getTime();
-            const now = new Date().getTime();
-            if (isNaN(last)) return false;
-            return (now - last) < 5 * 60 * 1000;
-        } catch (e) {
-            return false;
+    const [confirmConfig, setConfirmConfig] = useState<{
+        isOpen: boolean; title: string; message: string; confirmLabel?: string; type: 'primary' | 'danger'; onConfirm: () => void;
+    }>({ isOpen: false, title: '', message: '', type: 'primary', onConfirm: () => {} });
+
+    const getToolName = (tid: string) => {
+        switch (tid) {
+            case ToolId.XML_RENUMBER: return "XML Reference Normalizer";
+            case ToolId.CREDIT_GENERATOR: return "CRediT Author Tagging";
+            case ToolId.UNCITED_CLEANER: return "Uncited Ref Cleaner";
+            case ToolId.OTHER_REF_SCANNER: return "Other-Ref Scanner";
+            case ToolId.REFERENCE_GEN: return "Reference Updater";
+            case ToolId.REF_DUPE_CHECK: return "Duplicate Ref Remover";
+            case ToolId.HIGHLIGHTS_GEN: return "Article Highlights Gen";
+            case ToolId.QUICK_DIFF: return "Quick Text Diff";
+            case ToolId.TAG_CLEANER: return "XML Tag Cleaner";
+            case ToolId.TABLE_FIXER: return "XML Table Fixer";
+            case ToolId.VIEW_SYNC: return "View Synchronizer";
+            case 'universal': return "Universal Access";
+            default: return tid;
         }
     };
 
-    // Helper to format last seen
-    const formatLastSeen = (dateStr?: string) => {
-        if (!dateStr) return 'Never';
+    const fetchUsers = useCallback(async () => {
+        setIsLoading(true);
         try {
-            const date = new Date(dateStr);
-            const now = new Date();
-            const diffSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-            
-            if (diffSeconds < 60) return 'Just now';
-            if (diffSeconds < 3600) return `${Math.floor(diffSeconds / 60)}m ago`;
-            if (diffSeconds < 86400) return `${Math.floor(diffSeconds / 3600)}h ago`;
-            return date.toLocaleDateString();
-        } catch (e) {
-            return 'Invalid Date';
-        }
-    };
-
-    const fetchUsers = useCallback(async (isBackground = false) => {
-        if (!isBackground) setIsLoading(true);
-        else setIsRefetching(true);
-
-        try {
-            const dataPromise = supabase.from('profiles').select('*').order('last_seen', { ascending: false });
-            const { data, error } = await dataPromise;
+            const { data, error } = await supabase.from('profiles').select('*').order('last_seen', { ascending: false });
             if (error) throw error;
             setUsers(data || []);
+            
+            // Initialize row durations
+            const durMap: Record<string, string> = {};
+            (data || []).forEach(u => {
+                durMap[u.id] = 'sub_1y';
+            });
+            setSelectedDurations(durMap);
         } catch (error: any) {
-            if (!isBackground) {
-                setToast({ msg: 'Failed to load users: ' + getErrMsg(error), type: 'error' });
-            }
-        } finally {
-            if (!isBackground) setIsLoading(false);
-            else setIsRefetching(false);
-        }
+            setToast({ msg: 'Failed to load users', type: 'error' });
+        } finally { setIsLoading(false); }
     }, []);
 
-    const fetchAnnouncements = useCallback(async () => {
+    const fetchAccessKeys = useCallback(async () => {
         setIsLoading(true);
         try {
             const { data, error } = await supabase
-                .from('announcements')
+                .from('access_keys')
                 .select('*')
                 .order('created_at', { ascending: false });
             
             if (error) throw error;
+            setAccessKeys(data || []);
+        } catch (error: any) {
+            console.error(error);
+            setToast({ msg: 'Failed to load keys', type: 'error' });
+        } finally { setIsLoading(false); }
+    }, []);
+
+    const handleRevokeKey = async (keyRecord: AccessKeyRecord) => {
+        setIsLoading(true);
+        try {
+            const { error } = await supabase
+                .from('access_keys')
+                .update({ 
+                    is_used: false, 
+                    user_id: null, 
+                    device_id: null, 
+                    used_at: null 
+                })
+                .eq('id', keyRecord.id);
+
+            if (error) throw error;
+            
+            setAccessKeys(prev => prev.map(k => 
+                k.id === keyRecord.id ? { ...k, is_used: false, user_id: undefined, device_id: undefined, used_at: undefined } : k
+            ));
+            setToast({ msg: 'Key access revoked and reset.', type: 'success' });
+        } catch (err: any) {
+            setToast({ msg: 'Revocation failed', type: 'error' });
+        } finally { setIsLoading(false); }
+    };
+
+    const handleDeleteKey = (keyId: string) => {
+        setConfirmConfig({
+            isOpen: true,
+            title: 'Delete Access Key',
+            message: 'Are you sure? This will permanently remove this license from the system. Users currently bound to this key will lose access on their next session validation.',
+            confirmLabel: 'Delete Permanently',
+            type: 'danger',
+            onConfirm: async () => {
+                setIsLoading(true);
+                try {
+                    const { error } = await supabase.from('access_keys').delete().eq('id', keyId);
+                    if (error) throw error;
+                    setAccessKeys(prev => prev.filter(k => k.id !== keyId));
+                    setToast({ msg: 'Key deleted.', type: 'success' });
+                } catch (err: any) {
+                    setToast({ msg: 'Deletion failed', type: 'error' });
+                } finally { setIsLoading(false); }
+            }
+        });
+    };
+
+    const fetchAnnouncements = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const { data, error } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
+            if (error) throw error;
             setAnnouncements(data || []);
         } catch (error: any) {
-            if (error?.code === '42P01') {
-                setToast({ msg: 'Announcements table missing. Check Guide tab.', type: 'warn' });
-            } else {
-                setToast({ msg: 'Failed to load announcements: ' + getErrMsg(error), type: 'error' });
-            }
-        } finally {
-            setIsLoading(false);
-        }
+            setToast({ msg: 'Failed to load announcements', type: 'error' });
+        } finally { setIsLoading(false); }
     }, []);
 
     useEffect(() => {
-        if (activeTab === 'users') {
-            fetchUsers();
-            const intervalId = setInterval(() => { fetchUsers(true); }, 30000);
-            return () => clearInterval(intervalId);
-        } else if (activeTab === 'announcements') {
-            fetchAnnouncements();
+        if (activeTab === 'users') fetchUsers();
+        else if (activeTab === 'announcements') fetchAnnouncements();
+        else if (activeTab === 'keys') {
+            fetchUsers().then(() => fetchAccessKeys());
         }
-    }, [activeTab, fetchUsers, fetchAnnouncements]);
-
-    const calculateExpiry = (type: string) => {
-        const date = new Date();
-        if (type === '1min') date.setMinutes(date.getMinutes() + 1); 
-        else if (type === 'trial') date.setDate(date.getDate() + 20); 
-        else if (type === '1m') date.setMonth(date.getMonth() + 1);
-        else if (type === '3m') date.setMonth(date.getMonth() + 3);
-        else if (type === '6m') date.setMonth(date.getMonth() + 6);
-        else if (type === '1y') date.setFullYear(date.getFullYear() + 1);
-        else if (type === 'lifetime') date.setFullYear(date.getFullYear() + 99);
-        return date.toISOString();
-    };
+    }, [activeTab, fetchUsers, fetchAnnouncements, fetchAccessKeys]);
 
     const toggleSubscription = async (user: UserProfile) => {
         const newVal = !user.is_subscribed;
+        const selectedKey = selectedDurations[user.id] || 'sub_1y';
+        const durationOption = DURATION_OPTIONS.find(o => o.value === selectedKey);
+        
         const updates: any = { is_subscribed: newVal };
+        
         if (newVal) {
-            const expiryDate = calculateExpiry(duration);
-            updates.subscription_end = expiryDate;
-            if (duration === 'trial' || duration === '1min') {
+            const end = new Date(Date.now() + getDurationMs(selectedKey)).toISOString();
+            updates.subscription_end = end;
+            // If it's a trial, set trial_end to trigger the label in Layout
+            if (durationOption?.type === 'trial') {
                 updates.trial_start = new Date().toISOString();
-                updates.trial_end = expiryDate;
+                updates.trial_end = end;
             } else {
                 updates.trial_start = null;
                 updates.trial_end = null;
             }
-        } else { updates.subscription_end = null; }
+        } else {
+            updates.subscription_end = null;
+            updates.trial_start = null;
+            updates.trial_end = null;
+        }
+
         const { error } = await supabase.from('profiles').update(updates).eq('id', user.id);
-        if (error) { setToast({ msg: 'Update failed: ' + getErrMsg(error), type: 'error' }); }
-        else { setUsers(users.map(u => u.id === user.id ? { ...u, ...updates } : u)); setToast({ msg: `User ${newVal ? 'activated' : 'deactivated'}`, type: 'success' }); }
+        if (!error) {
+            setUsers(users.map(u => u.id === user.id ? { ...u, ...updates } : u));
+            setToast({ msg: newVal ? `Access granted (${durationOption?.label})` : 'Access revoked', type: 'success' });
+        }
     };
 
-    const toggleAdmin = async (user: UserProfile) => {
-        const newRole = user.role === 'admin' ? 'user' : 'admin';
-        const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', user.id);
-        if (error) { setToast({ msg: 'Role update failed: ' + getErrMsg(error), type: 'error' }); }
-        else { setUsers(users.map(u => u.id === user.id ? { ...u, role: newRole } : u)); setToast({ msg: `Role updated to ${newRole}`, type: 'success' }); }
+    const toggleFreeTool = async (tid: string) => {
+        setIsLoading(true);
+        const nextData = { ...freeToolsData };
+        
+        if (nextData[tid]) {
+            delete nextData[tid];
+        } else {
+            const expiry = new Date();
+            expiry.setDate(expiry.getDate() + 7);
+            nextData[tid] = expiry.toISOString();
+        }
+        
+        try {
+            const { error } = await supabase
+                .from('system_settings')
+                .update({ 
+                    free_tools_data: nextData,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', 'global');
+            
+            if (error) throw error;
+            await refreshFreeTools();
+            setToast({ msg: `Access window updated`, type: 'success' });
+        } catch (err) {
+            setToast({ msg: 'Update failed', type: 'error' });
+        } finally {
+            setIsLoading(false);
+        }
     };
 
-    const resetForm = () => { setNewTitle(''); setNewContent(''); setNewType('info'); setEditingId(null); };
-    const startEdit = (ann: Announcement) => { setNewTitle(ann.title); setNewContent(ann.content); setNewType(ann.type); setEditingId(ann.id); setTimeout(() => { titleInputRef.current?.focus(); }, 100); };
+    const generateKeys = async () => {
+        setIsLoading(true);
+        try {
+            const newKeys = [];
+            for (let i = 0; i < keyQty; i++) {
+                const random = Math.random().toString(36).substring(2, 10).toUpperCase();
+                newKeys.push({ key: `${random.slice(0,4)}-${random.slice(4)}`, tool: keyTool, is_used: false });
+            }
+            const { data, error } = await supabase.from('access_keys').insert(newKeys).select();
+            if (data) setAccessKeys(prev => [...data, ...prev]);
+            setToast({ msg: `Generated ${keyQty} keys`, type: 'success' });
+        } finally { setIsLoading(false); }
+    };
 
     const saveAnnouncement = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newTitle || !newContent) return;
         setIsLoading(true);
         try {
             if (editingId) {
-                const { error } = await supabase.from('announcements').update({ title: newTitle, content: newContent, type: newType }).eq('id', editingId);
-                if (error) throw error;
+                await supabase.from('announcements').update({ title: newTitle, content: newContent, type: newType }).eq('id', editingId);
                 setAnnouncements(prev => prev.map(a => a.id === editingId ? { ...a, title: newTitle, content: newContent, type: newType } : a));
-                setToast({ msg: 'Template updated successfully', type: 'success' });
             } else {
-                const { data, error } = await supabase.from('announcements').insert([{ title: newTitle, content: newContent, type: newType, is_active: false }]).select();
-                if (error) throw error;
+                const { data } = await supabase.from('announcements').insert([{ title: newTitle, content: newContent, type: newType, is_active: false }]).select();
                 if (data) setAnnouncements(prev => [data[0], ...prev]);
-                setToast({ msg: 'Template created', type: 'success' });
             }
-            resetForm();
-        } catch (error: any) { setToast({ msg: 'Save failed: ' + getErrMsg(error), type: 'error' }); }
-        finally { setIsLoading(false); }
-    };
-
-    const deleteAnnouncement = async (id: string) => {
-        if (!confirm('Are you sure you want to delete this template?')) return;
-        try {
-            const { error } = await supabase.from('announcements').delete().eq('id', id);
-            if (error) throw error;
-            setAnnouncements(announcements.filter(a => a.id !== id));
-            setToast({ msg: 'Deleted', type: 'success' });
-        } catch (error: any) { setToast({ msg: 'Delete failed: ' + getErrMsg(error), type: 'error' }); }
+            setNewTitle(''); setNewContent(''); setEditingId(null);
+        } finally { setIsLoading(false); }
     };
 
     const activateAnnouncement = async (id: string) => {
         setIsLoading(true);
         try {
-            await supabase.from('announcements').update({ is_active: false }).neq('id', '00000000-0000-0000-0000-000000000000'); 
-            const { error } = await supabase.from('announcements').update({ is_active: true }).eq('id', id);
+            const target = announcements.find(a => a.id === id);
+            if (!target) return;
+            const nextStatus = !target.is_active;
+            if (nextStatus) {
+                await supabase.from('announcements').update({ is_active: false }).neq('id', id);
+            }
+            const { error } = await supabase.from('announcements').update({ is_active: nextStatus }).eq('id', id);
             if (error) throw error;
-            setAnnouncements(announcements.map(a => ({ ...a, is_active: a.id === id })));
-            setToast({ msg: 'Announcement Live!', type: 'success' });
-        } catch (error: any) { setToast({ msg: 'Activation failed: ' + getErrMsg(error), type: 'error' }); }
-        finally { setIsLoading(false); }
-    };
-
-    const deactivateAll = async () => {
-        setIsLoading(true);
-        try {
-            const { error } = await supabase.from('announcements').update({ is_active: false }).neq('id', '00000000-0000-0000-0000-000000000000');
-            if (error) throw error;
-            setAnnouncements(announcements.map(a => ({ ...a, is_active: false })));
-            setToast({ msg: 'All announcements disabled', type: 'success' });
-        } catch (error: any) { setToast({ msg: 'Deactivation failed: ' + getErrMsg(error), type: 'error' }); }
-        finally { setIsLoading(false); }
-    };
-
-    const copySql = () => { navigator.clipboard.writeText(SQL_SCRIPT); setToast({ msg: 'SQL Copied to Clipboard', type: 'success' }); };
-
-    const filteredUsers = users.filter(u => {
-        const matchesSearch = u.email.toLowerCase().includes(search.toLowerCase()) || u.id.includes(search);
-        const isExpired = u.subscription_end && new Date(u.subscription_end) < new Date();
-        const isActive = u.is_subscribed && !isExpired;
-        const isOnline = checkIsOnline(u.last_seen);
-        if (filterStatus === 'active' && !isActive) return false;
-        if (filterStatus === 'online' && !isOnline) return false;
-        return matchesSearch;
-    });
-
-    const stats = {
-        total: users.length,
-        active: users.filter(u => {
-            const isExpired = u.subscription_end && new Date(u.subscription_end) < new Date();
-            return u.is_subscribed && !isExpired;
-        }).length,
-        online: users.filter(u => checkIsOnline(u.last_seen)).length
+            setAnnouncements(prev => prev.map(a => {
+                if (a.id === id) return { ...a, is_active: nextStatus };
+                if (nextStatus) return { ...a, is_active: false };
+                return a;
+            }));
+            setToast({ msg: nextStatus ? 'Broadcast is now Live' : 'Broadcast stopped', type: 'success' });
+        } catch (err: any) {
+            setToast({ msg: 'Failed to update broadcast status', type: 'error' });
+        } finally { setIsLoading(false); }
     };
 
     return (
         <div className="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8 animate-fade-in">
-                <div>
-                    <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Admin Console</h1>
-                    <p className="text-slate-500 mt-1">System management and technical configurations.</p>
-                </div>
-                <div className="flex gap-4">
-                    <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center min-w-[90px]">
-                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Users</span>
-                        <span className="text-2xl font-bold text-slate-800">{stats.total}</span>
-                    </div>
-                    <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center min-w-[90px]">
-                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Active</span>
-                        <span className="text-2xl font-bold text-emerald-600">{stats.active}</span>
-                    </div>
-                    <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center min-w-[90px]">
-                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Online</span>
-                        <span className="text-2xl font-bold text-blue-600 relative">
-                            {stats.online}
-                            <span className="absolute top-0 -right-2 w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
-                        </span>
-                    </div>
-                </div>
+            <ConfirmationModal isOpen={confirmConfig.isOpen} title={confirmConfig.title} message={confirmConfig.message} confirmLabel={confirmConfig.confirmLabel} type={confirmConfig.type} onConfirm={() => { confirmConfig.onConfirm(); setConfirmConfig(prev => ({ ...prev, isOpen: false })); }} onCancel={() => setConfirmConfig(prev => ({ ...prev, isOpen: false }))} />
+
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+                <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Admin Console</h1>
             </div>
 
-            <div className="flex space-x-1 bg-slate-200/50 p-1 rounded-xl mb-6 w-full max-w-xl">
-                <button onClick={() => setActiveTab('users')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'users' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Users</button>
-                <button onClick={() => setActiveTab('announcements')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'announcements' ? 'bg-white text-indigo-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Announcements</button>
-                <button onClick={() => setActiveTab('guide')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'guide' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Setup & Guide</button>
+            <div className="flex space-x-1 bg-slate-200/50 p-1 rounded-xl mb-6 w-full max-w-2xl overflow-x-auto">
+                <button onClick={() => setActiveTab('users')} className={`flex-1 py-2.5 px-6 text-sm font-bold rounded-lg transition-all ${activeTab === 'users' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>Personnel</button>
+                <button onClick={() => setActiveTab('keys')} className={`flex-1 py-2.5 px-6 text-sm font-bold rounded-lg transition-all ${activeTab === 'keys' ? 'bg-white text-indigo-900 shadow-sm' : 'text-slate-500'}`}>Key Matrix</button>
+                <button onClick={() => setActiveTab('config')} className={`flex-1 py-2.5 px-6 text-sm font-bold rounded-lg transition-all ${activeTab === 'config' ? 'bg-white text-emerald-900 shadow-sm' : 'text-slate-500'}`}>Global Config</button>
+                <button onClick={() => setActiveTab('announcements')} className={`flex-1 py-2.5 px-6 text-sm font-bold rounded-lg transition-all ${activeTab === 'announcements' ? 'bg-white text-indigo-900 shadow-sm' : 'text-slate-500'}`}>Broadcasts</button>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col min-h-[500px] animate-slide-up relative">
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden min-h-[600px] relative">
                 {isLoading && <LoadingOverlay message="Processing..." color="slate" />}
                 
                 {activeTab === 'users' && (
-                    <>
-                        <div className="p-4 border-b border-slate-100 bg-slate-50 flex flex-col sm:flex-row justify-between items-center gap-4">
-                            <div className="flex items-center gap-4 flex-grow w-full sm:w-auto">
-                                <div className="relative flex-grow sm:max-w-xs">
-                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg></div>
-                                    <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search users..." className="pl-9 w-full rounded-lg border-slate-200 text-sm focus:ring-indigo-500 focus:border-indigo-500 bg-white" />
-                                </div>
-                                <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
-                                    <span className="text-xs font-bold text-slate-500 uppercase">View:</span>
-                                    <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)} className="text-sm font-semibold text-slate-700 bg-transparent border-none outline-none focus:ring-0 cursor-pointer">
-                                        <option value="all">All Users</option>
-                                        <option value="active">Active Only</option>
-                                        <option value="online">Online Now</option>
-                                    </select>
-                                </div>
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-slate-100">
+                            <thead className="bg-slate-50">
+                                <tr>
+                                    <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase">User</th>
+                                    <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase">Role</th>
+                                    <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase">Status</th>
+                                    <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase">Expiration</th>
+                                    <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase">Control</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-slate-100">
+                                {users.filter(u => u.email.includes(search)).map(u => {
+                                    const isTrialRow = u.trial_end && u.subscription_end && new Date(u.trial_end).getTime() === new Date(u.subscription_end).getTime();
+                                    
+                                    return (
+                                        <tr key={u.id}>
+                                            <td className="px-6 py-4 text-sm font-bold">{u.email}</td>
+                                            <td className="px-6 py-4 text-xs font-black uppercase text-slate-400">{u.role}</td>
+                                            <td className="px-6 py-4">
+                                                <span className={`px-3 py-1 text-[10px] font-black rounded-full uppercase ${u.is_subscribed ? (isTrialRow ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700') : 'bg-slate-100 text-slate-400'}`}>
+                                                    {u.is_subscribed ? (isTrialRow ? 'Trial Active' : 'Authorized') : 'Pending'}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-[11px] font-mono font-bold text-slate-500">
+                                                {u.subscription_end ? new Date(u.subscription_end).toLocaleDateString() : 'N/A'}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-3">
+                                                    {!u.is_subscribed && (
+                                                        <select 
+                                                            value={selectedDurations[u.id] || 'sub_1y'} 
+                                                            onChange={(e) => setSelectedDurations(prev => ({...prev, [u.id]: e.target.value}))}
+                                                            className="text-[10px] font-black uppercase py-1.5 rounded-lg border-slate-200 focus:ring-indigo-500"
+                                                        >
+                                                            <optgroup label="TRIALS">
+                                                                {DURATION_OPTIONS.filter(o => o.type === 'trial').map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                                            </optgroup>
+                                                            <optgroup label="SUBSCRIPTIONS">
+                                                                {DURATION_OPTIONS.filter(o => o.type === 'sub').map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                                            </optgroup>
+                                                        </select>
+                                                    )}
+                                                    <button onClick={() => toggleSubscription(u)} className={`text-[10px] font-black px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 uppercase whitespace-nowrap transition-all ${u.is_subscribed ? 'text-rose-500 border-rose-100 bg-rose-50' : ''}`}>
+                                                        {u.is_subscribed ? 'Revoke Access' : 'Grant Access'}
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+
+                {activeTab === 'keys' && (
+                    <div className="p-8 space-y-8">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                            <div>
+                                <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">Module</label>
+                                <select value={keyTool} onChange={e => setKeyTool(e.target.value)} className="w-full rounded-xl border-slate-200 text-sm font-bold">
+                                    <option value="universal">Universal</option>
+                                    <option value={ToolId.XML_RENUMBER}>{getToolName(ToolId.XML_RENUMBER)}</option>
+                                    <option value={ToolId.CREDIT_GENERATOR}>{getToolName(ToolId.CREDIT_GENERATOR)}</option>
+                                </select>
                             </div>
-                            <div className="flex items-center gap-3 w-full sm:w-auto">
-                                <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
-                                    <span className="text-xs font-bold text-slate-500 uppercase">Grant:</span>
-                                    <select value={duration} onChange={(e) => setDuration(e.target.value)} className="text-sm font-semibold text-indigo-600 bg-transparent border-none outline-none focus:ring-0 cursor-pointer">
-                                        <option value="1min">Test: 1 Min</option>
-                                        <option value="trial">Trial (20 Days)</option>
-                                        <option value="1m">1 Month</option>
-                                        <option value="1y">1 Year</option>
-                                    </select>
-                                </div>
-                                <button onClick={() => fetchUsers(false)} className={`p-2 text-slate-500 hover:text-indigo-600 hover:bg-white rounded-lg transition-all ${isRefetching ? 'animate-spin text-indigo-600' : ''}`} title="Refresh List"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg></button>
-                            </div>
+                            <div><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">Qty</label><input type="number" min="1" max="50" value={keyQty} onChange={e => setKeyQty(parseInt(e.target.value))} className="w-full rounded-xl border-slate-200 text-sm font-bold" /></div>
+                            <button onClick={generateKeys} className="bg-indigo-600 text-white font-black py-2.5 rounded-xl uppercase text-xs">Generate</button>
                         </div>
                         <div className="overflow-x-auto">
                             <table className="min-w-full divide-y divide-slate-100">
                                 <thead className="bg-slate-50">
                                     <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">User</th>
-                                        <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Role</th>
-                                        <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Plan Status</th>
-                                        <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Last Seen</th>
-                                        <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Actions</th>
+                                        <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase">Key</th>
+                                        <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase">Target</th>
+                                        <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase">Status</th>
+                                        <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase">Used By (Email)</th>
+                                        <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase">Device ID</th>
+                                        <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase">Actions</th>
                                     </tr>
                                 </thead>
-                                <tbody className="bg-white divide-y divide-slate-100">
-                                    {filteredUsers.length === 0 ? (
-                                        <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-400 text-sm">No users found.</td></tr>
-                                    ) : (
-                                        filteredUsers.map(u => {
-                                            const isExpired = u.subscription_end && new Date(u.subscription_end) < new Date();
-                                            const isActive = u.is_subscribed && !isExpired;
-                                            const isTrial = isActive && u.trial_end && u.subscription_end && new Date(u.trial_end).getTime() === new Date(u.subscription_end).getTime();
-                                            const isOnline = checkIsOnline(u.last_seen);
-                                            return (
-                                            <tr key={u.id} className="hover:bg-slate-50/80 transition-colors">
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="flex items-center">
-                                                        <div className="relative">
-                                                            <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs uppercase mr-3">{u.email ? u.email.substring(0,2) : '??'}</div>
-                                                            {isOnline && <span className="absolute -top-0.5 -right-0.5 block h-2.5 w-2.5 rounded-full ring-2 ring-white bg-emerald-400"></span>}
-                                                        </div>
-                                                        <div className="flex flex-col">
-                                                            <span className="text-sm font-medium text-slate-900">{u.email}</span>
-                                                            <span className="text-[10px] text-slate-400 font-mono">{u.id.split('-')[0]}...</span>
-                                                        </div>
+                                <tbody className="divide-y divide-slate-100">
+                                    {accessKeys.map(k => {
+                                        const linkedUser = users.find(u => u.id === k.user_id);
+                                        return (
+                                            <tr key={k.id}>
+                                                <td className="px-6 py-4 font-mono font-black text-indigo-600">{k.key}</td>
+                                                <td className="px-6 py-4 text-xs font-bold">{getToolName(k.tool)}</td>
+                                                <td className="px-6 py-4">
+                                                    {k.is_used ? (
+                                                        <span className="text-[9px] font-black uppercase text-rose-500 bg-rose-50 px-2 py-0.5 rounded border border-rose-100">Used</span>
+                                                    ) : (
+                                                        <span className="text-[9px] font-black uppercase text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">Available</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-6 py-4 text-[11px] font-bold text-slate-600 truncate max-w-[150px]" title={linkedUser?.email}>
+                                                    {linkedUser?.email || (k.user_id ? <span className="text-slate-300 font-mono text-[9px]">{k.user_id.slice(0,8)}...</span> : <span className="text-slate-300 italic font-normal">N/A</span>)}
+                                                </td>
+                                                <td className="px-6 py-4 font-mono text-[9px] text-slate-400 truncate max-w-[120px]" title={k.device_id}>
+                                                    {k.device_id || <span className="text-slate-300">N/A</span>}
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center gap-3">
+                                                        {k.is_used && (
+                                                            <button 
+                                                                onClick={() => handleRevokeKey(k)}
+                                                                className="p-1.5 text-amber-500 hover:bg-amber-50 rounded-lg transition-colors"
+                                                                title="Revoke and Reset Key"
+                                                            >
+                                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                                                            </button>
+                                                        )}
+                                                        <button 
+                                                            onClick={() => handleDeleteKey(k.id)}
+                                                            className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                                                            title="Delete Key Permanently"
+                                                        >
+                                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                                        </button>
                                                     </div>
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap"><span onClick={() => toggleAdmin(u)} className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full cursor-pointer border ${u.role === 'admin' ? 'bg-purple-100 text-purple-800 border-purple-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>{u.role}</span></td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    {isActive ? (isTrial ? <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-amber-100 text-amber-800 border border-amber-200">Trial</span> : <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">Active</span>) : <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-slate-100 text-slate-500 border border-slate-200">Inactive</span>}
-                                                    {u.subscription_end && <div className="text-[10px] text-slate-400 mt-1">{new Date(u.subscription_end).toLocaleDateString()}</div>}
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap"><div className="flex items-center gap-1.5"><span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`}></span><span className={`text-xs ${isOnline ? 'font-bold text-slate-700' : 'text-slate-400'}`}>{isOnline ? 'Online' : formatLastSeen(u.last_seen)}</span></div></td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium"><button onClick={() => toggleSubscription(u)} className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors ${u.is_subscribed ? 'text-rose-600 border-rose-200 hover:bg-rose-50' : 'text-emerald-600 border-emerald-200 hover:bg-emerald-50'}`}>{u.is_subscribed ? 'Revoke' : 'Grant'}</button></td>
                                             </tr>
-                                        )})
-                                    )}
+                                        );
+                                    })}
                                 </tbody>
                             </table>
-                        </div>
-                    </>
-                )}
-
-                {activeTab === 'announcements' && (
-                    <div className="flex flex-col h-full">
-                        <div className="grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-slate-200 h-full">
-                            <div className="p-6 bg-slate-50 lg:col-span-1">
-                                <div className="flex justify-between items-center mb-4">
-                                    <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">{editingId ? 'Edit Template' : 'Create Template'}</h3>
-                                    {editingId && <button onClick={resetForm} className="text-xs font-bold text-slate-500 hover:text-slate-800 underline">Cancel</button>}
-                                </div>
-                                <form onSubmit={saveAnnouncement} className="space-y-4">
-                                    <div><label className="block text-xs font-semibold text-slate-500 mb-1">Title</label><input ref={titleInputRef} type="text" required value={newTitle} onChange={(e) => setNewTitle(e.target.value)} className="w-full rounded-lg border-slate-200 text-sm focus:ring-indigo-500 focus:border-indigo-500" placeholder="System Maintenance" /></div>
-                                    <div><label className="block text-xs font-semibold text-slate-500 mb-1">Type</label><select value={newType} onChange={(e) => setNewType(e.target.value as any)} className="w-full rounded-lg border-slate-200 text-sm focus:ring-indigo-500 focus:border-indigo-500 bg-white"><option value="info">Info (Blue)</option><option value="warning">Warning (Orange)</option><option value="error">Error (Red)</option><option value="success">Success (Green)</option></select></div>
-                                    <div><label className="block text-xs font-semibold text-slate-500 mb-1">Message Content</label><textarea required value={newContent} onChange={(e) => setNewContent(e.target.value)} rows={6} className="w-full rounded-lg border-slate-200 text-sm focus:ring-indigo-500 focus:border-indigo-500 resize-none" placeholder="We are updating the system..." /></div>
-                                    <button type="submit" className={`w-full text-white font-bold py-2 px-4 rounded-lg shadow-sm transition-colors text-sm ${editingId ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-emerald-600 hover:bg-emerald-700'}`}>{editingId ? 'Update Template' : 'Save Template'}</button>
-                                </form>
-                            </div>
-                            <div className="lg:col-span-2 flex flex-col max-h-[600px]">
-                                <div className="p-4 border-b border-slate-200 bg-white flex justify-between items-center sticky top-0 z-10"><h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Saved Templates</h3><button onClick={fetchAnnouncements} className="text-slate-400 hover:text-indigo-600"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg></button></div>
-                                <div className="overflow-y-auto custom-scrollbar p-4 space-y-3 bg-slate-50/30 flex-grow">
-                                    {announcements.map(ann => (
-                                        <div key={ann.id} className={`bg-white border rounded-xl p-4 transition-all ${editingId === ann.id ? 'border-indigo-400 ring-2 ring-indigo-100 shadow-md' : ann.is_active ? 'border-emerald-400 ring-1 ring-emerald-400 shadow-md' : 'border-slate-200 hover:border-slate-300 shadow-sm'}`}>
-                                            <div className="flex justify-between items-start mb-2">
-                                                <div className="flex items-center gap-2"><span className={`w-2 h-2 rounded-full ${ann.type === 'warning' ? 'bg-amber-500' : ann.type === 'error' ? 'bg-rose-500' : ann.type === 'success' ? 'bg-emerald-500' : 'bg-blue-500'}`}></span><h4 className="font-bold text-slate-800 text-sm">{ann.title}</h4>{ann.is_active && <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Active</span>}</div>
-                                                <div className="flex items-center gap-2">
-                                                    {!ann.is_active && <button onClick={() => activateAnnouncement(ann.id)} className="text-xs font-bold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded transition-colors">Go Live</button>}
-                                                    <button onClick={() => startEdit(ann)} className="text-slate-400 hover:text-indigo-600 p-1.5 hover:bg-indigo-50 rounded transition-colors" title="Edit"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button>
-                                                    <button onClick={() => deleteAnnouncement(ann.id)} className="text-slate-400 hover:text-rose-500 p-1.5 hover:bg-rose-50 rounded transition-colors" title="Delete"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
-                                                </div>
-                                            </div>
-                                            <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-2 rounded border border-slate-100">{ann.content}</p>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
                         </div>
                     </div>
                 )}
 
-                {activeTab === 'guide' && (
-                    <div className="flex flex-col h-full p-8 overflow-y-auto custom-scrollbar">
-                        <div className="max-w-4xl mx-auto space-y-12">
-                            <section>
-                                <h3 className="text-2xl font-bold text-slate-900 mb-4 flex items-center gap-2">
-                                    <svg className="w-6 h-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 12V5.25" /></svg>
-                                    Desktop Deployment (.exe)
-                                </h3>
-                                <p className="text-slate-600 mb-6 leading-relaxed">
-                                    This application is built with Electron and can be compiled into a standalone Windows executable. 
-                                    Follow these steps to generate a local installer:
-                                </p>
-                                <div className="bg-slate-900 rounded-2xl p-6 font-mono text-sm text-indigo-300 space-y-3 shadow-xl">
-                                    <div className="flex gap-4"><span className="text-slate-500">1.</span> <span>npm install</span></div>
-                                    <div className="flex gap-4"><span className="text-slate-500">2.</span> <span>npm run build</span></div>
-                                    <div className="flex gap-4"><span className="text-slate-500">3.</span> <span>npm run electron:build</span></div>
-                                    <div className="pt-4 border-t border-slate-800 text-slate-400 text-xs italic">// The portable installer will be generated in the /release folder.</div>
-                                </div>
-                            </section>
-
-                            <section>
-                                <div className="flex justify-between items-center mb-4">
-                                    <h3 className="text-2xl font-bold text-slate-900">Database Setup (Supabase)</h3>
-                                    <button onClick={copySql} className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 border border-indigo-100">
-                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
-                                        Copy SQL Script
-                                    </button>
-                                </div>
-                                <div className="bg-amber-50 border-l-4 border-amber-400 p-4 mb-6 rounded-r-xl">
-                                    <p className="text-sm text-amber-800">
-                                        <strong>Admin Setup:</strong> After running the script, sign up in the app, then manually run: <br/>
-                                        <code>update public.profiles set role = 'admin' where email = 'your_email';</code>
-                                    </p>
-                                </div>
-                                <div className="h-96 bg-slate-900 rounded-2xl overflow-hidden shadow-inner border border-slate-800">
-                                    <textarea readOnly value={SQL_SCRIPT} className="w-full h-full bg-transparent text-slate-300 font-mono text-xs p-6 resize-none focus:outline-none" />
-                                </div>
-                            </section>
+                {activeTab === 'config' && (
+                    <div className="p-10 space-y-10">
+                        <div>
+                            <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-2">Free Tool Assignments</h3>
+                            <p className="text-sm text-slate-500 mb-8">Assigned tools automatically bypass all guards. Access expires exactly 7 days after activation.</p>
+                            
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {Object.values(ToolId).filter(id => id !== 'dashboard' && id !== 'docs').map(tid => {
+                                    const expiry = freeToolsData[tid];
+                                    const isFree = !!expiry && new Date(expiry) > new Date();
+                                    return (
+                                        <div key={tid} onClick={() => toggleFreeTool(tid)} className={`p-6 rounded-[2rem] border-2 cursor-pointer transition-all flex items-center justify-between group ${isFree ? 'border-emerald-500 bg-emerald-50 shadow-lg shadow-emerald-100' : 'border-slate-100 hover:border-slate-200 bg-white'}`}>
+                                            <div className="flex flex-col">
+                                                <span className={`text-sm font-black uppercase tracking-tight ${isFree ? 'text-emerald-700' : 'text-slate-700'}`}>{getToolName(tid)}</span>
+                                                {isFree ? (
+                                                    <span className="text-[9px] font-bold text-emerald-600 mt-1 uppercase tracking-widest flex items-center gap-1.5">
+                                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                                        Ends: {new Date(expiry).toLocaleDateString()}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-widest">Restricted</span>
+                                                )}
+                                            </div>
+                                            <div className={`w-12 h-6 rounded-full relative transition-colors ${isFree ? 'bg-emerald-500' : 'bg-slate-200'}`}>
+                                                <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all shadow-sm ${isFree ? 'left-7' : 'left-1'}`}></div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
                         </div>
+                        
+                        <div className="p-6 bg-blue-50 border border-blue-100 rounded-3xl flex items-start gap-4">
+                             <div className="p-2 bg-white rounded-lg text-blue-500 shadow-sm"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div>
+                             <div>
+                                 <p className="text-sm font-bold text-blue-900 uppercase tracking-tight">Automation Protocol</p>
+                                 <p className="text-xs text-blue-700 mt-1 leading-relaxed">The application core validates expiry dates on every session start. No manual cleanup is required to re-restrict modules after the 7-day window concludes.</p>
+                             </div>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'announcements' && (
+                    <div className="grid grid-cols-1 lg:grid-cols-3 divide-x divide-slate-200 h-full min-h-[600px]">
+                        <div className="p-8 bg-white"><h3 className="text-xs font-black text-slate-400 uppercase mb-6">Template Editor</h3><form onSubmit={saveAnnouncement} className="space-y-6"><div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Title</label><input type="text" required value={newTitle} onChange={e => setNewTitle(e.target.value)} className="w-full rounded-xl border-slate-200 text-sm font-bold" /></div><div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Type</label><select value={newType} onChange={e => setNewType(e.target.value as any)} className="w-full rounded-xl border-slate-200 text-sm font-bold"><option value="info">Info</option><option value="warning">Warning</option><option value="success">Success</option><option value="error">Error</option></select></div><div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Content</label><textarea required value={newContent} onChange={e => setNewContent(e.target.value)} rows={4} className="w-full rounded-xl border-slate-200 text-sm font-medium" /></div><button type="submit" className="w-full bg-slate-900 text-white font-black py-4 rounded-xl uppercase text-xs">Save Template</button></form></div>
+                        <div className="lg:col-span-2 p-8 bg-slate-50/30 overflow-y-auto"><div className="grid grid-cols-1 md:grid-cols-2 gap-4">{announcements.map(a => (
+                            <div key={a.id} className={`p-6 border-2 rounded-[2.5rem] bg-white ${a.is_active ? 'border-emerald-500' : 'border-slate-100'}`}><h4 className="font-black text-sm uppercase mb-2">{a.title}</h4><p className="text-xs text-slate-500 mb-4 line-clamp-2">{a.content}</p><button onClick={() => activateAnnouncement(a.id)} className={`text-[10px] font-black uppercase ${a.is_active ? 'text-emerald-500' : 'text-slate-400'}`}>{a.is_active ? 'Live' : 'Go Live'}</button></div>
+                        ))}</div></div>
                     </div>
                 )}
             </div>

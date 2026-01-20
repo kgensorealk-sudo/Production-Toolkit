@@ -255,7 +255,8 @@ const XmlRenumber: React.FC = () => {
                 renumberedText = renumberedText.replace(singleCrossRefRegex, (match, openTag, refId, content, closeTag) => {
                     const newNumber = referenceMap[refId];
                     if (newNumber === undefined) return match; 
-                    return `${openTag}${newNumber}${closeTag}`;
+                    // Updated: include prefix and suffix within the tag
+                    return `${openTag}${prefix}${newNumber}${suffix}${closeTag}`;
                 });
 
                 const collapseRanges = (numbers: number[]) => {
@@ -280,7 +281,8 @@ const XmlRenumber: React.FC = () => {
                     const refIds = refIdsString.split(/\s+/).filter((id: string) => id.trim() !== '');
                     const uniqueNumbers = [...new Set(refIds.map((id: string) => referenceMap[id]).filter((num: number) => num !== undefined))];
                     if (uniqueNumbers.length === 0) return match; 
-                    return `${openTag}${collapseRanges(uniqueNumbers as number[])}${closeTag}`;
+                    // Updated: include prefix and suffix within the tag
+                    return `${openTag}${prefix}${collapseRanges(uniqueNumbers as number[])}${suffix}${closeTag}`;
                 });
 
                 // Extraction of Other Refs from the FINAL renumbered text

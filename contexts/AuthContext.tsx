@@ -3,215 +3,177 @@ import React, { createContext, useContext, useEffect, useState, useRef } from 'r
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../supabaseClient';
 import { UserProfile } from '../types';
+import { getDeviceId } from '../utils/device';
+
+interface FreeToolStatus {
+    id: string;
+    expires_at: string;
+}
 
 interface AuthContextType {
     session: Session | null;
     user: User | null;
     profile: UserProfile | null;
+    freeTools: string[];
+    freeToolsData: Record<string, string>; // Maps ID to Expiry ISO string
     loading: boolean;
-    signOut: () => Promise<void>;
+    signOut: (isAuto?: boolean) => Promise<void>;
+    refreshProfile: () => Promise<void>;
+    refreshFreeTools: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+const INACTIVITY_LIMIT = 4 * 60 * 60 * 1000; 
+const ACTIVITY_STORAGE_KEY = 'prod_toolkit_last_active';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [session, setSession] = useState<Session | null>(null);
     const [user, setUser] = useState<User | null>(null);
     const [profile, setProfile] = useState<UserProfile | null>(null);
+    const [freeTools, setFreeTools] = useState<string[]>([]);
+    const [freeToolsData, setFreeToolsData] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(true);
     
     const lastUserId = useRef<string | null>(null);
-    const lastUpdateRef = useRef<number>(0);
 
-    // Heartbeat: Updates 'last_seen' in the DB to keep Online status accurate
-    const updatePresence = async (userId: string) => {
-        const now = Date.now();
-        // Throttle updates to once every 4 minutes to save database resources
-        // Admin console considers users online if seen within last 5 mins.
-        if (now - lastUpdateRef.current < 4 * 60 * 1000) return;
+    const resetInactivityTimestamp = () => {
+        localStorage.setItem(ACTIVITY_STORAGE_KEY, Date.now().toString());
+    };
 
+    const fetchFreeTools = async () => {
         try {
-            await supabase
-                .from('profiles')
-                .update({ last_seen: new Date().toISOString() })
-                .eq('id', userId);
+            const { data, error } = await supabase
+                .from('system_settings')
+                .select('free_tools_data')
+                .eq('id', 'global')
+                .maybeSingle();
             
-            lastUpdateRef.current = now;
+            if (data?.free_tools_data) {
+                const now = new Date();
+                const activeMap: Record<string, string> = {};
+                const activeIds: string[] = [];
+
+                Object.entries(data.free_tools_data).forEach(([tid, expiry]) => {
+                    const expiryDate = new Date(expiry as string);
+                    if (expiryDate > now) {
+                        activeMap[tid] = expiry as string;
+                        activeIds.push(tid);
+                    }
+                });
+
+                setFreeTools(activeIds);
+                setFreeToolsData(activeMap);
+            }
         } catch (err) {
-            console.warn("Presence update failed silently:", err);
+            console.error("Failed to fetch free tools:", err);
         }
     };
 
-    // Storage Sanitizer: Clears Supabase specific local storage if it's corrupted
-    const clearCorruptedAuth = () => {
-        console.warn("Clearing corrupted auth storage...");
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && (key.startsWith('sb-') || key.includes('supabase.auth.token'))) {
-                localStorage.removeItem(key);
-            }
-        }
-    };
-
-    const fetchProfile = async (userId: string) => {
-        try {
-            const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Profile fetch timeout')), 10000)
-            );
-
-            const fetchPromise = supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', userId)
-                .single();
-
-            const result = await Promise.race([fetchPromise, timeoutPromise]) as any;
-            const { data, error } = result;
-            
-            if (error) throw error;
-
-            let isActive = data.is_subscribed;
-            let shouldUpdateDb = false;
-            
-            if (data.subscription_end) {
-                const endDate = new Date(data.subscription_end);
-                if (endDate < new Date()) {
-                    isActive = false;
-                    if (data.is_subscribed) shouldUpdateDb = true;
-                }
-            }
-
-            if (shouldUpdateDb) {
-                supabase.from('profiles').update({ is_subscribed: false }).eq('id', userId)
-                    .then(({ error }) => { if (error) console.warn("Sync failed:", error.message); });
-            }
-
-            const finalProfile = { ...data, is_subscribed: isActive };
-            setProfile(finalProfile);
-            localStorage.setItem(`profile_cache_${userId}`, JSON.stringify(finalProfile));
-
-            // Initial presence update upon login/load
-            updatePresence(userId);
-
-        } catch (err: any) {
-            console.warn("Using cached profile due to network/fetch error:", err.message);
-            const cachedStr = localStorage.getItem(`profile_cache_${userId}`);
-            if (cachedStr) {
-                const cachedProfile = JSON.parse(cachedStr);
-                setProfile(cachedProfile);
-            } else {
-                setProfile({ id: userId, email: '', role: 'user', is_subscribed: false });
-            }
-        }
-    };
-
-    // Presence Heartbeat Loop
-    useEffect(() => {
-        if (!user?.id) return;
-
-        const intervalId = setInterval(() => {
-            updatePresence(user.id);
-        }, 60 * 1000); // Check every minute, updatePresence throttles it to 4 mins
-
-        return () => clearInterval(intervalId);
-    }, [user?.id]);
-
-    useEffect(() => {
-        if (profile?.is_subscribed && profile.subscription_end) {
-            const endDate = new Date(profile.subscription_end).getTime();
-            const now = new Date().getTime();
-            const timeLeft = endDate - now;
-            if (timeLeft > 0 && timeLeft < 2147483647) {
-                const timerId = setTimeout(() => { window.location.reload(); }, timeLeft);
-                return () => clearTimeout(timerId);
-            }
-        }
-    }, [profile]);
-
-    useEffect(() => {
-        let mounted = true;
-
-        const initSession = async () => {
-            try {
-                const { data: { session }, error } = await supabase.auth.getSession();
-                
-                if (error) {
-                    if (error.message.includes('Refresh Token') || error.message.includes('not found')) {
-                        clearCorruptedAuth();
-                        if (mounted) setLoading(false);
-                        return;
-                    }
-                    throw error;
-                }
-
-                if (mounted) {
-                    setSession(session);
-                    setUser(session?.user ?? null);
-                    if (session?.user) {
-                        lastUserId.current = session.user.id;
-                        await fetchProfile(session.user.id);
-                    }
-                }
-            } catch (err) {
-                console.error("Session initialization failed:", err);
-            } finally {
-                if (mounted) setLoading(false);
-            }
-        };
-
-        initSession();
-
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-            if (!mounted) return;
-            
-            if (event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
-                setProfile(null);
-                setUser(null);
-                setSession(null);
-                lastUserId.current = null;
-                lastUpdateRef.current = 0;
-            } else if (session?.user) {
-                setSession(session);
-                setUser(session.user);
-                if (session.user.id !== lastUserId.current) {
-                    lastUserId.current = session.user.id;
-                    await fetchProfile(session.user.id);
-                }
-            }
-            setLoading(false);
-        });
-
-        return () => {
-            mounted = false;
-            subscription.unsubscribe();
-        };
-    }, []);
-
-    const signOut = async () => {
+    const signOut = async (isAuto: boolean = false) => {
         try {
             setLoading(true); 
             if (user?.id) localStorage.removeItem(`profile_cache_${user.id}`);
             await supabase.auth.signOut();
-            clearCorruptedAuth();
+            localStorage.removeItem(ACTIVITY_STORAGE_KEY);
+            if (isAuto) sessionStorage.setItem('session_expired', 'true');
             setProfile(null);
             setSession(null);
             setUser(null);
             lastUserId.current = null;
-            lastUpdateRef.current = 0;
         } catch (error) {
             console.error("Sign out error:", error);
-            clearCorruptedAuth();
         } finally {
             setLoading(false);
         }
     };
 
-    const value = { session, user, profile, loading, signOut };
+    const fetchProfile = async (userId: string) => {
+        try {
+            const { data: profileData, error: profileError } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', userId)
+                .single();
+            
+            if (profileError) throw profileError;
+
+            const { data: keysData } = await supabase
+                .from('access_keys')
+                .select('tool')
+                .eq('user_id', userId)
+                .eq('is_used', true);
+
+            const unlockedTools = keysData ? keysData.map(k => k.tool) : [];
+
+            let isActive = profileData.is_subscribed;
+            if (profileData.subscription_end) {
+                const endDate = new Date(profileData.subscription_end);
+                if (endDate < new Date()) isActive = false;
+            }
+
+            const finalProfile: UserProfile = { 
+                ...profileData, 
+                is_subscribed: isActive,
+                unlocked_tools: unlockedTools 
+            };
+
+            setProfile(finalProfile);
+        } catch (err: any) {
+            console.error("Profile fetch error:", err);
+        }
+    };
+
+    const refreshProfile = async () => { if (user?.id) await fetchProfile(user.id); };
+
+    useEffect(() => {
+        let mounted = true;
+        const init = async () => {
+            await fetchFreeTools();
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user && mounted) {
+                setSession(session);
+                setUser(session.user);
+                lastUserId.current = session.user.id;
+                resetInactivityTimestamp();
+                await fetchProfile(session.user.id);
+            }
+            if (mounted) setLoading(false);
+        };
+        init();
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+            if (!mounted) return;
+            if (event === 'SIGNED_OUT') {
+                setProfile(null); setUser(null); setSession(null);
+            } else if (session?.user) {
+                setSession(session); setUser(session.user);
+                if (session.user.id !== lastUserId.current) {
+                    lastUserId.current = session.user.id;
+                    await fetchProfile(session.user.id);
+                }
+            }
+        });
+
+        return () => { mounted = false; subscription.unsubscribe(); };
+    }, []);
+
+    const value = { 
+        session, 
+        user, 
+        profile, 
+        freeTools, 
+        freeToolsData,
+        loading, 
+        signOut, 
+        refreshProfile, 
+        refreshFreeTools: fetchFreeTools 
+    };
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = () => {
     const context = useContext(AuthContext);
-    if (context === undefined) throw new Error('useAuth must be used within an AuthProvider');
+    if (context === undefined) throw new Error('useAuth must be used within AuthProvider');
     return context;
 };

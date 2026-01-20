@@ -2,9 +2,9 @@
 {
   "name": "production-toolkit",
   "version": "1.5.0",
-  "description": "Professional Editorial Workflow Suite",
+  "description": "Professional Editorial Workflow Suite for Desktop & Web",
   "main": "electron/main.js",
-  "author": "Editorial Systems Team",
+  "author": "Editorial Systems Pro",
   "license": "MIT",
   "scripts": {
     "dev": "vite",
@@ -35,9 +35,9 @@
     "wait-on": "^7.2.0"
   },
   "build": {
-    "appId": "com.editorial.toolkit",
-    "productName": "Production Toolkit",
-    "copyright": "Copyright © 2025",
+    "appId": "com.prodtoolkit.pro",
+    "productName": "Production Toolkit Pro",
+    "copyright": "Copyright © 2025 Editorial Systems",
     "files": [
       "dist/**/*",
       "electron/**/*"
@@ -49,26 +49,31 @@
       "target": [
         {
           "target": "nsis",
-          "arch": [
-            "x64"
-          ]
+          "arch": ["x64"]
         },
         {
           "target": "portable",
-          "arch": [
-            "x64"
-          ]
+          "arch": ["x64"]
         }
       ],
       "icon": "public/favicon.ico",
+      "publisherName": "Editorial Systems Team",
       "artifactName": "${productName}-v${version}-Setup.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
       "runAfterFinish": true,
       "installerHeaderIcon": "public/favicon.ico"
-    }
+    },
+    "fileAssociations": [
+      {
+        "ext": "xml",
+        "name": "XML Document",
+        "role": "Editor"
+      }
+    ]
   }
 }

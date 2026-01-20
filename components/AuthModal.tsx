@@ -1,31 +1,45 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
-import { AUTH_PREFIX } from '../constants';
+import { useAuth } from '../contexts/AuthContext';
 import { ToolId } from '../types';
+import { getDeviceId } from '../utils/device';
 
 interface AuthModalProps {
-    toolName: ToolId;
+    toolId: ToolId;
     toolDisplayName: string;
     onSuccess: () => void;
-    onCancel: () => void;
 }
 
-const AuthModal: React.FC<AuthModalProps> = ({ toolName, toolDisplayName, onSuccess, onCancel }) => {
+const AuthModal: React.FC<AuthModalProps> = ({ toolId, toolDisplayName, onSuccess }) => {
+    const { user, refreshProfile } = useAuth();
+    const navigate = useNavigate();
     const [key, setKey] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    // Escape to go back
+    useEffect(() => {
+        const handleEsc = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') navigate('/dashboard');
+        };
+        window.addEventListener('keydown', handleEsc);
+        return () => window.removeEventListener('keydown', handleEsc);
+    }, [navigate]);
 
     const validateKey = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
         
         const keyString = key.trim().toUpperCase();
-        if (!keyString) return;
+        if (!keyString || !user) return;
 
         setLoading(true);
         try {
-            // Check if key exists and get its status
+            const currentDeviceId = getDeviceId();
+
+            // 1. Check if key exists
             const { data: keyData, error: fetchError } = await supabase
                 .from('access_keys')
                 .select('*')
@@ -33,35 +47,37 @@ const AuthModal: React.FC<AuthModalProps> = ({ toolName, toolDisplayName, onSucc
                 .single();
 
             if (fetchError || !keyData) {
-                throw new Error("Invalid Key.");
+                throw new Error("Invalid access key.");
             }
 
-            if (keyData.tool !== toolName) {
-                throw new Error(`Key valid for ${keyData.tool} only.`);
+            // 2. Ensure key matches tool
+            if (keyData.tool !== toolId && keyData.tool !== 'universal') {
+                throw new Error(`This key is not valid for ${toolDisplayName}.`);
             }
 
-            // We do not strictly enforce User ID checks in this lightweight version, 
-            // but we ensure the key hasn't been used yet.
-            if (keyData.is_used) {
-                 // Optional: If you implement Supabase Auth, you could check if used_by_uid === current_user.id here
-                throw new Error("Key already used.");
+            // 3. Check usage status with Graceful Re-binding
+            // If the key is used, but belongs to the CURRENT user, we allow them to update the device_id
+            if (keyData.is_used && keyData.user_id !== user.id) {
+                throw new Error("This key is already bound to another user account.");
             }
 
-            // Consume key
+            // 4. Bind (or Re-bind) to current User AND current Device
             const { error: updateError } = await supabase
                 .from('access_keys')
                 .update({ 
                     is_used: true, 
-                    used_at: new Date().toISOString()
+                    used_at: new Date().toISOString(),
+                    user_id: user.id,
+                    device_id: currentDeviceId 
                 })
                 .eq('id', keyData.id);
 
             if (updateError) {
-                throw new Error("Failed to activate key. Please try again.");
+                throw new Error("Activation failed. Please try again.");
             }
 
-            // Success - persist local access
-            localStorage.setItem(AUTH_PREFIX + toolName, 'true');
+            // 5. Success
+            await refreshProfile();
             onSuccess();
         } catch (err: any) {
             console.error(err);
@@ -72,38 +88,60 @@ const AuthModal: React.FC<AuthModalProps> = ({ toolName, toolDisplayName, onSucc
     };
 
     return (
-        <div className="fixed inset-0 z-50 bg-slate-900/95 flex items-center justify-center p-4">
-            <div className="bg-white p-10 rounded-2xl shadow-2xl max-w-sm w-full border border-slate-200 text-center animate-scale-in">
-                <button onClick={onCancel} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
-                <div className="mb-8">
-                    <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+        <div className="absolute inset-0 z-[100] bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-6 animate-fade-in">
+            <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl max-w-sm w-full border border-slate-200 text-center animate-scale-in relative ring-4 ring-slate-900/5">
+                <div className="mb-10">
+                    <div className="w-20 h-20 bg-indigo-50 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-sm border border-indigo-100">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
                     </div>
-                    <h2 className="text-2xl font-bold text-slate-900">Restricted Access</h2>
-                    <p className="text-slate-500 mt-2 text-sm">Enter Access Key for {toolDisplayName}</p>
+                    <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Locked Module</h2>
+                    <p className="text-slate-500 mt-2 text-xs font-bold uppercase tracking-widest">Activation Required: {toolDisplayName}</p>
                 </div>
-                <form onSubmit={validateKey} className="space-y-4">
-                    <input 
-                        type="text" 
-                        value={key}
-                        onChange={(e) => setKey(e.target.value)}
-                        className="w-full px-4 py-3 rounded-xl border border-slate-300 bg-white text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all text-center text-lg tracking-widest font-mono shadow-sm" 
-                        placeholder="XXXX-XXXX" 
-                        autoComplete="off"
-                        disabled={loading}
-                    />
-                    <button 
-                        type="submit" 
-                        disabled={loading || !key}
-                        className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-emerald-500/30 transform transition hover:-translate-y-0.5 focus:ring-4 focus:ring-emerald-200"
-                    >
-                        {loading ? 'Verifying...' : 'Unlock Tool'}
-                    </button>
+
+                <form onSubmit={validateKey} className="space-y-6">
+                    <div className="relative">
+                        <input 
+                            type="text" 
+                            value={key}
+                            onChange={(e) => setKey(e.target.value)}
+                            className="w-full px-4 py-4 rounded-2xl border-2 border-slate-100 bg-slate-50 text-slate-900 focus:ring-0 focus:border-indigo-500 transition-all text-center text-xl tracking-[0.3em] font-mono shadow-inner outline-none uppercase" 
+                            placeholder="XXXX-XXXX" 
+                            autoComplete="off"
+                            disabled={loading}
+                            autoFocus
+                        />
+                    </div>
+                    
+                    <div className="space-y-3">
+                        <button 
+                            type="submit" 
+                            disabled={loading || !key}
+                            className="w-full bg-slate-900 hover:bg-slate-800 disabled:bg-slate-200 text-white font-black py-4 px-4 rounded-2xl shadow-xl shadow-slate-200 transform transition active:scale-95 uppercase tracking-widest text-xs"
+                        >
+                            {loading ? 'Verifying...' : 'Unlock Module'}
+                        </button>
+                        
+                        <button 
+                            type="button"
+                            onClick={() => navigate('/dashboard')}
+                            className="w-full py-3 text-[10px] font-black text-slate-400 hover:text-slate-600 uppercase tracking-[0.2em] transition-colors"
+                        >
+                            Return to Dashboard
+                        </button>
+                    </div>
                 </form>
-                {error && <p className="mt-4 text-red-500 text-sm font-medium">{error}</p>}
-                <button onClick={onCancel} className="mt-6 text-xs text-slate-400 hover:text-slate-600 underline">Cancel</button>
+
+                {error && (
+                    <div className="mt-6 p-3 bg-rose-50 border border-rose-100 rounded-xl animate-shake">
+                        <p className="text-rose-600 text-xs font-bold uppercase tracking-wider">{error}</p>
+                    </div>
+                )}
+                
+                <div className="mt-8 pt-6 border-t border-slate-100">
+                    <p className="text-[9px] text-slate-300 font-bold uppercase tracking-[0.2em]">Hardware-Locked Session</p>
+                </div>
             </div>
         </div>
     );

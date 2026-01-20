@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { diffLines, diffWordsWithSpace, Change } from 'diff';
 import Toast from '../components/Toast';
@@ -281,7 +282,17 @@ const ReferenceDupeChecker: React.FC = () => {
                     }
                 }
 
-                const cleanLabelForCitation = (label: string) => label.replace(/[\[\]]/g, '').trim();
+                /**
+                 * UPDATED STANDARD: Retain brackets within citation tags.
+                 * If label is "1", result is "[1]". If label is "[1]", result remains "[1]".
+                 */
+                const formatCitationLabel = (label: string) => {
+                    const clean = label.trim();
+                    if (!clean.startsWith('[') && !clean.endsWith(']')) {
+                        return `[${clean}]`;
+                    }
+                    return clean;
+                };
 
                 const remappedIds = new Map<string, string>();
                 const bibRemovals: BibRemovalAudit[] = [];
@@ -312,11 +323,11 @@ const ReferenceDupeChecker: React.FC = () => {
 
                 // 2. Remap Singular Cross-Refs
                 const singleRegex = /<ce:cross-ref\b([^>]*?)refid="([^"]+)"([^>]*?)>([\s\S]*?)<\/ce:cross-ref>/g;
-                processedXml = processedXml.replace(singleRegex, (match, before, refid, after, content) => {
+                processedXml = processedXml.replace(singleRegex, (match: string, before: string, refid: string, after: string, content: string): string => {
                     if (remappedIds.has(refid)) {
                         const newRefid = remappedIds.get(refid)!;
                         const rawLabel = globalIdToLabel.get(newRefid) || content;
-                        const resultLabel = cleanLabelForCitation(rawLabel);
+                        const resultLabel = formatCitationLabel(rawLabel);
                         const result = `<ce:cross-ref${before}refid="${newRefid}"${after}>${resultLabel}</ce:cross-ref>`;
                         citationAudits.push({ type: 'relinked', original: match, result });
                         return result;
@@ -326,7 +337,6 @@ const ReferenceDupeChecker: React.FC = () => {
 
                 // 3. Process Plural Cross-Refs (Range Decomposition & Collapsing)
                 const pluralRegex = /<ce:cross-refs\b([^>]*?)refid="([^"]+)"([^>]*?)>([\s\S]*?)<\/ce:cross-refs>/g;
-                /* Add explicit type annotations to replace callback parameters to fix line 339 error */
                 processedXml = processedXml.replace(pluralRegex, (match: string, before: string, refidAttr: string, after: string, content: string): string => {
                     const originalIds = refidAttr.split(/\s+/).filter(id => id.trim() !== '');
                     const hasRemapped = originalIds.some(id => remappedIds.has(id));
@@ -338,9 +348,8 @@ const ReferenceDupeChecker: React.FC = () => {
 
                     const citationData = uniqueIds.map(id => {
                         const rawLabel = globalIdToLabel.get(id) || "??";
-                        const cleanLabel = cleanLabelForCitation(rawLabel);
-                        const numericValue = parseInt(cleanLabel.replace(/\D/g, ''), 10) || 0;
-                        return { id, label: cleanLabel, num: numericValue };
+                        const numericValue = parseInt(rawLabel.replace(/\D/g, ''), 10) || 0;
+                        return { id, label: rawLabel, num: numericValue };
                     });
 
                     citationData.sort((a, b) => a.num - b.num);
@@ -363,11 +372,15 @@ const ReferenceDupeChecker: React.FC = () => {
                         const tagId = `cf${cfCounter}`;
                         cfCounter += 5;
                         if (chunk.length === 1) {
-                            return `<ce:cross-ref id="${tagId}" refid="${chunk[0].id}">${chunk[0].label}</ce:cross-ref>`;
+                            const label = formatCitationLabel(chunk[0].label);
+                            return `<ce:cross-ref id="${tagId}" refid="${chunk[0].id}">${label}</ce:cross-ref>`;
                         } else {
                             const chunkRefIds = chunk.map(item => item.id).join(' ');
-                            const chunkLabel = `${chunk[0].label}–${chunk[chunk.length - 1].label}`;
-                            return `<ce:cross-refs id="${tagId}" refid="${chunkRefIds}">${chunkLabel}</ce:cross-refs>`;
+                            // Format: [1]–[5] or similar, but the whole range is encapsulated in brackets according to new rules
+                            const start = chunk[0].label.replace(/[\[\]]/g, '');
+                            const end = chunk[chunk.length - 1].label.replace(/[\[\]]/g, '');
+                            const rangeLabel = `[${start}–${end}]`;
+                            return `<ce:cross-refs id="${tagId}" refid="${chunkRefIds}">${rangeLabel}</ce:cross-refs>`;
                         }
                     });
 
@@ -393,7 +406,7 @@ const ReferenceDupeChecker: React.FC = () => {
                 generateDiff(input, processedXml);
                 setStep('result');
                 setActiveTab('report');
-                setToast({ msg: "Audit complete. XML updated.", type: "success" });
+                setToast({ msg: "Audit complete. XML updated with bracketed references.", type: "success" });
             } catch (error: any) {
                 console.error(error);
                 setToast({ msg: "Error during merge process.", type: "error" });
@@ -403,7 +416,6 @@ const ReferenceDupeChecker: React.FC = () => {
         }, 800);
     };
 
-    /* Fix potential unknown type issue in catch block */
     const handlePaste = async () => { try { setInput(await navigator.clipboard.readText()); setToast({ msg: "Pasted from clipboard", type: "info" }); } catch (err: any) { setToast({ msg: "Clipboard access denied", type: "error" }); } };
     const copyOutput = () => { navigator.clipboard.writeText(output); setToast({ msg: "Copied XML!", type: "success" }); };
 

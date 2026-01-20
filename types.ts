@@ -34,6 +34,7 @@ export interface UserProfile {
     trial_start?: string;
     trial_end?: string;
     last_seen?: string;
+    unlocked_tools: string[]; // List of tool IDs unlocked via keys
 }
 
 export enum ToolId {
@@ -48,8 +49,8 @@ export enum ToolId {
     REF_DUPE_CHECK = 'refDupeCheck',
     UNCITED_CLEANER = 'uncitedCleaner',
     OTHER_REF_SCANNER = 'otherRefScanner',
-    REFERENCE_EXTRACTOR = 'refExtractor',
-    REF_LIST_PURGER = 'refListPurger',
+    REF_EXTRACTOR = 'refExtractor',
+    REF_PURGER = 'refPurger',
     DOCS = 'docs',
     DASHBOARD = 'dashboard'
 }

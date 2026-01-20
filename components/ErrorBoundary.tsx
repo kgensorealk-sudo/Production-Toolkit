@@ -1,4 +1,4 @@
-import React, { ErrorInfo, ReactNode } from "react";
+import React, { Component, ErrorInfo, ReactNode } from "react";
 
 interface Props {
   children?: ReactNode;
@@ -13,23 +13,14 @@ interface State {
  * ErrorBoundary component to catch JavaScript errors anywhere in their child component tree,
  * log those errors, and display a fallback UI instead of the component tree that crashed.
  */
-class ErrorBoundary extends React.Component<Props, State> {
-  // Fix: Explicitly declare state and props properties to fix 'Property does not exist on type ErrorBoundary' errors
-  public state: State;
-  public props: Props;
+// Use the named Component import to ensure correct generic inheritance for this.props and this.state
+class ErrorBoundary extends Component<Props, State> {
+  // Initialize state as a class property for correct TypeScript inference.
+  public state: State = {
+    hasError: false,
+    error: null,
+  };
 
-  // Use constructor for proper initialization to fix 'Property state does not exist' and 'Property props does not exist' errors
-  constructor(props: Props) {
-    super(props);
-    // Fix: Explicit initialization of state and props to ensure they are recognized by the TypeScript compiler
-    this.state = {
-      hasError: false,
-      error: null,
-    };
-    this.props = props;
-  }
-
-  // getDerivedStateFromError is a static method that allows updating state after an error is thrown in a child component.
   public static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
   }
@@ -39,12 +30,10 @@ class ErrorBoundary extends React.Component<Props, State> {
   }
 
   public render(): ReactNode {
-    // Access state and props from the inherited React.Component properties
-    // Fix: Using explicitly declared class members to avoid undefined property access errors
+    // Accessing state and props via 'this' which are now correctly inherited from Component.
     const { hasError, error } = this.state;
     const { children } = this.props;
 
-    // Check if an error has occurred and render fallback UI.
     if (hasError) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">

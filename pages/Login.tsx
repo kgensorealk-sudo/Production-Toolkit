@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useNavigate } from 'react-router-dom';
 import Toast from '../components/Toast';
@@ -9,8 +9,16 @@ const Login: React.FC = () => {
     const [password, setPassword] = useState('');
     const [isSignUp, setIsSignUp] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
+    const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'|'info'} | null>(null);
     const navigate = useNavigate();
+
+    useEffect(() => {
+        const expired = sessionStorage.getItem('session_expired');
+        if (expired) {
+            setToast({ msg: "Your session has expired due to inactivity. Please sign in again.", type: "warn" });
+            sessionStorage.removeItem('session_expired');
+        }
+    }, []);
 
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -24,25 +32,11 @@ const Login: React.FC = () => {
                 });
                 if (error) throw error;
                 
-                // Create profile with 20-day trial activated by default
                 if (data.user) {
-                    const now = new Date();
-                    const trialEnd = new Date();
-                    trialEnd.setDate(now.getDate() + 20);
-
-                    await supabase.from('profiles').insert([
-                        { 
-                            id: data.user.id, 
-                            email: data.user.email,
-                            is_subscribed: true,
-                            subscription_end: trialEnd.toISOString(),
-                            trial_start: now.toISOString(),
-                            trial_end: trialEnd.toISOString()
-                        }
-                    ]);
+                    // Profile creation is handled by the DB trigger, but we ensure 
+                    // the frontend doesn't assume immediate access.
+                    setToast({ msg: "Account created! Access is pending administrator approval.", type: "info" });
                 }
-
-                setToast({ msg: "Account created! You have a 20-day trial.", type: "success" });
                 setIsSignUp(false);
             } else {
                 const { error } = await supabase.auth.signInWithPassword({
@@ -61,7 +55,6 @@ const Login: React.FC = () => {
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 relative overflow-hidden">
-            {/* Background Decorations */}
             <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-200/30 rounded-full blur-3xl animate-pulse-slow"></div>
             <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-200/30 rounded-full blur-3xl animate-pulse-slow" style={{ animationDelay: '1s' }}></div>
 

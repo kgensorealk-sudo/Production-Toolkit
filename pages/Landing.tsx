@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -61,7 +62,7 @@ const TOOLS_INFO = [
 ];
 
 const Landing: React.FC = () => {
-    const { user, profile, signOut } = useAuth();
+    const { user, profile } = useAuth();
     const navigate = useNavigate();
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const [activeIndex, setActiveIndex] = useState(0);
@@ -109,20 +110,8 @@ const Landing: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 relative flex flex-col font-sans overflow-x-hidden">
-            <header className="px-8 py-6 flex justify-between items-center z-20">
-                <div className="flex items-center gap-2">
-                     <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white shadow-xl shadow-slate-200">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-                        </svg>
-                    </div>
-                    <span className="font-black text-slate-900 tracking-tight text-xl uppercase">Production Toolkit</span>
-                </div>
-                <button onClick={signOut} className="text-xs font-black text-slate-400 hover:text-rose-600 transition-colors bg-white/80 px-4 py-2 rounded-xl shadow-sm border border-slate-100 uppercase tracking-widest">Sign Out</button>
-            </header>
-
-            <main className="flex-grow flex flex-col items-center w-full z-10 py-12 lg:py-24 gap-20">
+        <div className="bg-transparent relative flex flex-col font-sans overflow-x-hidden pt-4 lg:pt-12 pb-24">
+            <main className="flex-grow flex flex-col items-center w-full z-10 gap-20">
                 <div className="max-w-7xl w-full grid grid-cols-1 lg:grid-cols-2 gap-16 items-center px-6">
                     <div className="text-left space-y-10 animate-slide-up">
                         <div>
@@ -157,34 +146,33 @@ const Landing: React.FC = () => {
                             <div className="mb-10 flex justify-center">
                                 <div className={`w-32 h-32 rounded-[2rem] flex items-center justify-center mb-2 shadow-inner bg-slate-50 text-slate-900 border border-slate-100`}>
                                     {isSubscribed ? (
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                     ) : (
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-14 w-14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-14 w-14 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
                                     )}
                                 </div>
                             </div>
 
                             <h2 className="text-4xl font-black text-slate-900 mb-2 uppercase tracking-tighter">
-                                {isSubscribed ? `Ready for Production` : 'Access Restricted'}
+                                {isSubscribed ? `Premium Access` : 'Standard Node'}
                             </h2>
                             <p className="text-sm font-bold text-slate-400 mb-10 uppercase tracking-widest">{user?.email}</p>
                             
-                            {isSubscribed ? (
+                            <div className="space-y-4">
                                 <button onClick={() => navigate('/dashboard')} className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-5 px-10 rounded-2xl shadow-2xl shadow-slate-200 transform transition-all hover:-translate-y-1 active:scale-95 flex items-center justify-center gap-4 uppercase tracking-widest text-sm">
                                     <span>Enter Workspace</span>
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
                                 </button>
-                            ) : (
-                                <div className="space-y-4">
+                                
+                                {!isSubscribed && (
                                     <button 
                                         onClick={() => setIsRequestModalOpen(true)} 
-                                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-5 px-10 rounded-2xl shadow-2xl shadow-indigo-100 transform transition-all hover:-translate-y-1 active:scale-95 uppercase tracking-widest text-sm"
+                                        className="w-full py-4 text-[10px] font-black text-indigo-600 hover:text-indigo-700 uppercase tracking-[0.2em] transition-all"
                                     >
-                                        Request Access
+                                        Upgrade to Full Subscription
                                     </button>
-                                    <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Provisioning required by administrator</p>
-                                </div>
-                            )}
+                                )}
+                            </div>
                         </div>
                         <div className="absolute top-0 right-0 w-32 h-32 bg-slate-50 rounded-bl-[4rem] -mr-16 -mt-16 opacity-50"></div>
                     </div>
@@ -229,7 +217,6 @@ const Landing: React.FC = () => {
                  <div className="absolute bottom-[-10%] right-[-5%] w-[40%] h-[40%] bg-slate-100/50 rounded-full blur-3xl opacity-50"></div>
             </div>
 
-            {/* Request Access Modal */}
             {isRequestModalOpen && (
                 <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
                     <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden animate-scale-in relative ring-4 ring-slate-900/5">
@@ -241,14 +228,14 @@ const Landing: React.FC = () => {
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                                     </svg>
                                 </div>
-                                <h3 className="text-2xl font-black text-white uppercase tracking-tight">Request Access</h3>
+                                <h3 className="text-2xl font-black text-white uppercase tracking-tight">Request Subscription</h3>
                                 <div className="text-indigo-200 text-xs font-bold mt-2 uppercase tracking-[0.2em]">Provisioning Required</div>
                             </div>
                         </div>
 
                         <div className="p-10 space-y-6">
                             <p className="text-slate-600 leading-relaxed text-center font-medium">
-                                To request system access, please contact the <span className="text-indigo-600 font-bold">Administrator</span> directly through <span className="font-bold">Facebook Messenger</span>.
+                                To unlock all tools without individual keys, please contact the <span className="text-indigo-600 font-bold">Administrator</span> directly through <span className="font-bold">Facebook Messenger</span>.
                             </p>
                             
                             <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
