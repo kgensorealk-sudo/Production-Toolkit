@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ToolId } from '../types';
@@ -16,6 +17,9 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
     const location = useLocation();
     const { signOut, profile } = useAuth();
     const [isOnline, setIsOnline] = useState(navigator.onLine);
+    
+    // Detect if running in Electron (.exe) or Web (Vercel)
+    const isDesktop = (window as any).electron !== undefined;
 
     useEffect(() => {
         const handleOnline = () => setIsOnline(true);
@@ -33,20 +37,17 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
         navigate('/login');
     };
 
-    // Simplified Trial Check: If trial_end exists, it's a trial plan
     const isTrial = !!profile?.trial_end;
-
-    // Contextual header styling
     const headerClass = isLanding 
         ? "bg-transparent py-6" 
         : "glass-header sticky top-0 py-3 shadow-sm border-b border-slate-200/60";
 
     return (
         <div className="min-h-screen flex flex-col font-sans text-slate-900 bg-slate-50 selection:bg-indigo-100 overflow-x-hidden">
-            {/* Session Reminders & Warnings */}
+            {/* High-Impact Expiration & Warning Modals */}
             <ExpiryReminderModal />
 
-            {/* Desktop Offline Banner */}
+            {/* System Status Banner */}
             {!isOnline && (
                 <div className="bg-amber-500 text-white text-[10px] font-black uppercase tracking-[0.2em] py-1 text-center animate-pulse z-[60] sticky top-0">
                     System Offline - Local Processing Enabled
@@ -56,7 +57,6 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
             <header className={`${headerClass} transition-all duration-500 z-40 px-4 sm:px-6 lg:px-8`}>
                 <div className="max-w-7xl mx-auto flex justify-between items-center">
                     <div className="flex items-center gap-6">
-                         {/* Navigation to Landing Page */}
                          <div 
                             onClick={() => navigate('/')} 
                             className="flex items-center gap-3 cursor-pointer group"
@@ -69,7 +69,9 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                             </div>
                             <div className="flex flex-col">
                                 <h1 className="text-sm font-black text-slate-900 tracking-tight uppercase leading-none">Production Toolkit Pro</h1>
-                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Desktop Node</span>
+                                <span className={`text-[9px] font-bold uppercase tracking-widest mt-0.5 ${isDesktop ? 'text-indigo-500' : 'text-slate-400'}`}>
+                                    {isDesktop ? 'Desktop Node' : 'Web Node'}
+                                </span>
                             </div>
                         </div>
 
@@ -105,7 +107,6 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                         )}
 
                         <div className="flex items-center gap-2">
-                            {/* Return to Tool Dashboard */}
                             {!isLanding && (
                                 <button 
                                     onClick={() => navigate('/dashboard')} 
@@ -149,7 +150,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">
                     <p>&copy; 2025 Editorial Systems Pro</p>
                     <div className="flex gap-6">
-                        <span>Environment: Desktop Node</span>
+                        <span>Environment: {isDesktop ? 'Desktop Node' : 'Web Node'}</span>
                         <span>v1.5.0</span>
                     </div>
                 </div>

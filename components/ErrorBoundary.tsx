@@ -13,13 +13,15 @@ interface State {
  * ErrorBoundary component to catch JavaScript errors anywhere in their child component tree,
  * log those errors, and display a fallback UI instead of the component tree that crashed.
  */
-// Use the named Component import to ensure correct generic inheritance for this.props and this.state
 class ErrorBoundary extends Component<Props, State> {
-  // Initialize state as a class property for correct TypeScript inference.
-  public state: State = {
-    hasError: false,
-    error: null,
-  };
+  // Fix: Explicitly define constructor to ensure generic inheritance of this.props is correctly recognized by TypeScript
+  constructor(props: Props) {
+    super(props);
+    this.state = {
+      hasError: false,
+      error: null,
+    };
+  }
 
   public static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
