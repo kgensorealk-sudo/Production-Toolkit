@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useRef } from 'r
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../supabaseClient';
 import { UserProfile } from '../types';
+import { INACTIVITY_LIMIT } from '../constants';
 
 interface AuthContextType {
     session: Session | null;
@@ -36,6 +37,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [loading, setLoading] = useState(true);
     
     const lastUserId = useRef<string | null>(null);
+    // Fixed: Use ReturnType<typeof setTimeout> instead of NodeJS.Timeout to avoid namespace issues in browser environments
+    const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const fetchFreeTools = async () => {
         try {
@@ -63,7 +66,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
                 setFreeTools(activeIds);
                 setFreeToolsData(activeMap);
-                console.info(`Auth: Config loaded. ${activeIds.length} free tools.`);
             }
         } catch (err) {
             console.warn("Auth: Free tools fetch suppressed", err);
@@ -82,7 +84,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (profileError) throw profileError;
 
             if (!profileData) {
-                console.info("Auth: No profile record found. Using guest defaults.");
                 setProfile({ id: userId, email: user?.email || '', role: 'user', is_subscribed: false, unlocked_tools: [] });
                 return;
             }
@@ -104,7 +105,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 is_subscribed: isActive,
                 unlocked_tools: unlockedTools 
             });
-            console.info("Auth: Profile fully resolved.");
         } catch (err) {
             console.warn("Auth: Profile fetch suppressed", err);
         }
@@ -113,7 +113,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const signOut = async (isAuto: boolean = false) => {
         try {
             setLoading(true); 
-            console.info("Auth: Signing out...");
+            console.info(isAuto ? "Auth: Auto-signing out due to inactivity..." : "Auth: User signing out...");
             await supabase.auth.signOut();
             localStorage.removeItem(ACTIVITY_STORAGE_KEY);
             if (isAuto) sessionStorage.setItem('session_expired', 'true');
@@ -125,24 +125,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     };
 
+    const resetInactivityTimer = () => {
+        if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
+        
+        // Only track inactivity if a user is actually logged in
+        if (session && user) {
+            inactivityTimer.current = setTimeout(() => {
+                signOut(true);
+            }, INACTIVITY_LIMIT);
+        }
+    };
+
     const refreshProfile = async () => { if (user?.id) await fetchProfile(user.id); };
+
+    // Inactivity Event Listeners
+    useEffect(() => {
+        const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+        
+        const handleInteraction = () => {
+            resetInactivityTimer();
+        };
+
+        if (session && user) {
+            events.forEach(event => window.addEventListener(event, handleInteraction));
+            resetInactivityTimer(); // Start timer on login
+        }
+
+        return () => {
+            events.forEach(event => window.removeEventListener(event, handleInteraction));
+            if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
+        };
+    }, [session, user]);
 
     useEffect(() => {
         let mounted = true;
-        console.info("Auth: Starting system initialization...");
         
-        // Fail-safe Watchdog
         const watchdog = setTimeout(() => {
             if (mounted && loading) {
-                console.error("Auth: Initialization watchdog triggered! Forcing UI unlock.");
+                console.error("Auth: Initialization watchdog triggered.");
                 setLoading(false);
             }
-        }, 8000);
+        }, 10000);
 
         const init = async () => {
             try {
-                // Parallelized start with 10s timeout for cloud environments
-                console.info("Auth: Requesting session...");
                 const results = await withTimeout(
                     Promise.allSettled([
                         fetchFreeTools(),
@@ -153,7 +179,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 );
 
                 if (results === 'timeout') {
-                    console.error("Auth: Supabase initial check timed out.");
                     if (mounted) setLoading(false);
                     return;
                 }
@@ -161,12 +186,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const sessionRes = results[1];
                 if (sessionRes.status === 'fulfilled' && sessionRes.value.data.session) {
                     const currentSession = sessionRes.value.data.session;
-                    console.info("Auth: Session confirmed in init.");
                     if (mounted) {
                         setSession(currentSession);
                         setUser(currentSession.user);
                         lastUserId.current = currentSession.user.id;
-                        // Fetch profile without blocking the 'loading' state resolve
                         fetchProfile(currentSession.user.id);
                     }
                 }
@@ -183,7 +206,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         init();
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
-            console.info(`Auth: State change event: ${event}`);
             if (!mounted) return;
             
             if (event === 'SIGNED_OUT') {
@@ -192,11 +214,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             } else if (newSession?.user) {
                 setSession(newSession); 
                 setUser(newSession.user);
-                
-                // UNLOCK UI IMMEDIATELY
                 setLoading(false); 
                 
-                // Load detailed profile in background
                 if (newSession.user.id !== lastUserId.current) {
                     lastUserId.current = newSession.user.id;
                     fetchProfile(newSession.user.id);

@@ -1,4 +1,3 @@
-
 const { app, BrowserWindow, shell, Menu, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -11,15 +10,19 @@ const stateFilePath = path.join(app.getPath('userData'), 'window-state.json');
 
 function saveState() {
   if (!mainWindow) return;
-  const bounds = mainWindow.getBounds();
-  const state = {
-    width: bounds.width,
-    height: bounds.height,
-    x: bounds.x,
-    y: bounds.y,
-    isMaximized: mainWindow.isMaximized()
-  };
-  fs.writeFileSync(stateFilePath, JSON.stringify(state));
+  try {
+    const bounds = mainWindow.getBounds();
+    const state = {
+      width: bounds.width,
+      height: bounds.height,
+      x: bounds.x,
+      y: bounds.y,
+      isMaximized: mainWindow.isMaximized()
+    };
+    fs.writeFileSync(stateFilePath, JSON.stringify(state));
+  } catch (e) {
+    console.error("Failed to save state", e);
+  }
 }
 
 function loadState() {
@@ -111,7 +114,6 @@ function createWindow() {
         {
           label: 'Documentation',
           click: async () => {
-             // In a real app, this could send an IPC to the renderer to navigate to /docs
              mainWindow.webContents.executeJavaScript(`window.location.hash = "#/docs"`);
           }
         },
@@ -138,17 +140,10 @@ function createWindow() {
     }
     return { action: 'allow' };
   });
-
-  // Security: Prevent unauthorized navigation
-  mainWindow.webContents.on('will-navigate', (event, url) => {
-    const parsedUrl = new URL(url);
-    if (!isDev && parsedUrl.protocol !== 'file:' && !url.includes('supabase.co')) {
-      event.preventDefault();
-    }
-  });
 }
 
-// Optimization for Windows: Disable hardware acceleration if requested or needed
+// Windows Enterprise Fix: If you see a black screen on startup, 
+// uncomment the line below to disable hardware acceleration.
 // app.disableHardwareAcceleration();
 
 app.whenReady().then(() => {

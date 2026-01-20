@@ -35,7 +35,8 @@ class ErrorBoundary extends Component<Props, State> {
   public render(): ReactNode {
     // Accessing state and props via 'this' which are inherited from Component<Props, State>
     const { hasError, error } = this.state;
-    const { children } = this.props;
+    // Fixed: Explicitly cast 'this' to Component<Props, State> to ensure 'props' is recognized by the compiler
+    const { children } = (this as Component<Props, State>).props;
 
     if (hasError) {
       return (
