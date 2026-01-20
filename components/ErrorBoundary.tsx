@@ -14,13 +14,14 @@ interface State {
  * log those errors, and display a fallback UI instead of the component tree that crashed.
  */
 class ErrorBoundary extends Component<Props, State> {
-  // Fix: Explicitly define constructor to ensure generic inheritance of this.props is correctly recognized by TypeScript
+  // Use class field for state to ensure TypeScript correctly recognizes it as a member of the class
+  public state: State = {
+    hasError: false,
+    error: null,
+  };
+
   constructor(props: Props) {
     super(props);
-    this.state = {
-      hasError: false,
-      error: null,
-    };
   }
 
   public static getDerivedStateFromError(error: Error): State {
@@ -32,7 +33,7 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   public render(): ReactNode {
-    // Accessing state and props via 'this' which are now correctly inherited from Component.
+    // Accessing state and props via 'this' which are inherited from Component<Props, State>
     const { hasError, error } = this.state;
     const { children } = this.props;
 

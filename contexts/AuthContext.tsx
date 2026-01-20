@@ -1,14 +1,7 @@
-
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../supabaseClient';
 import { UserProfile } from '../types';
-import { getDeviceId } from '../utils/device';
-
-interface FreeToolStatus {
-    id: string;
-    expires_at: string;
-}
 
 interface AuthContextType {
     session: Session | null;
@@ -24,7 +17,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const INACTIVITY_LIMIT = 4 * 60 * 60 * 1000; 
 const ACTIVITY_STORAGE_KEY = 'prod_toolkit_last_active';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -49,6 +41,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 .eq('id', 'global')
                 .maybeSingle();
             
+            if (error) {
+                console.warn("Free tools fetch error (non-fatal):", error.message);
+                return;
+            }
+
             if (data?.free_tools_data) {
                 const now = new Date();
                 const activeMap: Record<string, string> = {};
@@ -90,13 +87,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const fetchProfile = async (userId: string) => {
         try {
+            // Use maybeSingle to prevent exceptions if profile doesn't exist yet
             const { data: profileData, error: profileError } = await supabase
                 .from('profiles')
                 .select('*')
                 .eq('id', userId)
-                .single();
+                .maybeSingle();
             
-            if (profileError) throw profileError;
+            if (profileError) {
+                console.error("Profile fetch error:", profileError.message);
+                return;
+            }
+
+            // If no profile record found yet, set a minimal guest profile
+            if (!profileData) {
+                setProfile({
+                    id: userId,
+                    email: user?.email || '',
+                    role: 'user',
+                    is_subscribed: false,
+                    unlocked_tools: []
+                });
+                return;
+            }
 
             const { data: keysData } = await supabase
                 .from('access_keys')
@@ -120,7 +133,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             setProfile(finalProfile);
         } catch (err: any) {
-            console.error("Profile fetch error:", err);
+            console.error("Critical error in fetchProfile:", err);
         }
     };
 
@@ -128,34 +141,64 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     useEffect(() => {
         let mounted = true;
+        
         const init = async () => {
-            await fetchFreeTools();
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session?.user && mounted) {
-                setSession(session);
-                setUser(session.user);
-                lastUserId.current = session.user.id;
-                resetInactivityTimestamp();
-                await fetchProfile(session.user.id);
-            }
-            if (mounted) setLoading(false);
-        };
-        init();
+            try {
+                // Ensure the loading state is active initially
+                setLoading(true);
+                
+                // Fetch public tools config first
+                await fetchFreeTools();
+                
+                // Get session
+                const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
+                
+                if (sessionError) throw sessionError;
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-            if (!mounted) return;
-            if (event === 'SIGNED_OUT') {
-                setProfile(null); setUser(null); setSession(null);
-            } else if (session?.user) {
-                setSession(session); setUser(session.user);
-                if (session.user.id !== lastUserId.current) {
-                    lastUserId.current = session.user.id;
-                    await fetchProfile(session.user.id);
+                if (currentSession?.user && mounted) {
+                    setSession(currentSession);
+                    setUser(currentSession.user);
+                    lastUserId.current = currentSession.user.id;
+                    resetInactivityTimestamp();
+                    // Fetch profile but don't block the entire app if it fails
+                    await fetchProfile(currentSession.user.id);
+                }
+            } catch (err) {
+                console.error("Auth initialization failed:", err);
+            } finally {
+                if (mounted) {
+                    setLoading(false);
                 }
             }
+        };
+
+        init();
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+            if (!mounted) return;
+            
+            if (event === 'SIGNED_OUT') {
+                setProfile(null); 
+                setUser(null); 
+                setSession(null);
+                lastUserId.current = null;
+            } else if (newSession?.user) {
+                setSession(newSession); 
+                setUser(newSession.user);
+                if (newSession.user.id !== lastUserId.current) {
+                    lastUserId.current = newSession.user.id;
+                    await fetchProfile(newSession.user.id);
+                }
+            }
+            
+            // If we're still "loading", onAuthStateChange provides a signal to stop
+            setLoading(false);
         });
 
-        return () => { mounted = false; subscription.unsubscribe(); };
+        return () => { 
+            mounted = false; 
+            subscription.unsubscribe(); 
+        };
     }, []);
 
     const value = { 
