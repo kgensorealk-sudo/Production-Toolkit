@@ -59,7 +59,7 @@
           ]
         }
       ],
-      "icon": "public/favicon.ico",
+      "icon": "favicon.png",
       "publisherName": "Editorial Systems Team",
       "artifactName": "${productName}-v${version}-${target}.${ext}"
     },
@@ -69,7 +69,7 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "runAfterFinish": true,
-      "installerHeaderIcon": "public/favicon.ico"
+      "installerHeaderIcon": "favicon.png"
     }
   }
 }

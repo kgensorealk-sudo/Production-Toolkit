@@ -56,7 +56,7 @@ function createWindow() {
       webSecurity: true,
       spellcheck: true
     },
-    icon: path.join(__dirname, '../public/favicon.ico')
+    icon: path.join(__dirname, '../favicon.png')
   });
 
   if (state.isMaximized) {
