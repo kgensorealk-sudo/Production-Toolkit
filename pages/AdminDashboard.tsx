@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import { UserProfile, ToolId } from '../types';
@@ -54,6 +53,23 @@ const getDurationMs = (val: string) => {
     }
 };
 
+// Helper for relative time formatting
+const formatLastSeen = (timestamp?: string) => {
+    if (!timestamp) return 'Never';
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 5) return <span className="text-emerald-500 font-bold uppercase tracking-widest flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Online</span>;
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
+};
+
 const AdminDashboard: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'users' | 'keys' | 'announcements' | 'config'>('users');
     const [isLoading, setIsLoading] = useState(false);
@@ -99,11 +115,15 @@ const AdminDashboard: React.FC = () => {
     const fetchUsers = useCallback(async () => {
         setIsLoading(true);
         try {
-            const { data, error } = await supabase.from('profiles').select('*').order('last_seen', { ascending: false });
+            // Sorting by last_seen descending to show active users first
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('*')
+                .order('last_seen', { ascending: false, nullsFirst: false });
+            
             if (error) throw error;
             setUsers(data || []);
             
-            // Initialize row durations
             const durMap: Record<string, string> = {};
             (data || []).forEach(u => {
                 durMap[u.id] = 'sub_1y';
@@ -194,6 +214,14 @@ const AdminDashboard: React.FC = () => {
         }
     }, [activeTab, fetchUsers, fetchAnnouncements, fetchAccessKeys]);
 
+    // Set up auto-refresh for online status
+    useEffect(() => {
+        if (activeTab === 'users') {
+            const interval = setInterval(fetchUsers, 30000); // Refresh every 30s
+            return () => clearInterval(interval);
+        }
+    }, [activeTab, fetchUsers]);
+
     const toggleSubscription = async (user: UserProfile) => {
         const newVal = !user.is_subscribed;
         const selectedKey = selectedDurations[user.id] || 'sub_1y';
@@ -204,7 +232,6 @@ const AdminDashboard: React.FC = () => {
         if (newVal) {
             const end = new Date(Date.now() + getDurationMs(selectedKey)).toISOString();
             updates.subscription_end = end;
-            // If it's a trial, set trial_end to trigger the label in Layout
             if (durationOption?.type === 'trial') {
                 updates.trial_start = new Date().toISOString();
                 updates.trial_end = end;
@@ -312,7 +339,21 @@ const AdminDashboard: React.FC = () => {
             <ConfirmationModal isOpen={confirmConfig.isOpen} title={confirmConfig.title} message={confirmConfig.message} confirmLabel={confirmConfig.confirmLabel} type={confirmConfig.type} onConfirm={() => { confirmConfig.onConfirm(); setConfirmConfig(prev => ({ ...prev, isOpen: false })); }} onCancel={() => setConfirmConfig(prev => ({ ...prev, isOpen: false }))} />
 
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
-                <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Admin Console</h1>
+                <div className="flex flex-col">
+                    <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Admin Console</h1>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Personnel and License Matrix</p>
+                </div>
+                <div className="bg-slate-100 px-4 py-2 rounded-xl flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">
+                            {users.filter(u => {
+                                if (!u.last_seen) return false;
+                                return (Date.now() - new Date(u.last_seen).getTime()) < (5 * 60 * 1000);
+                            }).length} Nodes Active
+                        </span>
+                    </div>
+                </div>
             </div>
 
             <div className="flex space-x-1 bg-slate-200/50 p-1 rounded-xl mb-6 w-full max-w-2xl overflow-x-auto">
@@ -330,11 +371,11 @@ const AdminDashboard: React.FC = () => {
                         <table className="min-w-full divide-y divide-slate-100">
                             <thead className="bg-slate-50">
                                 <tr>
-                                    <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase">User</th>
-                                    <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase">Role</th>
-                                    <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase">Status</th>
-                                    <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase">Expiration</th>
-                                    <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase">Control</th>
+                                    <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">User Identity</th>
+                                    <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Role</th>
+                                    <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">System Status</th>
+                                    <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Last Presence</th>
+                                    <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Authorization Control</th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-slate-100">
@@ -342,16 +383,28 @@ const AdminDashboard: React.FC = () => {
                                     const isTrialRow = u.trial_end && u.subscription_end && new Date(u.trial_end).getTime() === new Date(u.subscription_end).getTime();
                                     
                                     return (
-                                        <tr key={u.id}>
-                                            <td className="px-6 py-4 text-sm font-bold">{u.email}</td>
+                                        <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
+                                            <td className="px-6 py-4">
+                                                <div className="flex flex-col">
+                                                    <span className="text-sm font-bold text-slate-900">{u.email}</span>
+                                                    <span className="text-[10px] font-mono text-slate-400 uppercase tracking-tighter">{u.id.slice(0, 13)}...</span>
+                                                </div>
+                                            </td>
                                             <td className="px-6 py-4 text-xs font-black uppercase text-slate-400">{u.role}</td>
                                             <td className="px-6 py-4">
-                                                <span className={`px-3 py-1 text-[10px] font-black rounded-full uppercase ${u.is_subscribed ? (isTrialRow ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700') : 'bg-slate-100 text-slate-400'}`}>
-                                                    {u.is_subscribed ? (isTrialRow ? 'Trial Active' : 'Authorized') : 'Pending'}
+                                                <span className={`px-3 py-1 text-[10px] font-black rounded-full uppercase tracking-widest border ${u.is_subscribed ? (isTrialRow ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100') : 'bg-slate-50 text-slate-400 border-slate-200'}`}>
+                                                    {u.is_subscribed ? (isTrialRow ? 'Trial Access' : 'Authorized') : 'Node Dormant'}
                                                 </span>
                                             </td>
-                                            <td className="px-6 py-4 text-[11px] font-mono font-bold text-slate-500">
-                                                {u.subscription_end ? new Date(u.subscription_end).toLocaleDateString() : 'N/A'}
+                                            <td className="px-6 py-4 text-center">
+                                                <div className="flex flex-col items-center">
+                                                    <span className="text-[11px] font-bold text-slate-600">
+                                                        {formatLastSeen(u.last_seen)}
+                                                    </span>
+                                                    {u.subscription_end && (
+                                                        <span className="text-[9px] text-slate-300 font-black uppercase mt-1">Exp: {new Date(u.subscription_end).toLocaleDateString()}</span>
+                                                    )}
+                                                </div>
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center gap-3">
@@ -359,18 +412,18 @@ const AdminDashboard: React.FC = () => {
                                                         <select 
                                                             value={selectedDurations[u.id] || 'sub_1y'} 
                                                             onChange={(e) => setSelectedDurations(prev => ({...prev, [u.id]: e.target.value}))}
-                                                            className="text-[10px] font-black uppercase py-1.5 rounded-lg border-slate-200 focus:ring-indigo-500"
+                                                            className="text-[10px] font-black uppercase py-1.5 rounded-lg border-slate-200 focus:ring-indigo-500 bg-white"
                                                         >
-                                                            <optgroup label="TRIALS">
+                                                            <optgroup label="TRIAL PROTOCOLS">
                                                                 {DURATION_OPTIONS.filter(o => o.type === 'trial').map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                                             </optgroup>
-                                                            <optgroup label="SUBSCRIPTIONS">
+                                                            <optgroup label="SUBSCRIPTION TERMS">
                                                                 {DURATION_OPTIONS.filter(o => o.type === 'sub').map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                                             </optgroup>
                                                         </select>
                                                     )}
-                                                    <button onClick={() => toggleSubscription(u)} className={`text-[10px] font-black px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 uppercase whitespace-nowrap transition-all ${u.is_subscribed ? 'text-rose-500 border-rose-100 bg-rose-50' : ''}`}>
-                                                        {u.is_subscribed ? 'Revoke Access' : 'Grant Access'}
+                                                    <button onClick={() => toggleSubscription(u)} className={`text-[10px] font-black px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-900 hover:text-white hover:border-slate-900 uppercase whitespace-nowrap transition-all shadow-sm ${u.is_subscribed ? 'text-rose-600 border-rose-100 bg-rose-50' : 'text-indigo-600'}`}>
+                                                        {u.is_subscribed ? 'Terminate Node' : 'Provision Access'}
                                                     </button>
                                                 </div>
                                             </td>
@@ -386,47 +439,47 @@ const AdminDashboard: React.FC = () => {
                     <div className="p-8 space-y-8">
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end bg-slate-50 p-6 rounded-2xl border border-slate-100">
                             <div>
-                                <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">Module</label>
-                                <select value={keyTool} onChange={e => setKeyTool(e.target.value)} className="w-full rounded-xl border-slate-200 text-sm font-bold">
+                                <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block tracking-widest">Module Selection</label>
+                                <select value={keyTool} onChange={e => setKeyTool(e.target.value)} className="w-full rounded-xl border-slate-200 text-sm font-bold bg-white">
                                     <option value="universal">Universal</option>
                                     <option value={ToolId.XML_RENUMBER}>{getToolName(ToolId.XML_RENUMBER)}</option>
                                     <option value={ToolId.CREDIT_GENERATOR}>{getToolName(ToolId.CREDIT_GENERATOR)}</option>
                                 </select>
                             </div>
-                            <div><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">Qty</label><input type="number" min="1" max="50" value={keyQty} onChange={e => setKeyQty(parseInt(e.target.value))} className="w-full rounded-xl border-slate-200 text-sm font-bold" /></div>
-                            <button onClick={generateKeys} className="bg-indigo-600 text-white font-black py-2.5 rounded-xl uppercase text-xs">Generate</button>
+                            <div><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block tracking-widest">Quantity</label><input type="number" min="1" max="50" value={keyQty} onChange={e => setKeyQty(parseInt(e.target.value))} className="w-full rounded-xl border-slate-200 text-sm font-bold bg-white" /></div>
+                            <button onClick={generateKeys} className="bg-slate-900 text-white font-black py-2.5 rounded-xl uppercase text-xs tracking-widest shadow-lg shadow-slate-200 active:scale-95 transition-all">Generate Keys</button>
                         </div>
                         <div className="overflow-x-auto">
                             <table className="min-w-full divide-y divide-slate-100">
                                 <thead className="bg-slate-50">
                                     <tr>
-                                        <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase">Key</th>
-                                        <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase">Target</th>
-                                        <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase">Status</th>
-                                        <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase">Used By (Email)</th>
-                                        <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase">Device ID</th>
-                                        <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase">Actions</th>
+                                        <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Encryption Key</th>
+                                        <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Target Module</th>
+                                        <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Allocation</th>
+                                        <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Assigned User</th>
+                                        <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Hardware Fingerprint</th>
+                                        <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Management</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
                                     {accessKeys.map(k => {
                                         const linkedUser = users.find(u => u.id === k.user_id);
                                         return (
-                                            <tr key={k.id}>
-                                                <td className="px-6 py-4 font-mono font-black text-indigo-600">{k.key}</td>
-                                                <td className="px-6 py-4 text-xs font-bold">{getToolName(k.tool)}</td>
+                                            <tr key={k.id} className="hover:bg-slate-50/50 transition-colors">
+                                                <td className="px-6 py-4 font-mono font-black text-indigo-600 text-sm">{k.key}</td>
+                                                <td className="px-6 py-4 text-[11px] font-bold text-slate-600">{getToolName(k.tool)}</td>
                                                 <td className="px-6 py-4">
                                                     {k.is_used ? (
-                                                        <span className="text-[9px] font-black uppercase text-rose-500 bg-rose-50 px-2 py-0.5 rounded border border-rose-100">Used</span>
+                                                        <span className="text-[9px] font-black uppercase text-rose-500 bg-rose-50 px-2 py-0.5 rounded border border-rose-100 tracking-tighter">Locked</span>
                                                     ) : (
-                                                        <span className="text-[9px] font-black uppercase text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">Available</span>
+                                                        <span className="text-[9px] font-black uppercase text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 tracking-tighter">Available</span>
                                                     )}
                                                 </td>
                                                 <td className="px-6 py-4 text-[11px] font-bold text-slate-600 truncate max-w-[150px]" title={linkedUser?.email}>
-                                                    {linkedUser?.email || (k.user_id ? <span className="text-slate-300 font-mono text-[9px]">{k.user_id.slice(0,8)}...</span> : <span className="text-slate-300 italic font-normal">N/A</span>)}
+                                                    {linkedUser?.email || (k.user_id ? <span className="text-slate-300 font-mono text-[9px]">{k.user_id.slice(0,8)}...</span> : <span className="text-slate-300 italic font-normal tracking-widest text-[9px] uppercase">Floating</span>)}
                                                 </td>
                                                 <td className="px-6 py-4 font-mono text-[9px] text-slate-400 truncate max-w-[120px]" title={k.device_id}>
-                                                    {k.device_id || <span className="text-slate-300">N/A</span>}
+                                                    {k.device_id || <span className="text-slate-200">---</span>}
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-3">
@@ -434,7 +487,7 @@ const AdminDashboard: React.FC = () => {
                                                             <button 
                                                                 onClick={() => handleRevokeKey(k)}
                                                                 className="p-1.5 text-amber-500 hover:bg-amber-50 rounded-lg transition-colors"
-                                                                title="Revoke and Reset Key"
+                                                                title="Reset Allocation"
                                                             >
                                                                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                                                             </button>
@@ -442,7 +495,7 @@ const AdminDashboard: React.FC = () => {
                                                         <button 
                                                             onClick={() => handleDeleteKey(k.id)}
                                                             className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
-                                                            title="Delete Key Permanently"
+                                                            title="Purge Key"
                                                         >
                                                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                                         </button>

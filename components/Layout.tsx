@@ -14,12 +14,11 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => {
     const navigate = useNavigate();
     const location = useLocation();
-    const { signOut, profile } = useAuth();
+    const { signOut, profile, isAdmin } = useAuth();
     const [isOnline, setIsOnline] = useState(navigator.onLine);
     
     // Detect if running in Electron (.exe) or Web (Vercel)
     const isDesktop = (window as any).electron !== undefined;
-    const isAdmin = profile?.role?.toLowerCase() === 'admin';
 
     useEffect(() => {
         const handleOnline = () => setIsOnline(true);
@@ -74,7 +73,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                                         {isDesktop ? 'Desktop Node' : 'Web Node'}
                                     </span>
                                     {isAdmin && (
-                                        <span className="text-[8px] font-black bg-indigo-600 text-white px-1.5 py-0.5 rounded uppercase tracking-widest shadow-sm">Admin</span>
+                                        <span className="text-[8px] font-black bg-indigo-600 text-white px-1.5 py-0.5 rounded uppercase tracking-widest shadow-lg animate-pulse ring-2 ring-indigo-300">Admin</span>
                                     )}
                                 </div>
                             </div>

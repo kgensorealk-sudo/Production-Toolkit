@@ -11,6 +11,7 @@ interface AuthContextType {
     freeTools: string[];
     freeToolsData: Record<string, string>;
     loading: boolean;
+    isAdmin: boolean;
     signOut: (isAuto?: boolean) => Promise<void>;
     refreshProfile: () => Promise<void>;
     refreshFreeTools: () => Promise<void>;
@@ -19,8 +20,8 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const ACTIVITY_STORAGE_KEY = 'prod_toolkit_last_active';
+const HEARTBEAT_INTERVAL = 2 * 60 * 1000; // Update DB every 2 minutes while active
 
-// Helper to wrap Supabase calls in a timeout
 const withTimeout = <T,>(promise: Promise<T>, ms: number, timeoutValue: T): Promise<T> => {
     return Promise.race([
         promise,
@@ -37,11 +38,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [loading, setLoading] = useState(true);
     
     const lastUserId = useRef<string | null>(null);
+    const lastHeartbeat = useRef<number>(0);
     const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const isAdmin = (
+        profile?.role?.toLowerCase() === 'admin' || 
+        (user?.app_metadata?.role?.toLowerCase() === 'admin')
+    );
+
+    const updateLastSeen = async (uid: string) => {
+        const now = Date.now();
+        // Throttle updates to prevent excessive DB writes
+        if (now - lastHeartbeat.current < HEARTBEAT_INTERVAL) return;
+        
+        lastHeartbeat.current = now;
+        try {
+            await supabase
+                .from('profiles')
+                .update({ last_seen: new Date().toISOString() })
+                .eq('id', uid);
+        } catch (err) {
+            console.warn("Auth: Failed to update last_seen heartbeat");
+        }
+    };
 
     const fetchFreeTools = async () => {
         try {
-            console.info("Auth: Fetching system config...");
             const { data, error } = await supabase
                 .from('system_settings')
                 .select('free_tools_data')
@@ -73,7 +95,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const fetchProfile = async (userId: string) => {
         try {
-            console.info(`Auth: Loading profile for ${userId}...`);
             const { data: profileData, error: profileError } = await supabase
                 .from('profiles')
                 .select('*')
@@ -82,40 +103,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             
             if (profileError) throw profileError;
 
+            let finalProfile: UserProfile;
+
             if (!profileData) {
-                console.warn(`Auth: No profile row found for ${userId}. Using defaults.`);
-                setProfile({ id: userId, email: user?.email || '', role: 'user', is_subscribed: false, unlocked_tools: [] });
-                return;
+                const { data: newProfile, error: insertError } = await supabase
+                    .from('profiles')
+                    .insert([{ id: userId, email: user?.email || '', role: 'user' }])
+                    .select()
+                    .single();
+                
+                if (insertError) {
+                    finalProfile = { id: userId, email: user?.email || '', role: 'user', is_subscribed: false, unlocked_tools: [] };
+                } else {
+                    finalProfile = { ...newProfile, unlocked_tools: [] };
+                }
+            } else {
+                const { data: keysData } = await supabase
+                    .from('access_keys')
+                    .select('tool')
+                    .eq('user_id', userId)
+                    .eq('is_used', true);
+
+                const unlockedTools = keysData ? keysData.map(k => k.tool) : [];
+                let isActive = profileData.is_subscribed;
+                if (profileData.subscription_end && new Date(profileData.subscription_end) < new Date()) {
+                    isActive = false;
+                }
+
+                finalProfile = { 
+                    ...profileData, 
+                    is_subscribed: isActive,
+                    unlocked_tools: unlockedTools 
+                };
             }
 
-            console.info(`Auth: Profile loaded. Role recognized as: ${profileData.role}`);
+            setProfile(finalProfile);
+            updateLastSeen(userId); // Log presence immediately on load
 
-            const { data: keysData } = await supabase
-                .from('access_keys')
-                .select('tool')
-                .eq('user_id', userId)
-                .eq('is_used', true);
-
-            const unlockedTools = keysData ? keysData.map(k => k.tool) : [];
-            let isActive = profileData.is_subscribed;
-            if (profileData.subscription_end && new Date(profileData.subscription_end) < new Date()) {
-                isActive = false;
-            }
-
-            setProfile({ 
-                ...profileData, 
-                is_subscribed: isActive,
-                unlocked_tools: unlockedTools 
-            });
         } catch (err) {
-            console.warn("Auth: Profile fetch error", err);
+            console.error("Auth: Profile synchronization failed", err);
         }
     };
 
     const signOut = async (isAuto: boolean = false) => {
         try {
             setLoading(true); 
-            console.info(isAuto ? "Auth: Auto-signing out due to inactivity..." : "Auth: User signing out...");
             await supabase.auth.signOut();
             localStorage.removeItem(ACTIVITY_STORAGE_KEY);
             if (isAuto) sessionStorage.setItem('session_expired', 'true');
@@ -133,12 +165,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             inactivityTimer.current = setTimeout(() => {
                 signOut(true);
             }, INACTIVITY_LIMIT);
+            // Also attempt to update heartbeat on activity
+            updateLastSeen(user.id);
         }
     };
 
     const refreshProfile = async () => { 
         if (user?.id) {
-            console.info("Auth: Triggering manual profile sync...");
             await fetchProfile(user.id); 
         }
     };
@@ -158,13 +191,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     useEffect(() => {
         let mounted = true;
-        const watchdog = setTimeout(() => {
-            if (mounted && loading) {
-                console.error("Auth: Initialization watchdog triggered.");
-                setLoading(false);
-            }
-        }, 10000);
-
         const init = async () => {
             try {
                 const results = await withTimeout(
@@ -188,16 +214,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         setSession(currentSession);
                         setUser(currentSession.user);
                         lastUserId.current = currentSession.user.id;
-                        fetchProfile(currentSession.user.id);
+                        await fetchProfile(currentSession.user.id);
                     }
                 }
             } catch (err) {
                 console.error("Auth: Initialization exception", err);
             } finally {
-                if (mounted) {
-                    clearTimeout(watchdog);
-                    setLoading(false);
-                }
+                if (mounted) setLoading(false);
             }
         };
 
@@ -225,12 +248,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         return () => { 
             mounted = false; 
-            clearTimeout(watchdog);
             subscription.unsubscribe(); 
         };
     }, []);
 
-    const value = { session, user, profile, freeTools, freeToolsData, loading, signOut, refreshProfile, refreshFreeTools: fetchFreeTools };
+    const value = { 
+        session, user, profile, freeTools, freeToolsData, loading, isAdmin,
+        signOut, refreshProfile, refreshFreeTools: fetchFreeTools 
+    };
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 

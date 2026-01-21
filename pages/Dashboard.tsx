@@ -50,7 +50,7 @@ const ToolCard: React.FC<ToolCardProps> = ({ id, title, desc, iconBg, iconText, 
             style={{ animationDelay: `${delay}ms`, animationFillMode: 'backwards' }}
         >
             <div className={`h-full bg-white rounded-[2.2rem] p-8 flex flex-col border border-slate-100 relative overflow-hidden ${isLocked ? 'grayscale-[0.9]' : ''}`}>
-                <div className={`absolute top-0 left-0 w-full h-1.5 ${isLocked ? 'bg-slate-200' : (isFree ? 'bg-emerald-500' : borderColor)}`}></div>
+                <div className={`absolute top-0 left-0 w-full h-1.5 ${isLocked ? 'bg-slate-200' : (isFree ? 'bg-emerald-50' : borderColor)}`}></div>
                 
                 {isFree ? (
                     <div className="absolute top-5 right-5 z-20">
@@ -94,13 +94,12 @@ const ToolCard: React.FC<ToolCardProps> = ({ id, title, desc, iconBg, iconText, 
 
 const Dashboard: React.FC = () => {
     const navigate = useNavigate();
-    const { profile, freeTools, freeToolsData, refreshProfile } = useAuth();
+    const { profile, freeTools, freeToolsData, refreshProfile, isAdmin } = useAuth();
     const [isSyncing, setIsSyncing] = useState(false);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
 
     const getLockType = (toolId: ToolId): 'key' | 'subscription' | 'none' => {
-        const role = profile?.role?.toLowerCase();
-        if (role === 'admin') return 'none';
+        if (isAdmin) return 'none';
         if (profile?.is_subscribed) return 'none';
         if (toolId === ToolId.XML_RENUMBER || toolId === ToolId.CREDIT_GENERATOR) {
             if (profile?.unlocked_tools?.includes(toolId) || profile?.unlocked_tools?.includes('universal')) return 'none';
@@ -141,7 +140,7 @@ const Dashboard: React.FC = () => {
         const active = ALL_TOOLS.filter(t => freeTools.includes(t.id) || getLockType(t.id) === 'none');
         const locked = ALL_TOOLS.filter(t => !freeTools.includes(t.id) && getLockType(t.id) !== 'none');
         return { active, locked };
-    }, [profile, freeTools]);
+    }, [profile, freeTools, isAdmin]);
 
     return (
         <div className="max-w-7xl mx-auto px-4 py-20 sm:px-6 lg:px-8">

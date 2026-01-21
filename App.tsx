@@ -66,8 +66,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 };
 
 const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const { session, profile, loading } = useAuth();
-    const isAdmin = profile?.role?.toLowerCase() === 'admin';
+    const { session, isAdmin, loading } = useAuth();
 
     if (loading) return <LoadingOverlay message="Verifying Admin..." color="slate" />;
     if (!session || !isAdmin) return <Navigate to="/" replace />;
@@ -75,8 +74,7 @@ const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 };
 
 const LockedToolGuard: React.FC<{ children: React.ReactElement, toolId: ToolId, displayName: string }> = ({ children, toolId, displayName }) => {
-    const { profile, freeTools } = useAuth();
-    const isAdmin = profile?.role?.toLowerCase() === 'admin';
+    const { profile, freeTools, isAdmin } = useAuth();
 
     if (freeTools.includes(toolId)) return children;
     if (isAdmin) return children;
@@ -92,9 +90,8 @@ const LockedToolGuard: React.FC<{ children: React.ReactElement, toolId: ToolId, 
 };
 
 const SubscriptionGuard: React.FC<{ children: React.ReactElement, toolId: ToolId, displayName: string }> = ({ children, toolId, displayName }) => {
-    const { profile, freeTools } = useAuth();
+    const { profile, freeTools, isAdmin } = useAuth();
     const navigate = useNavigate();
-    const isAdmin = profile?.role?.toLowerCase() === 'admin';
 
     if (freeTools.includes(toolId)) return children;
     if (isAdmin || profile?.is_subscribed) return children;
