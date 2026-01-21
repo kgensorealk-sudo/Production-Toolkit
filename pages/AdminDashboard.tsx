@@ -53,19 +53,15 @@ const getDurationMs = (val: string) => {
     }
 };
 
-// Improved helper for relative time formatting with clock-skew tolerance
 const formatLastSeen = (timestamp?: string) => {
     if (!timestamp) return 'Never';
     const date = new Date(timestamp);
     const now = new Date();
-    
-    // Absolute difference to handle clock skew (e.g., DB time slightly ahead of client time)
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / (1000 * 60));
     const diffHours = Math.floor(diffMins / 60);
     const diffDays = Math.floor(diffHours / 24);
 
-    // If active within 5 minutes (or if time appears to be in the future due to skew), show Online
     if (diffMins < 5) {
         return (
             <span className="text-emerald-500 font-bold uppercase tracking-widest flex items-center gap-1.5">
@@ -224,12 +220,11 @@ const AdminDashboard: React.FC = () => {
         else if (activeTab === 'keys') {
             fetchUsers().then(() => fetchAccessKeys());
         }
-    }, [activeTab]); // Removed specific callbacks to allow fresh fetch on tab switch
+    }, [activeTab]);
 
-    // Set up auto-refresh for online status
     useEffect(() => {
         if (activeTab === 'users') {
-            const interval = setInterval(() => fetchUsers(true), 30000); // Silent refresh every 30s
+            const interval = setInterval(() => fetchUsers(true), 30000); 
             return () => clearInterval(interval);
         }
     }, [activeTab, fetchUsers]);
@@ -314,14 +309,54 @@ const AdminDashboard: React.FC = () => {
         setIsLoading(true);
         try {
             if (editingId) {
-                await supabase.from('announcements').update({ title: newTitle, content: newContent, type: newType }).eq('id', editingId);
+                const { error } = await supabase.from('announcements').update({ title: newTitle, content: newContent, type: newType }).eq('id', editingId);
+                if (error) throw error;
                 setAnnouncements(prev => prev.map(a => a.id === editingId ? { ...a, title: newTitle, content: newContent, type: newType } : a));
+                setToast({ msg: 'Announcement updated', type: 'success' });
             } else {
-                const { data } = await supabase.from('announcements').insert([{ title: newTitle, content: newContent, type: newType, is_active: false }]).select();
+                const { data, error } = await supabase.from('announcements').insert([{ title: newTitle, content: newContent, type: newType, is_active: false }]).select();
+                if (error) throw error;
                 if (data) setAnnouncements(prev => [data[0], ...prev]);
+                setToast({ msg: 'Announcement created', type: 'success' });
             }
-            setNewTitle(''); setNewContent(''); setEditingId(null);
+            setNewTitle(''); setNewContent(''); setNewType('info'); setEditingId(null);
+        } catch (err: any) {
+            setToast({ msg: 'Failed to save announcement', type: 'error' });
         } finally { setIsLoading(false); }
+    };
+
+    const deleteAnnouncement = (id: string) => {
+        setConfirmConfig({
+            isOpen: true,
+            title: 'Delete Broadcast',
+            message: 'Are you sure? This template will be permanently removed from the system.',
+            confirmLabel: 'Delete Broadcast',
+            type: 'danger',
+            onConfirm: async () => {
+                setIsLoading(true);
+                try {
+                    const { error } = await supabase.from('announcements').delete().eq('id', id);
+                    if (error) throw error;
+                    setAnnouncements(prev => prev.filter(a => a.id !== id));
+                    setToast({ msg: 'Announcement deleted', type: 'success' });
+                    if (editingId === id) {
+                        setEditingId(null); setNewTitle(''); setNewContent(''); setNewType('info');
+                    }
+                } catch (err: any) {
+                    setToast({ msg: 'Deletion failed', type: 'error' });
+                } finally { setIsLoading(false); }
+            }
+        });
+    };
+
+    const editAnnouncement = (a: Announcement) => {
+        setEditingId(a.id);
+        setNewTitle(a.title);
+        setNewContent(a.content);
+        setNewType(a.type);
+        // Scroll to form
+        const form = document.getElementById('announcement-editor');
+        if (form) form.scrollIntoView({ behavior: 'smooth' });
     };
 
     const activateAnnouncement = async (id: string) => {
@@ -330,11 +365,15 @@ const AdminDashboard: React.FC = () => {
             const target = announcements.find(a => a.id === id);
             if (!target) return;
             const nextStatus = !target.is_active;
+            
+            // Only one announcement can be active at a time
             if (nextStatus) {
                 await supabase.from('announcements').update({ is_active: false }).neq('id', id);
             }
+            
             const { error } = await supabase.from('announcements').update({ is_active: nextStatus }).eq('id', id);
             if (error) throw error;
+            
             setAnnouncements(prev => prev.map(a => {
                 if (a.id === id) return { ...a, is_active: nextStatus };
                 if (nextStatus) return { ...a, is_active: false };
@@ -566,10 +605,94 @@ const AdminDashboard: React.FC = () => {
 
                 {activeTab === 'announcements' && (
                     <div className="grid grid-cols-1 lg:grid-cols-3 divide-x divide-slate-200 h-full min-h-[600px]">
-                        <div className="p-8 bg-white"><h3 className="text-xs font-black text-slate-400 uppercase mb-6">Template Editor</h3><form onSubmit={saveAnnouncement} className="space-y-6"><div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Title</label><input type="text" required value={newTitle} onChange={e => setNewTitle(e.target.value)} className="w-full rounded-xl border-slate-200 text-sm font-bold" /></div><div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Type</label><select value={newType} onChange={e => setNewType(e.target.value as any)} className="w-full rounded-xl border-slate-200 text-sm font-bold"><option value="info">Info</option><option value="warning">Warning</option><option value="success">Success</option><option value="error">Error</option></select></div><div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Content</label><textarea required value={newContent} onChange={e => setNewContent(e.target.value)} rows={4} className="w-full rounded-xl border-slate-200 text-sm font-medium" /></div><button type="submit" className="w-full bg-slate-900 text-white font-black py-4 rounded-xl uppercase text-xs">Save Template</button></form></div>
-                        <div className="lg:col-span-2 p-8 bg-slate-50/30 overflow-y-auto"><div className="grid grid-cols-1 md:grid-cols-2 gap-4">{announcements.map(a => (
-                            <div key={a.id} className={`p-6 border-2 rounded-[2.5rem] bg-white ${a.is_active ? 'border-emerald-500' : 'border-slate-100'}`}><h4 className="font-black text-sm uppercase mb-2">{a.title}</h4><p className="text-xs text-slate-500 mb-4 line-clamp-2">{a.content}</p><button onClick={() => activateAnnouncement(a.id)} className={`text-[10px] font-black uppercase ${a.is_active ? 'text-emerald-500' : 'text-slate-400'}`}>{a.is_active ? 'Live' : 'Go Live'}</button></div>
-                        ))}</div></div>
+                        <div className="p-8 bg-white" id="announcement-editor">
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 className="text-xs font-black text-slate-400 uppercase">{editingId ? 'Edit Broadcast' : 'Template Editor'}</h3>
+                                {editingId && (
+                                    <button onClick={() => { setEditingId(null); setNewTitle(''); setNewContent(''); setNewType('info'); }} className="text-[10px] font-bold text-indigo-600 uppercase hover:underline">Create New</button>
+                                )}
+                            </div>
+                            <form onSubmit={saveAnnouncement} className="space-y-6">
+                                <div>
+                                    <label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Title</label>
+                                    <input type="text" required value={newTitle} onChange={e => setNewTitle(e.target.value)} className="w-full rounded-xl border-slate-200 text-sm font-bold shadow-sm" placeholder="System Maintenance..." />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Visual Style</label>
+                                    <select value={newType} onChange={e => setNewType(e.target.value as any)} className="w-full rounded-xl border-slate-200 text-sm font-bold shadow-sm">
+                                        <option value="info">Info (Blue)</option>
+                                        <option value="warning">Warning (Amber)</option>
+                                        <option value="success">Success (Emerald)</option>
+                                        <option value="error">Error (Rose)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Broadcast Content</label>
+                                    <textarea required value={newContent} onChange={e => setNewContent(e.target.value)} rows={5} className="w-full rounded-xl border-slate-200 text-sm font-medium shadow-sm" placeholder="Write your announcement content here..." />
+                                </div>
+                                <button type="submit" className={`w-full text-white font-black py-4 rounded-xl uppercase text-xs tracking-widest shadow-lg transition-all active:scale-95 ${editingId ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200' : 'bg-slate-900 hover:bg-slate-800 shadow-slate-200'}`}>
+                                    {editingId ? 'Update Template' : 'Save Template'}
+                                </button>
+                            </form>
+                        </div>
+                        <div className="lg:col-span-2 p-8 bg-slate-50/30 overflow-y-auto custom-scrollbar">
+                            <div className="flex items-center justify-between mb-8">
+                                <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Saved Broadcast Templates ({announcements.length})</h3>
+                                <div className="text-[10px] font-bold text-slate-400 uppercase">Only one active broadcast at a time</div>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {announcements.map(a => (
+                                    <div key={a.id} className={`group flex flex-col p-6 border-2 rounded-[2.5rem] bg-white transition-all hover:shadow-xl ${a.is_active ? 'border-emerald-500 shadow-lg shadow-emerald-100 ring-1 ring-emerald-500' : 'border-slate-100'}`}>
+                                        <div className="flex justify-between items-start mb-4">
+                                            <div className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border ${
+                                                a.type === 'info' ? 'bg-blue-50 text-blue-600 border-blue-100' :
+                                                a.type === 'warning' ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                                                a.type === 'error' ? 'bg-rose-50 text-rose-600 border-rose-100' :
+                                                'bg-emerald-50 text-emerald-600 border-emerald-100'
+                                            }`}>
+                                                {a.type} Style
+                                            </div>
+                                            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button onClick={() => editAnnouncement(a)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all" title="Edit Template">
+                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                                </button>
+                                                <button onClick={() => deleteAnnouncement(a.id)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all" title="Delete Template">
+                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <h4 className="font-black text-sm uppercase text-slate-800 mb-2 leading-tight">{a.title}</h4>
+                                        <p className="text-xs text-slate-500 mb-6 line-clamp-3 leading-relaxed flex-grow">{a.content}</p>
+                                        
+                                        <button 
+                                            onClick={() => activateAnnouncement(a.id)} 
+                                            className={`w-full py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 border-2 ${
+                                                a.is_active 
+                                                ? 'bg-rose-50 border-rose-100 text-rose-600 hover:bg-rose-100' 
+                                                : 'bg-emerald-50 border-emerald-100 text-emerald-600 hover:bg-emerald-100'
+                                            }`}
+                                        >
+                                            {a.is_active ? (
+                                                <>
+                                                    <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse"></span>
+                                                    Stop Broadcast
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
+                                                    Start Broadcast
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                ))}
+                                {announcements.length === 0 && (
+                                    <div className="col-span-full py-20 text-center bg-white rounded-[2.5rem] border border-dashed border-slate-200 opacity-50">
+                                        <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">No saved templates</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     </div>
                 )}
             </div>
