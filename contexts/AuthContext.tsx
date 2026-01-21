@@ -20,7 +20,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const ACTIVITY_STORAGE_KEY = 'prod_toolkit_last_active';
-const HEARTBEAT_INTERVAL = 2 * 60 * 1000; // Update DB every 2 minutes while active
+const HEARTBEAT_INTERVAL = 2 * 60 * 1000; // Throttled updates every 2 mins
 
 // Specific key used by Supabase for this project
 const SB_STORAGE_KEY = 'sb-jtrvpqxhjqpifglrhbzu-auth-token';
@@ -50,10 +50,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
 
     const clearLocalSession = () => {
-        console.warn("Auth: Executing hard reset of local session data...");
         localStorage.removeItem(SB_STORAGE_KEY);
         localStorage.removeItem(ACTIVITY_STORAGE_KEY);
-        // Fallback: clear everything if targeted keys fail
+        lastHeartbeat.current = 0; 
         try {
             localStorage.clear();
             sessionStorage.clear();
@@ -62,18 +61,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     };
 
-    const updateLastSeen = async (uid: string) => {
+    const updateLastSeen = async (uid: string, force: boolean = false) => {
         const now = Date.now();
-        if (now - lastHeartbeat.current < HEARTBEAT_INTERVAL) return;
+        // Don't update if it's been less than 2 minutes, unless 'force' is true (e.g., login or logout)
+        if (!force && (now - lastHeartbeat.current < HEARTBEAT_INTERVAL)) return;
         
         lastHeartbeat.current = now;
         try {
+            // Using a background update to not block UI
             await supabase
                 .from('profiles')
                 .update({ last_seen: new Date().toISOString() })
                 .eq('id', uid);
         } catch (err) {
-            console.warn("Auth: Heartbeat update skipped");
+            // Silently ignore heartbeat failures to prevent user disruption
         }
     };
 
@@ -104,7 +105,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setFreeToolsData(activeMap);
             }
         } catch (err) {
-            console.warn("Auth: Free tools fetch error ignored");
+            console.warn("Auth: Free tools sync error");
         }
     };
 
@@ -153,22 +154,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
 
             setProfile(finalProfile);
-            updateLastSeen(userId);
+            // CRITICAL: Force an immediate timestamp write on initial profile load
+            updateLastSeen(userId, true);
 
         } catch (err) {
-            console.error("Auth: Profile sync failed", err);
+            console.error("Auth: Profile sync error", err);
         }
     };
 
     const signOut = async (isAuto: boolean = false) => {
+        const userIdForLogoutSync = user?.id;
         try {
             setLoading(true); 
+            // If logging out due to inactivity, log the exact moment as Last Seen before killing the session
+            if (isAuto && userIdForLogoutSync) {
+                await updateLastSeen(userIdForLogoutSync, true);
+            }
             await supabase.auth.signOut();
             clearLocalSession();
-            if (isAuto) sessionStorage.setItem('session_expired', 'true');
             setProfile(null);
             setSession(null);
             setUser(null);
+            lastUserId.current = null;
+            lastHeartbeat.current = 0;
         } finally {
             setLoading(false);
         }
@@ -178,8 +186,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
         if (session && user) {
             inactivityTimer.current = setTimeout(() => {
-                signOut(true);
+                signOut(true); // isAuto = true
             }, INACTIVITY_LIMIT);
+            // On every user interaction, attempt a throttled heartbeat
             updateLastSeen(user.id);
         }
     };
@@ -203,6 +212,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
     }, [session, user]);
 
+    // Handle abrupt closure (closing .exe or tab)
+    useEffect(() => {
+        const handleUnload = () => {
+            if (user?.id) {
+                // We use Navigator.sendBeacon or a synchronous call if possible, 
+                // but since updateLastSeen is async, we just fire it.
+                updateLastSeen(user.id, true);
+            }
+        };
+        window.addEventListener('beforeunload', handleUnload);
+        return () => window.removeEventListener('beforeunload', handleUnload);
+    }, [user]);
+
     useEffect(() => {
         let mounted = true;
         const init = async () => {
@@ -217,7 +239,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 );
 
                 if (results === 'timeout') {
-                    console.error("Auth: System timeout during handshake.");
                     if (mounted) setLoading(false);
                     return;
                 }
@@ -226,9 +247,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 if (sessionRes.status === 'fulfilled') {
                     const { data: { session: currentSession }, error } = sessionRes.value;
                     
-                    // SURGICAL ERROR HANDLING FOR INVALID REFRESH TOKENS
                     if (error && (error.message.includes('Refresh Token Not Found') || error.status === 400)) {
-                        console.error("Auth: Invalid refresh token detected. Cleaning local state.");
                         clearLocalSession();
                         if (mounted) setLoading(false);
                         return;
@@ -241,11 +260,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         await fetchProfile(currentSession.user.id);
                     }
                 } else if (sessionRes.status === 'rejected') {
-                    console.error("Auth: Session promise rejected", sessionRes.reason);
                     clearLocalSession();
                 }
             } catch (err) {
-                console.error("Auth: Initialization exception", err);
                 clearLocalSession();
             } finally {
                 if (mounted) setLoading(false);
@@ -260,14 +277,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (event === 'SIGNED_OUT') {
                 setProfile(null); setUser(null); setSession(null);
                 setLoading(false);
+                lastHeartbeat.current = 0;
             } else if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') {
                 if (newSession?.user) {
+                    const isNewUser = newSession.user.id !== lastUserId.current;
                     setSession(newSession); 
                     setUser(newSession.user);
                     setLoading(false); 
                     
-                    if (newSession.user.id !== lastUserId.current) {
+                    if (isNewUser) {
                         lastUserId.current = newSession.user.id;
+                        lastHeartbeat.current = 0;
                         fetchProfile(newSession.user.id);
                     }
                 }

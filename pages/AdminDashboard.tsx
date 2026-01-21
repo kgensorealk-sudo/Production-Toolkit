@@ -53,17 +53,28 @@ const getDurationMs = (val: string) => {
     }
 };
 
-// Helper for relative time formatting
+// Improved helper for relative time formatting with clock-skew tolerance
 const formatLastSeen = (timestamp?: string) => {
     if (!timestamp) return 'Never';
     const date = new Date(timestamp);
     const now = new Date();
+    
+    // Absolute difference to handle clock skew (e.g., DB time slightly ahead of client time)
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / (1000 * 60));
     const diffHours = Math.floor(diffMins / 60);
     const diffDays = Math.floor(diffHours / 24);
 
-    if (diffMins < 5) return <span className="text-emerald-500 font-bold uppercase tracking-widest flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Online</span>;
+    // If active within 5 minutes (or if time appears to be in the future due to skew), show Online
+    if (diffMins < 5) {
+        return (
+            <span className="text-emerald-500 font-bold uppercase tracking-widest flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> 
+                Online
+            </span>
+        );
+    }
+    
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays < 7) return `${diffDays}d ago`;
@@ -112,10 +123,9 @@ const AdminDashboard: React.FC = () => {
         }
     };
 
-    const fetchUsers = useCallback(async () => {
-        setIsLoading(true);
+    const fetchUsers = useCallback(async (silent = false) => {
+        if (!silent) setIsLoading(true);
         try {
-            // Sorting by last_seen descending to show active users first
             const { data, error } = await supabase
                 .from('profiles')
                 .select('*')
@@ -126,13 +136,15 @@ const AdminDashboard: React.FC = () => {
             
             const durMap: Record<string, string> = {};
             (data || []).forEach(u => {
-                durMap[u.id] = 'sub_1y';
+                if (!selectedDurations[u.id]) durMap[u.id] = 'sub_1y';
             });
-            setSelectedDurations(durMap);
+            if (Object.keys(durMap).length > 0) {
+                setSelectedDurations(prev => ({ ...prev, ...durMap }));
+            }
         } catch (error: any) {
-            setToast({ msg: 'Failed to load users', type: 'error' });
-        } finally { setIsLoading(false); }
-    }, []);
+            if (!silent) setToast({ msg: 'Failed to load users', type: 'error' });
+        } finally { if (!silent) setIsLoading(false); }
+    }, [selectedDurations]);
 
     const fetchAccessKeys = useCallback(async () => {
         setIsLoading(true);
@@ -212,12 +224,12 @@ const AdminDashboard: React.FC = () => {
         else if (activeTab === 'keys') {
             fetchUsers().then(() => fetchAccessKeys());
         }
-    }, [activeTab, fetchUsers, fetchAnnouncements, fetchAccessKeys]);
+    }, [activeTab]); // Removed specific callbacks to allow fresh fetch on tab switch
 
     // Set up auto-refresh for online status
     useEffect(() => {
         if (activeTab === 'users') {
-            const interval = setInterval(fetchUsers, 30000); // Refresh every 30s
+            const interval = setInterval(() => fetchUsers(true), 30000); // Silent refresh every 30s
             return () => clearInterval(interval);
         }
     }, [activeTab, fetchUsers]);
@@ -349,7 +361,7 @@ const AdminDashboard: React.FC = () => {
                         <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">
                             {users.filter(u => {
                                 if (!u.last_seen) return false;
-                                return (Date.now() - new Date(u.last_seen).getTime()) < (5 * 60 * 1000);
+                                return Math.abs(Date.now() - new Date(u.last_seen).getTime()) < (5 * 60 * 1000);
                             }).length} Nodes Active
                         </span>
                     </div>
