@@ -1,9 +1,9 @@
-
 import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ToolId } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import AnnouncementModal from '../components/AnnouncementModal';
+import Toast from '../components/Toast';
 
 interface ToolCardProps {
     id: ToolId;
@@ -94,16 +94,31 @@ const ToolCard: React.FC<ToolCardProps> = ({ id, title, desc, iconBg, iconText, 
 
 const Dashboard: React.FC = () => {
     const navigate = useNavigate();
-    const { profile, freeTools, freeToolsData } = useAuth();
+    const { profile, freeTools, freeToolsData, refreshProfile } = useAuth();
+    const [isSyncing, setIsSyncing] = useState(false);
+    const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
 
     const getLockType = (toolId: ToolId): 'key' | 'subscription' | 'none' => {
-        if (profile?.role === 'admin') return 'none';
+        const role = profile?.role?.toLowerCase();
+        if (role === 'admin') return 'none';
         if (profile?.is_subscribed) return 'none';
         if (toolId === ToolId.XML_RENUMBER || toolId === ToolId.CREDIT_GENERATOR) {
             if (profile?.unlocked_tools?.includes(toolId) || profile?.unlocked_tools?.includes('universal')) return 'none';
             return 'key';
         }
         return 'subscription';
+    };
+
+    const handleSync = async () => {
+        setIsSyncing(true);
+        try {
+            await refreshProfile();
+            setToast({ msg: "Node integrity synchronized with database.", type: "success" });
+        } catch (e) {
+            setToast({ msg: "Synchronization failed.", type: "error" });
+        } finally {
+            setIsSyncing(false);
+        }
     };
 
     const ALL_TOOLS = [
@@ -131,7 +146,7 @@ const Dashboard: React.FC = () => {
     return (
         <div className="max-w-7xl mx-auto px-4 py-20 sm:px-6 lg:px-8">
             <AnnouncementModal />
-            <div className="text-center mb-24 animate-fade-in">
+            <div className="text-center mb-16 animate-fade-in">
                 <h2 className="text-5xl md:text-6xl font-black text-slate-900 tracking-tighter mb-6 uppercase">
                     Workspace <span className="text-indigo-600">Console</span>
                 </h2>
@@ -139,12 +154,26 @@ const Dashboard: React.FC = () => {
                     Integrated environment for technical XML production and citation integrity management.
                 </p>
                 
-                {freeTools.length > 0 && !profile?.is_subscribed && (
-                    <div className="mt-10 inline-flex items-center gap-3 px-6 py-3 bg-emerald-50 rounded-full border border-emerald-100 text-emerald-600 text-xs font-black uppercase tracking-widest shadow-lg shadow-emerald-500/10 animate-bounce">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                        Automatic Provisioning: {freeTools.length} Modules Active
-                    </div>
-                )}
+                <div className="mt-10 flex flex-wrap justify-center gap-4">
+                    {freeTools.length > 0 && !profile?.is_subscribed && (
+                        <div className="inline-flex items-center gap-3 px-6 py-3 bg-emerald-50 rounded-full border border-emerald-100 text-emerald-600 text-xs font-black uppercase tracking-widest shadow-lg shadow-emerald-500/10">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                            Automatic Provisioning: {freeTools.length} Modules Active
+                        </div>
+                    )}
+                    
+                    <button 
+                        onClick={handleSync}
+                        disabled={isSyncing}
+                        className="inline-flex items-center gap-2 px-6 py-3 bg-white hover:bg-slate-50 rounded-full border border-slate-200 text-slate-500 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-sm"
+                        title="Force refresh account permissions"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 ${isSyncing ? 'animate-spin text-indigo-500' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        {isSyncing ? 'Syncing...' : 'Node Integrity Sync'}
+                    </button>
+                </div>
             </div>
 
             {/* Active Modules Section */}
@@ -191,6 +220,8 @@ const Dashboard: React.FC = () => {
                     </div>
                 </div>
             )}
+
+            {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
         </div>
     );
 };

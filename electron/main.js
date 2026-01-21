@@ -39,6 +39,11 @@ function loadState() {
 function createWindow() {
   const state = loadState();
 
+  // Robust icon path resolution
+  const iconPath = isDev 
+    ? path.join(__dirname, '../favicon.png') 
+    : path.join(__dirname, '../favicon.png'); // When packaged, icon is in the root of the app.asar
+
   mainWindow = new BrowserWindow({
     width: state.width,
     height: state.height,
@@ -56,7 +61,7 @@ function createWindow() {
       webSecurity: true,
       spellcheck: true
     },
-    icon: path.join(__dirname, '../favicon.png')
+    icon: iconPath
   });
 
   if (state.isMaximized) {

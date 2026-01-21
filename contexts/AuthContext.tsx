@@ -37,7 +37,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [loading, setLoading] = useState(true);
     
     const lastUserId = useRef<string | null>(null);
-    // Fixed: Use ReturnType<typeof setTimeout> instead of NodeJS.Timeout to avoid namespace issues in browser environments
     const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const fetchFreeTools = async () => {
@@ -84,9 +83,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (profileError) throw profileError;
 
             if (!profileData) {
+                console.warn(`Auth: No profile row found for ${userId}. Using defaults.`);
                 setProfile({ id: userId, email: user?.email || '', role: 'user', is_subscribed: false, unlocked_tools: [] });
                 return;
             }
+
+            console.info(`Auth: Profile loaded. Role recognized as: ${profileData.role}`);
 
             const { data: keysData } = await supabase
                 .from('access_keys')
@@ -106,7 +108,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 unlocked_tools: unlockedTools 
             });
         } catch (err) {
-            console.warn("Auth: Profile fetch suppressed", err);
+            console.warn("Auth: Profile fetch error", err);
         }
     };
 
@@ -127,8 +129,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const resetInactivityTimer = () => {
         if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
-        
-        // Only track inactivity if a user is actually logged in
         if (session && user) {
             inactivityTimer.current = setTimeout(() => {
                 signOut(true);
@@ -136,21 +136,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     };
 
-    const refreshProfile = async () => { if (user?.id) await fetchProfile(user.id); };
+    const refreshProfile = async () => { 
+        if (user?.id) {
+            console.info("Auth: Triggering manual profile sync...");
+            await fetchProfile(user.id); 
+        }
+    };
 
-    // Inactivity Event Listeners
     useEffect(() => {
         const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
-        
-        const handleInteraction = () => {
-            resetInactivityTimer();
-        };
-
+        const handleInteraction = () => resetInactivityTimer();
         if (session && user) {
             events.forEach(event => window.addEventListener(event, handleInteraction));
-            resetInactivityTimer(); // Start timer on login
+            resetInactivityTimer();
         }
-
         return () => {
             events.forEach(event => window.removeEventListener(event, handleInteraction));
             if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
@@ -159,7 +158,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     useEffect(() => {
         let mounted = true;
-        
         const watchdog = setTimeout(() => {
             if (mounted && loading) {
                 console.error("Auth: Initialization watchdog triggered.");

@@ -39,7 +39,8 @@
     "copyright": "Copyright © 2025 Editorial Systems",
     "files": [
       "dist/**/*",
-      "electron/**/*"
+      "electron/**/*",
+      "favicon.png"
     ],
     "directories": {
       "output": "release"

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ToolId } from '../types';
@@ -20,6 +19,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
     
     // Detect if running in Electron (.exe) or Web (Vercel)
     const isDesktop = (window as any).electron !== undefined;
+    const isAdmin = profile?.role?.toLowerCase() === 'admin';
 
     useEffect(() => {
         const handleOnline = () => setIsOnline(true);
@@ -69,9 +69,14 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                             </div>
                             <div className="flex flex-col">
                                 <h1 className="text-sm font-black text-slate-900 tracking-tight uppercase leading-none">Production Toolkit Pro</h1>
-                                <span className={`text-[9px] font-bold uppercase tracking-widest mt-0.5 ${isDesktop ? 'text-indigo-500' : 'text-slate-400'}`}>
-                                    {isDesktop ? 'Desktop Node' : 'Web Node'}
-                                </span>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                    <span className={`text-[9px] font-bold uppercase tracking-widest ${isDesktop ? 'text-indigo-500' : 'text-slate-400'}`}>
+                                        {isDesktop ? 'Desktop Node' : 'Web Node'}
+                                    </span>
+                                    {isAdmin && (
+                                        <span className="text-[8px] font-black bg-indigo-600 text-white px-1.5 py-0.5 rounded uppercase tracking-widest shadow-sm">Admin</span>
+                                    )}
+                                </div>
                             </div>
                         </div>
 
@@ -119,13 +124,13 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                                 </button>
                             )}
 
-                            {profile?.role === 'admin' && (
-                                <button onClick={() => navigate('/admin')} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors" title="Admin Console">
+                            {isAdmin && (
+                                <button onClick={() => navigate('/admin')} className={`p-2 rounded-xl transition-all ${location.pathname === '/admin' ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'text-slate-400 hover:text-indigo-600'}`} title="Admin Console">
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37a1.724 1.724 0 002.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                                 </button>
                             )}
                             
-                            <button onClick={() => navigate('/docs')} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors" title="Help/Docs">
+                            <button onClick={() => navigate('/docs')} className={`p-2 rounded-xl transition-all ${location.pathname === '/docs' ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'text-slate-400 hover:text-indigo-600'}`} title="Help/Docs">
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
                             </button>
                             
@@ -151,7 +156,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                     <p>&copy; 2025 Editorial Systems Pro</p>
                     <div className="flex gap-6">
                         <span>Environment: {isDesktop ? 'Desktop Node' : 'Web Node'}</span>
-                        <span>v1.5.0</span>
+                        <span>v1.6.0</span>
                     </div>
                 </div>
             </footer>
