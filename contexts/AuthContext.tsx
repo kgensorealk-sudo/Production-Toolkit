@@ -22,6 +22,9 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const ACTIVITY_STORAGE_KEY = 'prod_toolkit_last_active';
 const HEARTBEAT_INTERVAL = 2 * 60 * 1000; // Update DB every 2 minutes while active
 
+// Specific key used by Supabase for this project
+const SB_STORAGE_KEY = 'sb-jtrvpqxhjqpifglrhbzu-auth-token';
+
 const withTimeout = <T,>(promise: Promise<T>, ms: number, timeoutValue: T): Promise<T> => {
     return Promise.race([
         promise,
@@ -46,9 +49,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         (user?.app_metadata?.role?.toLowerCase() === 'admin')
     );
 
+    const clearLocalSession = () => {
+        console.warn("Auth: Executing hard reset of local session data...");
+        localStorage.removeItem(SB_STORAGE_KEY);
+        localStorage.removeItem(ACTIVITY_STORAGE_KEY);
+        // Fallback: clear everything if targeted keys fail
+        try {
+            localStorage.clear();
+            sessionStorage.clear();
+        } catch (e) {
+            console.error("Auth: Could not clear storage", e);
+        }
+    };
+
     const updateLastSeen = async (uid: string) => {
         const now = Date.now();
-        // Throttle updates to prevent excessive DB writes
         if (now - lastHeartbeat.current < HEARTBEAT_INTERVAL) return;
         
         lastHeartbeat.current = now;
@@ -58,7 +73,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 .update({ last_seen: new Date().toISOString() })
                 .eq('id', uid);
         } catch (err) {
-            console.warn("Auth: Failed to update last_seen heartbeat");
+            console.warn("Auth: Heartbeat update skipped");
         }
     };
 
@@ -89,7 +104,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setFreeToolsData(activeMap);
             }
         } catch (err) {
-            console.warn("Auth: Free tools fetch suppressed", err);
+            console.warn("Auth: Free tools fetch error ignored");
         }
     };
 
@@ -138,10 +153,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
 
             setProfile(finalProfile);
-            updateLastSeen(userId); // Log presence immediately on load
+            updateLastSeen(userId);
 
         } catch (err) {
-            console.error("Auth: Profile synchronization failed", err);
+            console.error("Auth: Profile sync failed", err);
         }
     };
 
@@ -149,7 +164,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
             setLoading(true); 
             await supabase.auth.signOut();
-            localStorage.removeItem(ACTIVITY_STORAGE_KEY);
+            clearLocalSession();
             if (isAuto) sessionStorage.setItem('session_expired', 'true');
             setProfile(null);
             setSession(null);
@@ -165,7 +180,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             inactivityTimer.current = setTimeout(() => {
                 signOut(true);
             }, INACTIVITY_LIMIT);
-            // Also attempt to update heartbeat on activity
             updateLastSeen(user.id);
         }
     };
@@ -198,27 +212,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         fetchFreeTools(),
                         supabase.auth.getSession()
                     ]),
-                    10000,
+                    12000,
                     'timeout' as any
                 );
 
                 if (results === 'timeout') {
+                    console.error("Auth: System timeout during handshake.");
                     if (mounted) setLoading(false);
                     return;
                 }
 
                 const sessionRes = results[1];
-                if (sessionRes.status === 'fulfilled' && sessionRes.value.data.session) {
-                    const currentSession = sessionRes.value.data.session;
-                    if (mounted) {
+                if (sessionRes.status === 'fulfilled') {
+                    const { data: { session: currentSession }, error } = sessionRes.value;
+                    
+                    // SURGICAL ERROR HANDLING FOR INVALID REFRESH TOKENS
+                    if (error && (error.message.includes('Refresh Token Not Found') || error.status === 400)) {
+                        console.error("Auth: Invalid refresh token detected. Cleaning local state.");
+                        clearLocalSession();
+                        if (mounted) setLoading(false);
+                        return;
+                    }
+
+                    if (currentSession && mounted) {
                         setSession(currentSession);
                         setUser(currentSession.user);
                         lastUserId.current = currentSession.user.id;
                         await fetchProfile(currentSession.user.id);
                     }
+                } else if (sessionRes.status === 'rejected') {
+                    console.error("Auth: Session promise rejected", sessionRes.reason);
+                    clearLocalSession();
                 }
             } catch (err) {
                 console.error("Auth: Initialization exception", err);
+                clearLocalSession();
             } finally {
                 if (mounted) setLoading(false);
             }
@@ -232,14 +260,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (event === 'SIGNED_OUT') {
                 setProfile(null); setUser(null); setSession(null);
                 setLoading(false);
-            } else if (newSession?.user) {
-                setSession(newSession); 
-                setUser(newSession.user);
-                setLoading(false); 
-                
-                if (newSession.user.id !== lastUserId.current) {
-                    lastUserId.current = newSession.user.id;
-                    fetchProfile(newSession.user.id);
+            } else if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') {
+                if (newSession?.user) {
+                    setSession(newSession); 
+                    setUser(newSession.user);
+                    setLoading(false); 
+                    
+                    if (newSession.user.id !== lastUserId.current) {
+                        lastUserId.current = newSession.user.id;
+                        fetchProfile(newSession.user.id);
+                    }
                 }
             } else {
                 setLoading(false);
