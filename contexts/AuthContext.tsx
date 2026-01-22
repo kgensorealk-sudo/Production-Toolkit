@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../supabaseClient';
@@ -20,9 +21,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const ACTIVITY_STORAGE_KEY = 'prod_toolkit_last_active';
-const HEARTBEAT_INTERVAL = 2 * 60 * 1000; // Throttled updates every 2 mins
-
-// Specific key used by Supabase for this project
+const HEARTBEAT_INTERVAL = 2 * 60 * 1000;
 const SB_STORAGE_KEY = 'sb-jtrvpqxhjqpifglrhbzu-auth-token';
 
 const withTimeout = <T,>(promise: Promise<T>, ms: number, timeoutValue: T): Promise<T> => {
@@ -56,26 +55,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
             localStorage.clear();
             sessionStorage.clear();
-        } catch (e) {
-            console.error("Auth: Could not clear storage", e);
-        }
+        } catch (e) {}
     };
 
     const updateLastSeen = async (uid: string, force: boolean = false) => {
         const now = Date.now();
-        // Don't update if it's been less than 2 minutes, unless 'force' is true (e.g., login or logout)
         if (!force && (now - lastHeartbeat.current < HEARTBEAT_INTERVAL)) return;
         
         lastHeartbeat.current = now;
         try {
-            // Using a background update to not block UI
+            // Heartbeat update is the ONLY column the user can update now
             await supabase
                 .from('profiles')
                 .update({ last_seen: new Date().toISOString() })
                 .eq('id', uid);
-        } catch (err) {
-            // Silently ignore heartbeat failures to prevent user disruption
-        }
+        } catch (err) {}
     };
 
     const fetchFreeTools = async () => {
@@ -87,30 +81,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 .maybeSingle();
             
             if (error) throw error;
-
             if (data?.free_tools_data) {
                 const now = new Date();
                 const activeMap: Record<string, string> = {};
                 const activeIds: string[] = [];
-
                 Object.entries(data.free_tools_data).forEach(([tid, expiry]) => {
-                    const expiryDate = new Date(expiry as string);
-                    if (expiryDate > now) {
+                    if (new Date(expiry as string) > now) {
                         activeMap[tid] = expiry as string;
                         activeIds.push(tid);
                     }
                 });
-
                 setFreeTools(activeIds);
                 setFreeToolsData(activeMap);
             }
         } catch (err) {
-            console.warn("Auth: Free tools sync error");
+            console.warn("Auth: System config sync error");
         }
     };
 
     const fetchProfile = async (userId: string) => {
         try {
+            // We re-fetch keys explicitly to ensure current device/user binding is valid
             const { data: profileData, error: profileError } = await supabase
                 .from('profiles')
                 .select('*')
@@ -128,11 +119,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     .select()
                     .single();
                 
-                if (insertError) {
-                    finalProfile = { id: userId, email: user?.email || '', role: 'user', is_subscribed: false, unlocked_tools: [] };
-                } else {
-                    finalProfile = { ...newProfile, unlocked_tools: [] };
-                }
+                finalProfile = { id: userId, email: user?.email || '', role: 'user', is_subscribed: false, unlocked_tools: [] };
             } else {
                 const { data: keysData } = await supabase
                     .from('access_keys')
@@ -154,29 +141,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
 
             setProfile(finalProfile);
-            // CRITICAL: Force an immediate timestamp write on initial profile load
             updateLastSeen(userId, true);
-
         } catch (err) {
             console.error("Auth: Profile sync error", err);
         }
     };
 
     const signOut = async (isAuto: boolean = false) => {
-        const userIdForLogoutSync = user?.id;
+        const uid = user?.id;
         try {
             setLoading(true); 
-            // If logging out due to inactivity, log the exact moment as Last Seen before killing the session
-            if (isAuto && userIdForLogoutSync) {
-                await updateLastSeen(userIdForLogoutSync, true);
-            }
+            if (isAuto && uid) await updateLastSeen(uid, true);
             await supabase.auth.signOut();
             clearLocalSession();
-            setProfile(null);
-            setSession(null);
-            setUser(null);
+            setProfile(null); setSession(null); setUser(null);
             lastUserId.current = null;
-            lastHeartbeat.current = 0;
         } finally {
             setLoading(false);
         }
@@ -185,19 +164,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const resetInactivityTimer = () => {
         if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
         if (session && user) {
-            inactivityTimer.current = setTimeout(() => {
-                signOut(true); // isAuto = true
-            }, INACTIVITY_LIMIT);
-            // On every user interaction, attempt a throttled heartbeat
+            inactivityTimer.current = setTimeout(() => signOut(true), INACTIVITY_LIMIT);
             updateLastSeen(user.id);
         }
     };
 
-    const refreshProfile = async () => { 
-        if (user?.id) {
-            await fetchProfile(user.id); 
-        }
-    };
+    const refreshProfile = async () => { if (user?.id) await fetchProfile(user.id); };
 
     useEffect(() => {
         const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
@@ -212,28 +184,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
     }, [session, user]);
 
-    // Handle abrupt closure (closing .exe or tab)
-    useEffect(() => {
-        const handleUnload = () => {
-            if (user?.id) {
-                // We use Navigator.sendBeacon or a synchronous call if possible, 
-                // but since updateLastSeen is async, we just fire it.
-                updateLastSeen(user.id, true);
-            }
-        };
-        window.addEventListener('beforeunload', handleUnload);
-        return () => window.removeEventListener('beforeunload', handleUnload);
-    }, [user]);
-
     useEffect(() => {
         let mounted = true;
         const init = async () => {
             try {
                 const results = await withTimeout(
-                    Promise.allSettled([
-                        fetchFreeTools(),
-                        supabase.auth.getSession()
-                    ]),
+                    Promise.allSettled([fetchFreeTools(), supabase.auth.getSession()]),
                     12000,
                     'timeout' as any
                 );
@@ -245,22 +201,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
                 const sessionRes = results[1];
                 if (sessionRes.status === 'fulfilled') {
-                    const { data: { session: currentSession }, error } = sessionRes.value;
-                    
-                    if (error && (error.message.includes('Refresh Token Not Found') || error.status === 400)) {
-                        clearLocalSession();
-                        if (mounted) setLoading(false);
-                        return;
-                    }
-
+                    const { data: { session: currentSession } } = sessionRes.value;
                     if (currentSession && mounted) {
                         setSession(currentSession);
                         setUser(currentSession.user);
                         lastUserId.current = currentSession.user.id;
                         await fetchProfile(currentSession.user.id);
                     }
-                } else if (sessionRes.status === 'rejected') {
-                    clearLocalSession();
                 }
             } catch (err) {
                 clearLocalSession();
@@ -273,33 +220,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
             if (!mounted) return;
-            
             if (event === 'SIGNED_OUT') {
                 setProfile(null); setUser(null); setSession(null);
                 setLoading(false);
-                lastHeartbeat.current = 0;
-            } else if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') {
-                if (newSession?.user) {
-                    const isNewUser = newSession.user.id !== lastUserId.current;
-                    setSession(newSession); 
-                    setUser(newSession.user);
-                    setLoading(false); 
-                    
-                    if (isNewUser) {
-                        lastUserId.current = newSession.user.id;
-                        lastHeartbeat.current = 0;
-                        fetchProfile(newSession.user.id);
-                    }
-                }
-            } else {
-                setLoading(false);
+            } else if (event === 'SIGNED_IN' && newSession?.user) {
+                setSession(newSession); setUser(newSession.user);
+                fetchProfile(newSession.user.id);
             }
         });
 
-        return () => { 
-            mounted = false; 
-            subscription.unsubscribe(); 
-        };
+        return () => { mounted = false; subscription.unsubscribe(); };
     }, []);
 
     const value = { 
