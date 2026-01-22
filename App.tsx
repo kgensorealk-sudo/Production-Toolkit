@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { Analytics } from '@vercel/analytics/react';
 import Layout from './components/Layout';
 import Landing from './pages/Landing';
 import Dashboard from './pages/Dashboard';
@@ -130,6 +131,7 @@ const SubscriptionGuard: React.FC<{ children: React.ReactElement, toolId: ToolId
 const App: React.FC = () => {
     return (
         <AuthProvider>
+            <Analytics />
             <HashRouter>
                 <Routes>
                     <Route path="/login" element={<Login />} />
