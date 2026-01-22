@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 /* Import useNavigate from react-router to resolve potential named export issues in react-router-dom types */
@@ -27,7 +26,8 @@ const Login: React.FC = () => {
 
         try {
             if (isSignUp) {
-                const { data, error } = await supabase.auth.signUp({
+                // Fix: Use any casting to bypass incorrect type definition for signUp
+                const { data, error } = await (supabase.auth as any).signUp({
                     email,
                     password,
                 });
@@ -40,7 +40,8 @@ const Login: React.FC = () => {
                 }
                 setIsSignUp(false);
             } else {
-                const { error } = await supabase.auth.signInWithPassword({
+                // Fix: Use any casting to bypass incorrect type definition for signInWithPassword
+                const { error } = await (supabase.auth as any).signInWithPassword({
                     email,
                     password,
                 });

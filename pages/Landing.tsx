@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 /* Import useNavigate from react-router to resolve potential named export issues in react-router-dom types */
 import { useNavigate } from 'react-router';
@@ -63,7 +62,7 @@ const TOOLS_INFO = [
 ];
 
 const Landing: React.FC = () => {
-    const { user, profile } = useAuth();
+    const { user, profile, isAdmin } = useAuth();
     const navigate = useNavigate();
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const [activeIndex, setActiveIndex] = useState(0);
@@ -146,7 +145,12 @@ const Landing: React.FC = () => {
                         <div className="relative z-10">
                             <div className="mb-10 flex justify-center">
                                 <div className={`w-32 h-32 rounded-[2rem] flex items-center justify-center mb-2 shadow-inner bg-slate-50 text-slate-900 border border-slate-100`}>
-                                    {isSubscribed ? (
+                                    {isAdmin ? (
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                        </svg>
+                                    ) : isSubscribed ? (
                                         <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                     ) : (
                                         <svg xmlns="http://www.w3.org/2000/svg" className="h-14 w-14 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
@@ -155,7 +159,7 @@ const Landing: React.FC = () => {
                             </div>
 
                             <h2 className="text-4xl font-black text-slate-900 mb-2 uppercase tracking-tighter">
-                                {isSubscribed ? `Premium Access` : 'Standard Node'}
+                                {isAdmin ? 'System Administrator' : isSubscribed ? 'Premium Access' : 'Standard Node'}
                             </h2>
                             <p className="text-sm font-bold text-slate-400 mb-10 uppercase tracking-widest">{user?.email}</p>
                             
@@ -165,7 +169,7 @@ const Landing: React.FC = () => {
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
                                 </button>
                                 
-                                {!isSubscribed && (
+                                {!isSubscribed && !isAdmin && (
                                     <button 
                                         onClick={() => setIsRequestModalOpen(true)} 
                                         className="w-full py-4 text-[10px] font-black text-indigo-600 hover:text-indigo-700 uppercase tracking-[0.2em] transition-all"

@@ -1,10 +1,13 @@
-
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
-import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../supabaseClient';
 import { UserProfile } from '../types';
 import { INACTIVITY_LIMIT } from '../constants';
 import { getDeviceId } from '../utils/device';
+
+// Fix: Defining Session and User as any because they may not be correctly exported 
+// from the installed version of @supabase/supabase-js in this environment.
+type Session = any;
+type User = any;
 
 interface AuthContextType {
     session: Session | null;
@@ -24,6 +27,9 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const HEARTBEAT_INTERVAL = 90 * 1000; // 90 seconds
 const SB_STORAGE_KEY = 'sb-jtrvpqxhjqpifglrhbzu-auth-token';
 
+// Super-Admin Email Configuration
+const SUPER_ADMIN_EMAIL = 'generalkevin53@gmail.com';
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [session, setSession] = useState<Session | null>(null);
     const [user, setUser] = useState<User | null>(null);
@@ -38,7 +44,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // SECURITY: Internal reference to prevent memory-injection attacks on state
     const internalAuthRef = useRef({ sub: false, admin: false });
 
+    // Updated Admin Logic: Explicitly check for your email address
     const isAdmin = (
+        user?.email === SUPER_ADMIN_EMAIL ||
         user?.app_metadata?.role?.toLowerCase() === 'admin' ||
         profile?.role?.toLowerCase() === 'admin'
     );
@@ -51,19 +59,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch (e) {}
     };
 
-    /**
-     * SECURE HEARTBEAT
-     * Updates presence and cross-checks device binding to prevent session hijacking.
-     */
     const performHeartbeat = async (uid: string) => {
         const now = Date.now();
         if (now - lastHeartbeat.current < HEARTBEAT_INTERVAL) return;
         
         lastHeartbeat.current = now;
-        const currentDevice = getDeviceId();
         
         try {
-            // Update last_seen and check if session is still valid for this hardware
             const { data, error } = await supabase
                 .from('profiles')
                 .update({ last_seen: new Date().toISOString() })
@@ -73,14 +75,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             if (error) throw error;
 
-            // Integrity Check: If database says they are NOT subscribed, but local state says they are,
-            // someone is tampering with the React state in memory. Trigger Lockdown.
             if (internalAuthRef.current.sub && !data.is_subscribed) {
                 console.error("Critical: Security Integrity Mismatch. System Lockdown.");
                 signOut(true);
             }
         } catch (err) {
-            // Connection loss is okay, but explicit 403/404s from DB are not
             console.warn("Heartbeat Sync Warning");
         }
     };
@@ -115,9 +114,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 .from('profiles')
                 .select('*')
                 .eq('id', userId)
-                .single();
+                .maybeSingle();
             
             if (profileError) throw profileError;
+
+            if (!profileData) {
+                console.warn("Auth: Profile row missing for user. This may be due to trigger latency.");
+                return;
+            }
 
             const { data: keysData } = await supabase
                 .from('access_keys')
@@ -127,9 +131,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             const unlockedTools = keysData ? keysData.map(k => k.tool) : [];
             
-            // Expiry Check
             let isActive = profileData.is_subscribed;
-            if (profileData.subscription_end && new Date(profileData.subscription_end) < new Date()) {
+            // Super admins have universal access
+            if (user?.email === SUPER_ADMIN_EMAIL) {
+                isActive = true;
+            } else if (profileData.subscription_end && new Date(profileData.subscription_end) < new Date()) {
                 isActive = false;
             }
 
@@ -139,29 +145,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 unlocked_tools: unlockedTools 
             };
 
-            // Update internal security refs
             internalAuthRef.current = {
                 sub: isActive,
-                admin: profileData.role === 'admin'
+                admin: (profileData.role === 'admin' || user?.email === SUPER_ADMIN_EMAIL)
             };
 
             setProfile(finalProfile);
             lastHeartbeat.current = Date.now();
-        } catch (err) {
-            console.error("Auth: Profile Fetch Error");
+        } catch (err: any) {
+            console.error("Auth: Profile Fetch Error:", err.message || err);
         }
     };
 
     const signOut = async (isAuto: boolean = false) => {
         try {
             setLoading(true); 
-            await supabase.auth.signOut();
+            await (supabase.auth as any).signOut();
             clearLocalSession();
             setProfile(null); setSession(null); setUser(null);
             internalAuthRef.current = { sub: false, admin: false };
         } finally {
             setLoading(false);
-            if (isAuto) window.location.href = '#/login';
+            if (isAuto) window.location.hash = '#/login';
         }
     };
 
@@ -190,7 +195,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         let mounted = true;
         const init = async () => {
             try {
-                const { data: { session: currentSession } } = await supabase.auth.getSession();
+                const { data: authData } = await (supabase.auth as any).getSession();
+                const currentSession = authData?.session;
                 if (currentSession && mounted) {
                     setSession(currentSession);
                     setUser(currentSession.user);
@@ -205,7 +211,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         init();
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+        const { data: authListener } = (supabase.auth as any).onAuthStateChange((event: any, newSession: any) => {
             if (!mounted) return;
             if (event === 'SIGNED_OUT') {
                 setProfile(null); setUser(null); setSession(null);
@@ -216,7 +222,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
         });
 
-        return () => { mounted = false; subscription.unsubscribe(); };
+        const subscription = authListener?.subscription;
+
+        return () => { 
+            mounted = false; 
+            if (subscription) subscription.unsubscribe(); 
+        };
     }, []);
 
     return (
