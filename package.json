@@ -14,11 +14,12 @@
     "electron:dist": "npm run build && electron-builder build --windows"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "@vercel/analytics": "^1.6.1",
     "diff": "^5.2.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
-    "react-router-dom": "^7.12.0",
-    "@supabase/supabase-js": "^2.39.0"
+    "react-router-dom": "^7.12.0"
   },
   "devDependencies": {
     "@types/diff": "^5.0.9",
