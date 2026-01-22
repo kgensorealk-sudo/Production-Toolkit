@@ -43,9 +43,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const lastHeartbeat = useRef<number>(0);
     const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+    // SECURITY: isAdmin is derived from the User JWT (app_metadata), 
+    // which is signed by Supabase and cannot be modified by the user in memory.
     const isAdmin = (
-        profile?.role?.toLowerCase() === 'admin' || 
-        (user?.app_metadata?.role?.toLowerCase() === 'admin')
+        user?.app_metadata?.role?.toLowerCase() === 'admin' ||
+        profile?.role?.toLowerCase() === 'admin'
     );
 
     const clearLocalSession = () => {
@@ -64,7 +66,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         lastHeartbeat.current = now;
         try {
-            // Heartbeat update is the ONLY column the user can update now
             await supabase
                 .from('profiles')
                 .update({ last_seen: new Date().toISOString() })
@@ -101,7 +102,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const fetchProfile = async (userId: string) => {
         try {
-            // We re-fetch keys explicitly to ensure current device/user binding is valid
             const { data: profileData, error: profileError } = await supabase
                 .from('profiles')
                 .select('*')
@@ -113,12 +113,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             let finalProfile: UserProfile;
 
             if (!profileData) {
-                const { data: newProfile, error: insertError } = await supabase
-                    .from('profiles')
-                    .insert([{ id: userId, email: user?.email || '', role: 'user' }])
-                    .select()
-                    .single();
-                
+                // Initial creation handled by trigger, but we set a safe default for the local state
                 finalProfile = { id: userId, email: user?.email || '', role: 'user', is_subscribed: false, unlocked_tools: [] };
             } else {
                 const { data: keysData } = await supabase

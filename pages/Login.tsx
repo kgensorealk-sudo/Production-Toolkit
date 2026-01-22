@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { useNavigate } from 'react-router-dom';
+/* Import useNavigate from react-router to resolve potential named export issues in react-router-dom types */
+import { useNavigate } from 'react-router';
 import Toast from '../components/Toast';
 
 const Login: React.FC = () => {

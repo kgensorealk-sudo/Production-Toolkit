@@ -1,5 +1,7 @@
+
 import React, { useMemo, useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+/* Import useNavigate from react-router to resolve potential named export issues in react-router-dom types */
+import { useNavigate } from 'react-router';
 import { ToolId } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import AnnouncementModal from '../components/AnnouncementModal';

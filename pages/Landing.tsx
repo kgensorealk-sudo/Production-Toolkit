@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+/* Import useNavigate from react-router to resolve potential named export issues in react-router-dom types */
+import { useNavigate } from 'react-router';
 import { useAuth } from '../contexts/AuthContext';
 import Toast from '../components/Toast';
 

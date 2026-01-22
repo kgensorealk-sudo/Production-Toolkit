@@ -1,5 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
-import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+/* Split react-router-dom and react-router imports to resolve missing named export errors in specific environments */
+import { HashRouter } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate } from 'react-router';
 import Layout from './components/Layout';
 import Landing from './pages/Landing';
 import Dashboard from './pages/Dashboard';
@@ -25,7 +28,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import LoadingOverlay from './components/LoadingOverlay';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const { session, loading } = useAuth();
+    const { session, loading, refreshProfile } = useAuth();
     const [showRecovery, setShowRecovery] = useState(false);
 
     useEffect(() => {
@@ -33,8 +36,10 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
         if (loading) {
             timer = setTimeout(() => setShowRecovery(true), 6000);
         }
+        // Integrity check on every protected route mount
+        if (!loading && session) refreshProfile();
         return () => clearTimeout(timer);
-    }, [loading]);
+    }, [loading, session]);
 
     const handleReset = () => {
         localStorage.clear();
@@ -66,7 +71,11 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 };
 
 const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const { session, isAdmin, loading } = useAuth();
+    const { session, isAdmin, loading, refreshProfile } = useAuth();
+
+    useEffect(() => {
+        if (!loading && session) refreshProfile();
+    }, [loading, session]);
 
     if (loading) return <LoadingOverlay message="Verifying Admin..." color="slate" />;
     if (!session || !isAdmin) return <Navigate to="/" replace />;
@@ -76,11 +85,14 @@ const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 const LockedToolGuard: React.FC<{ children: React.ReactElement, toolId: ToolId, displayName: string }> = ({ children, toolId, displayName }) => {
     const { profile, freeTools, isAdmin } = useAuth();
 
+    // SECURITY: Background integrity check happens at the ProtectedRoute level.
+    // We trust current state here for immediate rendering, but DB enforces XML saves.
     if (freeTools.includes(toolId)) return children;
     if (isAdmin) return children;
     if (profile?.is_subscribed) return children;
     const isUnlocked = profile?.unlocked_tools?.includes(toolId) || profile?.unlocked_tools?.includes('universal');
     if (isUnlocked) return children;
+    
     return (
         <div className="relative h-full w-full overflow-hidden">
             <div className="blur-sm pointer-events-none grayscale opacity-40 select-none">{children}</div>
