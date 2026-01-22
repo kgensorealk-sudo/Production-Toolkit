@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../supabaseClient';
@@ -20,7 +19,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const ACTIVITY_STORAGE_KEY = 'prod_toolkit_last_active';
 const HEARTBEAT_INTERVAL = 2 * 60 * 1000;
 const SB_STORAGE_KEY = 'sb-jtrvpqxhjqpifglrhbzu-auth-token';
 
@@ -39,9 +37,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [freeToolsData, setFreeToolsData] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(true);
     
-    const lastUserId = useRef<string | null>(null);
     const lastHeartbeat = useRef<number>(0);
     const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const serverSubscriptionRef = useRef<boolean>(false);
 
     // SECURITY: isAdmin is derived from the User JWT (app_metadata), 
     // which is signed by Supabase and cannot be modified by the user in memory.
@@ -52,7 +50,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const clearLocalSession = () => {
         localStorage.removeItem(SB_STORAGE_KEY);
-        localStorage.removeItem(ACTIVITY_STORAGE_KEY);
         lastHeartbeat.current = 0; 
         try {
             localStorage.clear();
@@ -72,6 +69,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 .eq('id', uid);
         } catch (err) {}
     };
+
+    /**
+     * INTEGRITY PROCTOR
+     * Periodically verifies the local 'is_subscribed' state against the server.
+     * Prevents users from manually editing the React state in RAM.
+     */
+    useEffect(() => {
+        if (!session || !user) return;
+
+        const proctor = setInterval(async () => {
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('is_subscribed, subscription_end')
+                .eq('id', user.id)
+                .maybeSingle();
+
+            if (error) return;
+
+            if (data) {
+                const actuallySubscribed = data.is_subscribed && 
+                    (!data.subscription_end || new Date(data.subscription_end) > new Date());
+                
+                // If local state says "true" but server says "false", trigger lockdown
+                if (profile?.is_subscribed && !actuallySubscribed) {
+                    console.error("System Integrity Violation Detected");
+                    signOut(true);
+                }
+                serverSubscriptionRef.current = actuallySubscribed;
+            }
+        }, 120000); // Check every 2 minutes
+
+        return () => clearInterval(proctor);
+    }, [session, user, profile?.is_subscribed]);
 
     const fetchFreeTools = async () => {
         try {
@@ -113,7 +143,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             let finalProfile: UserProfile;
 
             if (!profileData) {
-                // Initial creation handled by trigger, but we set a safe default for the local state
                 finalProfile = { id: userId, email: user?.email || '', role: 'user', is_subscribed: false, unlocked_tools: [] };
             } else {
                 const { data: keysData } = await supabase
@@ -133,6 +162,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     is_subscribed: isActive,
                     unlocked_tools: unlockedTools 
                 };
+                serverSubscriptionRef.current = isActive;
             }
 
             setProfile(finalProfile);
@@ -150,7 +180,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             await supabase.auth.signOut();
             clearLocalSession();
             setProfile(null); setSession(null); setUser(null);
-            lastUserId.current = null;
+            serverSubscriptionRef.current = false;
         } finally {
             setLoading(false);
         }
@@ -200,7 +230,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     if (currentSession && mounted) {
                         setSession(currentSession);
                         setUser(currentSession.user);
-                        lastUserId.current = currentSession.user.id;
                         await fetchProfile(currentSession.user.id);
                     }
                 }
