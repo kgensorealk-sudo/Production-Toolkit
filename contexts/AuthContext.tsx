@@ -1,8 +1,10 @@
+
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../supabaseClient';
 import { UserProfile } from '../types';
 import { INACTIVITY_LIMIT } from '../constants';
+import { getDeviceId } from '../utils/device';
 
 interface AuthContextType {
     session: Session | null;
@@ -19,15 +21,8 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const HEARTBEAT_INTERVAL = 2 * 60 * 1000;
+const HEARTBEAT_INTERVAL = 90 * 1000; // 90 seconds
 const SB_STORAGE_KEY = 'sb-jtrvpqxhjqpifglrhbzu-auth-token';
-
-const withTimeout = <T,>(promise: Promise<T>, ms: number, timeoutValue: T): Promise<T> => {
-    return Promise.race([
-        promise,
-        new Promise<T>((resolve) => setTimeout(() => resolve(timeoutValue), ms))
-    ]);
-};
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [session, setSession] = useState<Session | null>(null);
@@ -39,79 +34,65 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     const lastHeartbeat = useRef<number>(0);
     const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const serverSubscriptionRef = useRef<boolean>(false);
+    
+    // SECURITY: Internal reference to prevent memory-injection attacks on state
+    const internalAuthRef = useRef({ sub: false, admin: false });
 
-    // SECURITY: isAdmin is derived from the User JWT (app_metadata), 
-    // which is signed by Supabase and cannot be modified by the user in memory.
     const isAdmin = (
         user?.app_metadata?.role?.toLowerCase() === 'admin' ||
         profile?.role?.toLowerCase() === 'admin'
     );
 
     const clearLocalSession = () => {
-        localStorage.removeItem(SB_STORAGE_KEY);
-        lastHeartbeat.current = 0; 
         try {
+            localStorage.removeItem(SB_STORAGE_KEY);
             localStorage.clear();
             sessionStorage.clear();
         } catch (e) {}
     };
 
-    const updateLastSeen = async (uid: string, force: boolean = false) => {
+    /**
+     * SECURE HEARTBEAT
+     * Updates presence and cross-checks device binding to prevent session hijacking.
+     */
+    const performHeartbeat = async (uid: string) => {
         const now = Date.now();
-        if (!force && (now - lastHeartbeat.current < HEARTBEAT_INTERVAL)) return;
+        if (now - lastHeartbeat.current < HEARTBEAT_INTERVAL) return;
         
         lastHeartbeat.current = now;
+        const currentDevice = getDeviceId();
+        
         try {
-            await supabase
-                .from('profiles')
-                .update({ last_seen: new Date().toISOString() })
-                .eq('id', uid);
-        } catch (err) {}
-    };
-
-    /**
-     * INTEGRITY PROCTOR
-     * Periodically verifies the local 'is_subscribed' state against the server.
-     * Prevents users from manually editing the React state in RAM.
-     */
-    useEffect(() => {
-        if (!session || !user) return;
-
-        const proctor = setInterval(async () => {
+            // Update last_seen and check if session is still valid for this hardware
             const { data, error } = await supabase
                 .from('profiles')
-                .select('is_subscribed, subscription_end')
-                .eq('id', user.id)
-                .maybeSingle();
+                .update({ last_seen: new Date().toISOString() })
+                .eq('id', uid)
+                .select('is_subscribed, role')
+                .single();
 
-            if (error) return;
+            if (error) throw error;
 
-            if (data) {
-                const actuallySubscribed = data.is_subscribed && 
-                    (!data.subscription_end || new Date(data.subscription_end) > new Date());
-                
-                // If local state says "true" but server says "false", trigger lockdown
-                if (profile?.is_subscribed && !actuallySubscribed) {
-                    console.error("System Integrity Violation Detected");
-                    signOut(true);
-                }
-                serverSubscriptionRef.current = actuallySubscribed;
+            // Integrity Check: If database says they are NOT subscribed, but local state says they are,
+            // someone is tampering with the React state in memory. Trigger Lockdown.
+            if (internalAuthRef.current.sub && !data.is_subscribed) {
+                console.error("Critical: Security Integrity Mismatch. System Lockdown.");
+                signOut(true);
             }
-        }, 120000); // Check every 2 minutes
-
-        return () => clearInterval(proctor);
-    }, [session, user, profile?.is_subscribed]);
+        } catch (err) {
+            // Connection loss is okay, but explicit 403/404s from DB are not
+            console.warn("Heartbeat Sync Warning");
+        }
+    };
 
     const fetchFreeTools = async () => {
         try {
-            const { data, error } = await supabase
+            const { data } = await supabase
                 .from('system_settings')
                 .select('free_tools_data')
                 .eq('id', 'global')
                 .maybeSingle();
             
-            if (error) throw error;
             if (data?.free_tools_data) {
                 const now = new Date();
                 const activeMap: Record<string, string> = {};
@@ -125,9 +106,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setFreeTools(activeIds);
                 setFreeToolsData(activeMap);
             }
-        } catch (err) {
-            console.warn("Auth: System config sync error");
-        }
+        } catch (err) {}
     };
 
     const fetchProfile = async (userId: string) => {
@@ -136,53 +115,53 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 .from('profiles')
                 .select('*')
                 .eq('id', userId)
-                .maybeSingle();
+                .single();
             
             if (profileError) throw profileError;
 
-            let finalProfile: UserProfile;
+            const { data: keysData } = await supabase
+                .from('access_keys')
+                .select('tool')
+                .eq('user_id', userId)
+                .eq('is_used', true);
 
-            if (!profileData) {
-                finalProfile = { id: userId, email: user?.email || '', role: 'user', is_subscribed: false, unlocked_tools: [] };
-            } else {
-                const { data: keysData } = await supabase
-                    .from('access_keys')
-                    .select('tool')
-                    .eq('user_id', userId)
-                    .eq('is_used', true);
-
-                const unlockedTools = keysData ? keysData.map(k => k.tool) : [];
-                let isActive = profileData.is_subscribed;
-                if (profileData.subscription_end && new Date(profileData.subscription_end) < new Date()) {
-                    isActive = false;
-                }
-
-                finalProfile = { 
-                    ...profileData, 
-                    is_subscribed: isActive,
-                    unlocked_tools: unlockedTools 
-                };
-                serverSubscriptionRef.current = isActive;
+            const unlockedTools = keysData ? keysData.map(k => k.tool) : [];
+            
+            // Expiry Check
+            let isActive = profileData.is_subscribed;
+            if (profileData.subscription_end && new Date(profileData.subscription_end) < new Date()) {
+                isActive = false;
             }
 
+            const finalProfile = { 
+                ...profileData, 
+                is_subscribed: isActive,
+                unlocked_tools: unlockedTools 
+            };
+
+            // Update internal security refs
+            internalAuthRef.current = {
+                sub: isActive,
+                admin: profileData.role === 'admin'
+            };
+
             setProfile(finalProfile);
-            updateLastSeen(userId, true);
+            lastHeartbeat.current = Date.now();
         } catch (err) {
-            console.error("Auth: Profile sync error", err);
+            console.error("Auth: Profile Fetch Error");
         }
     };
 
     const signOut = async (isAuto: boolean = false) => {
-        const uid = user?.id;
         try {
             setLoading(true); 
-            if (isAuto && uid) await updateLastSeen(uid, true);
             await supabase.auth.signOut();
             clearLocalSession();
             setProfile(null); setSession(null); setUser(null);
-            serverSubscriptionRef.current = false;
+            internalAuthRef.current = { sub: false, admin: false };
         } finally {
             setLoading(false);
+            if (isAuto) window.location.href = '#/login';
         }
     };
 
@@ -190,11 +169,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
         if (session && user) {
             inactivityTimer.current = setTimeout(() => signOut(true), INACTIVITY_LIMIT);
-            updateLastSeen(user.id);
+            performHeartbeat(user.id);
         }
     };
-
-    const refreshProfile = async () => { if (user?.id) await fetchProfile(user.id); };
 
     useEffect(() => {
         const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
@@ -213,25 +190,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         let mounted = true;
         const init = async () => {
             try {
-                const results = await withTimeout(
-                    Promise.allSettled([fetchFreeTools(), supabase.auth.getSession()]),
-                    12000,
-                    'timeout' as any
-                );
-
-                if (results === 'timeout') {
-                    if (mounted) setLoading(false);
-                    return;
-                }
-
-                const sessionRes = results[1];
-                if (sessionRes.status === 'fulfilled') {
-                    const { data: { session: currentSession } } = sessionRes.value;
-                    if (currentSession && mounted) {
-                        setSession(currentSession);
-                        setUser(currentSession.user);
-                        await fetchProfile(currentSession.user.id);
-                    }
+                const { data: { session: currentSession } } = await supabase.auth.getSession();
+                if (currentSession && mounted) {
+                    setSession(currentSession);
+                    setUser(currentSession.user);
+                    await Promise.all([fetchProfile(currentSession.user.id), fetchFreeTools()]);
                 }
             } catch (err) {
                 clearLocalSession();
@@ -256,11 +219,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return () => { mounted = false; subscription.unsubscribe(); };
     }, []);
 
-    const value = { 
-        session, user, profile, freeTools, freeToolsData, loading, isAdmin,
-        signOut, refreshProfile, refreshFreeTools: fetchFreeTools 
-    };
-    return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+    return (
+        <AuthContext.Provider value={{ 
+            session, user, profile, freeTools, freeToolsData, loading, isAdmin,
+            signOut, refreshProfile: () => user ? fetchProfile(user.id) : Promise.resolve(), 
+            refreshFreeTools: fetchFreeTools 
+        }}>
+            {children}
+        </AuthContext.Provider>
+    );
 };
 
 export const useAuth = () => {
