@@ -2,7 +2,6 @@ import React, { createContext, useContext, useEffect, useState, useRef } from 'r
 import { supabase } from '../supabaseClient';
 import { UserProfile } from '../types';
 import { INACTIVITY_LIMIT } from '../constants';
-import { getDeviceId } from '../utils/device';
 
 // Fix: Defining Session and User as any because they may not be correctly exported 
 // from the installed version of @supabase/supabase-js in this environment.
@@ -25,6 +24,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const HEARTBEAT_INTERVAL = 90 * 1000; // 90 seconds
+// This is the specific key Supabase uses for this project
 const SB_STORAGE_KEY = 'sb-jtrvpqxhjqpifglrhbzu-auth-token';
 
 // Super-Admin Email Configuration
@@ -44,7 +44,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // SECURITY: Internal reference to prevent memory-injection attacks on state
     const internalAuthRef = useRef({ sub: false, admin: false });
 
-    // Updated Admin Logic: Explicitly check for your email address
     const isAdmin = (
         user?.email === SUPER_ADMIN_EMAIL ||
         user?.app_metadata?.role?.toLowerCase() === 'admin' ||
@@ -53,10 +52,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const clearLocalSession = () => {
         try {
+            console.warn("Auth: Purging local session storage due to token corruption.");
             localStorage.removeItem(SB_STORAGE_KEY);
-            localStorage.clear();
+            // Also clear generic Supabase keys just in case
+            Object.keys(localStorage).forEach(key => {
+                if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+                    localStorage.removeItem(key);
+                }
+            });
             sessionStorage.clear();
-        } catch (e) {}
+        } catch (e) {
+            console.error("Auth: Failed to clear storage", e);
+        }
     };
 
     const performHeartbeat = async (uid: string) => {
@@ -76,11 +83,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (error) throw error;
 
             if (internalAuthRef.current.sub && !data.is_subscribed) {
-                console.error("Critical: Security Integrity Mismatch. System Lockdown.");
                 signOut(true);
             }
         } catch (err) {
-            console.warn("Heartbeat Sync Warning");
+            // Silently handle heartbeat failures to avoid UI flicker
         }
     };
 
@@ -118,10 +124,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             
             if (profileError) throw profileError;
 
-            if (!profileData) {
-                console.warn("Auth: Profile row missing for user. This may be due to trigger latency.");
-                return;
-            }
+            if (!profileData) return;
 
             const { data: keysData } = await supabase
                 .from('access_keys')
@@ -132,7 +135,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const unlockedTools = keysData ? keysData.map(k => k.tool) : [];
             
             let isActive = profileData.is_subscribed;
-            // Super admins have universal access
             if (user?.email === SUPER_ADMIN_EMAIL) {
                 isActive = true;
             } else if (profileData.subscription_end && new Date(profileData.subscription_end) < new Date()) {
@@ -161,12 +163,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
             setLoading(true); 
             await (supabase.auth as any).signOut();
+        } catch (e) {
+            // Ignore signout errors, we clear locally anyway
+        } finally {
             clearLocalSession();
             setProfile(null); setSession(null); setUser(null);
             internalAuthRef.current = { sub: false, admin: false };
-        } finally {
             setLoading(false);
-            if (isAuto) window.location.hash = '#/login';
+            if (isAuto || !session) window.location.hash = '#/login';
         }
     };
 
@@ -195,15 +199,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         let mounted = true;
         const init = async () => {
             try {
-                const { data: authData } = await (supabase.auth as any).getSession();
-                const currentSession = authData?.session;
+                // Critical: Explicitly check session status
+                const { data, error } = await (supabase.auth as any).getSession();
+                
+                if (error) {
+                    // If we get an auth error during init (like invalid refresh token), clear storage
+                    if (error.message.toLowerCase().includes('refresh_token') || error.status === 400) {
+                        clearLocalSession();
+                    }
+                    throw error;
+                }
+
+                const currentSession = data?.session;
                 if (currentSession && mounted) {
                     setSession(currentSession);
                     setUser(currentSession.user);
                     await Promise.all([fetchProfile(currentSession.user.id), fetchFreeTools()]);
                 }
             } catch (err) {
-                clearLocalSession();
+                console.error("Auth: Initialization error", err);
+                if (mounted) {
+                    setSession(null);
+                    setUser(null);
+                }
             } finally {
                 if (mounted) setLoading(false);
             }
@@ -211,14 +229,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         init();
 
-        const { data: authListener } = (supabase.auth as any).onAuthStateChange((event: any, newSession: any) => {
+        const { data: authListener } = (supabase.auth as any).onAuthStateChange(async (event: any, newSession: any) => {
             if (!mounted) return;
+            
             if (event === 'SIGNED_OUT') {
                 setProfile(null); setUser(null); setSession(null);
                 setLoading(false);
             } else if (event === 'SIGNED_IN' && newSession?.user) {
                 setSession(newSession); setUser(newSession.user);
-                fetchProfile(newSession.user.id);
+                await fetchProfile(newSession.user.id);
+                setLoading(false);
+            } else if (event === 'TOKEN_REFRESHED' && newSession) {
+                setSession(newSession);
+                setUser(newSession.user);
+            } else if (event === 'USER_UPDATED' && newSession) {
+                setUser(newSession.user);
             }
         });
 
