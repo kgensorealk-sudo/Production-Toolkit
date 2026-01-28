@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { diffLines, diffWordsWithSpace, Change } from 'diff';
 import Toast from '../components/Toast';
@@ -133,7 +132,7 @@ const UncitedRefCleaner: React.FC = () => {
         setIsLoading(true);
         setTimeout(() => {
             try {
-                const bibRegex = /<ce:bib-reference\b[^>]*?\bid="([^"]+)"[^>]*>([\s\S]*?)<\/ce:bib-reference>/g;
+                const bibRegex = /<ce:bib-reference\b[^>]*?\ bid="([^"]+)"[^>]*>([\s\S]*?)<\/ce:bib-reference>/g;
                 const bibRefs: RefItem[] = [];
                 let match;
                 while ((match = bibRegex.exec(input)) !== null) {
@@ -211,8 +210,8 @@ const UncitedRefCleaner: React.FC = () => {
                     // Append to existing section
                     result = result.replace('</ce:further-reading-sec>', `\n${movedRefsMarkup}\n</ce:further-reading-sec>`);
                 } else {
-                    // Create new section
-                    const frBlock = `\n<ce:further-reading id="fr0005">\n<ce:section-title id="st3000">Further reading</ce:section-title>\n<ce:further-reading-sec id="fs0005">\n${movedRefsMarkup}\n</ce:further-reading-sec>\n</ce:further-reading>`;
+                    // Create new section (using 'ti' for title prefix to avoid 'st')
+                    const frBlock = `\n<ce:further-reading id="fr0005">\n<ce:section-title id="ti3000">Further reading</ce:section-title>\n<ce:further-reading-sec id="fs0005">\n${movedRefsMarkup}\n</ce:further-reading-sec>\n</ce:further-reading>`;
                     
                     const bibEndIndex = result.lastIndexOf('</ce:bibliography>');
                     if (bibEndIndex !== -1) {
