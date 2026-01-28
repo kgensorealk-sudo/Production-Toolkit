@@ -1,3 +1,4 @@
+
 const { app, BrowserWindow, shell, Menu, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -5,7 +6,11 @@ const fs = require('fs');
 const isDev = !app.isPackaged;
 let mainWindow;
 
-// Path for storing window state
+// Security: Disable remote debugging and other switches in production
+if (!isDev) {
+  app.commandLine.appendSwitch('disable-features', 'DevTools');
+}
+
 const stateFilePath = path.join(app.getPath('userData'), 'window-state.json');
 
 function saveState() {
@@ -38,11 +43,7 @@ function loadState() {
 
 function createWindow() {
   const state = loadState();
-
-  // Robust icon path resolution
-  const iconPath = isDev 
-    ? path.join(__dirname, '../favicon.png') 
-    : path.join(__dirname, '../favicon.png'); // When packaged, icon is in the root of the app.asar
+  const iconPath = path.join(__dirname, '../favicon.png');
 
   mainWindow = new BrowserWindow({
     width: state.width,
@@ -59,7 +60,9 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       webSecurity: true,
-      spellcheck: true
+      spellcheck: true,
+      // SECURITY: Disable devTools in production
+      devTools: isDev 
     },
     icon: iconPath
   });
@@ -72,9 +75,9 @@ function createWindow() {
     mainWindow.show();
   });
 
-  // Persist window size/pos on change
   mainWindow.on('close', saveState);
 
+  // Custom Menu without "Toggle DevTools" in production
   const template = [
     {
       label: 'File',
@@ -97,20 +100,11 @@ function createWindow() {
       label: 'View',
       submenu: [
         { role: 'reload' },
-        { role: 'toggleDevTools' },
+        ...(isDev ? [{ role: 'toggleDevTools' }] : []),
         { type: 'separator' },
         { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' },
         { type: 'separator' },
         { role: 'togglefullscreen' }
-      ]
-    },
-    {
-      label: 'Window',
-      submenu: [
-        { role: 'minimize' },
-        { role: 'zoom' },
-        { type: 'separator' },
-        { role: 'close' }
       ]
     },
     {
@@ -121,9 +115,7 @@ function createWindow() {
           click: async () => {
              mainWindow.webContents.executeJavaScript(`window.location.hash = "#/docs"`);
           }
-        },
-        { type: 'separator' },
-        { label: 'Check for Updates...', click: () => { shell.openExternal('https://github.com/editorial-systems/toolkit'); } }
+        }
       ]
     }
   ];
@@ -137,28 +129,27 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 
-  // Security: Handle external links
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('https:') || url.startsWith('http:')) {
+  // Security: Prevent navigation to untrusted sites
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith('file://') && !url.startsWith('http://localhost')) {
+      event.preventDefault();
       shell.openExternal(url);
-      return { action: 'deny' };
     }
-    return { action: 'allow' };
+  });
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: 'deny' };
   });
 }
 
-// Windows Enterprise Fix: If you see a black screen on startup, 
-// uncomment the line below to disable hardware acceleration.
-// app.disableHardwareAcceleration();
-
 app.whenReady().then(() => {
   createWindow();
-
-  app.on('activate', function () {
+  app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
-app.on('window-all-closed', function () {
+app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });

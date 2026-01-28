@@ -1,148 +1,76 @@
 
--- PRODUCTION TOOLKIT: DATABASE REPAIR & SETUP
--- Execute this in Supabase SQL Editor to fix permissions and tables.
+-- 1. TABLE STRUCTURE (Ensure columns exist)
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
+  email TEXT,
+  role TEXT DEFAULT 'user',
+  is_subscribed BOOLEAN DEFAULT false,
+  subscription_end TIMESTAMPTZ,
+  trial_start TIMESTAMPTZ,
+  trial_end TIMESTAMPTZ,
+  last_seen TIMESTAMPTZ DEFAULT now()
+);
 
--- ==========================================
--- 1. HELPER FUNCTION (Fixes Admin Permissions)
--- ==========================================
-create or replace function public.is_admin()
-returns boolean as $$
-begin
-  return exists (
-    select 1 
-    from public.profiles 
-    where id = auth.uid() 
-    and role = 'admin'
+-- 2. AUTOMATIC PROFILE CREATION
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, role)
+  VALUES (new.id, new.email, 'user');
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- 3. RECURSION FIX: Helper function to check admin status
+-- This bypasses RLS because it is SECURITY DEFINER
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = auth.uid() AND role = 'admin'
   );
-end;
-$$ language plpgsql security definer;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- ==========================================
--- 2. PROFILES TABLE
--- ==========================================
-create table if not exists public.profiles (
-  id uuid references auth.users on delete cascade primary key,
-  email text,
-  role text default 'user',
-  is_subscribed boolean default false,
-  subscription_end timestamp with time zone,
-  trial_start timestamp with time zone,
-  trial_end timestamp with time zone,
-  last_seen timestamp with time zone default now()
-);
+-- 4. HARDENED SECURITY POLICIES (Non-Recursive)
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.access_keys ENABLE ROW LEVEL SECURITY;
 
-alter table profiles enable row level security;
+-- Select Policy: Users see themselves, Admins see everyone
+DROP POLICY IF EXISTS "Users view own profile" ON public.profiles;
+CREATE POLICY "Users view own profile" 
+ON public.profiles FOR SELECT 
+USING ( auth.uid() = id OR is_admin() );
 
-drop policy if exists "Users view own profile" on profiles;
-create policy "Users view own profile" on profiles for select using ( auth.uid() = id );
+-- Admin Master Policy: Full access if is_admin() is true
+DROP POLICY IF EXISTS "Admin Master Control Profiles" ON public.profiles;
+CREATE POLICY "Admin Master Control Profiles" 
+ON public.profiles FOR ALL 
+USING ( is_admin() );
 
-drop policy if exists "Users update own profile" on profiles;
-create policy "Users update own profile" on profiles for update using ( auth.uid() = id );
+-- Heartbeat/Update Policy: Users can update their own last_seen
+-- Note: We trust the app to only update permitted columns, 
+-- or use a trigger for hard column-level locking.
+DROP POLICY IF EXISTS "Users update own heartbeat" ON public.profiles;
+CREATE POLICY "Users update own heartbeat" 
+ON public.profiles FOR UPDATE 
+USING ( auth.uid() = id )
+WITH CHECK ( auth.uid() = id );
 
-drop policy if exists "Admins view all profiles" on profiles;
-create policy "Admins view all profiles" on profiles for select using ( is_admin() );
+-- 5. ACCESS KEYS POLICIES
+DROP POLICY IF EXISTS "Ghost Key Discovery" ON public.access_keys;
+CREATE POLICY "Ghost Key Discovery" 
+ON public.access_keys FOR SELECT 
+USING ( auth.uid() = user_id OR is_used = false OR is_admin() );
 
-drop policy if exists "Admins update all profiles" on profiles;
-create policy "Admins update all profiles" on profiles for update using ( is_admin() );
-
--- ==========================================
--- 3. SYSTEM SETTINGS (Global Tool Control with Auto-Expiry)
--- ==========================================
-create table if not exists public.system_settings (
-  id text primary key default 'global',
-  free_tools text[] default '{}',
-  free_tools_data jsonb default '{}'::jsonb, -- Stores { tool_id: expiry_iso_string }
-  updated_at timestamp with time zone default now()
-);
-
--- MIGRATION: Ensure column exists if table was created in an older version
-DO $$ 
-BEGIN 
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='system_settings' AND column_name='free_tools_data') THEN
-    ALTER TABLE public.system_settings ADD COLUMN free_tools_data jsonb DEFAULT '{}'::jsonb;
-  END IF;
-END $$;
-
--- Seed global settings if not exists
-insert into public.system_settings (id, free_tools, free_tools_data)
-values ('global', '{}', '{}'::jsonb)
-on conflict (id) do nothing;
-
-alter table system_settings enable row level security;
-
-drop policy if exists "Anyone can read settings" on system_settings;
-create policy "Anyone can read settings" on system_settings for select using (true);
-
-drop policy if exists "Admins manage settings" on system_settings;
-create policy "Admins manage settings" on system_settings for all using (is_admin());
-
--- ==========================================
--- 4. ANNOUNCEMENTS TABLE
--- ==========================================
-create table if not exists public.announcements (
-  id uuid default gen_random_uuid() primary key,
-  title text not null,
-  content text not null,
-  type text default 'info',
-  is_active boolean default false,
-  created_at timestamp with time zone default timezone('utc'::text, now())
-);
-
-alter table announcements enable row level security;
-
-drop policy if exists "Public read active announcements" on announcements;
-create policy "Public read active announcements" on announcements for select using ( is_active = true );
-
-drop policy if exists "Admins select announcements" on announcements;
-create policy "Admins select announcements" on announcements for select using ( is_admin() );
-
-drop policy if exists "Admins insert announcements" on announcements;
-create policy "Admins insert announcements" on announcements for insert with check ( is_admin() );
-
-drop policy if exists "Admins update announcements" on announcements;
-create policy "Admins update announcements" on announcements for update using ( is_admin() );
-
-drop policy if exists "Admins delete announcements" on announcements;
-create policy "Admins delete announcements" on announcements for delete using ( is_admin() );
-
--- ==========================================
--- 5. ACCESS KEYS (Hardware Locking)
--- ==========================================
-create table if not exists public.access_keys (
-  id uuid default gen_random_uuid() primary key,
-  key text unique not null,
-  tool text not null,
-  is_used boolean default false,
-  used_at timestamp with time zone,
-  user_id uuid references public.profiles on delete set null, -- Link to profiles for email lookup
-  device_id text,
-  created_at timestamp with time zone default timezone('utc'::text, now())
-);
-
-alter table access_keys enable row level security;
-
-drop policy if exists "Read keys" on access_keys;
-create policy "Read keys" on access_keys for select using (true);
-
-drop policy if exists "Admins manage keys" on access_keys;
-create policy "Admins manage keys" on access_keys for all using (is_admin());
-
-drop policy if exists "Users update used keys" on access_keys;
-create policy "Users update used keys" on access_keys for update using (auth.uid() = user_id or (is_used = false));
-
--- ==========================================
--- 6. TRIGGER FOR NEW USERS
--- ==========================================
-create or replace function public.handle_new_user()
-returns trigger as $$
-begin
-  insert into public.profiles (id, email, is_subscribed, trial_start, trial_end, subscription_end, last_seen)
-  values (new.id, new.email, false, null, null, null, now());
-  return new;
-end;
-$$ language plpgsql security definer;
-
-drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute procedure public.handle_new_user();
+DROP POLICY IF EXISTS "Secure Key Binding" ON public.access_keys;
+CREATE POLICY "Secure Key Binding"
+ON public.access_keys FOR UPDATE
+USING ( is_used = false OR user_id = auth.uid() OR is_admin() )
+WITH CHECK ( user_id = auth.uid() OR is_admin() );

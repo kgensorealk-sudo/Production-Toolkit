@@ -1,5 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
-import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { HashRouter } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate } from 'react-router';
 import Layout from './components/Layout';
 import Landing from './pages/Landing';
 import Dashboard from './pages/Dashboard';
@@ -23,82 +25,44 @@ import AuthModal from './components/AuthModal';
 import { ToolId } from './types';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import LoadingOverlay from './components/LoadingOverlay';
+import ErrorBoundary from './components/ErrorBoundary';
 
-const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const { session, loading } = useAuth();
-    const [showRecovery, setShowRecovery] = useState(false);
-
-    useEffect(() => {
-        let timer: any;
-        if (loading) {
-            timer = setTimeout(() => setShowRecovery(true), 6000);
-        }
-        return () => clearTimeout(timer);
-    }, [loading]);
-
-    const handleReset = () => {
-        localStorage.clear();
-        sessionStorage.clear();
-        window.location.reload();
-    };
-
-    if (loading) {
-        return (
-            <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-6">
-                <LoadingOverlay message="Establishing Node Connection..." color="indigo" />
-                {showRecovery && (
-                    <div className="animate-fade-in flex flex-col items-center gap-4 z-[100] mt-32">
-                        <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">Connection taking longer than expected</p>
-                        <button 
-                            onClick={handleReset}
-                            className="px-6 py-2 bg-white border border-slate-200 text-slate-600 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm hover:bg-slate-50 transition-all active:scale-95"
-                        >
-                            Reset System Cache
-                        </button>
-                    </div>
-                )}
-            </div>
-        );
-    }
-    
-    if (!session) return <Navigate to="/login" replace />;
-    return <>{children}</>;
-};
-
-const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const { session, isAdmin, loading } = useAuth();
-
-    if (loading) return <LoadingOverlay message="Verifying Admin..." color="slate" />;
-    if (!session || !isAdmin) return <Navigate to="/" replace />;
-    return <>{children}</>;
-};
-
-const LockedToolGuard: React.FC<{ children: React.ReactElement, toolId: ToolId, displayName: string }> = ({ children, toolId, displayName }) => {
-    const { profile, freeTools, isAdmin } = useAuth();
-
-    if (freeTools.includes(toolId)) return children;
-    if (isAdmin) return children;
-    if (profile?.is_subscribed) return children;
-    const isUnlocked = profile?.unlocked_tools?.includes(toolId) || profile?.unlocked_tools?.includes('universal');
-    if (isUnlocked) return children;
-    return (
-        <div className="relative h-full w-full overflow-hidden">
-            <div className="blur-sm pointer-events-none grayscale opacity-40 select-none">{children}</div>
-            <AuthModal toolId={toolId} toolDisplayName={displayName} onSuccess={() => {}} />
-        </div>
-    );
-};
-
-const SubscriptionGuard: React.FC<{ children: React.ReactElement, toolId: ToolId, displayName: string }> = ({ children, toolId, displayName }) => {
+/**
+ * NODE ACCESS CONTROLLER
+ * A robust "Fail-Closed" guard that handles both Subscription and Key logic.
+ */
+const NodeAccessController: React.FC<{ 
+    children: React.ReactElement, 
+    toolId: ToolId, 
+    displayName: string,
+    mode: 'key-allowed' | 'subscription-only'
+}> = ({ children, toolId, displayName, mode }) => {
     const { profile, freeTools, isAdmin } = useAuth();
     const navigate = useNavigate();
 
-    if (freeTools.includes(toolId)) return children;
-    if (isAdmin || profile?.is_subscribed) return children;
+    // 1. Universal Overrides (Admin / Global Provisioning)
+    if (isAdmin || freeTools.includes(toolId)) return children;
 
+    // 2. Subscription Check
+    if (profile?.is_subscribed) return children;
+
+    // 3. Persistent Key Check (if allowed for this tool)
+    if (mode === 'key-allowed') {
+        const isUnlocked = profile?.unlocked_tools?.includes(toolId) || profile?.unlocked_tools?.includes('universal');
+        if (isUnlocked) return children;
+        
+        return (
+            <div className="relative h-full w-full overflow-hidden">
+                <div className="blur-md pointer-events-none grayscale opacity-30 select-none">{children}</div>
+                <AuthModal toolId={toolId} toolDisplayName={displayName} onSuccess={() => {}} />
+            </div>
+        );
+    }
+
+    // 4. Default: Block Access (Subscription Required)
     return (
         <div className="relative h-full w-full overflow-hidden">
-            <div className="blur-sm pointer-events-none grayscale opacity-40 select-none">{children}</div>
+            <div className="blur-md pointer-events-none grayscale opacity-30 select-none">{children}</div>
             <div className="absolute inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-6 animate-fade-in">
                 <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl max-w-sm w-full border border-slate-200 text-center animate-scale-in relative ring-4 ring-slate-900/5">
                     <div className="mb-10">
@@ -109,51 +73,64 @@ const SubscriptionGuard: React.FC<{ children: React.ReactElement, toolId: ToolId
                         </div>
                         <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Premium Module</h2>
                         <p className="text-slate-500 mt-2 text-xs font-bold uppercase tracking-widest leading-relaxed">
-                            {displayName} requires an active subscription for access.
+                            {displayName} requires an active subscription.
                         </p>
                     </div>
-                    <div className="space-y-4">
-                        <p className="text-sm text-slate-600 leading-relaxed font-medium">Please contact the administrator to upgrade your node profile.</p>
-                        <button 
-                            onClick={() => navigate('/dashboard')}
-                            className="block w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-4 px-4 rounded-2xl shadow-xl transition active:scale-95 uppercase tracking-widest text-xs text-center"
-                        >
-                            Back to Workspace
-                        </button>
-                    </div>
+                    <button onClick={() => navigate('/dashboard')} className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-4 rounded-2xl shadow-xl transition active:scale-95 uppercase tracking-widest text-xs">
+                        Back to Workspace
+                    </button>
                 </div>
             </div>
         </div>
     );
 };
 
+const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const { session, loading } = useAuth();
+    if (loading) return <LoadingOverlay message="Verifying Integrity..." color="indigo" />;
+    if (!session) return <Navigate to="/login" replace />;
+    return <>{children}</>;
+};
+
+const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const { session, isAdmin, loading } = useAuth();
+    if (loading) return <LoadingOverlay message="Authenticating Admin..." color="slate" />;
+    if (!session || !isAdmin) return <Navigate to="/" replace />;
+    return <>{children}</>;
+};
+
 const App: React.FC = () => {
     return (
-        <AuthProvider>
-            <HashRouter>
-                <Routes>
-                    <Route path="/login" element={<Login />} />
-                    <Route path="/" element={<ProtectedRoute><Layout isLanding={true}><Landing /></Layout></ProtectedRoute>} />
-                    <Route path="/admin" element={<AdminRoute><Layout><AdminDashboard /></Layout></AdminRoute>} />
-                    <Route path="/dashboard" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />
-                    <Route path="/docs" element={<ProtectedRoute><Layout><Docs /></Layout></ProtectedRoute>} />
-                    
-                    <Route path="/xmlRenumber" element={<ProtectedRoute><Layout currentTool={ToolId.XML_RENUMBER}><LockedToolGuard toolId={ToolId.XML_RENUMBER} displayName="XML Normalizer"><XmlRenumber /></LockedToolGuard></Layout></ProtectedRoute>} />
-                    <Route path="/creditGenerator" element={<ProtectedRoute><Layout currentTool={ToolId.CREDIT_GENERATOR}><LockedToolGuard toolId={ToolId.CREDIT_GENERATOR} displayName="CRediT Tagging"><CreditGenerator /></LockedToolGuard></Layout></ProtectedRoute>} />
-                    <Route path="/uncitedCleaner" element={<ProtectedRoute><Layout currentTool={ToolId.UNCITED_CLEANER}><SubscriptionGuard toolId={ToolId.UNCITED_CLEANER} displayName="Uncited Ref Cleaner"><UncitedRefCleaner /></SubscriptionGuard></Layout></ProtectedRoute>} />
-                    <Route path="/otherRefScanner" element={<ProtectedRoute><Layout currentTool={ToolId.OTHER_REF_SCANNER}><SubscriptionGuard toolId={ToolId.OTHER_REF_SCANNER} displayName="Other-Ref Scanner"><OtherRefScanner /></SubscriptionGuard></Layout></ProtectedRoute>} />
-                    <Route path="/quickDiff" element={<ProtectedRoute><Layout currentTool={ToolId.QUICK_DIFF}><SubscriptionGuard toolId={ToolId.QUICK_DIFF} displayName="Quick Text Diff"><QuickDiff /></SubscriptionGuard></Layout></ProtectedRoute>} />
-                    <Route path="/tagCleaner" element={<ProtectedRoute><Layout currentTool={ToolId.TAG_CLEANER}><SubscriptionGuard toolId={ToolId.TAG_CLEANER} displayName="XML Tag Cleaner"><TagCleaner /></SubscriptionGuard></Layout></ProtectedRoute>} />
-                    <Route path="/tableFixer" element={<ProtectedRoute><Layout currentTool={ToolId.TABLE_FIXER}><SubscriptionGuard toolId={ToolId.TABLE_FIXER} displayName="XML Table Fixer"><TableFixer /></SubscriptionGuard></Layout></ProtectedRoute>} />
-                    <Route path="/highlightsGen" element={<ProtectedRoute><Layout currentTool={ToolId.HIGHLIGHTS_GEN}><SubscriptionGuard toolId={ToolId.HIGHLIGHTS_GEN} displayName="Article Highlights Gen"><ArticleHighlights /></SubscriptionGuard></Layout></ProtectedRoute>} />
-                    <Route path="/viewSync" element={<ProtectedRoute><Layout currentTool={ToolId.VIEW_SYNC}><SubscriptionGuard toolId={ToolId.VIEW_SYNC} displayName="View Synchronizer"><ViewSync /></SubscriptionGuard></Layout></ProtectedRoute>} />
-                    <Route path="/referenceGen" element={<ProtectedRoute><Layout currentTool={ToolId.REFERENCE_GEN}><SubscriptionGuard toolId={ToolId.REFERENCE_GEN} displayName="Reference Updater"><ReferenceUpdater /></SubscriptionGuard></Layout></ProtectedRoute>} />
-                    <Route path="/refDupeCheck" element={<ProtectedRoute><Layout currentTool={ToolId.REF_DUPE_CHECK}><SubscriptionGuard toolId={ToolId.REF_DUPE_CHECK} displayName="Duplicate Ref Remover"><ReferenceDupeChecker /></SubscriptionGuard></Layout></ProtectedRoute>} />
-                    <Route path="/refExtractor" element={<ProtectedRoute><Layout currentTool={ToolId.REF_EXTRACTOR}><SubscriptionGuard toolId={ToolId.REF_EXTRACTOR} displayName="Bibliography Extractor"><ReferenceExtractor /></SubscriptionGuard></Layout></ProtectedRoute>} />
-                    <Route path="/refPurger" element={<ProtectedRoute><Layout currentTool={ToolId.REF_PURGER}><SubscriptionGuard toolId={ToolId.REF_PURGER} displayName="Reference List Purger"><RefListPurger /></SubscriptionGuard></Layout></ProtectedRoute>} />
-                </Routes>
-            </HashRouter>
-        </AuthProvider>
+        <ErrorBoundary>
+            <AuthProvider>
+                <HashRouter>
+                    <Routes>
+                        <Route path="/login" element={<Login />} />
+                        <Route path="/" element={<ProtectedRoute><Layout isLanding={true}><Landing /></Layout></ProtectedRoute>} />
+                        <Route path="/admin" element={<AdminRoute><Layout><AdminDashboard /></Layout></AdminRoute>} />
+                        <Route path="/dashboard" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />
+                        <Route path="/docs" element={<ProtectedRoute><Layout><Docs /></Layout></ProtectedRoute>} />
+                        
+                        {/* KEY-ALLOWED TOOLS */}
+                        <Route path="/xmlRenumber" element={<ProtectedRoute><Layout currentTool={ToolId.XML_RENUMBER}><NodeAccessController toolId={ToolId.XML_RENUMBER} displayName="XML Normalizer" mode="key-allowed"><XmlRenumber /></NodeAccessController></Layout></ProtectedRoute>} />
+                        <Route path="/creditGenerator" element={<ProtectedRoute><Layout currentTool={ToolId.CREDIT_GENERATOR}><NodeAccessController toolId={ToolId.CREDIT_GENERATOR} displayName="CRediT Tagging" mode="key-allowed"><CreditGenerator /></NodeAccessController></Layout></ProtectedRoute>} />
+                        
+                        {/* SUBSCRIPTION-ONLY TOOLS */}
+                        <Route path="/uncitedCleaner" element={<ProtectedRoute><Layout currentTool={ToolId.UNCITED_CLEANER}><NodeAccessController toolId={ToolId.UNCITED_CLEANER} displayName="Uncited Ref Cleaner" mode="subscription-only"><UncitedRefCleaner /></NodeAccessController></Layout></ProtectedRoute>} />
+                        <Route path="/otherRefScanner" element={<ProtectedRoute><Layout currentTool={ToolId.OTHER_REF_SCANNER}><NodeAccessController toolId={ToolId.OTHER_REF_SCANNER} displayName="Other-Ref Scanner" mode="subscription-only"><OtherRefScanner /></NodeAccessController></Layout></ProtectedRoute>} />
+                        <Route path="/quickDiff" element={<ProtectedRoute><Layout currentTool={ToolId.QUICK_DIFF}><NodeAccessController toolId={ToolId.QUICK_DIFF} displayName="Quick Text Diff" mode="subscription-only"><QuickDiff /></NodeAccessController></Layout></ProtectedRoute>} />
+                        <Route path="/tagCleaner" element={<ProtectedRoute><Layout currentTool={ToolId.TAG_CLEANER}><NodeAccessController toolId={ToolId.TAG_CLEANER} displayName="XML Tag Cleaner" mode="subscription-only"><TagCleaner /></NodeAccessController></Layout></ProtectedRoute>} />
+                        <Route path="/tableFixer" element={<ProtectedRoute><Layout currentTool={ToolId.TABLE_FIXER}><NodeAccessController toolId={ToolId.TABLE_FIXER} displayName="XML Table Fixer" mode="subscription-only"><TableFixer /></NodeAccessController></Layout></ProtectedRoute>} />
+                        <Route path="/highlightsGen" element={<ProtectedRoute><Layout currentTool={ToolId.HIGHLIGHTS_GEN}><NodeAccessController toolId={ToolId.HIGHLIGHTS_GEN} displayName="Article Highlights Gen" mode="subscription-only"><ArticleHighlights /></NodeAccessController></Layout></ProtectedRoute>} />
+                        <Route path="/viewSync" element={<ProtectedRoute><Layout currentTool={ToolId.VIEW_SYNC}><NodeAccessController toolId={ToolId.VIEW_SYNC} displayName="View Synchronizer" mode="subscription-only"><ViewSync /></NodeAccessController></Layout></ProtectedRoute>} />
+                        <Route path="/referenceGen" element={<ProtectedRoute><Layout currentTool={ToolId.REFERENCE_GEN}><NodeAccessController toolId={ToolId.REFERENCE_GEN} displayName="Reference Updater" mode="subscription-only"><ReferenceUpdater /></NodeAccessController></Layout></ProtectedRoute>} />
+                        <Route path="/refDupeCheck" element={<ProtectedRoute><Layout currentTool={ToolId.REF_DUPE_CHECK}><NodeAccessController toolId={ToolId.REF_DUPE_CHECK} displayName="Duplicate Ref Remover" mode="subscription-only"><ReferenceDupeChecker /></NodeAccessController></Layout></ProtectedRoute>} />
+                        <Route path="/refExtractor" element={<ProtectedRoute><Layout currentTool={ToolId.REF_EXTRACTOR}><NodeAccessController toolId={ToolId.REF_EXTRACTOR} displayName="Bibliography Extractor" mode="subscription-only"><ReferenceExtractor /></NodeAccessController></Layout></ProtectedRoute>} />
+                        <Route path="/refPurger" element={<ProtectedRoute><Layout currentTool={ToolId.REF_PURGER}><NodeAccessController toolId={ToolId.REF_PURGER} displayName="Reference List Purger" mode="subscription-only"><RefListPurger /></NodeAccessController></Layout></ProtectedRoute>} />
+                    </Routes>
+                </HashRouter>
+            </AuthProvider>
+        </ErrorBoundary>
     );
 };
 

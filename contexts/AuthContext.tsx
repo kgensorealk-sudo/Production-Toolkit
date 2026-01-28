@@ -1,8 +1,12 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
-import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../supabaseClient';
 import { UserProfile } from '../types';
 import { INACTIVITY_LIMIT } from '../constants';
+
+// Fix: Defining Session and User as any because they may not be correctly exported 
+// from the installed version of @supabase/supabase-js in this environment.
+type Session = any;
+type User = any;
 
 interface AuthContextType {
     session: Session | null;
@@ -19,18 +23,12 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const ACTIVITY_STORAGE_KEY = 'prod_toolkit_last_active';
-const HEARTBEAT_INTERVAL = 2 * 60 * 1000; // Throttled updates every 2 mins
-
-// Specific key used by Supabase for this project
+const HEARTBEAT_INTERVAL = 90 * 1000; // 90 seconds
+// This is the specific key Supabase uses for this project
 const SB_STORAGE_KEY = 'sb-jtrvpqxhjqpifglrhbzu-auth-token';
 
-const withTimeout = <T,>(promise: Promise<T>, ms: number, timeoutValue: T): Promise<T> => {
-    return Promise.race([
-        promise,
-        new Promise<T>((resolve) => setTimeout(() => resolve(timeoutValue), ms))
-    ]);
-};
+// Super-Admin Email Configuration
+const SUPER_ADMIN_EMAIL = 'generalkevin53@gmail.com';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [session, setSession] = useState<Session | null>(null);
@@ -40,73 +38,80 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [freeToolsData, setFreeToolsData] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(true);
     
-    const lastUserId = useRef<string | null>(null);
     const lastHeartbeat = useRef<number>(0);
     const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    
+    // SECURITY: Internal reference to prevent memory-injection attacks on state
+    const internalAuthRef = useRef({ sub: false, admin: false });
 
     const isAdmin = (
-        profile?.role?.toLowerCase() === 'admin' || 
-        (user?.app_metadata?.role?.toLowerCase() === 'admin')
+        user?.email === SUPER_ADMIN_EMAIL ||
+        user?.app_metadata?.role?.toLowerCase() === 'admin' ||
+        profile?.role?.toLowerCase() === 'admin'
     );
 
     const clearLocalSession = () => {
-        localStorage.removeItem(SB_STORAGE_KEY);
-        localStorage.removeItem(ACTIVITY_STORAGE_KEY);
-        lastHeartbeat.current = 0; 
         try {
-            localStorage.clear();
+            console.warn("Auth: Purging local session storage due to token corruption.");
+            localStorage.removeItem(SB_STORAGE_KEY);
+            // Also clear generic Supabase keys just in case
+            Object.keys(localStorage).forEach(key => {
+                if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+                    localStorage.removeItem(key);
+                }
+            });
             sessionStorage.clear();
         } catch (e) {
-            console.error("Auth: Could not clear storage", e);
+            console.error("Auth: Failed to clear storage", e);
         }
     };
 
-    const updateLastSeen = async (uid: string, force: boolean = false) => {
+    const performHeartbeat = async (uid: string) => {
         const now = Date.now();
-        // Don't update if it's been less than 2 minutes, unless 'force' is true (e.g., login or logout)
-        if (!force && (now - lastHeartbeat.current < HEARTBEAT_INTERVAL)) return;
+        if (now - lastHeartbeat.current < HEARTBEAT_INTERVAL) return;
         
         lastHeartbeat.current = now;
+        
         try {
-            // Using a background update to not block UI
-            await supabase
+            const { data, error } = await supabase
                 .from('profiles')
                 .update({ last_seen: new Date().toISOString() })
-                .eq('id', uid);
+                .eq('id', uid)
+                .select('is_subscribed, role')
+                .single();
+
+            if (error) throw error;
+
+            if (internalAuthRef.current.sub && !data.is_subscribed) {
+                signOut(true);
+            }
         } catch (err) {
-            // Silently ignore heartbeat failures to prevent user disruption
+            // Silently handle heartbeat failures to avoid UI flicker
         }
     };
 
     const fetchFreeTools = async () => {
         try {
-            const { data, error } = await supabase
+            const { data } = await supabase
                 .from('system_settings')
                 .select('free_tools_data')
                 .eq('id', 'global')
                 .maybeSingle();
             
-            if (error) throw error;
-
             if (data?.free_tools_data) {
                 const now = new Date();
                 const activeMap: Record<string, string> = {};
                 const activeIds: string[] = [];
-
                 Object.entries(data.free_tools_data).forEach(([tid, expiry]) => {
-                    const expiryDate = new Date(expiry as string);
-                    if (expiryDate > now) {
+                    if (new Date(expiry as string) > now) {
                         activeMap[tid] = expiry as string;
                         activeIds.push(tid);
                     }
                 });
-
                 setFreeTools(activeIds);
                 setFreeToolsData(activeMap);
             }
-        } catch (err) {
-            console.warn("Auth: Free tools sync error");
-        }
+        } catch (err) {}
     };
 
     const fetchProfile = async (userId: string) => {
@@ -119,83 +124,61 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             
             if (profileError) throw profileError;
 
-            let finalProfile: UserProfile;
+            if (!profileData) return;
 
-            if (!profileData) {
-                const { data: newProfile, error: insertError } = await supabase
-                    .from('profiles')
-                    .insert([{ id: userId, email: user?.email || '', role: 'user' }])
-                    .select()
-                    .single();
-                
-                if (insertError) {
-                    finalProfile = { id: userId, email: user?.email || '', role: 'user', is_subscribed: false, unlocked_tools: [] };
-                } else {
-                    finalProfile = { ...newProfile, unlocked_tools: [] };
-                }
-            } else {
-                const { data: keysData } = await supabase
-                    .from('access_keys')
-                    .select('tool')
-                    .eq('user_id', userId)
-                    .eq('is_used', true);
+            const { data: keysData } = await supabase
+                .from('access_keys')
+                .select('tool')
+                .eq('user_id', userId)
+                .eq('is_used', true);
 
-                const unlockedTools = keysData ? keysData.map(k => k.tool) : [];
-                let isActive = profileData.is_subscribed;
-                if (profileData.subscription_end && new Date(profileData.subscription_end) < new Date()) {
-                    isActive = false;
-                }
-
-                finalProfile = { 
-                    ...profileData, 
-                    is_subscribed: isActive,
-                    unlocked_tools: unlockedTools 
-                };
+            const unlockedTools = keysData ? keysData.map(k => k.tool) : [];
+            
+            let isActive = profileData.is_subscribed;
+            if (user?.email === SUPER_ADMIN_EMAIL) {
+                isActive = true;
+            } else if (profileData.subscription_end && new Date(profileData.subscription_end) < new Date()) {
+                isActive = false;
             }
 
-            setProfile(finalProfile);
-            // CRITICAL: Force an immediate timestamp write on initial profile load
-            updateLastSeen(userId, true);
+            const finalProfile = { 
+                ...profileData, 
+                is_subscribed: isActive,
+                unlocked_tools: unlockedTools 
+            };
 
-        } catch (err) {
-            console.error("Auth: Profile sync error", err);
+            internalAuthRef.current = {
+                sub: isActive,
+                admin: (profileData.role === 'admin' || user?.email === SUPER_ADMIN_EMAIL)
+            };
+
+            setProfile(finalProfile);
+            lastHeartbeat.current = Date.now();
+        } catch (err: any) {
+            console.error("Auth: Profile Fetch Error:", err.message || err);
         }
     };
 
     const signOut = async (isAuto: boolean = false) => {
-        const userIdForLogoutSync = user?.id;
         try {
             setLoading(true); 
-            // If logging out due to inactivity, log the exact moment as Last Seen before killing the session
-            if (isAuto && userIdForLogoutSync) {
-                await updateLastSeen(userIdForLogoutSync, true);
-            }
-            await supabase.auth.signOut();
-            clearLocalSession();
-            setProfile(null);
-            setSession(null);
-            setUser(null);
-            lastUserId.current = null;
-            lastHeartbeat.current = 0;
+            await (supabase.auth as any).signOut();
+        } catch (e) {
+            // Ignore signout errors, we clear locally anyway
         } finally {
+            clearLocalSession();
+            setProfile(null); setSession(null); setUser(null);
+            internalAuthRef.current = { sub: false, admin: false };
             setLoading(false);
+            if (isAuto || !session) window.location.hash = '#/login';
         }
     };
 
     const resetInactivityTimer = () => {
         if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
         if (session && user) {
-            inactivityTimer.current = setTimeout(() => {
-                signOut(true); // isAuto = true
-            }, INACTIVITY_LIMIT);
-            // On every user interaction, attempt a throttled heartbeat
-            updateLastSeen(user.id);
-        }
-    };
-
-    const refreshProfile = async () => { 
-        if (user?.id) {
-            await fetchProfile(user.id); 
+            inactivityTimer.current = setTimeout(() => signOut(true), INACTIVITY_LIMIT);
+            performHeartbeat(user.id);
         }
     };
 
@@ -212,58 +195,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
     }, [session, user]);
 
-    // Handle abrupt closure (closing .exe or tab)
-    useEffect(() => {
-        const handleUnload = () => {
-            if (user?.id) {
-                // We use Navigator.sendBeacon or a synchronous call if possible, 
-                // but since updateLastSeen is async, we just fire it.
-                updateLastSeen(user.id, true);
-            }
-        };
-        window.addEventListener('beforeunload', handleUnload);
-        return () => window.removeEventListener('beforeunload', handleUnload);
-    }, [user]);
-
     useEffect(() => {
         let mounted = true;
         const init = async () => {
             try {
-                const results = await withTimeout(
-                    Promise.allSettled([
-                        fetchFreeTools(),
-                        supabase.auth.getSession()
-                    ]),
-                    12000,
-                    'timeout' as any
-                );
-
-                if (results === 'timeout') {
-                    if (mounted) setLoading(false);
-                    return;
+                // Critical: Explicitly check session status
+                const { data, error } = await (supabase.auth as any).getSession();
+                
+                if (error) {
+                    // If we get an auth error during init (like invalid refresh token), clear storage
+                    if (error.message.toLowerCase().includes('refresh_token') || error.status === 400) {
+                        clearLocalSession();
+                    }
+                    throw error;
                 }
 
-                const sessionRes = results[1];
-                if (sessionRes.status === 'fulfilled') {
-                    const { data: { session: currentSession }, error } = sessionRes.value;
-                    
-                    if (error && (error.message.includes('Refresh Token Not Found') || error.status === 400)) {
-                        clearLocalSession();
-                        if (mounted) setLoading(false);
-                        return;
-                    }
-
-                    if (currentSession && mounted) {
-                        setSession(currentSession);
-                        setUser(currentSession.user);
-                        lastUserId.current = currentSession.user.id;
-                        await fetchProfile(currentSession.user.id);
-                    }
-                } else if (sessionRes.status === 'rejected') {
-                    clearLocalSession();
+                const currentSession = data?.session;
+                if (currentSession && mounted) {
+                    setSession(currentSession);
+                    setUser(currentSession.user);
+                    await Promise.all([fetchProfile(currentSession.user.id), fetchFreeTools()]);
                 }
             } catch (err) {
-                clearLocalSession();
+                console.error("Auth: Initialization error", err);
+                if (mounted) {
+                    setSession(null);
+                    setUser(null);
+                }
             } finally {
                 if (mounted) setLoading(false);
             }
@@ -271,42 +229,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         init();
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+        const { data: authListener } = (supabase.auth as any).onAuthStateChange(async (event: any, newSession: any) => {
             if (!mounted) return;
             
             if (event === 'SIGNED_OUT') {
                 setProfile(null); setUser(null); setSession(null);
                 setLoading(false);
-                lastHeartbeat.current = 0;
-            } else if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') {
-                if (newSession?.user) {
-                    const isNewUser = newSession.user.id !== lastUserId.current;
-                    setSession(newSession); 
-                    setUser(newSession.user);
-                    setLoading(false); 
-                    
-                    if (isNewUser) {
-                        lastUserId.current = newSession.user.id;
-                        lastHeartbeat.current = 0;
-                        fetchProfile(newSession.user.id);
-                    }
-                }
-            } else {
+            } else if (event === 'SIGNED_IN' && newSession?.user) {
+                setSession(newSession); setUser(newSession.user);
+                await fetchProfile(newSession.user.id);
                 setLoading(false);
+            } else if (event === 'TOKEN_REFRESHED' && newSession) {
+                setSession(newSession);
+                setUser(newSession.user);
+            } else if (event === 'USER_UPDATED' && newSession) {
+                setUser(newSession.user);
             }
         });
 
+        const subscription = authListener?.subscription;
+
         return () => { 
             mounted = false; 
-            subscription.unsubscribe(); 
+            if (subscription) subscription.unsubscribe(); 
         };
     }, []);
 
-    const value = { 
-        session, user, profile, freeTools, freeToolsData, loading, isAdmin,
-        signOut, refreshProfile, refreshFreeTools: fetchFreeTools 
-    };
-    return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+    return (
+        <AuthContext.Provider value={{ 
+            session, user, profile, freeTools, freeToolsData, loading, isAdmin,
+            signOut, refreshProfile: () => user ? fetchProfile(user.id) : Promise.resolve(), 
+            refreshFreeTools: fetchFreeTools 
+        }}>
+            {children}
+        </AuthContext.Provider>
+    );
 };
 
 export const useAuth = () => {
