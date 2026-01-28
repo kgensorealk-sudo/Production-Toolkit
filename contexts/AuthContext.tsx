@@ -45,7 +45,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const clearLocalSession = () => {
         try {
-            console.warn("Auth: Purging local session storage.");
             localStorage.removeItem(SB_STORAGE_KEY);
             Object.keys(localStorage).forEach(key => {
                 if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
@@ -53,9 +52,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 }
             });
             sessionStorage.clear();
-        } catch (e) {
-            console.error("Auth: Failed to clear storage", e);
-        }
+        } catch (e) {}
     };
 
     const fetchFreeTools = async () => {
@@ -66,8 +63,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 .eq('id', 'global')
                 .maybeSingle();
             
-            if (error) throw error;
-
             if (data?.free_tools_data) {
                 const now = new Date();
                 const activeMap: Record<string, string> = {};
@@ -81,23 +76,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setFreeTools(activeIds);
                 setFreeToolsData(activeMap);
             }
-        } catch (err) {
-            console.warn("Auth: Free tools fetch skipped/failed.");
-        }
+        } catch (err) {}
     };
 
     const fetchProfile = async (userId: string) => {
         try {
-            // Profile fetch with timeout capability via abort controller if needed, 
-            // but usually a simple select is fine unless RLS is recursive.
             const { data: profileData, error: profileError } = await supabase
                 .from('profiles')
                 .select('*')
                 .eq('id', userId)
                 .maybeSingle();
 
-            if (profileError) throw profileError;
-            if (!profileData) return;
+            if (profileError || !profileData) return;
 
             const { data: keysData } = await supabase
                 .from('access_keys')
@@ -117,9 +107,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             internalAuthRef.current = { sub: isActive, admin: (profileData.role === 'admin' || user?.email === SUPER_ADMIN_EMAIL) };
             setProfile(finalProfile);
             lastHeartbeat.current = Date.now();
-        } catch (err: any) {
-            console.error("Auth: Profile Fetch Error:", err.message);
-        }
+        } catch (err) {}
     };
 
     const signOut = async (isAuto: boolean = false) => {
@@ -138,22 +126,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     useEffect(() => {
         let mounted = true;
 
-        // FAIL-SAFE: 5 Second Initialization Timeout
-        // If Supabase takes too long, we force the app to try and render anyway.
+        // EMERGENCY FAIL-SAFE: 4 Seconds Hard Limit
         initTimeoutRef.current = setTimeout(() => {
             if (mounted && loading) {
-                console.error("Auth: Initialization timed out. Forcing ready state.");
+                console.warn("Auth: Integrity check bypassed due to network delay.");
                 setLoading(false);
             }
-        }, 5000);
+        }, 4000);
 
         const init = async () => {
             try {
-                // Step 1: Get Session
                 const { data, error } = await (supabase.auth as any).getSession();
                 
                 if (error) {
-                    if (error.message.toLowerCase().includes('refresh_token') || error.status === 400) {
+                    if (error.status === 400 || error.message.toLowerCase().includes('refresh_token')) {
                         clearLocalSession();
                     }
                     throw error;
@@ -164,18 +150,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     setSession(currentSession);
                     setUser(currentSession.user);
                     
-                    // Step 2: Fetch metadata in parallel but don't block the finally block if they hang
-                    // We use a local timeout for the profile/metadata fetch specifically
+                    // Metadata fetch with tight race to prevent stuck loaders
                     await Promise.race([
                         Promise.allSettled([
                             fetchProfile(currentSession.user.id),
                             fetchFreeTools()
                         ]),
-                        new Promise(resolve => setTimeout(resolve, 3500))
+                        new Promise(resolve => setTimeout(resolve, 2500))
                     ]);
                 }
             } catch (err) {
-                console.error("Auth: Init fail", err);
+                console.error("Auth: Bootstrap failed", err);
             } finally {
                 if (mounted) {
                     if (initTimeoutRef.current) clearTimeout(initTimeoutRef.current);
