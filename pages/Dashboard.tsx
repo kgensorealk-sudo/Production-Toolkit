@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState, useEffect } from 'react';
 /* Import useNavigate from react-router to resolve potential named export issues in react-router-dom types */
 import { useNavigate } from 'react-router';
@@ -112,8 +111,16 @@ const Dashboard: React.FC = () => {
 
     const handleSync = async () => {
         setIsSyncing(true);
+        
+        // FORCED CUTOFF: If AuthContext doesn't finish in 6s, we stop the spinner here.
+        const timer = setTimeout(() => {
+            setIsSyncing(false);
+            setToast({ msg: "Database timed out. Check network connection.", type: "warn" });
+        }, 6000);
+
         try {
             await refreshProfile();
+            clearTimeout(timer);
             setToast({ msg: "Node integrity synchronized with database.", type: "success" });
         } catch (e) {
             setToast({ msg: "Synchronization failed.", type: "error" });

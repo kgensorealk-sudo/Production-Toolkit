@@ -21,9 +21,9 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const HEARTBEAT_INTERVAL = 90 * 1000;
 const SB_STORAGE_KEY = 'sb-jtrvpqxhjqpifglrhbzu-auth-token';
 const SUPER_ADMIN_EMAIL = 'generalkevin53@gmail.com';
+const HEARTBEAT_INTERVAL = 120 * 1000; // 2 Minutes
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [session, setSession] = useState<Session | null>(null);
@@ -33,9 +33,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [freeToolsData, setFreeToolsData] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(true);
     
-    const lastHeartbeat = useRef<number>(0);
     const initTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const internalAuthRef = useRef({ sub: false, admin: false });
+    const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     const isAdmin = (
         user?.email === SUPER_ADMIN_EMAIL ||
@@ -53,6 +52,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             });
             sessionStorage.clear();
         } catch (e) {}
+    };
+
+    const updateLastSeen = async (uid: string) => {
+        try {
+            await supabase
+                .from('profiles')
+                .update({ last_seen: new Date().toISOString() })
+                .eq('id', uid);
+        } catch (err) {
+            console.warn("Heartbeat failed to sync.");
+        }
     };
 
     const fetchFreeTools = async () => {
@@ -80,44 +90,57 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     const fetchProfile = async (userId: string) => {
-        try {
-            const { data: profileData, error: profileError } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', userId)
-                .maybeSingle();
+        const profilePromise = (async () => {
+            try {
+                // Update heartbeat immediately upon profile fetch
+                updateLastSeen(userId);
 
-            if (profileError || !profileData) return;
+                const { data: profileData, error: profileError } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .eq('id', userId)
+                    .maybeSingle();
 
-            const { data: keysData } = await supabase
-                .from('access_keys')
-                .select('tool')
-                .eq('user_id', userId)
-                .eq('is_used', true);
+                if (profileError || !profileData) return null;
 
-            const unlockedTools = keysData ? keysData.map(k => k.tool) : [];
-            let isActive = profileData.is_subscribed;
-            
-            if (user?.email === SUPER_ADMIN_EMAIL) isActive = true;
-            else if (profileData.subscription_end && new Date(profileData.subscription_end) < new Date()) {
-                isActive = false;
+                const { data: keysData } = await supabase
+                    .from('access_keys')
+                    .select('tool')
+                    .eq('user_id', userId)
+                    .eq('is_used', true);
+
+                const unlockedTools = keysData ? keysData.map(k => k.tool) : [];
+                let isActive = profileData.is_subscribed;
+                
+                if (user?.email === SUPER_ADMIN_EMAIL) isActive = true;
+                else if (profileData.subscription_end && new Date(profileData.subscription_end) < new Date()) {
+                    isActive = false;
+                }
+
+                return { ...profileData, is_subscribed: isActive, unlocked_tools: unlockedTools };
+            } catch (e) {
+                return null;
             }
+        })();
 
-            const finalProfile = { ...profileData, is_subscribed: isActive, unlocked_tools: unlockedTools };
-            internalAuthRef.current = { sub: isActive, admin: (profileData.role === 'admin' || user?.email === SUPER_ADMIN_EMAIL) };
-            setProfile(finalProfile);
-            lastHeartbeat.current = Date.now();
-        } catch (err) {}
+        const result = await Promise.race([
+            profilePromise,
+            new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 5000))
+        ]).catch(() => null);
+
+        if (result) {
+            setProfile(result as any);
+        }
     };
 
     const signOut = async (isAuto: boolean = false) => {
+        if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
         try {
             setLoading(true); 
             await (supabase.auth as any).signOut();
         } catch (e) {} finally {
             clearLocalSession();
             setProfile(null); setSession(null); setUser(null);
-            internalAuthRef.current = { sub: false, admin: false };
             setLoading(false);
             if (isAuto || !session) window.location.hash = '#/login';
         }
@@ -126,16 +149,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     useEffect(() => {
         let mounted = true;
 
-        // EMERGENCY FAIL-SAFE: 4 Seconds Hard Limit
-        initTimeoutRef.current = setTimeout(() => {
-            if (mounted && loading) {
-                console.warn("Auth: Integrity check bypassed due to network delay.");
-                setLoading(false);
-            }
-        }, 4000);
-
         const init = async () => {
             try {
+                initTimeoutRef.current = setTimeout(() => {
+                    if (mounted && loading) {
+                        console.warn("Auth: Initialization forced to complete via timeout.");
+                        setLoading(false);
+                    }
+                }, 4000);
+
                 const { data, error } = await (supabase.auth as any).getSession();
                 
                 if (error) {
@@ -150,13 +172,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     setSession(currentSession);
                     setUser(currentSession.user);
                     
-                    // Metadata fetch with tight race to prevent stuck loaders
-                    await Promise.race([
-                        Promise.allSettled([
-                            fetchProfile(currentSession.user.id),
-                            fetchFreeTools()
-                        ]),
-                        new Promise(resolve => setTimeout(resolve, 2500))
+                    // Setup background heartbeat
+                    if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
+                    heartbeatTimerRef.current = setInterval(() => {
+                        updateLastSeen(currentSession.user.id);
+                    }, HEARTBEAT_INTERVAL);
+
+                    await Promise.allSettled([
+                        fetchProfile(currentSession.user.id),
+                        fetchFreeTools()
                     ]);
                 }
             } catch (err) {
@@ -174,10 +198,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const { data: authListener } = (supabase.auth as any).onAuthStateChange(async (event: any, newSession: any) => {
             if (!mounted) return;
             if (event === 'SIGNED_OUT') {
+                if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
                 setProfile(null); setUser(null); setSession(null);
                 setLoading(false);
             } else if (event === 'SIGNED_IN' && newSession?.user) {
                 setSession(newSession); setUser(newSession.user);
+                
+                if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
+                heartbeatTimerRef.current = setInterval(() => {
+                    updateLastSeen(newSession.user.id);
+                }, HEARTBEAT_INTERVAL);
+
                 await fetchProfile(newSession.user.id);
                 setLoading(false);
             }
@@ -186,6 +217,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return () => { 
             mounted = false; 
             if (initTimeoutRef.current) clearTimeout(initTimeoutRef.current);
+            if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
             if (authListener?.subscription) authListener.subscription.unsubscribe(); 
         };
     }, []);

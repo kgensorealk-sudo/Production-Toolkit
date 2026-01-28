@@ -125,7 +125,7 @@ const AdminDashboard: React.FC = () => {
         // CIRCUIT BREAKER: Hard loading override after 6s
         const breaker = setTimeout(() => {
             setIsLoading(false);
-            if (!isSilent) setToast({ msg: "Database slow to respond. Displaying cached/partial data.", type: "warn" });
+            if (!isSilent) setToast({ msg: "Database connectivity bottleneck. Using cached node state.", type: "warn" });
         }, 6000);
 
         try {
@@ -346,7 +346,6 @@ const AdminDashboard: React.FC = () => {
         });
     };
 
-    // Added missing editAnnouncement function to fix reference error
     const editAnnouncement = (a: Announcement) => {
         setEditingId(a.id);
         setNewTitle(a.title);
@@ -370,6 +369,12 @@ const AdminDashboard: React.FC = () => {
         } finally { setIsLoading(false); }
     };
 
+    const activeNodesCount = users.filter(u => {
+        if (!u.last_seen) return false;
+        const diffMs = Date.now() - new Date(u.last_seen).getTime();
+        return diffMs < 300000; // 5 Minutes
+    }).length;
+
     return (
         <div className="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
             <ConfirmationModal isOpen={confirmConfig.isOpen} title={confirmConfig.title} message={confirmConfig.message} confirmLabel={confirmConfig.confirmLabel} type={confirmConfig.type} onConfirm={() => { confirmConfig.onConfirm(); setConfirmConfig(prev => ({ ...prev, isOpen: false })); }} onCancel={() => setConfirmConfig(prev => ({ ...prev, isOpen: false }))} />
@@ -381,9 +386,9 @@ const AdminDashboard: React.FC = () => {
                 </div>
                 <div className="bg-slate-100 px-4 py-2 rounded-xl flex items-center gap-4">
                     <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span className={`w-2.5 h-2.5 rounded-full ${activeNodesCount > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`}></span>
                         <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">
-                            {users.filter(u => u.last_seen && Math.abs(Date.now() - new Date(u.last_seen).getTime()) < 300000).length} Nodes Active
+                            {activeNodesCount} Nodes Active
                         </span>
                     </div>
                 </div>
