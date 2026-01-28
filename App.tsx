@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { HashRouter } from 'react-router-dom';
 import { Routes, Route, Navigate, useNavigate } from 'react-router';
@@ -29,7 +28,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 
 /**
  * NODE ACCESS CONTROLLER
- * A robust "Fail-Closed" guard that handles both Subscription and Key logic.
+ * Hardened to prevent unauthorized DOM access.
  */
 const NodeAccessController: React.FC<{ 
     children: React.ReactElement, 
@@ -40,46 +39,46 @@ const NodeAccessController: React.FC<{
     const { profile, freeTools, isAdmin } = useAuth();
     const navigate = useNavigate();
 
-    // 1. Universal Overrides (Admin / Global Provisioning)
-    if (isAdmin || freeTools.includes(toolId)) return children;
+    // 1. Check for valid authorization state
+    const isFree = freeTools.includes(toolId);
+    const isSubscribed = profile?.is_subscribed;
+    const isUnlockedViaKey = mode === 'key-allowed' && (profile?.unlocked_tools?.includes(toolId) || profile?.unlocked_tools?.includes('universal'));
 
-    // 2. Subscription Check
-    if (profile?.is_subscribed) return children;
+    const hasAccess = isAdmin || isFree || isSubscribed || isUnlockedViaKey;
 
-    // 3. Persistent Key Check (if allowed for this tool)
+    if (hasAccess) return children;
+
+    // 2. Handle specific lock screens
     if (mode === 'key-allowed') {
-        const isUnlocked = profile?.unlocked_tools?.includes(toolId) || profile?.unlocked_tools?.includes('universal');
-        if (isUnlocked) return children;
-        
         return (
-            <div className="relative h-full w-full overflow-hidden">
-                <div className="blur-md pointer-events-none grayscale opacity-30 select-none">{children}</div>
+            <div className="relative h-full w-full overflow-hidden flex items-center justify-center bg-slate-50">
+                {/* We don't render children at all here to prevent memory inspection/DOM reveals */}
+                <div className="absolute inset-0 bg-slate-100 opacity-50 pointer-events-none" />
                 <AuthModal toolId={toolId} toolDisplayName={displayName} onSuccess={() => {}} />
             </div>
         );
     }
 
-    // 4. Default: Block Access (Subscription Required)
     return (
-        <div className="relative h-full w-full overflow-hidden">
-            <div className="blur-md pointer-events-none grayscale opacity-30 select-none">{children}</div>
-            <div className="absolute inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-6 animate-fade-in">
-                <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl max-w-sm w-full border border-slate-200 text-center animate-scale-in relative ring-4 ring-slate-900/5">
-                    <div className="mb-10">
-                        <div className="w-20 h-20 bg-amber-50 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-sm border border-amber-100">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                            </svg>
-                        </div>
-                        <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Premium Module</h2>
-                        <p className="text-slate-500 mt-2 text-xs font-bold uppercase tracking-widest leading-relaxed">
-                            {displayName} requires an active subscription.
-                        </p>
+        <div className="relative h-full w-full overflow-hidden bg-slate-100 flex items-center justify-center">
+            <div className="bg-white p-12 rounded-[3rem] shadow-2xl max-w-md w-full border border-slate-200 text-center animate-scale-in relative ring-8 ring-slate-900/5">
+                <div className="mb-8">
+                    <div className="w-24 h-24 bg-amber-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6 shadow-sm border border-amber-100">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
                     </div>
-                    <button onClick={() => navigate('/dashboard')} className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-4 rounded-2xl shadow-xl transition active:scale-95 uppercase tracking-widest text-xs">
-                        Back to Workspace
-                    </button>
+                    <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tight">Access Restricted</h2>
+                    <p className="text-slate-500 mt-4 text-sm font-medium leading-relaxed">
+                        The <b>{displayName}</b> module requires a validated Enterprise Subscription.
+                    </p>
                 </div>
+                <button 
+                    onClick={() => navigate('/dashboard')} 
+                    className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-4 rounded-2xl shadow-xl transition-all active:scale-95 uppercase tracking-widest text-xs"
+                >
+                    Return to Workspace
+                </button>
             </div>
         </div>
     );
@@ -87,14 +86,14 @@ const NodeAccessController: React.FC<{
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { session, loading } = useAuth();
-    if (loading) return <LoadingOverlay message="Verifying Integrity..." color="indigo" />;
+    if (loading) return <LoadingOverlay message="Validating Session..." color="indigo" />;
     if (!session) return <Navigate to="/login" replace />;
     return <>{children}</>;
 };
 
 const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { session, isAdmin, loading } = useAuth();
-    if (loading) return <LoadingOverlay message="Authenticating Admin..." color="slate" />;
+    if (loading) return <LoadingOverlay message="Checking Authority..." color="slate" />;
     if (!session || !isAdmin) return <Navigate to="/" replace />;
     return <>{children}</>;
 };
