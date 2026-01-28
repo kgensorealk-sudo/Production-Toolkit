@@ -3,6 +3,8 @@ import { supabase } from '../supabaseClient';
 import { UserProfile } from '../types';
 import { INACTIVITY_LIMIT } from '../constants';
 
+// Fix: Defining Session and User as any because they may not be correctly exported 
+// from the installed version of @supabase/supabase-js in this environment.
 type Session = any;
 type User = any;
 
@@ -21,7 +23,11 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const HEARTBEAT_INTERVAL = 90 * 1000;
+const HEARTBEAT_INTERVAL = 90 * 1000; // 90 seconds
+// This is the specific key Supabase uses for this project
+const SB_STORAGE_KEY = 'sb-jtrvpqxhjqpifglrhbzu-auth-token';
+
+// Super-Admin Email Configuration
 const SUPER_ADMIN_EMAIL = 'generalkevin53@gmail.com';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -34,6 +40,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     const lastHeartbeat = useRef<number>(0);
     const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    
+    // SECURITY: Internal reference to prevent memory-injection attacks on state
     const internalAuthRef = useRef({ sub: false, admin: false });
 
     const isAdmin = (
@@ -41,6 +49,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user?.app_metadata?.role?.toLowerCase() === 'admin' ||
         profile?.role?.toLowerCase() === 'admin'
     );
+
+    const clearLocalSession = () => {
+        try {
+            console.warn("Auth: Purging local session storage due to token corruption.");
+            localStorage.removeItem(SB_STORAGE_KEY);
+            // Also clear generic Supabase keys just in case
+            Object.keys(localStorage).forEach(key => {
+                if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+                    localStorage.removeItem(key);
+                }
+            });
+            sessionStorage.clear();
+        } catch (e) {
+            console.error("Auth: Failed to clear storage", e);
+        }
+    };
+
+    const performHeartbeat = async (uid: string) => {
+        const now = Date.now();
+        if (now - lastHeartbeat.current < HEARTBEAT_INTERVAL) return;
+        
+        lastHeartbeat.current = now;
+        
+        try {
+            const { data, error } = await supabase
+                .from('profiles')
+                .update({ last_seen: new Date().toISOString() })
+                .eq('id', uid)
+                .select('is_subscribed, role')
+                .single();
+
+            if (error) throw error;
+
+            if (internalAuthRef.current.sub && !data.is_subscribed) {
+                signOut(true);
+            }
+        } catch (err) {
+            // Silently handle heartbeat failures to avoid UI flicker
+        }
+    };
 
     const fetchFreeTools = async () => {
         try {
@@ -75,6 +123,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 .maybeSingle();
             
             if (profileError) throw profileError;
+
             if (!profileData) return;
 
             const { data: keysData } = await supabase
@@ -84,8 +133,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 .eq('is_used', true);
 
             const unlockedTools = keysData ? keysData.map(k => k.tool) : [];
-            let isActive = profileData.is_subscribed;
             
+            let isActive = profileData.is_subscribed;
             if (user?.email === SUPER_ADMIN_EMAIL) {
                 isActive = true;
             } else if (profileData.subscription_end && new Date(profileData.subscription_end) < new Date()) {
@@ -104,21 +153,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             };
 
             setProfile(finalProfile);
+            lastHeartbeat.current = Date.now();
         } catch (err: any) {
-            console.error("Auth Profile Fetch Error:", err.message);
+            console.error("Auth: Profile Fetch Error:", err.message || err);
         }
     };
 
     const signOut = async (isAuto: boolean = false) => {
         try {
+            setLoading(true); 
             await (supabase.auth as any).signOut();
         } catch (e) {
+            // Ignore signout errors, we clear locally anyway
         } finally {
+            clearLocalSession();
             setProfile(null); setSession(null); setUser(null);
-            if (isAuto) {
-                sessionStorage.setItem('session_expired', 'true');
-                window.location.hash = '#/login';
-            }
+            internalAuthRef.current = { sub: false, admin: false };
+            setLoading(false);
+            if (isAuto || !session) window.location.hash = '#/login';
         }
     };
 
@@ -126,6 +178,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
         if (session && user) {
             inactivityTimer.current = setTimeout(() => signOut(true), INACTIVITY_LIMIT);
+            performHeartbeat(user.id);
         }
     };
 
@@ -144,43 +197,61 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     useEffect(() => {
         let mounted = true;
-
-        const initSession = async () => {
+        const init = async () => {
             try {
+                // Critical: Explicitly check session status
                 const { data, error } = await (supabase.auth as any).getSession();
-                if (error) throw error;
                 
-                if (data?.session && mounted) {
-                    setSession(data.session);
-                    setUser(data.session.user);
-                    await Promise.all([fetchProfile(data.session.user.id), fetchFreeTools()]);
+                if (error) {
+                    // If we get an auth error during init (like invalid refresh token), clear storage
+                    if (error.message.toLowerCase().includes('refresh_token') || error.status === 400) {
+                        clearLocalSession();
+                    }
+                    throw error;
+                }
+
+                const currentSession = data?.session;
+                if (currentSession && mounted) {
+                    setSession(currentSession);
+                    setUser(currentSession.user);
+                    await Promise.all([fetchProfile(currentSession.user.id), fetchFreeTools()]);
                 }
             } catch (err) {
-                console.error("Auth Init Error:", err);
+                console.error("Auth: Initialization error", err);
+                if (mounted) {
+                    setSession(null);
+                    setUser(null);
+                }
             } finally {
                 if (mounted) setLoading(false);
             }
         };
 
-        initSession();
+        init();
 
         const { data: authListener } = (supabase.auth as any).onAuthStateChange(async (event: any, newSession: any) => {
             if (!mounted) return;
+            
             if (event === 'SIGNED_OUT') {
                 setProfile(null); setUser(null); setSession(null);
-            } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-                if (newSession) {
-                    setSession(newSession);
-                    setUser(newSession.user);
-                    await fetchProfile(newSession.user.id);
-                }
+                setLoading(false);
+            } else if (event === 'SIGNED_IN' && newSession?.user) {
+                setSession(newSession); setUser(newSession.user);
+                await fetchProfile(newSession.user.id);
+                setLoading(false);
+            } else if (event === 'TOKEN_REFRESHED' && newSession) {
+                setSession(newSession);
+                setUser(newSession.user);
+            } else if (event === 'USER_UPDATED' && newSession) {
+                setUser(newSession.user);
             }
-            setLoading(false);
         });
+
+        const subscription = authListener?.subscription;
 
         return () => { 
             mounted = false; 
-            authListener.subscription.unsubscribe();
+            if (subscription) subscription.unsubscribe(); 
         };
     }, []);
 
