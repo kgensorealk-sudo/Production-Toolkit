@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo } from 'react';
 import { diffLines, diffWordsWithSpace, Change } from 'diff';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
@@ -37,144 +37,14 @@ const ReferenceUpdater: React.FC = () => {
     const [renumberInternal, setRenumberInternal] = useState(true);
     const [addOrphans, setAddOrphans] = useState(false);
     const [isNumberedMode, setIsNumberedMode] = useState(false);
-    const [sortAlphabetically, setSortAlphabetically] = useState(true);
     const [convertAndToAmp, setConvertAndToAmp] = useState(false);
     const [activeTab, setActiveTab] = useState<'scan' | 'sequence' | 'result' | 'diff'>('scan');
     const [isLoading, setIsLoading] = useState(false);
-    const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'|'info'} | null>(null);
+    const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
     const [scanResults, setScanResults] = useState<ScanItem[]>([]);
     const [diffElements, setDiffElements] = useState<React.ReactNode>(null);
 
-    // Drag and Drop State
-    const [draggedItemIndex, setDraggedItemIndex] = useState<number | null>(null);
-
     const escapeHtml = (unsafe: string) => unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-    const buildLines = (diffParts: Change[], isLeft: boolean) => {
-        let lines: string[] = [];
-        let currentLine = "";
-        let activeClass: string | null = null;
-
-        const append = (text: string, cls: string | null) => {
-            if (!text) return;
-            for (let i = 0; i < text.length; i++) {
-                const char = text[i];
-                if (char === '\n') {
-                    if (activeClass) currentLine += '</span>';
-                    lines.push(currentLine);
-                    currentLine = "";
-                    if (activeClass) currentLine += `<span class="${activeClass}">`;
-                } else {
-                    if (cls !== activeClass) {
-                        if (activeClass) currentLine += '</span>';
-                        activeClass = cls;
-                        if (activeClass) currentLine += `<span class="${activeClass}">`;
-                    }
-                    currentLine += escapeHtml(char);
-                }
-            }
-        };
-
-        diffParts.forEach(part => {
-            if (part.removed && isLeft) append(part.value, 'bg-rose-100 text-rose-900 line-through decoration-rose-900/30');
-            else if (part.added && !isLeft) append(part.value, 'bg-emerald-100 text-emerald-900 font-medium');
-            else if (!part.added && !part.removed) append(part.value, null);
-        });
-
-        if (activeClass) currentLine += '</span>';
-        lines.push(currentLine);
-        return lines;
-    };
-
-    const generateDiff = (original: string, modified: string) => {
-        const diff = diffLines(original, modified);
-        let rows: React.ReactNode[] = [];
-        let leftLineNum = 1;
-        let rightLineNum = 1;
-
-        let i = 0;
-        while(i < diff.length) {
-            const current = diff[i];
-            let type = 'equal';
-            let leftVal = '', rightVal = '';
-
-            if (current.removed && diff[i+1]?.added) {
-                type = 'replace';
-                leftVal = current.value;
-                rightVal = diff[i+1].value;
-                i += 2;
-            } else if (current.removed) {
-                type = 'delete';
-                leftVal = current.value;
-                i++;
-            } else if (current.added) {
-                type = 'insert';
-                rightVal = current.value;
-                i++;
-            } else {
-                leftVal = rightVal = current.value;
-                i++;
-            }
-
-            let leftLines: string[] = [];
-            let rightLines: string[] = [];
-
-            if (type === 'replace') {
-                const wordDiff = diffWordsWithSpace(leftVal, rightVal);
-                leftLines = buildLines(wordDiff, true);
-                rightLines = buildLines(wordDiff, false);
-            } else if (type === 'delete') {
-                leftLines = buildLines([{removed: true, value: leftVal} as Change], true);
-            } else if (type === 'insert') {
-                rightLines = buildLines([{added: true, value: rightVal} as Change], false);
-            } else {
-                 const lines = leftVal.split('\n');
-                 if (lines.length > 0 && lines[lines.length-1] === '') lines.pop(); 
-                 leftLines = lines.map(escapeHtml);
-                 rightLines = [...leftLines];
-            }
-
-            const maxRows = Math.max(leftLines.length, rightLines.length);
-            for (let r = 0; r < maxRows; r++) {
-                 const lContent = leftLines[r];
-                 const rContent = rightLines[r];
-                 const lNum = lContent !== undefined ? leftLineNum++ : '';
-                 const rNum = rContent !== undefined ? rightLineNum++ : '';
-                 
-                 let lClass = lContent !== undefined && type === 'delete' ? 'bg-rose-50/50' : (type === 'replace' ? 'bg-rose-50/30' : '');
-                 let rClass = rContent !== undefined && type === 'insert' ? 'bg-emerald-50/50' : (type === 'replace' ? 'bg-emerald-50/30' : '');
-                 if (type === 'equal') { lClass = ''; rClass = ''; }
-
-                 rows.push(
-                    <tr key={`${i}-${r}`} className="hover:bg-slate-50 transition-colors duration-75 group border-b border-slate-100/30 last:border-0">
-                        <td className={`w-14 text-right text-[10px] text-slate-400 p-1.5 pr-3 border-r border-slate-200 select-none bg-slate-50/80 font-mono ${lClass}`}>{lNum}</td>
-                        <td className={`p-1.5 pl-4 font-mono text-[11px] text-slate-700 whitespace-pre-wrap break-all leading-relaxed ${lClass}`} dangerouslySetInnerHTML={{__html: lContent || ''}}></td>
-                        <td className={`w-14 text-right text-[10px] text-slate-400 p-1.5 pr-3 border-r border-slate-200 border-l select-none bg-slate-50/80 font-mono ${rClass}`}>{rNum}</td>
-                        <td className={`p-1.5 pl-4 font-mono text-[11px] text-slate-700 whitespace-pre-wrap break-all leading-relaxed ${rClass}`} dangerouslySetInnerHTML={{__html: rContent || ''}}></td>
-                    </tr>
-                 );
-            }
-        }
-        
-        setDiffElements(
-            <div className="bg-white">
-                <table className="w-full text-sm font-mono border-collapse table-fixed">
-                    <colgroup><col className="w-14" /><col className="w-[calc(50%-3.5rem)]" /><col className="w-14 border-l border-slate-200" /><col className="w-[calc(50%-3.5rem)]" /></colgroup>
-                    <thead className="sticky top-0 z-20 bg-slate-100 border-b border-slate-200 shadow-sm">
-                        <tr>
-                            <th colSpan={2} className="px-6 py-3 text-left text-[11px] font-extrabold text-slate-500 uppercase tracking-widest bg-slate-100/95 backdrop-blur">
-                                <span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-rose-400"></span>Original Source</span>
-                            </th>
-                            <th colSpan={2} className="px-6 py-3 text-left text-[11px] font-extrabold text-slate-500 uppercase tracking-widest bg-slate-100/95 backdrop-blur border-l border-slate-200">
-                                <span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-emerald-400"></span>Processed Output</span>
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody>{rows}</tbody>
-                </table>
-            </div>
-        );
-    };
 
     const formatLabel = (label: string) => {
         if (!label) return label;
@@ -257,6 +127,96 @@ const ReferenceUpdater: React.FC = () => {
         return refs;
     };
 
+    const buildLines = (diffParts: Change[], isLeft: boolean) => {
+        let lines: string[] = [];
+        let currentLine = "";
+        let activeClass: string | null = null;
+        const append = (text: string, cls: string | null) => {
+            if (!text) return;
+            for (let i = 0; i < text.length; i++) {
+                const char = text[i];
+                if (char === '\n') {
+                    if (activeClass) currentLine += '</span>';
+                    lines.push(currentLine);
+                    currentLine = "";
+                    if (activeClass) currentLine += `<span class="${activeClass}">`;
+                } else {
+                    if (cls !== activeClass) {
+                        if (activeClass) currentLine += '</span>';
+                        activeClass = cls;
+                        if (activeClass) currentLine += `<span class="${activeClass}">`;
+                    }
+                    currentLine += escapeHtml(char);
+                }
+            }
+        };
+        diffParts.forEach(part => {
+            if (part.removed && isLeft) append(part.value, 'bg-rose-100 text-rose-900 line-through decoration-rose-900/30');
+            else if (part.added && !isLeft) append(part.value, 'bg-emerald-100 text-emerald-900 font-medium');
+            else if (!part.added && !part.removed) append(part.value, null);
+        });
+        if (activeClass) currentLine += '</span>';
+        lines.push(currentLine);
+        return lines;
+    };
+
+    const generateDiff = (original: string, modified: string) => {
+        const diff = diffLines(original, modified);
+        let rows: React.ReactNode[] = [];
+        let leftLineNum = 1, rightLineNum = 1, i = 0;
+        while(i < diff.length) {
+            const current = diff[i];
+            let type = 'equal', leftVal = '', rightVal = '';
+            if (current.removed && diff[i+1]?.added) {
+                type = 'replace'; leftVal = current.value; rightVal = diff[i+1].value; i += 2;
+            } else if (current.removed) {
+                type = 'delete'; leftVal = current.value; i++;
+            } else if (current.added) {
+                type = 'insert'; rightVal = current.value; i++;
+            } else {
+                leftVal = rightVal = current.value; i++;
+            }
+            let leftLines: string[] = [], rightLines: string[] = [];
+            if (type === 'replace') {
+                const wordDiff = diffWordsWithSpace(leftVal, rightVal);
+                leftLines = buildLines(wordDiff, true);
+                rightLines = buildLines(wordDiff, false);
+            } else if (type === 'delete') {
+                leftLines = buildLines([{removed: true, value: leftVal} as Change], true);
+            } else if (type === 'insert') {
+                rightLines = buildLines([{added: true, value: rightVal} as Change], false);
+            } else {
+                const lines = leftVal.split('\n');
+                if (lines.length > 0 && lines[lines.length-1] === '') lines.pop(); 
+                leftLines = lines.map(escapeHtml);
+                rightLines = [...leftLines];
+            }
+            const maxRows = Math.max(leftLines.length, rightLines.length);
+            for (let r = 0; r < maxRows; r++) {
+                const lContent = leftLines[r], rContent = rightLines[r];
+                const lNum = lContent !== undefined ? leftLineNum++ : '', rNum = rContent !== undefined ? rightLineNum++ : '';
+                let lClass = lContent !== undefined && type === 'delete' ? 'bg-rose-50/50' : (type === 'replace' ? 'bg-rose-50/30' : '');
+                let rClass = rContent !== undefined && type === 'insert' ? 'bg-emerald-50/50' : (type === 'replace' ? 'bg-emerald-50/30' : '');
+                rows.push(
+                    <tr key={`${i}-${r}`} className="border-b border-slate-100 hover:bg-slate-50 transition-colors duration-75">
+                        <td className={`w-10 text-right text-[10px] text-slate-400 p-1 border-r border-slate-200 select-none bg-slate-50 font-mono ${lClass}`}>{lNum}</td>
+                        <td className={`p-1.5 font-mono text-xs text-slate-600 whitespace-pre-wrap break-all leading-relaxed ${lClass}`} dangerouslySetInnerHTML={{__html: lContent || ''}}></td>
+                        <td className={`w-10 text-right text-[10px] text-slate-400 p-1 border-r border-slate-200 border-l select-none bg-slate-50 font-mono ${rClass}`}>{rNum}</td>
+                        <td className={`p-1.5 font-mono text-xs text-slate-600 whitespace-pre-wrap break-all leading-relaxed ${rClass}`} dangerouslySetInnerHTML={{__html: rContent || ''}}></td>
+                    </tr>
+                );
+            }
+        }
+        setDiffElements(
+            <div className="rounded-lg border border-slate-200 overflow-hidden bg-white m-2 shadow-sm">
+                <table className="w-full text-sm font-mono border-collapse table-fixed">
+                    <colgroup><col className="w-10 bg-slate-50" /><col className="w-[calc(50%-2.5rem)]" /><col className="w-10 bg-slate-50 border-l" /><col className="w-[calc(50%-2.5rem)]" /></colgroup>
+                    <tbody>{rows}</tbody>
+                </table>
+            </div>
+        );
+    };
+
     const runAnalysis = () => {
         if (!originalXml.trim() || !updatedXml.trim()) { setToast({ msg: "Paste both Original and Updated XML.", type: "warn" }); return; }
         setIsLoading(true);
@@ -265,6 +225,7 @@ const ReferenceUpdater: React.FC = () => {
                 const origRefs = parseReferences(originalXml);
                 const updatedRefs = parseReferences(updatedXml);
                 const analysis: ScanItem[] = [];
+                let updateCount = 0;
                 const usedUpdateIdx = new Set<number>();
 
                 origRefs.forEach((origRef, oIdx) => {
@@ -303,7 +264,7 @@ const ReferenceUpdater: React.FC = () => {
                     }
 
                     if (matchIdx !== -1) {
-                        usedUpdateIdx.add(matchIdx);
+                        updateCount++; usedUpdateIdx.add(matchIdx);
                         analysis.push({ 
                             label: formatLabel(origRef.label), 
                             id: origRef.id, 
@@ -380,15 +341,14 @@ const ReferenceUpdater: React.FC = () => {
 
             let bbStart = getNextId(originalXml, 'bb', 3000);
             let rfCounter = getNextId(originalXml, 'rf', 3000);
-            let seCounter = getNextId(originalXml, 'se', 3000); // Updated to se
+            let stCounter = getNextId(originalXml, 'st', 3000);
             let irCounter = getNextId(originalXml, 'ir', 3000);
             let orCounter = getNextId(originalXml, 'or', 3000);
             let trCounter = getNextId(originalXml, 'tr', 3000);
             
             const finalBlocks: RefBlock[] = [];
-            const displaySequence = projectedSequence;
 
-            displaySequence.forEach(item => {
+            scanResults.forEach(item => {
                 if (item.originalIndex !== null) {
                     const origRef = origRefs[item.originalIndex];
                     if (item.selected && item.updatedIndex !== null && (item.status === 'update' || item.status === 'smart_match')) {
@@ -404,11 +364,10 @@ const ReferenceUpdater: React.FC = () => {
                         }
                         if (renumberInternal) {
                             finalTag = finalTag.replace(/(<(?:sb:reference|ce:source-text|ce:inter-ref|sb:inter-ref|ce:other-ref|ce:textref)\b[^>]*?)(\bid="[^"]+")([^>]*?>)/g, (m, p1, idAttr, p2) => {
-                                // Changed 'st' to 'se'
-                                let prefix = p1.includes('ce:source-text') ? 'se' : p1.includes('inter-ref') ? 'ir' : p1.includes('ce:other-ref') ? 'or' : p1.includes('ce:textref') ? 'tr' : 'rf';
-                                let counter = prefix === 'se' ? seCounter : prefix === 'ir' ? irCounter : prefix === 'or' ? orCounter : prefix === 'tr' ? trCounter : rfCounter;
+                                let prefix = p1.includes('ce:source-text') ? 'st' : p1.includes('inter-ref') ? 'ir' : p1.includes('ce:other-ref') ? 'or' : p1.includes('ce:textref') ? 'tr' : 'rf';
+                                let counter = prefix === 'st' ? stCounter : prefix === 'ir' ? irCounter : prefix === 'or' ? orCounter : prefix === 'tr' ? trCounter : rfCounter;
                                 const res = `${p1}id="${prefix}${counter}"${p2}`;
-                                if (prefix === 'se') seCounter += 5; else if (prefix === 'ir') irCounter += 5; else if (prefix === 'or') orCounter += 5; else if (prefix === 'tr') trCounter += 5; else rfCounter += 5;
+                                if (prefix === 'st') stCounter += 5; else if (prefix === 'ir') irCounter += 5; else if (prefix === 'or') orCounter += 5; else if (prefix === 'tr') trCounter += 5; else rfCounter += 5;
                                 return res;
                             });
                         }
@@ -429,17 +388,23 @@ const ReferenceUpdater: React.FC = () => {
                     finalTag = finalTag.replace(/id="[^"]*"\s*/, '').replace('<ce:bib-reference', `<ce:bib-reference id="${idToUse}"`);
                     if (renumberInternal) {
                         finalTag = finalTag.replace(/(<(?:sb:reference|ce:source-text|ce:inter-ref|sb:inter-ref|ce:other-ref|ce:textref)\b[^>]*?)(\bid="[^"]+")([^>]*?>)/g, (m, p1, idAttr, p2) => {
-                            // Changed 'st' to 'se'
-                            let prefix = p1.includes('ce:source-text') ? 'se' : p1.includes('inter-ref') ? 'ir' : p1.includes('ce:other-ref') ? 'or' : p1.includes('ce:textref') ? 'tr' : 'rf';
-                            let counter = prefix === 'se' ? seCounter : prefix === 'ir' ? irCounter : prefix === 'or' ? orCounter : prefix === 'tr' ? trCounter : rfCounter;
+                            let prefix = p1.includes('ce:source-text') ? 'st' : p1.includes('inter-ref') ? 'ir' : p1.includes('ce:other-ref') ? 'or' : p1.includes('ce:textref') ? 'tr' : 'rf';
+                            let counter = prefix === 'st' ? stCounter : prefix === 'ir' ? irCounter : prefix === 'or' ? orCounter : prefix === 'tr' ? trCounter : rfCounter;
                             const res = `${p1}id="${prefix}${counter}"${p2}`;
-                            if (prefix === 'se') seCounter += 5; else if (prefix === 'ir') irCounter += 5; else if (prefix === 'or') orCounter += 5; else if (prefix === 'tr') trCounter += 5; else rfCounter += 5;
+                            if (prefix === 'st') stCounter += 5; else if (prefix === 'ir') irCounter += 5; else if (prefix === 'or') orCounter += 5; else if (prefix === 'tr') trCounter += 5; else rfCounter += 5;
                             return res;
                         });
                     }
                     finalBlocks.push({ ...u, fullTag: finalTag, id: idToUse });
                 }
             });
+
+            const hasAuthorLabels = finalBlocks.some(b => b.label && /[a-zA-Z]/.test(b.label));
+            const isNameDate = !isNumberedMode || hasAuthorLabels;
+            if (isNameDate) {
+                const cleanForSort = (str: string) => str.replace(/[^a-zA-Z0-9]/g, '').trim().toLowerCase();
+                finalBlocks.sort((a, b) => cleanForSort(a.sortKey).localeCompare(cleanForSort(b.sortKey), undefined, { sensitivity: 'base', numeric: true }));
+            }
 
             const joinedResult = finalBlocks.map(b => b.fullTag).join('\n');
             setOutput(joinedResult);
@@ -459,52 +424,20 @@ const ReferenceUpdater: React.FC = () => {
 
     const projectedSequence = useMemo(() => {
         if (scanResults.length === 0) return [];
-        
-        let list = [...scanResults].filter(r => r.selected);
-        
-        if (sortAlphabetically) {
-            const hasAuthorLabels = list.some(b => b.label && /[a-zA-Z]/.test(b.label));
-            const isNameDate = !isNumberedMode || hasAuthorLabels;
-            if (isNameDate) {
-                const cleanForSort = (str: string) => str.replace(/[^a-zA-Z0-9]/g, '').trim().toLowerCase();
-                list.sort((a, b) => cleanForSort(a.sortKey).localeCompare(cleanForSort(b.sortKey), undefined, { sensitivity: 'base', numeric: true }));
-            }
+        let list = scanResults.filter(r => r.selected).map(r => ({
+            label: formatLabel(r.label),
+            id: r.id,
+            status: r.status,
+            sortKey: r.sortKey
+        }));
+        const hasAuthorLabels = list.some(b => b.label && /[a-zA-Z]/.test(b.label));
+        const isNameDate = !isNumberedMode || hasAuthorLabels;
+        if (isNameDate) {
+            const cleanForSort = (str: string) => str.replace(/[^a-zA-Z0-9]/g, '').trim().toLowerCase();
+            list.sort((a, b) => cleanForSort(a.sortKey).localeCompare(cleanForSort(b.sortKey), undefined, { sensitivity: 'base', numeric: true }));
         }
-        
         return list;
-    }, [scanResults, isNumberedMode, sortAlphabetically]);
-
-    const handleDragStart = (idx: number) => {
-        setDraggedItemIndex(idx);
-    };
-
-    const handleDragOver = (e: React.DragEvent) => {
-        e.preventDefault();
-    };
-
-    const handleDrop = (dropIndex: number) => {
-        if (draggedItemIndex === null || draggedItemIndex === dropIndex) return;
-
-        if (sortAlphabetically) {
-            setSortAlphabetically(false);
-            setToast({ msg: "Auto-Sort disabled. Manual sequence active.", type: "info" });
-        }
-
-        const newList = [...scanResults];
-        const visibleItems = scanResults.filter(r => r.selected);
-        const itemToMove = visibleItems[draggedItemIndex];
-        
-        const originalScanIdx = scanResults.findIndex(r => r === itemToMove);
-        newList.splice(originalScanIdx, 1);
-        
-        const dropTargetItem = visibleItems[dropIndex];
-        const finalDropIdx = newList.findIndex(r => r === dropTargetItem);
-        
-        newList.splice(finalDropIdx, 0, itemToMove);
-        
-        setScanResults(newList);
-        setDraggedItemIndex(null);
-    };
+    }, [scanResults, isNumberedMode, convertAndToAmp]);
 
     useKeyboardShortcuts({
         onPrimary: initiateUpdate,
@@ -516,7 +449,7 @@ const ReferenceUpdater: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
             <div className="mb-8 text-center animate-fade-in">
                 <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase">Reference Updater</h1>
-                <p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic">Smart-merge corrections. Drag and drop in Sequence tab to manually rearrange.</p>
+                <p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic">Smart-merge corrections into existing lists with manual audit control.</p>
             </div>
 
             <div className="flex justify-center mb-8">
@@ -537,28 +470,12 @@ const ReferenceUpdater: React.FC = () => {
 
                     <label className="flex items-center gap-3 cursor-pointer group">
                         <div className="relative">
-                            <input type="checkbox" checked={sortAlphabetically} onChange={(e) => setSortAlphabetically(e.target.checked)} className="sr-only" />
-                            <div className={`block w-10 h-6 rounded-full transition-colors ${sortAlphabetically ? 'bg-indigo-600' : 'bg-slate-300'}`}></div>
-                            <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${sortAlphabetically ? 'translate-x-4' : ''}`}></div>
-                        </div>
-                        <div className="flex flex-col">
-                            <span className="text-sm font-bold text-slate-700">Auto-Sort</span>
-                            <span className={`text-[10px] font-black uppercase tracking-tighter ${sortAlphabetically ? 'text-indigo-500' : 'text-amber-500'}`}>
-                                {sortAlphabetically ? 'Alphabetical' : 'Manual / Original'}
-                            </span>
-                        </div>
-                    </label>
-
-                    <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
-
-                    <label className="flex items-center gap-3 cursor-pointer group">
-                        <div className="relative">
                             <input type="checkbox" checked={addOrphans} onChange={(e) => setAddOrphans(e.target.checked)} className="sr-only" />
                             <div className={`block w-10 h-6 rounded-full transition-colors ${addOrphans ? 'bg-emerald-600' : 'bg-slate-300'}`}></div>
                             <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${addOrphans ? 'translate-x-4' : ''}`}></div>
                         </div>
                         <div className="flex flex-col">
-                            <span className="text-sm font-bold text-slate-700">Add Orphans</span>
+                            <span className="text-sm font-bold text-slate-700">Add New Orphans</span>
                             <span className="text-[10px] text-slate-400 font-medium uppercase tracking-tighter">Interleave Mode</span>
                         </div>
                     </label>
@@ -572,7 +489,7 @@ const ReferenceUpdater: React.FC = () => {
                             <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${convertAndToAmp ? 'translate-x-4' : ''}`}></div>
                         </div>
                         <div className="flex flex-col">
-                            <span className="text-sm font-bold text-slate-700">Ampersand</span>
+                            <span className="text-sm font-bold text-slate-700">Ampersand Labels</span>
                             <span className="text-[10px] text-slate-400 font-medium uppercase tracking-tighter">and to &amp;amp;</span>
                         </div>
                     </label>
@@ -689,7 +606,7 @@ const ReferenceUpdater: React.FC = () => {
                                 <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
                                     <div>
                                         <div className="text-xs font-black text-slate-800 uppercase tracking-widest leading-none">Output Sequence Preview</div>
-                                        <div className="text-[10px] text-slate-400 mt-1 font-medium">Drag items to rearrange.</div>
+                                        <div className="text-[10px] text-slate-400 mt-1 font-medium">Final bibliography order after alphabetical/numeric sort.</div>
                                     </div>
                                     <div className="bg-indigo-50 px-3 py-1 rounded-lg border border-indigo-100">
                                         <span className="text-[10px] font-black text-indigo-600 uppercase">{projectedSequence.length} Active Items</span>
@@ -700,25 +617,13 @@ const ReferenceUpdater: React.FC = () => {
                                         <div className="h-full flex flex-col items-center justify-center opacity-30 grayscale"><svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M4 6h16M4 12h16M4 18h16" /></svg><p className="text-sm font-bold uppercase tracking-widest">No Selected Outputs</p></div>
                                     ) : (
                                         projectedSequence.map((ref, idx) => (
-                                            <div 
-                                                key={`${ref.id}-${idx}`}
-                                                draggable
-                                                onDragStart={() => handleDragStart(idx)}
-                                                onDragOver={handleDragOver}
-                                                onDrop={() => handleDrop(idx)}
-                                                className={`flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl shadow-sm hover:border-indigo-300 transition-all group cursor-grab active:cursor-grabbing ${draggedItemIndex === idx ? 'opacity-40 grayscale scale-95 border-dashed border-indigo-400 bg-indigo-50/20' : ''}`}
-                                            >
-                                                <div className="flex flex-col items-center gap-1 shrink-0">
-                                                    <div className="text-slate-300 group-hover:text-indigo-300">
-                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M4 8h16M4 16h16" /></svg>
-                                                    </div>
-                                                    <div className="w-8 h-8 bg-slate-50 rounded-xl flex items-center justify-center text-[10px] font-black text-slate-300 group-hover:bg-indigo-50 group-hover:text-indigo-400 transition-colors border border-slate-100">
-                                                        {idx + 1}
-                                                    </div>
+                                            <div key={idx} className="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl shadow-sm hover:border-indigo-300 transition-all group">
+                                                <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-xs font-black text-slate-300 group-hover:bg-indigo-50 group-hover:text-indigo-400 transition-colors border border-slate-100">
+                                                    {idx + 1}
                                                 </div>
                                                 <div className="flex-grow min-w-0">
-                                                    <div className="text-sm font-bold text-slate-800 truncate">{ref.label}</div>
-                                                    <div className="text-[10px] font-mono text-slate-400 uppercase tracking-tighter">ID: {ref.id}</div>
+                                                    <div className="text-sm font-bold text-slate-800">{ref.label}</div>
+                                                    <div className="text-[10px] font-mono text-slate-400 uppercase tracking-tighter">ID REFERENCE: {ref.id}</div>
                                                 </div>
                                                 <div className="flex-shrink-0">
                                                     <span className={`text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-widest border ${
@@ -736,7 +641,7 @@ const ReferenceUpdater: React.FC = () => {
                             </div>
                         )}
 
-                        {activeTab === 'result' && <textarea value={output} readOnly className="w-full h-full p-6 text-xs font-mono bg-transparent border-0 focus:ring-0 resize-none leading-relaxed" placeholder="Final merged XML will appear here..." />}
+                        {activeTab === 'result' && <textarea value={output} readOnly className="w-full h-full p-6 text-xs font-mono bg-transparent border-0 focus:ring-0 outline-none resize-none leading-relaxed" placeholder="Final merged XML will appear here..." />}
                         {activeTab === 'diff' && <div className="absolute inset-0 overflow-auto bg-white p-2 custom-scrollbar">{diffElements || <div className="h-full flex items-center justify-center text-slate-400">Run merge to generate diff.</div>}</div>}
                     </div>
                 </div>

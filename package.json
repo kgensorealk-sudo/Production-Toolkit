@@ -1,8 +1,7 @@
-
 {
   "name": "production-toolkit",
   "version": "1.6.0",
-  "description": "Professional Editorial Workflow Suite with Security Hardening",
+  "description": "Professional Editorial Workflow Suite with 15-Min Inactivity Lockdown",
   "main": "electron/main.js",
   "author": "Editorial Systems Pro",
   "license": "MIT",
@@ -62,7 +61,6 @@
         }
       ],
       "icon": "favicon.png",
-      "requestedExecutionLevel": "asInvoker",
       "publisherName": "Editorial Systems Team",
       "artifactName": "${productName}-v${version}-${target}.${ext}"
     },

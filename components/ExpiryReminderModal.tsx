@@ -1,8 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-/* Import hooks from react-router to resolve potential named export issues in react-router-dom types */
-import { useNavigate, useLocation } from 'react-router';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 const ExpiryReminderModal: React.FC = () => {
     const { profile } = useAuth();

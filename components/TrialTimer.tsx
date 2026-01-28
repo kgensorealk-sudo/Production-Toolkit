@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-/* Import useNavigate from react-router to resolve potential named export issues in react-router-dom types */
-import { useNavigate } from 'react-router';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -124,7 +123,7 @@ const TrialTimer: React.FC<TrialTimerProps> = ({ endDate, label = "Trial", isTri
                 <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in">
                     <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-xl" />
                     
-                    <div className="bg-white rounded-[2.5rem] shadow-2xl max-sm w-full border border-slate-200 overflow-hidden animate-scale-in relative z-10 ring-4 ring-rose-500/10">
+                    <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-sm w-full border border-slate-200 overflow-hidden animate-scale-in relative z-10 ring-4 ring-rose-500/10">
                         <div className="p-8 text-center bg-rose-50">
                             <div className="w-20 h-20 mx-auto rounded-3xl flex items-center justify-center mb-6 shadow-sm border border-rose-100 bg-white text-rose-500">
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">

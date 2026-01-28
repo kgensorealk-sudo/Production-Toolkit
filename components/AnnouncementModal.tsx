@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 
@@ -26,6 +27,7 @@ const AnnouncementModal: React.FC = () => {
                     .maybeSingle();
 
                 if (error) {
+                    // Ignore "relation does not exist" error (42P01) which happens if SQL hasn't been run yet
                     if (error.code !== '42P01') {
                         console.warn("Failed to fetch announcements:", error.message || error);
                     }
@@ -33,6 +35,7 @@ const AnnouncementModal: React.FC = () => {
                 }
 
                 if (data) {
+                    // Check if this specific announcement ID has been seen in this session
                     const seenKey = `announcement_seen_${data.id}`;
                     const seen = sessionStorage.getItem(seenKey);
                     
@@ -42,6 +45,7 @@ const AnnouncementModal: React.FC = () => {
                     }
                 }
             } catch (err: any) {
+                // Silent fail for announcement checks to not disrupt user experience
                 console.warn("Announcement check failed:", err.message || err);
             }
         };
@@ -58,6 +62,7 @@ const AnnouncementModal: React.FC = () => {
 
     if (!isOpen || !announcement) return null;
 
+    // Dynamic Styles based on Type
     const getStyles = (type: string) => {
         switch (type) {
             case 'warning':
@@ -99,37 +104,34 @@ const AnnouncementModal: React.FC = () => {
 
     return (
         <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-[2px] flex items-center justify-center p-4 animate-fade-in">
-            {/* Modal Card - max-h reduced to 80vh and rounding tweaked to 1.25rem */}
-            <div className="bg-white rounded-[1.25rem] shadow-2xl max-w-sm w-full border border-slate-200 overflow-hidden animate-scale-in relative ring-4 ring-slate-900/5 flex flex-col max-h-[80vh]">
-                
-                {/* Header Area - Tightened padding from p-5 to py-4 px-5 */}
-                <div className={`${style.bg} py-4 px-5 border-b ${style.border} flex items-center gap-4 flex-shrink-0`}>
-                    <div className={`p-1.5 rounded-lg shadow-sm border ${style.border} flex-shrink-0 ${style.iconBg}`}>
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden animate-scale-in relative ring-4 ring-slate-900/5">
+                {/* Header / Banner Area */}
+                <div className={`${style.bg} p-6 border-b ${style.border} flex items-start gap-5`}>
+                    <div className={`p-3 rounded-xl shadow-sm border ${style.border} flex-shrink-0 ${style.iconBg}`}>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             {style.icon}
                         </svg>
                     </div>
                     <div>
-                        <h3 className={`text-base font-black tracking-tight leading-tight ${style.title}`}>{announcement.title}</h3>
-                        <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-0.5">System Broadcast</div>
+                        <h3 className={`text-xl font-extrabold tracking-tight ${style.title}`}>{announcement.title}</h3>
+                        <div className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-wider">System Announcement</div>
                     </div>
                 </div>
 
-                {/* Content Body - Tightened padding from p-5 to p-4 */}
-                <div className="p-4 bg-white overflow-y-auto custom-scrollbar flex-grow">
-                    <div className="text-[11px] text-slate-600 bg-slate-50 p-3.5 rounded-xl border border-slate-100 whitespace-pre-wrap leading-relaxed font-medium">
+                {/* Content Body */}
+                <div className="p-6 bg-white space-y-4">
+                    <div className="text-sm text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-100 whitespace-pre-wrap leading-relaxed">
                         {announcement.content}
                     </div>
-                </div>
-
-                {/* Footer Area - Tightened padding from p-4 to p-3 */}
-                <div className="p-3 bg-slate-50/50 border-t border-slate-100 flex justify-end flex-shrink-0">
-                    <button 
-                        onClick={close}
-                        className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-2.5 px-6 rounded-lg transition-all active:scale-95 text-[9px] uppercase tracking-widest shadow-md shadow-slate-500/20"
-                    >
-                        I Understand
-                    </button>
+                    
+                    <div className="flex justify-end pt-2">
+                        <button 
+                            onClick={close}
+                            className="bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 px-6 rounded-xl transition-all active:scale-95 text-sm shadow-lg shadow-slate-500/20"
+                        >
+                            I Understand
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
