@@ -41,7 +41,6 @@ const ReferenceUpdater: React.FC = () => {
     const [convertAndToAmp, setConvertAndToAmp] = useState(false);
     const [activeTab, setActiveTab] = useState<'scan' | 'sequence' | 'result' | 'diff'>('scan');
     const [isLoading, setIsLoading] = useState(false);
-    // Fix: Updated Toast type to include 'info' to resolve line 365 error
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'|'info'} | null>(null);
     const [scanResults, setScanResults] = useState<ScanItem[]>([]);
     const [diffElements, setDiffElements] = useState<React.ReactNode>(null);
@@ -51,7 +50,6 @@ const ReferenceUpdater: React.FC = () => {
 
     const escapeHtml = (unsafe: string) => unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-    // Fix: Added missing buildLines helper for generateDiff
     const buildLines = (diffParts: Change[], isLeft: boolean) => {
         let lines: string[] = [];
         let currentLine = "";
@@ -88,7 +86,6 @@ const ReferenceUpdater: React.FC = () => {
         return lines;
     };
 
-    // Fix: Added missing generateDiff function to resolve line 319 error
     const generateDiff = (original: string, modified: string) => {
         const diff = diffLines(original, modified);
         let rows: React.ReactNode[] = [];
@@ -383,12 +380,11 @@ const ReferenceUpdater: React.FC = () => {
 
             let bbStart = getNextId(originalXml, 'bb', 3000);
             let rfCounter = getNextId(originalXml, 'rf', 3000);
-            let stCounter = getNextId(originalXml, 'st', 3000);
+            let seCounter = getNextId(originalXml, 'se', 3000); // Updated to se
             let irCounter = getNextId(originalXml, 'ir', 3000);
             let orCounter = getNextId(originalXml, 'or', 3000);
             let trCounter = getNextId(originalXml, 'tr', 3000);
             
-            // Respect the sequence exactly as displayed in the Sequence tab
             const finalBlocks: RefBlock[] = [];
             const displaySequence = projectedSequence;
 
@@ -408,10 +404,11 @@ const ReferenceUpdater: React.FC = () => {
                         }
                         if (renumberInternal) {
                             finalTag = finalTag.replace(/(<(?:sb:reference|ce:source-text|ce:inter-ref|sb:inter-ref|ce:other-ref|ce:textref)\b[^>]*?)(\bid="[^"]+")([^>]*?>)/g, (m, p1, idAttr, p2) => {
-                                let prefix = p1.includes('ce:source-text') ? 'st' : p1.includes('inter-ref') ? 'ir' : p1.includes('ce:other-ref') ? 'or' : p1.includes('ce:textref') ? 'tr' : 'rf';
-                                let counter = prefix === 'st' ? stCounter : prefix === 'ir' ? irCounter : prefix === 'or' ? orCounter : prefix === 'tr' ? trCounter : rfCounter;
+                                // Changed 'st' to 'se'
+                                let prefix = p1.includes('ce:source-text') ? 'se' : p1.includes('inter-ref') ? 'ir' : p1.includes('ce:other-ref') ? 'or' : p1.includes('ce:textref') ? 'tr' : 'rf';
+                                let counter = prefix === 'se' ? seCounter : prefix === 'ir' ? irCounter : prefix === 'or' ? orCounter : prefix === 'tr' ? trCounter : rfCounter;
                                 const res = `${p1}id="${prefix}${counter}"${p2}`;
-                                if (prefix === 'st') stCounter += 5; else if (prefix === 'ir') irCounter += 5; else if (prefix === 'or') orCounter += 5; else if (prefix === 'tr') trCounter += 5; else rfCounter += 5;
+                                if (prefix === 'se') seCounter += 5; else if (prefix === 'ir') irCounter += 5; else if (prefix === 'or') orCounter += 5; else if (prefix === 'tr') trCounter += 5; else rfCounter += 5;
                                 return res;
                             });
                         }
@@ -432,10 +429,11 @@ const ReferenceUpdater: React.FC = () => {
                     finalTag = finalTag.replace(/id="[^"]*"\s*/, '').replace('<ce:bib-reference', `<ce:bib-reference id="${idToUse}"`);
                     if (renumberInternal) {
                         finalTag = finalTag.replace(/(<(?:sb:reference|ce:source-text|ce:inter-ref|sb:inter-ref|ce:other-ref|ce:textref)\b[^>]*?)(\bid="[^"]+")([^>]*?>)/g, (m, p1, idAttr, p2) => {
-                            let prefix = p1.includes('ce:source-text') ? 'st' : p1.includes('inter-ref') ? 'ir' : p1.includes('ce:other-ref') ? 'or' : p1.includes('ce:textref') ? 'tr' : 'rf';
-                            let counter = prefix === 'st' ? stCounter : prefix === 'ir' ? irCounter : prefix === 'or' ? orCounter : prefix === 'tr' ? trCounter : rfCounter;
+                            // Changed 'st' to 'se'
+                            let prefix = p1.includes('ce:source-text') ? 'se' : p1.includes('inter-ref') ? 'ir' : p1.includes('ce:other-ref') ? 'or' : p1.includes('ce:textref') ? 'tr' : 'rf';
+                            let counter = prefix === 'se' ? seCounter : prefix === 'ir' ? irCounter : prefix === 'or' ? orCounter : prefix === 'tr' ? trCounter : rfCounter;
                             const res = `${p1}id="${prefix}${counter}"${p2}`;
-                            if (prefix === 'st') stCounter += 5; else if (prefix === 'ir') irCounter += 5; else if (prefix === 'or') orCounter += 5; else if (prefix === 'tr') trCounter += 5; else rfCounter += 5;
+                            if (prefix === 'se') seCounter += 5; else if (prefix === 'ir') irCounter += 5; else if (prefix === 'or') orCounter += 5; else if (prefix === 'tr') trCounter += 5; else rfCounter += 5;
                             return res;
                         });
                     }
@@ -445,7 +443,6 @@ const ReferenceUpdater: React.FC = () => {
 
             const joinedResult = finalBlocks.map(b => b.fullTag).join('\n');
             setOutput(joinedResult);
-            // Fix: generateDiff call now points to the defined function to resolve line 319 error
             generateDiff(originalXml, joinedResult);
             setActiveTab('result');
             setToast({ msg: "Merge complete. Review output XML.", type: "success" });
@@ -465,7 +462,6 @@ const ReferenceUpdater: React.FC = () => {
         
         let list = [...scanResults].filter(r => r.selected);
         
-        // Only apply automatic sort if toggle is ON
         if (sortAlphabetically) {
             const hasAuthorLabels = list.some(b => b.label && /[a-zA-Z]/.test(b.label));
             const isNameDate = !isNumberedMode || hasAuthorLabels;
@@ -489,22 +485,18 @@ const ReferenceUpdater: React.FC = () => {
     const handleDrop = (dropIndex: number) => {
         if (draggedItemIndex === null || draggedItemIndex === dropIndex) return;
 
-        // Turn off auto-sort if user manually reorders
         if (sortAlphabetically) {
             setSortAlphabetically(false);
             setToast({ msg: "Auto-Sort disabled. Manual sequence active.", type: "info" });
         }
 
         const newList = [...scanResults];
-        // We need to find the actual items in scanResults that correspond to the visual indices
         const visibleItems = scanResults.filter(r => r.selected);
         const itemToMove = visibleItems[draggedItemIndex];
         
-        // Remove item from scanResults
         const originalScanIdx = scanResults.findIndex(r => r === itemToMove);
         newList.splice(originalScanIdx, 1);
         
-        // Find drop target in the full scanResults
         const dropTargetItem = visibleItems[dropIndex];
         const finalDropIdx = newList.findIndex(r => r === dropTargetItem);
         
@@ -697,7 +689,7 @@ const ReferenceUpdater: React.FC = () => {
                                 <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
                                     <div>
                                         <div className="text-xs font-black text-slate-800 uppercase tracking-widest leading-none">Output Sequence Preview</div>
-                                        <div className="text-[10px] text-slate-400 mt-1 font-medium">Drag items to rearrange. Orphans are {sortAlphabetically ? 'sorted' : 'appended to end'}.</div>
+                                        <div className="text-[10px] text-slate-400 mt-1 font-medium">Drag items to rearrange.</div>
                                     </div>
                                     <div className="bg-indigo-50 px-3 py-1 rounded-lg border border-indigo-100">
                                         <span className="text-[10px] font-black text-indigo-600 uppercase">{projectedSequence.length} Active Items</span>
