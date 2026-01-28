@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { diffLines, diffWordsWithSpace, Change } from 'diff';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
+import ConfirmationModal from '../components/ConfirmationModal';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 
 interface RefBlock {
@@ -46,6 +47,7 @@ const ReferenceUpdater: React.FC = () => {
     const [diffElements, setDiffElements] = useState<React.ReactNode>(null);
     const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
     const [copiedIndices, setCopiedIndices] = useState<Set<number>>(new Set());
+    const [itemToDelete, setItemToDelete] = useState<{ label: string, scanIdx: number } | null>(null);
 
     const escapeHtml = (unsafe: string) => unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -348,7 +350,7 @@ const ReferenceUpdater: React.FC = () => {
 
             let bbStart = getNextId(originalXml, 'bb', 3000);
             let rfCounter = getNextId(originalXml, 'rf', 3000);
-            let stCounter = getNextId(originalXml, 'st', 3000);
+            let seCounter = getNextId(originalXml, 'se', 3000); // Changed from st to se
             let irCounter = getNextId(originalXml, 'ir', 3000);
             let orCounter = getNextId(originalXml, 'or', 3000);
             let trCounter = getNextId(originalXml, 'tr', 3000);
@@ -375,10 +377,10 @@ const ReferenceUpdater: React.FC = () => {
                         }
                         if (renumberInternal) {
                             finalTag = finalTag.replace(/(<(?:sb:reference|ce:source-text|ce:inter-ref|sb:inter-ref|ce:other-ref|ce:textref)\b[^>]*?)(\bid="[^"]+")([^>]*?>)/g, (m, p1, idAttr, p2) => {
-                                let prefix = p1.includes('ce:source-text') ? 'st' : p1.includes('inter-ref') ? 'ir' : p1.includes('ce:other-ref') ? 'or' : p1.includes('ce:textref') ? 'tr' : 'rf';
-                                let counter = prefix === 'st' ? stCounter : prefix === 'ir' ? irCounter : prefix === 'or' ? orCounter : prefix === 'tr' ? trCounter : rfCounter;
+                                let prefix = p1.includes('ce:source-text') ? 'se' : p1.includes('inter-ref') ? 'ir' : p1.includes('ce:other-ref') ? 'or' : p1.includes('ce:textref') ? 'tr' : 'rf';
+                                let counter = prefix === 'se' ? seCounter : prefix === 'ir' ? irCounter : prefix === 'or' ? orCounter : prefix === 'tr' ? trCounter : rfCounter;
                                 const res = `${p1}id="${prefix}${counter}"${p2}`;
-                                if (prefix === 'st') stCounter += 5; else if (prefix === 'ir') irCounter += 5; else if (prefix === 'or') orCounter += 5; else if (prefix === 'tr') trCounter += 5; else rfCounter += 5;
+                                if (prefix === 'se') seCounter += 5; else if (prefix === 'ir') irCounter += 5; else if (prefix === 'or') orCounter += 5; else if (prefix === 'tr') trCounter += 5; else rfCounter += 5;
                                 return res;
                             });
                         }
@@ -399,10 +401,10 @@ const ReferenceUpdater: React.FC = () => {
                     finalTag = finalTag.replace(/id="[^"]*"\s*/, '').replace('<ce:bib-reference', `<ce:bib-reference id="${idToUse}"`);
                     if (renumberInternal) {
                         finalTag = finalTag.replace(/(<(?:sb:reference|ce:source-text|ce:inter-ref|sb:inter-ref|ce:other-ref|ce:textref)\b[^>]*?)(\bid="[^"]+")([^>]*?>)/g, (m, p1, idAttr, p2) => {
-                            let prefix = p1.includes('ce:source-text') ? 'st' : p1.includes('inter-ref') ? 'ir' : p1.includes('ce:other-ref') ? 'or' : p1.includes('ce:textref') ? 'tr' : 'rf';
-                            let counter = prefix === 'st' ? stCounter : prefix === 'ir' ? irCounter : prefix === 'or' ? orCounter : prefix === 'tr' ? trCounter : rfCounter;
+                            let prefix = p1.includes('ce:source-text') ? 'se' : p1.includes('inter-ref') ? 'ir' : p1.includes('ce:other-ref') ? 'or' : p1.includes('ce:textref') ? 'tr' : 'rf';
+                            let counter = prefix === 'se' ? seCounter : prefix === 'ir' ? irCounter : prefix === 'or' ? orCounter : prefix === 'tr' ? trCounter : rfCounter;
                             const res = `${p1}id="${prefix}${counter}"${p2}`;
-                            if (prefix === 'st') stCounter += 5; else if (prefix === 'ir') irCounter += 5; else if (prefix === 'or') orCounter += 5; else if (prefix === 'tr') trCounter += 5; else rfCounter += 5;
+                            if (prefix === 'se') seCounter += 5; else if (prefix === 'ir') irCounter += 5; else if (prefix === 'or') orCounter += 5; else if (prefix === 'tr') trCounter += 5; else rfCounter += 5;
                             return res;
                         });
                     }
@@ -519,6 +521,18 @@ const ReferenceUpdater: React.FC = () => {
         setDraggedIdx(null);
     };
 
+    const confirmDelete = (label: string, scanIdx: number) => {
+        setItemToDelete({ label, scanIdx });
+    };
+
+    const handleDelete = () => {
+        if (itemToDelete) {
+            toggleItem(itemToDelete.scanIdx);
+            setToast({ msg: `Removed "${itemToDelete.label}" from sequence.`, type: "info" });
+            setItemToDelete(null);
+        }
+    };
+
     useKeyboardShortcuts({
         onPrimary: initiateUpdate,
         onCopy: () => { if (output && activeTab === 'result') { navigator.clipboard.writeText(output); setToast({ msg: "XML Copied!", type: "success" }); } },
@@ -527,6 +541,16 @@ const ReferenceUpdater: React.FC = () => {
 
     return (
         <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+            <ConfirmationModal 
+                isOpen={!!itemToDelete}
+                title="Remove Reference"
+                message={`Are you sure you want to remove reference "${itemToDelete?.label || ''}" from the output sequence?`}
+                confirmLabel="Remove"
+                type="danger"
+                onConfirm={handleDelete}
+                onCancel={() => setItemToDelete(null)}
+            />
+
             <div className="mb-8 text-center animate-fade-in">
                 <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase tracking-tighter">Reference Updater</h1>
                 <p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic">Smart-merge corrections into existing lists with manual audit control.</p>
@@ -763,6 +787,17 @@ const ReferenceUpdater: React.FC = () => {
                                                     >
                                                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                                                     </button>
+                                                    
+                                                    <button 
+                                                        onClick={() => confirmDelete(ref.label, (ref as any).originalScanIdx)}
+                                                        className="p-2 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                                                        title="Remove from Sequence"
+                                                    >
+                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                        </svg>
+                                                    </button>
+
                                                     <span className={`text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-widest border ${
                                                         ref.status === 'add' || ref.status === 'orphan' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
                                                         ref.status === 'update' || ref.status === 'smart_match' ? 'bg-amber-50 text-amber-600 border-amber-100' :
