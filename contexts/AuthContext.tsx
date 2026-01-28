@@ -3,8 +3,6 @@ import { supabase } from '../supabaseClient';
 import { UserProfile } from '../types';
 import { INACTIVITY_LIMIT } from '../constants';
 
-// Fix: Defining Session and User as any because they may not be correctly exported 
-// from the installed version of @supabase/supabase-js in this environment.
 type Session = any;
 type User = any;
 
@@ -23,11 +21,8 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const HEARTBEAT_INTERVAL = 90 * 1000; // 90 seconds
-// This is the specific key Supabase uses for this project
+const HEARTBEAT_INTERVAL = 90 * 1000;
 const SB_STORAGE_KEY = 'sb-jtrvpqxhjqpifglrhbzu-auth-token';
-
-// Super-Admin Email Configuration
 const SUPER_ADMIN_EMAIL = 'generalkevin53@gmail.com';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -40,8 +35,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     const lastHeartbeat = useRef<number>(0);
     const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    
-    // SECURITY: Internal reference to prevent memory-injection attacks on state
+    const initTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const internalAuthRef = useRef({ sub: false, admin: false });
 
     const isAdmin = (
@@ -52,9 +46,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const clearLocalSession = () => {
         try {
-            console.warn("Auth: Purging local session storage due to token corruption.");
+            console.warn("Auth: Purging local session storage.");
             localStorage.removeItem(SB_STORAGE_KEY);
-            // Also clear generic Supabase keys just in case
             Object.keys(localStorage).forEach(key => {
                 if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
                     localStorage.removeItem(key);
@@ -69,9 +62,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const performHeartbeat = async (uid: string) => {
         const now = Date.now();
         if (now - lastHeartbeat.current < HEARTBEAT_INTERVAL) return;
-        
         lastHeartbeat.current = now;
-        
         try {
             const { data, error } = await supabase
                 .from('profiles')
@@ -79,15 +70,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 .eq('id', uid)
                 .select('is_subscribed, role')
                 .single();
-
-            if (error) throw error;
-
-            if (internalAuthRef.current.sub && !data.is_subscribed) {
+            if (!error && internalAuthRef.current.sub && !data.is_subscribed) {
                 signOut(true);
             }
-        } catch (err) {
-            // Silently handle heartbeat failures to avoid UI flicker
-        }
+        } catch (err) {}
     };
 
     const fetchFreeTools = async () => {
@@ -97,7 +83,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 .select('free_tools_data')
                 .eq('id', 'global')
                 .maybeSingle();
-            
             if (data?.free_tools_data) {
                 const now = new Date();
                 const activeMap: Record<string, string> = {};
@@ -121,41 +106,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 .select('*')
                 .eq('id', userId)
                 .maybeSingle();
-            
             if (profileError) throw profileError;
-
             if (!profileData) return;
-
             const { data: keysData } = await supabase
                 .from('access_keys')
                 .select('tool')
                 .eq('user_id', userId)
                 .eq('is_used', true);
-
             const unlockedTools = keysData ? keysData.map(k => k.tool) : [];
-            
             let isActive = profileData.is_subscribed;
-            if (user?.email === SUPER_ADMIN_EMAIL) {
-                isActive = true;
-            } else if (profileData.subscription_end && new Date(profileData.subscription_end) < new Date()) {
-                isActive = false;
-            }
-
-            const finalProfile = { 
-                ...profileData, 
-                is_subscribed: isActive,
-                unlocked_tools: unlockedTools 
-            };
-
-            internalAuthRef.current = {
-                sub: isActive,
-                admin: (profileData.role === 'admin' || user?.email === SUPER_ADMIN_EMAIL)
-            };
-
+            if (user?.email === SUPER_ADMIN_EMAIL) isActive = true;
+            else if (profileData.subscription_end && new Date(profileData.subscription_end) < new Date()) isActive = false;
+            const finalProfile = { ...profileData, is_subscribed: isActive, unlocked_tools: unlockedTools };
+            internalAuthRef.current = { sub: isActive, admin: (profileData.role === 'admin' || user?.email === SUPER_ADMIN_EMAIL) };
             setProfile(finalProfile);
             lastHeartbeat.current = Date.now();
         } catch (err: any) {
-            console.error("Auth: Profile Fetch Error:", err.message || err);
+            console.error("Auth: Profile Fetch Error:", err.message);
         }
     };
 
@@ -163,9 +130,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
             setLoading(true); 
             await (supabase.auth as any).signOut();
-        } catch (e) {
-            // Ignore signout errors, we clear locally anyway
-        } finally {
+        } catch (e) {} finally {
             clearLocalSession();
             setProfile(null); setSession(null); setUser(null);
             internalAuthRef.current = { sub: false, admin: false };
@@ -174,56 +139,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     };
 
-    const resetInactivityTimer = () => {
-        if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
-        if (session && user) {
-            inactivityTimer.current = setTimeout(() => signOut(true), INACTIVITY_LIMIT);
-            performHeartbeat(user.id);
-        }
-    };
-
-    useEffect(() => {
-        const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
-        const handleInteraction = () => resetInactivityTimer();
-        if (session && user) {
-            events.forEach(event => window.addEventListener(event, handleInteraction));
-            resetInactivityTimer();
-        }
-        return () => {
-            events.forEach(event => window.removeEventListener(event, handleInteraction));
-            if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
-        };
-    }, [session, user]);
-
     useEffect(() => {
         let mounted = true;
+
+        // FAIL-SAFE: 6 Second Initialization Timeout
+        initTimeoutRef.current = setTimeout(() => {
+            if (mounted && loading) {
+                console.error("Auth: Initialiation timed out. Forcing ready state.");
+                setLoading(false);
+            }
+        }, 6000);
+
         const init = async () => {
             try {
-                // Critical: Explicitly check session status
                 const { data, error } = await (supabase.auth as any).getSession();
-                
                 if (error) {
-                    // If we get an auth error during init (like invalid refresh token), clear storage
                     if (error.message.toLowerCase().includes('refresh_token') || error.status === 400) {
                         clearLocalSession();
                     }
                     throw error;
                 }
-
                 const currentSession = data?.session;
                 if (currentSession && mounted) {
                     setSession(currentSession);
                     setUser(currentSession.user);
-                    await Promise.all([fetchProfile(currentSession.user.id), fetchFreeTools()]);
+                    // Isolated parallel fetching to prevent hangs
+                    await Promise.allSettled([
+                        fetchProfile(currentSession.user.id),
+                        fetchFreeTools()
+                    ]);
                 }
             } catch (err) {
-                console.error("Auth: Initialization error", err);
-                if (mounted) {
-                    setSession(null);
-                    setUser(null);
-                }
+                console.error("Auth: Init fail", err);
             } finally {
-                if (mounted) setLoading(false);
+                if (mounted) {
+                    if (initTimeoutRef.current) clearTimeout(initTimeoutRef.current);
+                    setLoading(false);
+                }
             }
         };
 
@@ -231,7 +183,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         const { data: authListener } = (supabase.auth as any).onAuthStateChange(async (event: any, newSession: any) => {
             if (!mounted) return;
-            
             if (event === 'SIGNED_OUT') {
                 setProfile(null); setUser(null); setSession(null);
                 setLoading(false);
@@ -239,19 +190,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setSession(newSession); setUser(newSession.user);
                 await fetchProfile(newSession.user.id);
                 setLoading(false);
-            } else if (event === 'TOKEN_REFRESHED' && newSession) {
-                setSession(newSession);
-                setUser(newSession.user);
-            } else if (event === 'USER_UPDATED' && newSession) {
-                setUser(newSession.user);
             }
         });
 
-        const subscription = authListener?.subscription;
-
         return () => { 
             mounted = false; 
-            if (subscription) subscription.unsubscribe(); 
+            if (initTimeoutRef.current) clearTimeout(initTimeoutRef.current);
+            if (authListener?.subscription) authListener.subscription.unsubscribe(); 
         };
     }, []);
 
