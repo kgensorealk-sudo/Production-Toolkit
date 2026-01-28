@@ -35,6 +35,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     const initTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const isAdmin = (
         user?.email === SUPER_ADMIN_EMAIL ||
@@ -50,7 +51,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     localStorage.removeItem(key);
                 }
             });
-            sessionStorage.clear();
+            sessionStorage.removeItem('session_expired');
         } catch (e) {}
     };
 
@@ -92,7 +93,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const fetchProfile = async (userId: string) => {
         const profilePromise = (async () => {
             try {
-                // Update heartbeat immediately upon profile fetch
                 updateLastSeen(userId);
 
                 const { data: profileData, error: profileError } = await supabase
@@ -135,16 +135,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const signOut = async (isAuto: boolean = false) => {
         if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
+        if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+        
         try {
             setLoading(true); 
             await (supabase.auth as any).signOut();
         } catch (e) {} finally {
             clearLocalSession();
+            if (isAuto) {
+                sessionStorage.setItem('session_expired', 'true');
+            }
             setProfile(null); setSession(null); setUser(null);
             setLoading(false);
-            if (isAuto || !session) window.location.hash = '#/login';
+            window.location.hash = '#/login';
         }
     };
+
+    // Idle Monitoring Logic
+    const resetIdleTimer = () => {
+        if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+        if (session) {
+            idleTimerRef.current = setTimeout(() => {
+                console.log("Session expired due to inactivity.");
+                signOut(true);
+            }, INACTIVITY_LIMIT);
+        }
+    };
+
+    useEffect(() => {
+        const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+        const handler = () => resetIdleTimer();
+
+        if (session) {
+            events.forEach(event => window.addEventListener(event, handler));
+            resetIdleTimer();
+        }
+
+        return () => {
+            events.forEach(event => window.removeEventListener(event, handler));
+            if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+        };
+    }, [session]);
 
     useEffect(() => {
         let mounted = true;
@@ -172,7 +203,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     setSession(currentSession);
                     setUser(currentSession.user);
                     
-                    // Setup background heartbeat
                     if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
                     heartbeatTimerRef.current = setInterval(() => {
                         updateLastSeen(currentSession.user.id);
@@ -199,6 +229,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (!mounted) return;
             if (event === 'SIGNED_OUT') {
                 if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
+                if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
                 setProfile(null); setUser(null); setSession(null);
                 setLoading(false);
             } else if (event === 'SIGNED_IN' && newSession?.user) {
@@ -218,6 +249,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             mounted = false; 
             if (initTimeoutRef.current) clearTimeout(initTimeoutRef.current);
             if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
+            if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
             if (authListener?.subscription) authListener.subscription.unsubscribe(); 
         };
     }, []);

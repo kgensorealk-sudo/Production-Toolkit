@@ -51,6 +51,7 @@ export enum ToolId {
     OTHER_REF_SCANNER = 'otherRefScanner',
     REF_EXTRACTOR = 'refExtractor',
     REF_PURGER = 'refPurger',
+    GRANT_TAGGER = 'grantTagger',
     DOCS = 'docs',
     DASHBOARD = 'dashboard'
 }

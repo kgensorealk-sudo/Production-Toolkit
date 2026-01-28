@@ -2,8 +2,8 @@ import { CreditRole } from './types';
 
 export const APP_ID = 'prod-toolkit-v1';
 
-// 15 Minutes in milliseconds
-export const INACTIVITY_LIMIT = 15 * 60 * 1000;
+// 8 Minutes in milliseconds
+export const INACTIVITY_LIMIT = 8 * 60 * 1000;
 
 export const CREDIT_DB: CreditRole[] = [
     { name: "Conceptualization", url: "http://credit.niso.org/contributor-roles/conceptualization", aliases: ["conceptualization", "concept", "idea", "conception"] },

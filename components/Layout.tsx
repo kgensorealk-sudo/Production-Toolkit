@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 /* Import hooks from react-router to resolve potential named export issues in react-router-dom types */
 import { useNavigate, useLocation } from 'react-router';
@@ -98,6 +97,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                                     {currentTool === ToolId.OTHER_REF_SCANNER && 'Other-Ref Scanner'}
                                     {currentTool === ToolId.REF_EXTRACTOR && 'Bib Extractor'}
                                     {currentTool === ToolId.REF_PURGER && 'Ref Purger'}
+                                    {currentTool === ToolId.GRANT_TAGGER && 'Grant Tagger'}
                                 </span>
                             </div>
                         )}

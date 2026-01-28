@@ -17,6 +17,7 @@ import UncitedRefCleaner from './pages/UncitedRefCleaner';
 import OtherRefScanner from './pages/OtherRefScanner';
 import ReferenceExtractor from './pages/ReferenceExtractor';
 import RefListPurger from './pages/RefListPurger';
+import GrantTagger from './pages/GrantTagger';
 import Docs from './pages/Docs';
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
@@ -61,7 +62,7 @@ const NodeAccessController: React.FC<{
 
     return (
         <div className="relative h-full w-full overflow-hidden bg-slate-100 flex items-center justify-center">
-            <div className="bg-white p-12 rounded-[3rem] shadow-2xl max-w-md w-full border border-slate-200 text-center animate-scale-in relative ring-8 ring-slate-900/5">
+            <div className="bg-white p-12 rounded-[3rem] shadow-2xl max-md w-full border border-slate-200 text-center animate-scale-in relative ring-8 ring-slate-900/5">
                 <div className="mb-8">
                     <div className="w-24 h-24 bg-amber-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6 shadow-sm border border-amber-100">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -126,6 +127,7 @@ const App: React.FC = () => {
                         <Route path="/refDupeCheck" element={<ProtectedRoute><Layout currentTool={ToolId.REF_DUPE_CHECK}><NodeAccessController toolId={ToolId.REF_DUPE_CHECK} displayName="Duplicate Ref Remover" mode="subscription-only"><ReferenceDupeChecker /></NodeAccessController></Layout></ProtectedRoute>} />
                         <Route path="/refExtractor" element={<ProtectedRoute><Layout currentTool={ToolId.REF_EXTRACTOR}><NodeAccessController toolId={ToolId.REF_EXTRACTOR} displayName="Bibliography Extractor" mode="subscription-only"><ReferenceExtractor /></NodeAccessController></Layout></ProtectedRoute>} />
                         <Route path="/refPurger" element={<ProtectedRoute><Layout currentTool={ToolId.REF_PURGER}><NodeAccessController toolId={ToolId.REF_PURGER} displayName="Reference List Purger" mode="subscription-only"><RefListPurger /></NodeAccessController></Layout></ProtectedRoute>} />
+                        <Route path="/grantTagger" element={<ProtectedRoute><Layout currentTool={ToolId.GRANT_TAGGER}><NodeAccessController toolId={ToolId.GRANT_TAGGER} displayName="Grant Tagger" mode="subscription-only"><GrantTagger /></NodeAccessController></Layout></ProtectedRoute>} />
                     </Routes>
                 </HashRouter>
             </AuthProvider>

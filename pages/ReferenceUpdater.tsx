@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef } from 'react';
 import { diffLines, diffWordsWithSpace, Change } from 'diff';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
+import Switch from '../components/Switch';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 
 interface RefBlock {
@@ -45,6 +46,7 @@ const ReferenceUpdater: React.FC = () => {
     const [scanResults, setScanResults] = useState<ScanItem[]>([]);
     const [diffElements, setDiffElements] = useState<React.ReactNode>(null);
     const [draggedItemIndex, setDraggedItemIndex] = useState<number | null>(null);
+    const [lastRemovedKey, setLastRemovedKey] = useState<string | null>(null);
 
     const escapeHtml = (unsafe: string) => unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -316,25 +318,68 @@ const ReferenceUpdater: React.FC = () => {
         setScanResults(newList); setDraggedItemIndex(null);
     };
 
+    const removeFromOutput = (ref: ScanItem) => {
+        setScanResults(prev => prev.map(it => it === ref ? { ...it, selected: false } : it));
+        setLastRemovedKey(`${ref.originalIndex}-${ref.updatedIndex}`);
+        setToast({ msg: `Removed ${ref.label} from output sequence.`, type: 'warn' });
+    };
+
+    const undoRemoval = () => {
+        if (!lastRemovedKey) return;
+        setScanResults(prev => prev.map(it => {
+            if (`${it.originalIndex}-${it.updatedIndex}` === lastRemovedKey) {
+                return { ...it, selected: true };
+            }
+            return it;
+        }));
+        setLastRemovedKey(null);
+        setToast({ msg: "Restored reference to sequence.", type: "success" });
+    };
+
     useKeyboardShortcuts({
         onPrimary: initiateUpdate,
         onCopy: () => { if (output && activeTab === 'result') { navigator.clipboard.writeText(output); setToast({ msg: "Copied!", type: "success" }); } },
-        onClear: () => { setOriginalXml(''); setUpdatedXml(''); setOutput(''); setScanResults([]); }
-    }, [originalXml, updatedXml, output, scanResults]);
+        onClear: () => { setOriginalXml(''); setUpdatedXml(''); setOutput(''); setScanResults([]); setLastRemovedKey(null); }
+    }, [originalXml, updatedXml, output, scanResults, lastRemovedKey]);
 
     return (
         <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
             <div className="mb-8 text-center animate-fade-in"><h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase">Reference Updater</h1><p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic">Smart-merge corrections. Drag handles in Sequence tab for manual ordering.</p></div>
-            <div className="flex justify-center mb-8"><div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap items-center justify-center gap-6">
-                <label className="flex items-center gap-3 cursor-pointer group"><div className="relative"><input type="checkbox" checked={isNumberedMode} onChange={(e) => setIsNumberedMode(e.target.checked)} className="sr-only" /><div className={`block w-10 h-6 rounded-full transition-colors ${isNumberedMode ? 'bg-blue-600' : 'bg-slate-300'}`}></div><div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${isNumberedMode ? 'translate-x-4' : ''}`}></div></div><div className="flex flex-col"><span className="text-sm font-bold text-slate-700">Numbered Style</span><span className="text-[10px] text-slate-400 font-medium uppercase tracking-tighter">Fingerprinting ON</span></div></label>
-                <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
-                <label className="flex items-center gap-3 cursor-pointer group"><div className="relative"><input type="checkbox" checked={sortAlphabetically} onChange={(e) => setSortAlphabetically(e.target.checked)} className="sr-only" /><div className={`block w-10 h-6 rounded-full transition-colors ${sortAlphabetically ? 'bg-indigo-600' : 'bg-slate-300'}`}></div><div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${sortAlphabetically ? 'translate-x-4' : ''}`}></div></div><div className="flex flex-col"><span className="text-sm font-bold text-slate-700">Auto-Sort</span><span className={`text-[10px] font-black uppercase tracking-tighter ${sortAlphabetically ? 'text-indigo-500' : 'text-amber-500'}`}>{sortAlphabetically ? 'Alphabetical' : 'Manual'}</span></div></label>
-                <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
-                <label className="flex items-center gap-3 cursor-pointer group"><div className="relative"><input type="checkbox" checked={addOrphans} onChange={(e) => setAddOrphans(e.target.checked)} className="sr-only" /><div className={`block w-10 h-6 rounded-full transition-colors ${addOrphans ? 'bg-emerald-600' : 'bg-slate-300'}`}></div><div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${addOrphans ? 'translate-x-4' : ''}`}></div></div><div className="flex flex-col"><span className="text-sm font-bold text-slate-700">Add Orphans</span><span className="text-[10px] text-slate-400 font-medium uppercase tracking-tighter">Append Mode</span></div></label>
-                <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
-                <button onClick={runAnalysis} className="bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold py-2 px-4 rounded-lg border border-slate-200 transition-colors">Analyze</button>
-                <button onClick={initiateUpdate} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded-lg shadow-lg active:scale-95 transition-all">Merge Updates</button>
-            </div></div>
+            <div className="flex justify-center mb-8">
+                <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap items-center justify-center gap-10">
+                    <Switch 
+                        id="toggle-numbered"
+                        label="Numbered Style"
+                        subLabel="Fingerprinting ON"
+                        checked={isNumberedMode}
+                        onChange={setIsNumberedMode}
+                        color="blue"
+                    />
+                    <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
+                    <Switch 
+                        id="toggle-sort"
+                        label="Auto-Sort"
+                        subLabel={sortAlphabetically ? 'Alphabetical' : 'Manual'}
+                        checked={sortAlphabetically}
+                        onChange={setSortAlphabetically}
+                        color="indigo"
+                    />
+                    <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
+                    <Switch 
+                        id="toggle-orphans"
+                        label="Add Orphans"
+                        subLabel="Append Mode"
+                        checked={addOrphans}
+                        onChange={setAddOrphans}
+                        color="emerald"
+                    />
+                    <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
+                    <div className="flex gap-3">
+                        <button onClick={runAnalysis} className="bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold py-2.5 px-5 rounded-xl border border-slate-200 transition-all active:scale-95 shadow-sm">Analyze</button>
+                        <button onClick={initiateUpdate} className="bg-indigo-600 hover:bg-indigo-700 text-white font-black py-2.5 px-8 rounded-xl shadow-lg shadow-indigo-500/20 active:scale-95 transition-all uppercase text-xs tracking-widest">Merge Updates</button>
+                    </div>
+                </div>
+            </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[700px]">
                 <div className="flex flex-col gap-6 h-full overflow-hidden">
                     <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col"><div className="bg-slate-50 px-4 py-2 border-b border-slate-100 flex justify-between items-center"><label className="font-bold text-slate-700 text-xs uppercase">Original XML Source</label></div><textarea value={originalXml} onChange={e => setOriginalXml(e.target.value)} className="w-full h-full p-4 text-xs font-mono text-slate-700 border-0 focus:ring-0 resize-none" placeholder="Paste full article reference list..." spellCheck={false} /></div>
@@ -345,7 +390,68 @@ const ReferenceUpdater: React.FC = () => {
                     <div className="flex-grow relative bg-slate-50 overflow-hidden flex flex-col min-h-0">
                         {isLoading && <LoadingOverlay message="Processing..." color="indigo" />}
                         {activeTab === 'scan' && (<div className="h-full overflow-hidden flex flex-col bg-white"><div className="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-2">Matching Decisions</span><div className="flex gap-2"><button onClick={() => bulkSelect(true)} className="text-[10px] font-bold text-indigo-600 uppercase">All</button><span className="text-slate-300">|</span><button onClick={() => bulkSelect(false)} className="text-[10px] font-bold text-slate-400 uppercase">None</button></div></div><div className="flex-grow overflow-auto custom-scrollbar"><table className="w-full text-left text-[11px] border-collapse"><thead className="bg-slate-50 sticky top-0 border-b border-slate-200 z-10"><tr><th className="p-3 font-bold text-slate-500 uppercase w-8"></th><th className="p-3 font-bold text-slate-500 uppercase w-32">Target</th><th className="p-3 font-bold text-slate-500 uppercase w-24">Action</th><th className="p-3 font-bold text-slate-500 uppercase">Logic & Preview</th></tr></thead><tbody className="divide-y divide-slate-100">{scanResults.length === 0 ? (<tr><td colSpan={4} className="p-20 text-center text-slate-400 italic">Click "Analyze" to begin.</td></tr>) : (scanResults.map((item, idx) => (<tr key={idx} className={`transition-colors hover:bg-slate-50 ${!item.selected ? 'opacity-40' : ''}`}><td className="p-3 text-center"><input type="checkbox" checked={item.selected} onChange={() => setScanResults(prev => prev.map((it, i) => i === idx ? { ...it, selected: !it.selected } : it))} className="rounded border-slate-300 text-indigo-600 h-4 w-4" /></td><td className="p-3 font-mono"><div className="font-bold text-slate-700 truncate max-w-[140px]">{item.label}</div><div className="text-[9px] text-slate-400 uppercase">{item.id}</div></td><td className="p-3"><span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase border block text-center ${item.status === 'update' || item.status === 'smart_match' ? 'bg-amber-100 text-amber-700 border-amber-200' : item.status === 'add' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : item.status === 'orphan' ? 'bg-rose-100 text-rose-700 border-rose-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>{item.status.replace('_', ' ')}</span></td><td className="p-3"><div className="text-slate-500 italic mb-1 line-clamp-1">{item.preview}</div></td></tr>)))}</tbody></table></div></div>)}
-                        {activeTab === 'sequence' && (<div className="h-full overflow-hidden flex flex-col bg-white"><div className="p-4 bg-slate-50 border-b border-slate-200"><div className="text-xs font-black text-slate-800 uppercase tracking-widest leading-none">Output Sequence Preview</div><div className="text-[10px] text-slate-400 mt-1 font-medium">Drag items to manually rearrange sequence.</div></div><div className="flex-grow overflow-auto custom-scrollbar p-6 space-y-2.5">{projectedSequence.length === 0 ? (<div className="h-full flex flex-col items-center justify-center opacity-30 grayscale"><p className="text-sm font-bold uppercase tracking-widest">No Selected Outputs</p></div>) : (projectedSequence.map((ref, idx) => (<div key={`${ref.id}-${idx}`} draggable onDragStart={() => setDraggedItemIndex(idx)} onDragOver={(e) => e.preventDefault()} onDrop={() => handleDrop(idx)} className={`flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl shadow-sm hover:border-indigo-300 transition-all group cursor-grab active:cursor-grabbing ${draggedItemIndex === idx ? 'opacity-40 grayscale scale-95' : ''}`}><div className="flex flex-col items-center shrink-0"><div className="text-slate-300 group-hover:text-indigo-300">⠿</div><div className="w-8 h-8 bg-slate-50 rounded-xl flex items-center justify-center text-[10px] font-black text-slate-300 group-hover:bg-indigo-50 group-hover:text-indigo-400 transition-colors border border-slate-100">{idx + 1}</div></div><div className="flex-grow min-w-0"><div className="text-sm font-bold text-slate-800 truncate">{ref.label}</div><div className="text-[10px] font-mono text-slate-400 uppercase tracking-tighter">ID: {ref.id}</div></div><div><span className={`text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-widest border ${ref.status === 'add' || ref.status === 'orphan' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>{ref.status === 'add' || ref.status === 'orphan' ? 'NEW' : 'ORIG'}</span></div></div>)))}</div></div>)}
+                        {activeTab === 'sequence' && (
+                            <div className="h-full overflow-hidden flex flex-col bg-white">
+                                <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                                    <div>
+                                        <div className="text-xs font-black text-slate-800 uppercase tracking-widest leading-none">Output Sequence Preview</div>
+                                        <div className="text-[10px] text-slate-400 mt-1 font-medium">Drag items to manually rearrange sequence. Click 'X' to exclude.</div>
+                                    </div>
+                                    {lastRemovedKey && (
+                                        <button 
+                                            onClick={undoRemoval}
+                                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg shadow-lg transition-all animate-fade-in flex items-center gap-2"
+                                        >
+                                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                                            </svg>
+                                            Undo Removal
+                                        </button>
+                                    )}
+                                </div>
+                                <div className="flex-grow overflow-auto custom-scrollbar p-6 space-y-2.5">
+                                    {projectedSequence.length === 0 ? (
+                                        <div className="h-full flex flex-col items-center justify-center opacity-30 grayscale">
+                                            <p className="text-sm font-bold uppercase tracking-widest">No Selected Outputs</p>
+                                        </div>
+                                    ) : (
+                                        projectedSequence.map((ref, idx) => (
+                                            <div 
+                                                key={`${ref.id}-${idx}`} 
+                                                draggable 
+                                                onDragStart={() => setDraggedItemIndex(idx)} 
+                                                onDragOver={(e) => e.preventDefault()} 
+                                                onDrop={() => handleDrop(idx)} 
+                                                className={`flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl shadow-sm hover:border-indigo-300 transition-all group cursor-grab active:cursor-grabbing ${draggedItemIndex === idx ? 'opacity-40 grayscale scale-95' : ''}`}
+                                            >
+                                                <div className="flex flex-col items-center shrink-0">
+                                                    <div className="text-slate-300 group-hover:text-indigo-300">⠿</div>
+                                                    <div className="w-8 h-8 bg-slate-50 rounded-xl flex items-center justify-center text-[10px] font-black text-slate-300 group-hover:bg-indigo-50 group-hover:text-indigo-400 transition-colors border border-slate-100">{idx + 1}</div>
+                                                </div>
+                                                <div className="flex-grow min-w-0">
+                                                    <div className="text-sm font-bold text-slate-800 truncate">{ref.label}</div>
+                                                    <div className="text-[10px] font-mono text-slate-400 uppercase tracking-tighter">ID: {ref.id}</div>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <span className={`text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-widest border ${ref.status === 'add' || ref.status === 'orphan' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>
+                                                        {ref.status === 'add' || ref.status === 'orphan' ? 'NEW' : 'ORIG'}
+                                                    </span>
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); removeFromOutput(ref); }}
+                                                        className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-100 hover:ring-2 hover:ring-rose-500/20 rounded-lg transition-all"
+                                                        title="Remove from output"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        )}
                         {activeTab === 'result' && <textarea value={output} readOnly className="w-full h-full p-6 text-xs font-mono bg-transparent border-0 focus:ring-0 outline-none resize-none leading-relaxed" placeholder="Final merged XML will appear here..." />}
                         {activeTab === 'diff' && <div className="absolute inset-0 overflow-auto bg-white p-2 custom-scrollbar">{diffElements || <div className="h-full flex items-center justify-center text-slate-400">Run merge to generate diff.</div>}</div>}
                     </div>
