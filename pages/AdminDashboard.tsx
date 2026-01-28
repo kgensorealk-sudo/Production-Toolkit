@@ -81,7 +81,7 @@ const AdminDashboard: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'users' | 'keys' | 'announcements' | 'config'>('users');
     const [isLoading, setIsLoading] = useState(false);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
-    const { freeTools, freeToolsData, refreshFreeTools } = useAuth();
+    const { freeToolsData, refreshFreeTools } = useAuth();
 
     const [users, setUsers] = useState<UserProfile[]>([]);
     const [search, setSearch] = useState('');
@@ -121,6 +121,12 @@ const AdminDashboard: React.FC = () => {
 
     const fetchUsers = useCallback(async (silent = false) => {
         if (!silent) setIsLoading(true);
+        
+        // Safety timeout for database fetch
+        const timeout = setTimeout(() => {
+            if (!silent) setIsLoading(false);
+        }, 8000);
+
         try {
             const { data, error } = await supabase
                 .from('profiles')
@@ -139,11 +145,15 @@ const AdminDashboard: React.FC = () => {
             }
         } catch (error: any) {
             if (!silent) setToast({ msg: 'Failed to load users', type: 'error' });
-        } finally { if (!silent) setIsLoading(false); }
+        } finally { 
+            clearTimeout(timeout);
+            if (!silent) setIsLoading(false); 
+        }
     }, [selectedDurations]);
 
     const fetchAccessKeys = useCallback(async () => {
         setIsLoading(true);
+        const timeout = setTimeout(() => setIsLoading(false), 8000);
         try {
             const { data, error } = await supabase
                 .from('access_keys')
@@ -155,7 +165,10 @@ const AdminDashboard: React.FC = () => {
         } catch (error: any) {
             console.error(error);
             setToast({ msg: 'Failed to load keys', type: 'error' });
-        } finally { setIsLoading(false); }
+        } finally { 
+            clearTimeout(timeout);
+            setIsLoading(false); 
+        }
     }, []);
 
     const handleRevokeKey = async (keyRecord: AccessKeyRecord) => {
@@ -205,13 +218,17 @@ const AdminDashboard: React.FC = () => {
 
     const fetchAnnouncements = useCallback(async () => {
         setIsLoading(true);
+        const timeout = setTimeout(() => setIsLoading(false), 8000);
         try {
             const { data, error } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
             if (error) throw error;
             setAnnouncements(data || []);
         } catch (error: any) {
             setToast({ msg: 'Failed to load announcements', type: 'error' });
-        } finally { setIsLoading(false); }
+        } finally { 
+            clearTimeout(timeout);
+            setIsLoading(false); 
+        }
     }, []);
 
     useEffect(() => {
@@ -252,10 +269,16 @@ const AdminDashboard: React.FC = () => {
             updates.trial_end = null;
         }
 
-        const { error } = await supabase.from('profiles').update(updates).eq('id', user.id);
-        if (!error) {
+        setIsLoading(true);
+        try {
+            const { error } = await supabase.from('profiles').update(updates).eq('id', user.id);
+            if (error) throw error;
             setUsers(users.map(u => u.id === user.id ? { ...u, ...updates } : u));
             setToast({ msg: newVal ? `Access granted (${durationOption?.label})` : 'Access revoked', type: 'success' });
+        } catch (err: any) {
+            setToast({ msg: 'Provisioning failed', type: 'error' });
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -299,8 +322,11 @@ const AdminDashboard: React.FC = () => {
                 newKeys.push({ key: `${random.slice(0,4)}-${random.slice(4)}`, tool: keyTool, is_used: false });
             }
             const { data, error } = await supabase.from('access_keys').insert(newKeys).select();
+            if (error) throw error;
             if (data) setAccessKeys(prev => [...data, ...prev]);
             setToast({ msg: `Generated ${keyQty} keys`, type: 'success' });
+        } catch (err: any) {
+            setToast({ msg: 'Key generation failed', type: 'error' });
         } finally { setIsLoading(false); }
     };
 
@@ -354,7 +380,6 @@ const AdminDashboard: React.FC = () => {
         setNewTitle(a.title);
         setNewContent(a.content);
         setNewType(a.type);
-        // Scroll to form
         const form = document.getElementById('announcement-editor');
         if (form) form.scrollIntoView({ behavior: 'smooth' });
     };
@@ -366,7 +391,6 @@ const AdminDashboard: React.FC = () => {
             if (!target) return;
             const nextStatus = !target.is_active;
             
-            // Only one announcement can be active at a time
             if (nextStatus) {
                 await supabase.from('announcements').update({ is_active: false }).neq('id', id);
             }
@@ -415,7 +439,7 @@ const AdminDashboard: React.FC = () => {
             </div>
 
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden min-h-[600px] relative">
-                {isLoading && <LoadingOverlay message="Processing..." color="slate" />}
+                {isLoading && <LoadingOverlay message="Fetching Data..." color="slate" />}
                 
                 {activeTab === 'users' && (
                     <div className="overflow-x-auto">
@@ -430,57 +454,63 @@ const AdminDashboard: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-slate-100">
-                                {users.filter(u => u.email.includes(search)).map(u => {
-                                    const isTrialRow = u.trial_end && u.subscription_end && new Date(u.trial_end).getTime() === new Date(u.subscription_end).getTime();
-                                    
-                                    return (
-                                        <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
-                                            <td className="px-6 py-4">
-                                                <div className="flex flex-col">
-                                                    <span className="text-sm font-bold text-slate-900">{u.email}</span>
-                                                    <span className="text-[10px] font-mono text-slate-400 uppercase tracking-tighter">{u.id.slice(0, 13)}...</span>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4 text-xs font-black uppercase text-slate-400">{u.role}</td>
-                                            <td className="px-6 py-4">
-                                                <span className={`px-3 py-1 text-[10px] font-black rounded-full uppercase tracking-widest border ${u.is_subscribed ? (isTrialRow ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100') : 'bg-slate-50 text-slate-400 border-slate-200'}`}>
-                                                    {u.is_subscribed ? (isTrialRow ? 'Trial Access' : 'Authorized') : 'Node Dormant'}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 text-center">
-                                                <div className="flex flex-col items-center">
-                                                    <span className="text-[11px] font-bold text-slate-600">
-                                                        {formatLastSeen(u.last_seen)}
+                                {users.filter(u => u.email.includes(search)).length === 0 ? (
+                                    <tr>
+                                        <td colSpan={5} className="px-6 py-20 text-center text-slate-400 italic">No personnel records found.</td>
+                                    </tr>
+                                ) : (
+                                    users.filter(u => u.email.includes(search)).map(u => {
+                                        const isTrialRow = u.trial_end && u.subscription_end && new Date(u.trial_end).getTime() === new Date(u.subscription_end).getTime();
+                                        
+                                        return (
+                                            <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
+                                                <td className="px-6 py-4">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-sm font-bold text-slate-900">{u.email}</span>
+                                                        <span className="text-[10px] font-mono text-slate-400 uppercase tracking-tighter">{u.id.slice(0, 13)}...</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 text-xs font-black uppercase text-slate-400">{u.role}</td>
+                                                <td className="px-6 py-4">
+                                                    <span className={`px-3 py-1 text-[10px] font-black rounded-full uppercase tracking-widest border ${u.is_subscribed ? (isTrialRow ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100') : 'bg-slate-50 text-slate-400 border-slate-200'}`}>
+                                                        {u.is_subscribed ? (isTrialRow ? 'Trial Access' : 'Authorized') : 'Node Dormant'}
                                                     </span>
-                                                    {u.subscription_end && (
-                                                        <span className="text-[9px] text-slate-300 font-black uppercase mt-1">Exp: {new Date(u.subscription_end).toLocaleDateString()}</span>
-                                                    )}
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <div className="flex items-center gap-3">
-                                                    {!u.is_subscribed && (
-                                                        <select 
-                                                            value={selectedDurations[u.id] || 'sub_1y'} 
-                                                            onChange={(e) => setSelectedDurations(prev => ({...prev, [u.id]: e.target.value}))}
-                                                            className="text-[10px] font-black uppercase py-1.5 rounded-lg border-slate-200 focus:ring-indigo-500 bg-white"
-                                                        >
-                                                            <optgroup label="TRIAL PROTOCOLS">
-                                                                {DURATION_OPTIONS.filter(o => o.type === 'trial').map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                                                            </optgroup>
-                                                            <optgroup label="SUBSCRIPTION TERMS">
-                                                                {DURATION_OPTIONS.filter(o => o.type === 'sub').map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                                                            </optgroup>
-                                                        </select>
-                                                    )}
-                                                    <button onClick={() => toggleSubscription(u)} className={`text-[10px] font-black px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-900 hover:text-white hover:border-slate-900 uppercase whitespace-nowrap transition-all shadow-sm ${u.is_subscribed ? 'text-rose-600 border-rose-100 bg-rose-50' : 'text-indigo-600'}`}>
-                                                        {u.is_subscribed ? 'Terminate Node' : 'Provision Access'}
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <div className="flex flex-col items-center">
+                                                        <span className="text-[11px] font-bold text-slate-600">
+                                                            {formatLastSeen(u.last_seen)}
+                                                        </span>
+                                                        {u.subscription_end && (
+                                                            <span className="text-[9px] text-slate-300 font-black uppercase mt-1">Exp: {new Date(u.subscription_end).toLocaleDateString()}</span>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center gap-3">
+                                                        {!u.is_subscribed && (
+                                                            <select 
+                                                                value={selectedDurations[u.id] || 'sub_1y'} 
+                                                                onChange={(e) => setSelectedDurations(prev => ({...prev, [u.id]: e.target.value}))}
+                                                                className="text-[10px] font-black uppercase py-1.5 rounded-lg border-slate-200 focus:ring-indigo-500 bg-white"
+                                                            >
+                                                                <optgroup label="TRIAL PROTOCOLS">
+                                                                    {DURATION_OPTIONS.filter(o => o.type === 'trial').map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                                                </optgroup>
+                                                                <optgroup label="SUBSCRIPTION TERMS">
+                                                                    {DURATION_OPTIONS.filter(o => o.type === 'sub').map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                                                </optgroup>
+                                                            </select>
+                                                        )}
+                                                        <button onClick={() => toggleSubscription(u)} className={`text-[10px] font-black px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-900 hover:text-white hover:border-slate-900 uppercase whitespace-nowrap transition-all shadow-sm ${u.is_subscribed ? 'text-rose-600 border-rose-100 bg-rose-50' : 'text-indigo-600'}`}>
+                                                            {u.is_subscribed ? 'Terminate Node' : 'Provision Access'}
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
+                                )}
                             </tbody>
                         </table>
                     </div>
@@ -513,48 +543,52 @@ const AdminDashboard: React.FC = () => {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                    {accessKeys.map(k => {
-                                        const linkedUser = users.find(u => u.id === k.user_id);
-                                        return (
-                                            <tr key={k.id} className="hover:bg-slate-50/50 transition-colors">
-                                                <td className="px-6 py-4 font-mono font-black text-indigo-600 text-sm">{k.key}</td>
-                                                <td className="px-6 py-4 text-[11px] font-bold text-slate-600">{getToolName(k.tool)}</td>
-                                                <td className="px-6 py-4">
-                                                    {k.is_used ? (
-                                                        <span className="text-[9px] font-black uppercase text-rose-500 bg-rose-50 px-2 py-0.5 rounded border border-rose-100 tracking-tighter">Locked</span>
-                                                    ) : (
-                                                        <span className="text-[9px] font-black uppercase text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 tracking-tighter">Available</span>
-                                                    )}
-                                                </td>
-                                                <td className="px-6 py-4 text-[11px] font-bold text-slate-600 truncate max-w-[150px]" title={linkedUser?.email}>
-                                                    {linkedUser?.email || (k.user_id ? <span className="text-slate-300 font-mono text-[9px]">{k.user_id.slice(0,8)}...</span> : <span className="text-slate-300 italic font-normal tracking-widest text-[9px] uppercase">Floating</span>)}
-                                                </td>
-                                                <td className="px-6 py-4 font-mono text-[9px] text-slate-400 truncate max-w-[120px]" title={k.device_id}>
-                                                    {k.device_id || <span className="text-slate-200">---</span>}
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="flex items-center gap-3">
-                                                        {k.is_used && (
-                                                            <button 
-                                                                onClick={() => handleRevokeKey(k)}
-                                                                className="p-1.5 text-amber-500 hover:bg-amber-50 rounded-lg transition-colors"
-                                                                title="Reset Allocation"
-                                                            >
-                                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                                                            </button>
+                                    {accessKeys.length === 0 ? (
+                                        <tr><td colSpan={6} className="px-6 py-20 text-center text-slate-400 italic">No access keys generated.</td></tr>
+                                    ) : (
+                                        accessKeys.map(k => {
+                                            const linkedUser = users.find(u => u.id === k.user_id);
+                                            return (
+                                                <tr key={k.id} className="hover:bg-slate-50/50 transition-colors">
+                                                    <td className="px-6 py-4 font-mono font-black text-indigo-600 text-sm">{k.key}</td>
+                                                    <td className="px-6 py-4 text-[11px] font-bold text-slate-600">{getToolName(k.tool)}</td>
+                                                    <td className="px-6 py-4">
+                                                        {k.is_used ? (
+                                                            <span className="text-[9px] font-black uppercase text-rose-500 bg-rose-50 px-2 py-0.5 rounded border border-rose-100 tracking-tighter">Locked</span>
+                                                        ) : (
+                                                            <span className="text-[9px] font-black uppercase text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 tracking-tighter">Available</span>
                                                         )}
-                                                        <button 
-                                                            onClick={() => handleDeleteKey(k.id)}
-                                                            className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
-                                                            title="Purge Key"
-                                                        >
-                                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
+                                                    </td>
+                                                    <td className="px-6 py-4 text-[11px] font-bold text-slate-600 truncate max-w-[150px]" title={linkedUser?.email}>
+                                                        {linkedUser?.email || (k.user_id ? <span className="text-slate-300 font-mono text-[9px]">{k.user_id.slice(0,8)}...</span> : <span className="text-slate-300 italic font-normal tracking-widest text-[9px] uppercase">Floating</span>)}
+                                                    </td>
+                                                    <td className="px-6 py-4 font-mono text-[9px] text-slate-400 truncate max-w-[120px]" title={k.device_id}>
+                                                        {k.device_id || <span className="text-slate-200">---</span>}
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <div className="flex items-center gap-3">
+                                                            {k.is_used && (
+                                                                <button 
+                                                                    onClick={() => handleRevokeKey(k)}
+                                                                    className="p-1.5 text-amber-500 hover:bg-amber-50 rounded-lg transition-colors"
+                                                                    title="Reset Allocation"
+                                                                >
+                                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                                                                </button>
+                                                            )}
+                                                            <button 
+                                                                onClick={() => handleDeleteKey(k.id)}
+                                                                className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                                                                title="Purge Key"
+                                                            >
+                                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                    )}
                                 </tbody>
                             </table>
                         </div>

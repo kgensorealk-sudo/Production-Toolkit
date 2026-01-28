@@ -34,7 +34,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [loading, setLoading] = useState(true);
     
     const lastHeartbeat = useRef<number>(0);
-    const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const initTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const internalAuthRef = useRef({ sub: false, admin: false });
 
@@ -59,30 +58,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     };
 
-    const performHeartbeat = async (uid: string) => {
-        const now = Date.now();
-        if (now - lastHeartbeat.current < HEARTBEAT_INTERVAL) return;
-        lastHeartbeat.current = now;
-        try {
-            const { data, error } = await supabase
-                .from('profiles')
-                .update({ last_seen: new Date().toISOString() })
-                .eq('id', uid)
-                .select('is_subscribed, role')
-                .single();
-            if (!error && internalAuthRef.current.sub && !data.is_subscribed) {
-                signOut(true);
-            }
-        } catch (err) {}
-    };
-
     const fetchFreeTools = async () => {
         try {
-            const { data } = await supabase
+            const { data, error } = await supabase
                 .from('system_settings')
                 .select('free_tools_data')
                 .eq('id', 'global')
                 .maybeSingle();
+            
+            if (error) throw error;
+
             if (data?.free_tools_data) {
                 const now = new Date();
                 const activeMap: Record<string, string> = {};
@@ -96,27 +81,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setFreeTools(activeIds);
                 setFreeToolsData(activeMap);
             }
-        } catch (err) {}
+        } catch (err) {
+            console.warn("Auth: Free tools fetch skipped/failed.");
+        }
     };
 
     const fetchProfile = async (userId: string) => {
         try {
+            // Profile fetch with timeout capability via abort controller if needed, 
+            // but usually a simple select is fine unless RLS is recursive.
             const { data: profileData, error: profileError } = await supabase
                 .from('profiles')
                 .select('*')
                 .eq('id', userId)
                 .maybeSingle();
+
             if (profileError) throw profileError;
             if (!profileData) return;
+
             const { data: keysData } = await supabase
                 .from('access_keys')
                 .select('tool')
                 .eq('user_id', userId)
                 .eq('is_used', true);
+
             const unlockedTools = keysData ? keysData.map(k => k.tool) : [];
             let isActive = profileData.is_subscribed;
+            
             if (user?.email === SUPER_ADMIN_EMAIL) isActive = true;
-            else if (profileData.subscription_end && new Date(profileData.subscription_end) < new Date()) isActive = false;
+            else if (profileData.subscription_end && new Date(profileData.subscription_end) < new Date()) {
+                isActive = false;
+            }
+
             const finalProfile = { ...profileData, is_subscribed: isActive, unlocked_tools: unlockedTools };
             internalAuthRef.current = { sub: isActive, admin: (profileData.role === 'admin' || user?.email === SUPER_ADMIN_EMAIL) };
             setProfile(finalProfile);
@@ -142,31 +138,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     useEffect(() => {
         let mounted = true;
 
-        // FAIL-SAFE: 6 Second Initialization Timeout
+        // FAIL-SAFE: 5 Second Initialization Timeout
+        // If Supabase takes too long, we force the app to try and render anyway.
         initTimeoutRef.current = setTimeout(() => {
             if (mounted && loading) {
-                console.error("Auth: Initialiation timed out. Forcing ready state.");
+                console.error("Auth: Initialization timed out. Forcing ready state.");
                 setLoading(false);
             }
-        }, 6000);
+        }, 5000);
 
         const init = async () => {
             try {
+                // Step 1: Get Session
                 const { data, error } = await (supabase.auth as any).getSession();
+                
                 if (error) {
                     if (error.message.toLowerCase().includes('refresh_token') || error.status === 400) {
                         clearLocalSession();
                     }
                     throw error;
                 }
+
                 const currentSession = data?.session;
                 if (currentSession && mounted) {
                     setSession(currentSession);
                     setUser(currentSession.user);
-                    // Isolated parallel fetching to prevent hangs
-                    await Promise.allSettled([
-                        fetchProfile(currentSession.user.id),
-                        fetchFreeTools()
+                    
+                    // Step 2: Fetch metadata in parallel but don't block the finally block if they hang
+                    // We use a local timeout for the profile/metadata fetch specifically
+                    await Promise.race([
+                        Promise.allSettled([
+                            fetchProfile(currentSession.user.id),
+                            fetchFreeTools()
+                        ]),
+                        new Promise(resolve => setTimeout(resolve, 3500))
                     ]);
                 }
             } catch (err) {
