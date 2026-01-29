@@ -38,7 +38,7 @@ const ReferenceUpdater: React.FC = () => {
     const [renumberInternal, setRenumberInternal] = useState(true);
     const [addOrphans, setAddOrphans] = useState(false);
     const [isNumberedMode, setIsNumberedMode] = useState(false);
-    const [sortAlphabetically, setSortAlphabetically] = useState(true);
+    const [sortAlphabetically, setSortAlphabetically] = useState(false);
     const [convertAndToAmp, setConvertAndToAmp] = useState(false);
     const [activeTab, setActiveTab] = useState<'scan' | 'sequence' | 'result' | 'diff'>('scan');
     const [isLoading, setIsLoading] = useState(false);
@@ -299,24 +299,73 @@ const ReferenceUpdater: React.FC = () => {
 
     const projectedSequence = useMemo(() => {
         if (scanResults.length === 0) return [];
-        let list = [...scanResults].filter(r => r.selected);
+        let selectedList = scanResults.filter(r => r.selected);
+        
+        const cleanForSort = (str: string) => str.replace(/[^a-zA-Z0-9]/g, '').trim().toLowerCase();
+
         if (sortAlphabetically) {
-            const hasAuthorLabels = list.some(b => b.label && /[a-zA-Z]/.test(b.label));
-            if (!isNumberedMode || hasAuthorLabels) {
-                const cleanForSort = (str: string) => str.replace(/[^a-zA-Z0-9]/g, '').trim().toLowerCase();
-                list.sort((a, b) => cleanForSort(a.sortKey).localeCompare(cleanForSort(b.sortKey), undefined, { sensitivity: 'base', numeric: true }));
-            }
+            // Full Global Alphabetical Sort
+            return [...selectedList].sort((a, b) => 
+                cleanForSort(a.sortKey).localeCompare(cleanForSort(b.sortKey), undefined, { sensitivity: 'base', numeric: true })
+            );
+        } else {
+            /**
+             * RELATIVE ALPHABETICAL INSERTION:
+             * 1. Treat existing matched items as a pinned sequence (originalIndex is not null).
+             * 2. Take new items (originalIndex is null) and sort them alphabetically among themselves first.
+             * 3. Insert each new item into the pinned sequence at the first point where an existing item is alphabetically greater.
+             */
+            const resultList = selectedList
+                .filter(r => r.originalIndex !== null)
+                .sort((a, b) => (a.originalIndex ?? 0) - (b.originalIndex ?? 0));
+            
+            const newItems = selectedList
+                .filter(r => r.originalIndex === null)
+                .sort((a, b) => 
+                    cleanForSort(a.sortKey).localeCompare(cleanForSort(b.sortKey), undefined, { sensitivity: 'base', numeric: true })
+                );
+            
+            newItems.forEach(newItem => {
+                const newKey = cleanForSort(newItem.sortKey);
+                const insertIdx = resultList.findIndex(existingItem => 
+                    cleanForSort(existingItem.sortKey).localeCompare(newKey, undefined, { sensitivity: 'base', numeric: true }) > 0
+                );
+                
+                if (insertIdx === -1) {
+                    resultList.push(newItem);
+                } else {
+                    resultList.splice(insertIdx, 0, newItem);
+                }
+            });
+            
+            return resultList;
         }
-        return list;
-    }, [scanResults, isNumberedMode, sortAlphabetically]);
+    }, [scanResults, sortAlphabetically]);
 
     const handleDrop = (dropIndex: number) => {
         if (draggedItemIndex === null || draggedItemIndex === dropIndex) return;
-        if (sortAlphabetically) { setSortAlphabetically(false); setToast({ msg: "Auto-Sort disabled. Manual mode active.", type: "info" }); }
-        const newList = [...scanResults], visibleItems = scanResults.filter(r => r.selected), itemToMove = visibleItems[draggedItemIndex];
-        newList.splice(scanResults.findIndex(r => r === itemToMove), 1);
-        newList.splice(newList.findIndex(r => r === visibleItems[dropIndex]), 0, itemToMove);
-        setScanResults(newList); setDraggedItemIndex(null);
+        
+        // Manual override: To maintain a manual order, we reset the indexes relative to the new arrangement
+        const visibleItems = projectedSequence;
+        const itemToMove = visibleItems[draggedItemIndex];
+        
+        const absoluteIdxMove = scanResults.findIndex(r => r === itemToMove);
+        const absoluteIdxTarget = scanResults.findIndex(r => r === visibleItems[dropIndex]);
+        
+        const newList = [...scanResults];
+        newList.splice(absoluteIdxMove, 1);
+        newList.splice(absoluteIdxTarget, 0, itemToMove);
+        
+        // Force fully manual state by overwriting originalIndex with current position
+        const finalizedList = newList.map((item, idx) => ({
+            ...item,
+            originalIndex: idx
+        }));
+
+        setScanResults(finalizedList);
+        setDraggedItemIndex(null);
+        setSortAlphabetically(false);
+        setToast({ msg: "Manual sequence recorded.", type: "info" });
     };
 
     const removeFromOutput = (ref: ScanItem) => {
@@ -351,7 +400,7 @@ const ReferenceUpdater: React.FC = () => {
 
     return (
         <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-            <div className="mb-8 text-center animate-fade-in"><h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase">Reference Updater</h1><p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic">Smart-merge corrections. Drag handles in Sequence tab for manual ordering.</p></div>
+            <div className="mb-8 text-center animate-fade-in"><h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase">Reference Updater</h1><p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic">Smart-merge corrections. Original order is pinned; additions are inserted alphabetically relative to existing items.</p></div>
             <div className="flex justify-center mb-8">
                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap items-center justify-center gap-10">
                     <Switch 
@@ -365,8 +414,8 @@ const ReferenceUpdater: React.FC = () => {
                     <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
                     <Switch 
                         id="toggle-sort"
-                        label="Auto-Sort"
-                        subLabel={sortAlphabetically ? 'Alphabetical' : 'Manual'}
+                        label="Global Sort"
+                        subLabel={sortAlphabetically ? 'Full Alpha' : 'Relative Insertion'}
                         checked={sortAlphabetically}
                         onChange={setSortAlphabetically}
                         color="indigo"
@@ -375,7 +424,7 @@ const ReferenceUpdater: React.FC = () => {
                     <Switch 
                         id="toggle-orphans"
                         label="Add Orphans"
-                        subLabel="Append Mode"
+                        subLabel="Correction Items"
                         checked={addOrphans}
                         onChange={setAddOrphans}
                         color="emerald"
@@ -402,7 +451,7 @@ const ReferenceUpdater: React.FC = () => {
                                 <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
                                     <div>
                                         <div className="text-xs font-black text-slate-800 uppercase tracking-widest leading-none">Output Sequence Preview</div>
-                                        <div className="text-[10px] text-slate-400 mt-1 font-medium">Drag items to manually rearrange sequence. Click 'X' to exclude.</div>
+                                        <div className="text-[10px] text-slate-400 mt-1 font-medium">Relative alphabetical insertion active. Original order is pinned.</div>
                                     </div>
                                     {lastRemovedKey && (
                                         <button 
@@ -432,12 +481,12 @@ const ReferenceUpdater: React.FC = () => {
                                                 className={`flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl shadow-sm hover:border-indigo-300 transition-all group cursor-grab active:cursor-grabbing ${draggedItemIndex === idx ? 'opacity-40 grayscale scale-95' : ''}`}
                                             >
                                                 <div className="flex flex-col items-center shrink-0">
-                                                    <div className="text-slate-300 group-hover:text-indigo-300">⠿</div>
+                                                    <div className="text-slate-300 group-hover:text-indigo-300 font-bold">⠿</div>
                                                     <div className="w-8 h-8 bg-slate-50 rounded-xl flex items-center justify-center text-[10px] font-black text-slate-300 group-hover:bg-indigo-50 group-hover:text-indigo-400 transition-colors border border-slate-100">{idx + 1}</div>
                                                 </div>
                                                 <div className="flex-grow min-w-0">
                                                     <div className="text-sm font-bold text-slate-800 truncate">{ref.label}</div>
-                                                    <div className="text-[10px] font-mono text-slate-400 uppercase tracking-tighter">ID: {ref.id}</div>
+                                                    <div className="text-[10px] font-mono text-slate-400 uppercase tracking-tighter truncate">ID: {ref.id}</div>
                                                 </div>
                                                 <div className="flex items-center gap-2">
                                                     <span className={`text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-widest border transition-colors ${
