@@ -325,6 +325,12 @@ const ReferenceUpdater: React.FC = () => {
         setToast({ msg: `Removed ${ref.label} from output sequence.`, type: 'warn' });
     };
 
+    const copyRefLabel = (label: string) => {
+        navigator.clipboard.writeText(label).then(() => {
+            setToast({ msg: `Label "${label}" copied!`, type: 'success' });
+        });
+    };
+
     const undoRemoval = () => {
         if (!lastRemovedKey) return;
         setScanResults(prev => prev.map(it => {
@@ -433,7 +439,7 @@ const ReferenceUpdater: React.FC = () => {
                                                     <div className="text-sm font-bold text-slate-800 truncate">{ref.label}</div>
                                                     <div className="text-[10px] font-mono text-slate-400 uppercase tracking-tighter">ID: {ref.id}</div>
                                                 </div>
-                                                <div className="flex items-center gap-3">
+                                                <div className="flex items-center gap-2">
                                                     <span className={`text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-widest border transition-colors ${
                                                         (ref.status === 'add' || ref.status === 'orphan') 
                                                             ? 'bg-emerald-50 text-emerald-600 border-emerald-100' 
@@ -444,15 +450,26 @@ const ReferenceUpdater: React.FC = () => {
                                                         {(ref.status === 'add' || ref.status === 'orphan') ? 'NEW' : 
                                                          (ref.status === 'update' || ref.status === 'smart_match') ? 'UPDATED' : 'ORIG'}
                                                     </span>
-                                                    <button 
-                                                        onClick={(e) => { e.stopPropagation(); removeFromOutput(ref); }}
-                                                        className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-100 hover:ring-2 hover:ring-rose-500/20 rounded-lg transition-all"
-                                                        title="Remove from output"
-                                                    >
-                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                                                        </svg>
-                                                    </button>
+                                                    <div className="flex gap-1">
+                                                        <button 
+                                                            onClick={(e) => { e.stopPropagation(); copyRefLabel(ref.label); }}
+                                                            className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                                                            title="Copy label text"
+                                                        >
+                                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                            </svg>
+                                                        </button>
+                                                        <button 
+                                                            onClick={(e) => { e.stopPropagation(); removeFromOutput(ref); }}
+                                                            className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-100 hover:ring-2 hover:ring-rose-500/20 rounded-lg transition-all"
+                                                            title="Remove from output"
+                                                        >
+                                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </div>
                                         ))
