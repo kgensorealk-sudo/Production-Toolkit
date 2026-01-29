@@ -6,6 +6,7 @@ interface Announcement {
     title: string;
     content: string;
     type: 'warning' | 'info' | 'success' | 'error';
+    updated_at: string;
     created_at: string;
 }
 
@@ -16,7 +17,7 @@ const AnnouncementModal: React.FC = () => {
     useEffect(() => {
         const fetchAnnouncement = async () => {
             try {
-                // Fetch the single active announcement
+                // Fetch the single latest active announcement
                 const { data, error } = await supabase
                     .from('announcements')
                     .select('*')
@@ -33,11 +34,19 @@ const AnnouncementModal: React.FC = () => {
                 }
 
                 if (data) {
-                    const seenKey = `announcement_seen_${data.id}`;
-                    const seen = sessionStorage.getItem(seenKey);
+                    const typedData = data as Announcement;
                     
-                    if (!seen) {
-                        setAnnouncement(data as Announcement);
+                    /**
+                     * SMART DISMISS LOGIC:
+                     * We store a hash key combining ID and a simplified version of the content.
+                     * If the admin updates the text (even if ID stays same), seenKey changes.
+                     */
+                    const contentHash = btoa(typedData.content.substring(0, 30)).substring(0, 8);
+                    const seenKey = `ann_seen_${typedData.id}_${contentHash}`;
+                    const hasSeen = localStorage.getItem(seenKey);
+                    
+                    if (!hasSeen) {
+                        setAnnouncement(typedData);
                         setIsOpen(true);
                     }
                 }
@@ -51,7 +60,8 @@ const AnnouncementModal: React.FC = () => {
 
     const close = () => {
         if (announcement) {
-            sessionStorage.setItem(`announcement_seen_${announcement.id}`, 'true');
+            const contentHash = btoa(announcement.content.substring(0, 30)).substring(0, 8);
+            localStorage.setItem(`ann_seen_${announcement.id}_${contentHash}`, 'true');
         }
         setIsOpen(false);
     };
@@ -62,34 +72,34 @@ const AnnouncementModal: React.FC = () => {
         switch (type) {
             case 'warning':
                 return {
-                    bg: 'bg-gradient-to-r from-amber-50 to-orange-50',
-                    border: 'border-amber-100',
-                    iconBg: 'bg-white text-amber-500',
-                    title: 'text-slate-900',
+                    bg: 'bg-amber-50',
+                    header: 'bg-amber-100/50',
+                    border: 'border-amber-200',
+                    accent: 'bg-amber-500',
                     icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                };
-            case 'success':
-                return {
-                    bg: 'bg-gradient-to-r from-emerald-50 to-teal-50',
-                    border: 'border-emerald-100',
-                    iconBg: 'bg-white text-emerald-500',
-                    title: 'text-slate-900',
-                    icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 };
             case 'error':
                 return {
-                    bg: 'bg-gradient-to-r from-rose-50 to-red-50',
-                    border: 'border-rose-100',
-                    iconBg: 'bg-white text-rose-500',
-                    title: 'text-slate-900',
+                    bg: 'bg-rose-50',
+                    header: 'bg-rose-100/50',
+                    border: 'border-rose-200',
+                    accent: 'bg-rose-500',
                     icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                };
+            case 'success':
+                return {
+                    bg: 'bg-emerald-50',
+                    header: 'bg-emerald-100/50',
+                    border: 'border-emerald-200',
+                    accent: 'bg-emerald-500',
+                    icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 };
             default: // info
                 return {
-                    bg: 'bg-gradient-to-r from-blue-50 to-indigo-50',
-                    border: 'border-blue-100',
-                    iconBg: 'bg-white text-blue-500',
-                    title: 'text-slate-900',
+                    bg: 'bg-indigo-50',
+                    header: 'bg-indigo-100/50',
+                    border: 'border-indigo-200',
+                    accent: 'bg-indigo-500',
                     icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 };
         }
@@ -98,37 +108,43 @@ const AnnouncementModal: React.FC = () => {
     const style = getStyles(announcement.type);
 
     return (
-        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-[2px] flex items-center justify-center p-4 animate-fade-in">
-            {/* Modal Card - max-h reduced to 80vh and rounding tweaked to 1.25rem */}
-            <div className="bg-white rounded-[1.25rem] shadow-2xl max-w-sm w-full border border-slate-200 overflow-hidden animate-scale-in relative ring-4 ring-slate-900/5 flex flex-col max-h-[80vh]">
+        <div className="fixed inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" role="dialog" aria-modal="true">
+            <div className="bg-white rounded-[2rem] shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden animate-scale-in relative ring-1 ring-black/5 flex flex-col max-h-[85vh]">
                 
-                {/* Header Area - Tightened padding from p-5 to py-4 px-5 */}
-                <div className={`${style.bg} py-4 px-5 border-b ${style.border} flex items-center gap-4 flex-shrink-0`}>
-                    <div className={`p-1.5 rounded-lg shadow-sm border ${style.border} flex-shrink-0 ${style.iconBg}`}>
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                {/* Header Decoration */}
+                <div className={`h-1.5 w-full ${style.accent}`}></div>
+
+                {/* Title Section */}
+                <div className={`${style.header} py-6 px-8 border-b border-slate-100 flex items-center gap-5`}>
+                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-sm border border-white/50 bg-white ${style.accent.replace('bg-', 'text-')}`}>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             {style.icon}
                         </svg>
                     </div>
                     <div>
-                        <h3 className={`text-base font-black tracking-tight leading-tight ${style.title}`}>{announcement.title}</h3>
-                        <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-0.5">System Broadcast</div>
+                        <h3 className="text-lg font-black text-slate-900 tracking-tight leading-tight uppercase">{announcement.title}</h3>
+                        <div className="flex items-center gap-2 mt-1">
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Protocol Broadcast</span>
+                            <div className="w-1 h-1 rounded-full bg-slate-200"></div>
+                            <span className="text-[9px] font-bold text-slate-400 uppercase">{new Date(announcement.created_at).toLocaleDateString()}</span>
+                        </div>
                     </div>
                 </div>
 
-                {/* Content Body - Tightened padding from p-5 to p-4 */}
-                <div className="p-4 bg-white overflow-y-auto custom-scrollbar flex-grow">
-                    <div className="text-[11px] text-slate-600 bg-slate-50 p-3.5 rounded-xl border border-slate-100 whitespace-pre-wrap leading-relaxed font-medium">
+                {/* Content Area */}
+                <div className="p-8 overflow-y-auto custom-scrollbar flex-grow bg-white">
+                    <div className="text-sm text-slate-600 leading-relaxed font-medium whitespace-pre-wrap break-words">
                         {announcement.content}
                     </div>
                 </div>
 
-                {/* Footer Area - Tightened padding from p-4 to p-3 */}
-                <div className="p-3 bg-slate-50/50 border-t border-slate-100 flex justify-end flex-shrink-0">
+                {/* Action Area */}
+                <div className="p-6 bg-slate-50 border-t border-slate-100">
                     <button 
                         onClick={close}
-                        className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-2.5 px-6 rounded-lg transition-all active:scale-95 text-[9px] uppercase tracking-widest shadow-md shadow-slate-500/20"
+                        className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-4 px-6 rounded-xl transition-all active:scale-95 text-xs uppercase tracking-widest shadow-xl shadow-slate-900/10"
                     >
-                        I Understand
+                        Confirm & Acknowledge
                     </button>
                 </div>
             </div>

@@ -62,11 +62,10 @@ const formatLastSeen = (timestamp?: string) => {
     const diffHours = Math.floor(diffMins / 60);
     const diffDays = Math.floor(diffHours / 24);
 
-    // Heartbeat is 120s. 4 minutes (240s) allows for one missed packet without status flapping.
     if (diffMs < 240000) {
         return (
-            <span className="text-emerald-500 font-bold uppercase tracking-widest flex items-center justify-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span> 
+            <span className="text-emerald-500 font-bold uppercase tracking-widest flex items-center justify-center gap-1.5 text-[9px]">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> 
                 Online
             </span>
         );
@@ -125,56 +124,35 @@ const AdminDashboard: React.FC = () => {
 
     const fetchUsers = useCallback(async (isSilent = false) => {
         if (!isSilent) setIsLoading(true);
-        
         try {
-            const { data, error } = await supabase
-                .from('profiles')
-                .select('*')
-                .order('last_seen', { ascending: false, nullsFirst: false });
-            
+            const { data, error } = await supabase.from('profiles').select('*').order('last_seen', { ascending: false, nullsFirst: false });
             if (error) throw error;
             if (data) {
                 setUsers(data);
                 const durMap: Record<string, string> = {};
-                data.forEach(u => {
-                    if (!selectedDurations[u.id]) durMap[u.id] = 'sub_1y';
-                });
-                if (Object.keys(durMap).length > 0) {
-                    setSelectedDurations(prev => ({ ...prev, ...durMap }));
-                }
+                data.forEach(u => { if (!selectedDurations[u.id]) durMap[u.id] = 'sub_1y'; });
+                if (Object.keys(durMap).length > 0) setSelectedDurations(prev => ({ ...prev, ...durMap }));
             }
         } catch (error: any) {
-            if (!isSilent) setToast({ msg: 'Personnel check failed: ' + error.message, type: 'error' });
-        } finally { 
-            setIsLoading(false); 
-        }
+            if (!isSilent) setToast({ msg: 'Personnel check failed', type: 'error' });
+        } finally { setIsLoading(false); }
     }, [selectedDurations]);
 
     const fetchAccessKeys = useCallback(async () => {
         setIsLoading(true);
         try {
-            const { data, error } = await supabase
-                .from('access_keys')
-                .select('*')
-                .order('created_at', { ascending: false });
-            
+            const { data, error } = await supabase.from('access_keys').select('*').order('created_at', { ascending: false });
             if (error) throw error;
             setAccessKeys(data || []);
         } catch (error: any) {
             setToast({ msg: 'Key matrix fetch failed', type: 'error' });
-        } finally { 
-            setIsLoading(false); 
-        }
+        } finally { setIsLoading(false); }
     }, []);
 
     const handleRevokeKey = async (keyRecord: AccessKeyRecord) => {
         setIsLoading(true);
         try {
-            const { error } = await supabase
-                .from('access_keys')
-                .update({ is_used: false, user_id: null, device_id: null, used_at: null })
-                .eq('id', keyRecord.id);
-
+            const { error } = await supabase.from('access_keys').update({ is_used: false, user_id: null, device_id: null, used_at: null }).eq('id', keyRecord.id);
             if (error) throw error;
             setAccessKeys(prev => prev.map(k => k.id === keyRecord.id ? { ...k, is_used: false, user_id: undefined, device_id: undefined, used_at: undefined } : k));
             setToast({ msg: 'Key access reset.', type: 'success' });
@@ -185,11 +163,7 @@ const AdminDashboard: React.FC = () => {
 
     const handleDeleteKey = (keyId: string) => {
         setConfirmConfig({
-            isOpen: true,
-            title: 'Delete Access Key',
-            message: 'Are you sure? This license will be purged.',
-            confirmLabel: 'Delete',
-            type: 'danger',
+            isOpen: true, title: 'Delete Access Key', message: 'Purge this license?', confirmLabel: 'Delete', type: 'danger',
             onConfirm: async () => {
                 setIsLoading(true);
                 try {
@@ -197,9 +171,7 @@ const AdminDashboard: React.FC = () => {
                     if (error) throw error;
                     setAccessKeys(prev => prev.filter(k => k.id !== keyId));
                     setToast({ msg: 'Key purged', type: 'success' });
-                } catch (err: any) {
-                    setToast({ msg: 'Deletion failed', type: 'error' });
-                } finally { setIsLoading(false); }
+                } catch (err: any) { setToast({ msg: 'Deletion failed', type: 'error' }); } finally { setIsLoading(false); }
             }
         });
     };
@@ -210,21 +182,14 @@ const AdminDashboard: React.FC = () => {
             const { data, error } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
             if (error) throw error;
             setAnnouncements(data || []);
-        } catch (error: any) {
-            setToast({ msg: 'Broadcast fetch failed', type: 'error' });
-        } finally { 
-            setIsLoading(false); 
-        }
+        } catch (error: any) { setToast({ msg: 'Broadcast fetch failed', type: 'error' }); } finally { setIsLoading(false); }
     }, []);
 
     useEffect(() => {
         if (activeTab === 'users') fetchUsers();
         else if (activeTab === 'announcements') fetchAnnouncements();
-        else if (activeTab === 'keys') {
-            fetchUsers(true).then(() => fetchAccessKeys());
-        } else if (activeTab === 'config') {
-            refreshFreeTools();
-        }
+        else if (activeTab === 'keys') fetchUsers(true).then(() => fetchAccessKeys());
+        else if (activeTab === 'config') refreshFreeTools();
     }, [activeTab, fetchUsers, fetchAnnouncements, fetchAccessKeys, refreshFreeTools]);
 
     useEffect(() => {
@@ -259,56 +224,24 @@ const AdminDashboard: React.FC = () => {
             if (error) throw error;
             setUsers(users.map(u => u.id === user.id ? { ...u, ...updates } : u));
             setToast({ msg: newVal ? `Authorized (${durationOption?.label})` : 'Access Terminated', type: 'success' });
-        } catch (err: any) {
-            setToast({ msg: 'Operation failed', type: 'error' });
-        } finally { setIsLoading(false); }
+        } catch (err: any) { setToast({ msg: 'Operation failed', type: 'error' }); } finally { setIsLoading(false); }
     };
 
-    /**
-     * ATOMIC TOGGLE LOGIC
-     * Fetches current DB state first to prevent overwriting or desync.
-     */
     const toggleFreeTool = async (tid: string) => {
         setIsLoading(true);
         try {
-            // 1. Fetch latest source of truth
-            const { data: latest } = await supabase
-                .from('system_settings')
-                .select('free_tools_data')
-                .eq('id', 'global')
-                .maybeSingle();
-            
-            const currentMatrix = latest?.free_tools_data || {};
-            const nextData = { ...currentMatrix };
-
-            // 2. Logic Check
-            if (nextData[tid]) {
-                delete nextData[tid]; // Gating
-            } else {
-                // Provisioning 7 day window
-                const expiry = new Date();
-                expiry.setDate(expiry.getDate() + 7);
+            const { data: latest } = await supabase.from('system_settings').select('free_tools_data').eq('id', 'global').maybeSingle();
+            const nextData = { ...latest?.free_tools_data || {} };
+            if (nextData[tid]) delete nextData[tid];
+            else {
+                const expiry = new Date(); expiry.setDate(expiry.getDate() + 7);
                 nextData[tid] = expiry.toISOString();
             }
-
-            // 3. Push Update
-            const { error } = await supabase
-                .from('system_settings')
-                .update({ 
-                    free_tools_data: nextData, 
-                    updated_at: new Date().toISOString() 
-                })
-                .eq('id', 'global');
-
+            const { error } = await supabase.from('system_settings').update({ free_tools_data: nextData, updated_at: new Date().toISOString() }).eq('id', 'global');
             if (error) throw error;
-            
             await refreshFreeTools();
             setToast({ msg: `System protocol synchronized`, type: 'success' });
-        } catch (err) {
-            setToast({ msg: 'Protocol update rejected by DB', type: 'error' });
-        } finally { 
-            setIsLoading(false); 
-        }
+        } catch (err) { setToast({ msg: 'Protocol update rejected', type: 'error' }); } finally { setIsLoading(false); }
     };
 
     const generateKeys = async () => {
@@ -323,9 +256,7 @@ const AdminDashboard: React.FC = () => {
             if (error) throw error;
             if (data) setAccessKeys(prev => [...data, ...prev]);
             setToast({ msg: `Provisioned ${keyQty} keys`, type: 'success' });
-        } catch (err: any) {
-            setToast({ msg: 'Generation failed', type: 'error' });
-        } finally { setIsLoading(false); }
+        } catch (err: any) { setToast({ msg: 'Generation failed', type: 'error' }); } finally { setIsLoading(false); }
     };
 
     const saveAnnouncement = async (e: React.FormEvent) => {
@@ -333,7 +264,7 @@ const AdminDashboard: React.FC = () => {
         setIsLoading(true);
         try {
             if (editingId) {
-                const { error } = await supabase.from('announcements').update({ title: newTitle, content: newContent, type: newType }).eq('id', editingId);
+                const { error } = await supabase.from('announcements').update({ title: newTitle, content: newContent, type: newType, updated_at: new Date().toISOString() }).eq('id', editingId);
                 if (error) throw error;
                 setAnnouncements(prev => prev.map(a => a.id === editingId ? { ...a, title: newTitle, content: newContent, type: newType } : a));
                 setToast({ msg: 'Broadcast updated', type: 'success' });
@@ -344,18 +275,12 @@ const AdminDashboard: React.FC = () => {
                 setToast({ msg: 'Broadcast created', type: 'success' });
             }
             setNewTitle(''); setNewContent(''); setNewType('info'); setEditingId(null);
-        } catch (err: any) {
-            setToast({ msg: 'Broadcast failed to save', type: 'error' });
-        } finally { setIsLoading(false); }
+        } catch (err: any) { setToast({ msg: 'Broadcast failed to save', type: 'error' }); } finally { setIsLoading(false); }
     };
 
     const deleteAnnouncement = (id: string) => {
         setConfirmConfig({
-            isOpen: true,
-            title: 'Delete Broadcast',
-            message: 'Are you sure?',
-            confirmLabel: 'Delete',
-            type: 'danger',
+            isOpen: true, title: 'Delete Broadcast', message: 'Are you sure?', confirmLabel: 'Delete', type: 'danger',
             onConfirm: async () => {
                 setIsLoading(true);
                 try {
@@ -363,19 +288,12 @@ const AdminDashboard: React.FC = () => {
                     if (error) throw error;
                     setAnnouncements(prev => prev.filter(a => a.id !== id));
                     setToast({ msg: 'Broadcast purged', type: 'success' });
-                } catch (err: any) {
-                    setToast({ msg: 'Deletion failed', type: 'error' });
-                } finally { setIsLoading(false); }
+                } catch (err: any) { setToast({ msg: 'Deletion failed', type: 'error' }); } finally { setIsLoading(false); }
             }
         });
     };
 
-    const editAnnouncement = (a: Announcement) => {
-        setEditingId(a.id);
-        setNewTitle(a.title);
-        setNewContent(a.content);
-        setNewType(a.type);
-    };
+    const editAnnouncement = (a: Announcement) => { setEditingId(a.id); setNewTitle(a.title); setNewContent(a.content); setNewType(a.type); };
 
     const activateAnnouncement = async (id: string) => {
         setIsLoading(true);
@@ -388,15 +306,12 @@ const AdminDashboard: React.FC = () => {
             if (error) throw error;
             setAnnouncements(prev => prev.map(a => (a.id === id ? { ...a, is_active: nextStatus } : (nextStatus ? { ...a, is_active: false } : a))));
             setToast({ msg: nextStatus ? 'Broadcast Live' : 'Broadcast Halted', type: 'success' });
-        } catch (err: any) {
-            setToast({ msg: 'State update failed', type: 'error' });
-        } finally { setIsLoading(false); }
+        } catch (err: any) { setToast({ msg: 'State update failed', type: 'error' }); } finally { setIsLoading(false); }
     };
 
     const activeNodesCount = users.filter(u => {
         if (!u.last_seen) return false;
-        const diffMs = Date.now() - new Date(u.last_seen).getTime();
-        return diffMs < 300000; // 5 Minutes
+        return (Date.now() - new Date(u.last_seen).getTime()) < 300000;
     }).length;
 
     return (
@@ -412,7 +327,7 @@ const AdminDashboard: React.FC = () => {
                     <div className="flex items-center gap-2">
                         <span className={`w-2.5 h-2.5 rounded-full ${activeNodesCount > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`}></span>
                         <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">
-                            {activeNodesCount} Active Nodes Detected
+                            {activeNodesCount} Active Nodes
                         </span>
                     </div>
                 </div>
@@ -426,13 +341,13 @@ const AdminDashboard: React.FC = () => {
             </div>
 
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden min-h-[600px] relative">
-                {isLoading && <LoadingOverlay message="Synchronizing System State..." color="slate" />}
+                {isLoading && <LoadingOverlay message="Synchronizing..." color="slate" />}
                 
                 {activeTab === 'users' && (
                     <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-slate-100">
                             <thead className="bg-slate-50 font-black text-slate-400 uppercase tracking-widest text-[10px]">
-                                <tr><th className="px-6 py-4 text-left">Identity</th><th className="px-6 py-4 text-left">Role</th><th className="px-6 py-4 text-left">Status</th><th className="px-6 py-4 text-center">Activity Status</th><th className="px-6 py-4 text-left">Control</th></tr>
+                                <tr><th className="px-6 py-4 text-left">Identity</th><th className="px-6 py-4 text-left">Role</th><th className="px-6 py-4 text-left">Status</th><th className="px-6 py-4 text-center">Activity</th><th className="px-6 py-4 text-left">Control</th></tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-slate-100 font-medium">
                                 {users.filter(u => u.email.includes(search)).map(u => (
@@ -440,8 +355,8 @@ const AdminDashboard: React.FC = () => {
                                         <td className="px-6 py-4"><div className="flex flex-col"><span className="text-sm font-bold text-slate-900">{u.email}</span><span className="text-[10px] font-mono text-slate-400 uppercase">{u.id.slice(0, 13)}...</span></div></td>
                                         <td className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-tighter">{u.role}</td>
                                         <td className="px-6 py-4"><span className={`px-3 py-1 text-[10px] font-black rounded-full uppercase tracking-widest border ${u.is_subscribed ? 'bg-emerald-50 text-emerald-600 border-emerald-100 shadow-sm' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>{u.is_subscribed ? 'Authorized' : 'Dormant'}</span></td>
-                                        <td className="px-6 py-4 text-center"><div className="flex flex-col items-center"><span className="text-[11px] font-bold text-slate-600">{formatLastSeen(u.last_seen)}</span>{u.subscription_end && <span className="text-[9px] text-slate-300 font-black uppercase mt-1">TTL: {new Date(u.subscription_end).toLocaleDateString()}</span>}</div></td>
-                                        <td className="px-6 py-4"><div className="flex items-center gap-3">{!u.is_subscribed && (<select value={selectedDurations[u.id] || 'sub_1y'} onChange={(e) => setSelectedDurations(prev => ({...prev, [u.id]: e.target.value}))} className="text-[10px] font-black uppercase py-1.5 rounded-lg border-slate-200 bg-white"><optgroup label="Access Term">{DURATION_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</optgroup></select>)}<button onClick={() => toggleSubscription(u)} className={`text-[10px] font-black px-4 py-2 rounded-xl border border-slate-200 uppercase transition-all shadow-sm ${u.is_subscribed ? 'text-rose-600 border-rose-100 bg-rose-50 hover:bg-rose-600 hover:text-white' : 'text-indigo-600 hover:bg-indigo-600 hover:text-white'}`}>{u.is_subscribed ? 'Kill Session' : 'Grant Entry'}</button></div></td>
+                                        <td className="px-6 py-4 text-center"><div className="flex flex-col items-center"><span className="text-[11px] font-bold text-slate-600">{formatLastSeen(u.last_seen)}</span></div></td>
+                                        <td className="px-6 py-4"><div className="flex items-center gap-3">{!u.is_subscribed && (<select value={selectedDurations[u.id] || 'sub_1y'} onChange={(e) => setSelectedDurations(prev => ({...prev, [u.id]: e.target.value}))} className="text-[10px] font-black uppercase py-1.5 rounded-lg border-slate-200 bg-white"><optgroup label="Access Term">{DURATION_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</optgroup></select>)}<button onClick={() => toggleSubscription(u)} className={`text-[10px] font-black px-4 py-2 rounded-xl border border-slate-200 uppercase transition-all shadow-sm ${u.is_subscribed ? 'text-rose-600 border-rose-100 bg-rose-50 hover:bg-rose-600 hover:text-white' : 'text-indigo-600 hover:bg-indigo-600 hover:text-white'}`}>{u.is_subscribed ? 'Terminate' : 'Authorize'}</button></div></td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -450,58 +365,66 @@ const AdminDashboard: React.FC = () => {
                 )}
 
                 {activeTab === 'keys' && (
-                    <div className="p-8 space-y-8 animate-fade-in">
+                    <div className="p-8 space-y-8">
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end bg-slate-50 p-6 rounded-2xl border border-slate-100 shadow-inner">
                             <div><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block tracking-widest">Target Module</label><select value={keyTool} onChange={e => setKeyTool(e.target.value)} className="w-full rounded-xl border-slate-200 text-sm font-bold bg-white focus:ring-2 focus:ring-indigo-100 outline-none"><option value="universal">Universal Access</option><option value={ToolId.XML_RENUMBER}>XML Normalizer</option><option value={ToolId.CREDIT_GENERATOR}>CRediT Tagging</option></select></div>
-                            <div><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block tracking-widest">Key Quantity</label><input type="number" min="1" max="50" value={keyQty} onChange={e => setKeyQty(parseInt(e.target.value))} className="w-full rounded-xl border-slate-200 text-sm font-bold bg-white focus:ring-2 focus:ring-indigo-100 outline-none" /></div>
-                            <button onClick={generateKeys} className="bg-slate-900 text-white font-black py-2.5 rounded-xl uppercase text-xs tracking-widest shadow-lg shadow-slate-200 transition-all active:scale-95">Generate Matrix</button>
+                            <div><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block tracking-widest">Quantity</label><input type="number" min="1" max="50" value={keyQty} onChange={e => setKeyQty(parseInt(e.target.value))} className="w-full rounded-xl border-slate-200 text-sm font-bold bg-white focus:ring-2 focus:ring-indigo-100 outline-none" /></div>
+                            <button onClick={generateKeys} className="bg-slate-900 text-white font-black py-2.5 rounded-xl uppercase text-xs tracking-widest shadow-lg active:scale-95 transition-all">Generate</button>
                         </div>
-                        <div className="overflow-x-auto"><table className="min-w-full divide-y divide-slate-100"><thead className="bg-slate-50 font-black text-slate-400 uppercase text-[10px]"><tr><th className="px-6 py-4 text-left">Key Stream</th><th className="px-6 py-4 text-left">Constraint</th><th className="px-6 py-4 text-left">Status</th><th className="px-6 py-4 text-left">Identity Bind</th><th className="px-6 py-4 text-left">Hardware Hash</th><th className="px-6 py-4 text-left">Mgmt</th></tr></thead><tbody className="divide-y divide-slate-100">
+                        <div className="overflow-x-auto"><table className="min-w-full divide-y divide-slate-100"><thead className="bg-slate-50 font-black text-slate-400 uppercase text-[10px]"><tr><th className="px-6 py-4 text-left">Key</th><th className="px-6 py-4 text-left">Target</th><th className="px-6 py-4 text-left">Status</th><th className="px-6 py-4 text-left">User</th><th className="px-6 py-4 text-left">Control</th></tr></thead><tbody className="divide-y divide-slate-100">
                             {accessKeys.map(k => (
-                                <tr key={k.id} className="hover:bg-slate-50/50 transition-colors"><td className="px-6 py-4 font-mono font-black text-indigo-600 text-sm tracking-widest">{k.key}</td><td className="px-6 py-4 text-[11px] font-bold text-slate-600">{getToolName(k.tool)}</td><td className="px-6 py-4"><span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border ${k.is_used ? 'text-rose-500 bg-rose-50 border-rose-100' : 'text-emerald-500 bg-emerald-50 border-emerald-100 shadow-sm'}`}>{k.is_used ? 'LOCKED' : 'AVAIL'}</span></td><td className="px-6 py-4 text-[11px] font-bold text-slate-600">{users.find(u => u.id === k.user_id)?.email || (k.user_id ? 'Unknown' : 'Unbound')}</td><td className="px-6 py-4 font-mono text-[9px] text-slate-400">{k.device_id || '---'}</td><td className="px-6 py-4"><div className="flex gap-2">{k.is_used && <button onClick={() => handleRevokeKey(k)} className="p-1.5 text-amber-500 hover:bg-amber-50 rounded transition-colors" title="Reset License"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg></button>}<button onClick={() => handleDeleteKey(k.id)} className="p-1.5 text-rose-300 hover:text-rose-600 transition-colors" title="Delete Permanent"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button></div></td></tr>
+                                <tr key={k.id} className="hover:bg-slate-50/50 transition-colors"><td className="px-6 py-4 font-mono font-black text-indigo-600 text-sm tracking-widest">{k.key}</td><td className="px-6 py-4 text-[11px] font-bold text-slate-600">{getToolName(k.tool)}</td><td className="px-6 py-4"><span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border ${k.is_used ? 'text-rose-500 bg-rose-50 border-rose-100' : 'text-emerald-500 bg-emerald-50 border-emerald-100'}`}>{k.is_used ? 'LOCKED' : 'AVAIL'}</span></td><td className="px-6 py-4 text-[11px] font-bold text-slate-600">{users.find(u => u.id === k.user_id)?.email || 'Unbound'}</td><td className="px-6 py-4"><div className="flex gap-2">{k.is_used && <button onClick={() => handleRevokeKey(k)} className="p-1.5 text-amber-500 hover:bg-amber-50 rounded transition-colors"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg></button>}<button onClick={() => handleDeleteKey(k.id)} className="p-1.5 text-rose-300 hover:text-rose-600 transition-colors"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button></div></td></tr>
                             ))}
                         </tbody></table></div>
                     </div>
                 )}
 
                 {activeTab === 'config' && (
-                    <div className="p-10 space-y-10 animate-fade-in">
-                        <div>
-                            <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-2">Free Access Windows</h3>
-                            <p className="text-sm text-slate-500 mb-8 font-medium">Provision 7-day override protocols for selected modules globally.</p>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {Object.values(ToolId).filter(id => id !== 'dashboard' && id !== 'docs').map(tid => {
-                                    const expiry = freeToolsData[tid]; 
-                                    const isFree = !!expiry && new Date(expiry) > new Date();
-                                    return (
-                                        <div key={tid} onClick={() => toggleFreeTool(tid)} className={`p-8 rounded-[2.5rem] border-2 cursor-pointer transition-all flex items-center justify-between group ${isFree ? 'border-emerald-500 bg-emerald-50 shadow-xl scale-[1.02]' : 'border-slate-100 bg-white hover:border-slate-200'}`}>
-                                            <div className="flex flex-col">
-                                                <span className={`text-sm font-black uppercase tracking-tight ${isFree ? 'text-emerald-700' : 'text-slate-700'}`}>{getToolName(tid)}</span>
-                                                {isFree ? (
-                                                    <span className="text-[10px] font-black text-emerald-600 mt-2 uppercase flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Ends: {new Date(expiry).toLocaleDateString()}</span>
-                                                ) : (
-                                                    <span className="text-[10px] font-bold text-slate-300 mt-2 uppercase tracking-[0.2em]">Gated Protocol</span>
-                                                )}
-                                            </div>
-                                            <div className={`w-12 h-6 rounded-full relative transition-colors border ${isFree ? 'bg-emerald-500 border-emerald-600' : 'bg-slate-200 border-slate-300'}`}>
-                                                <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all shadow-md ${isFree ? 'left-[26px]' : 'left-1'}`}></div>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
+                    <div className="p-10 space-y-10">
+                        <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">System Protocols</h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {Object.values(ToolId).filter(id => id !== 'dashboard' && id !== 'docs').map(tid => {
+                                const expiry = freeToolsData[tid]; const isFree = !!expiry && new Date(expiry) > new Date();
+                                return (
+                                    <div key={tid} onClick={() => toggleFreeTool(tid)} className={`p-8 rounded-[2rem] border-2 cursor-pointer transition-all flex items-center justify-between group ${isFree ? 'border-emerald-500 bg-emerald-50 shadow-lg' : 'border-slate-100 bg-white hover:border-slate-200'}`}>
+                                        <div className="flex flex-col"><span className={`text-xs font-black uppercase ${isFree ? 'text-emerald-700' : 'text-slate-700'}`}>{getToolName(tid)}</span>{isFree && <span className="text-[9px] font-black text-emerald-600 mt-1 uppercase">ACTIVE FREE ZONE</span>}</div>
+                                        <div className={`w-10 h-5 rounded-full relative transition-colors border ${isFree ? 'bg-emerald-500 border-emerald-600' : 'bg-slate-200 border-slate-300'}`}><div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${isFree ? 'left-[22px]' : 'left-1'}`}></div></div>
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 )}
 
                 {activeTab === 'announcements' && (
-                    <div className="grid grid-cols-1 lg:grid-cols-3 divide-x divide-slate-200 h-full min-h-[600px] animate-fade-in">
-                        <div className="p-8 bg-white"><div className="flex justify-between items-center mb-6"><h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{editingId ? 'Modify Broadcast' : 'System Broadcaster'}</h3>{editingId && (<button onClick={() => { setEditingId(null); setNewTitle(''); setNewContent(''); setNewType('info'); }} className="text-[10px] font-black text-indigo-600 uppercase hover:underline">Discard Draft</button>)}</div><form onSubmit={saveAnnouncement} className="space-y-6"><div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Subject</label><input type="text" required value={newTitle} onChange={e => setNewTitle(e.target.value)} className="w-full rounded-xl border-slate-200 text-sm font-bold shadow-sm focus:ring-2 focus:ring-indigo-50 outline-none" placeholder="Announcement Title..." /></div><div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Category</label><select value={newType} onChange={e => setNewType(e.target.value as any)} className="w-full rounded-xl border-slate-200 text-sm font-bold shadow-sm focus:ring-2 focus:ring-indigo-50 outline-none"><option value="info">General Info</option><option value="warning">System Alert</option><option value="success">Resolution</option><option value="error">Maintenance</option></select></div><div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Message Content</label><textarea required value={newContent} onChange={e => setNewContent(e.target.value)} rows={5} className="w-full rounded-xl border-slate-200 text-sm font-medium shadow-sm focus:ring-2 focus:ring-indigo-50 outline-none leading-relaxed" placeholder="Write message..." /></div><button type="submit" className={`w-full text-white font-black py-4 rounded-xl uppercase text-xs tracking-widest shadow-lg transition-all active:scale-95 ${editingId ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200' : 'bg-slate-900 hover:bg-slate-800 shadow-slate-200'}`}>{editingId ? 'Update Stream' : 'Deploy Broadcast'}</button></form></div>
-                        <div className="lg:col-span-2 p-8 bg-slate-50/30 overflow-y-auto custom-scrollbar"><div className="flex items-center justify-between mb-8"><h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Broadcast History</h3></div><div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {announcements.map(a => (
-                                <div key={a.id} className={`group flex flex-col p-6 border-2 rounded-[2.5rem] bg-white transition-all hover:shadow-2xl ${a.is_active ? 'border-emerald-500 shadow-lg scale-[1.02]' : 'border-slate-100 opacity-80'}`}><div className="flex justify-between items-start mb-4"><div className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border ${a.type === 'warning' ? 'bg-amber-50 text-amber-600' : 'bg-blue-50 text-blue-600'}`}>{a.type}</div><div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => editAnnouncement(a)} className="p-1.5 text-slate-400 hover:text-indigo-600 transition-all"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg></button><button onClick={() => deleteAnnouncement(a.id)} className="p-1.5 text-slate-400 hover:text-rose-600 transition-all"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button></div></div><h4 className="font-black text-sm uppercase text-slate-800 mb-2">{a.title}</h4><p className="text-[11px] text-slate-500 mb-6 line-clamp-3 leading-relaxed flex-grow font-medium">{a.content}</p><button onClick={() => activateAnnouncement(a.id)} className={`w-full py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border-2 ${a.is_active ? 'bg-rose-50 border-rose-100 text-rose-600' : 'bg-emerald-50 border-emerald-100 text-emerald-600 shadow-sm'}`}>{a.is_active ? 'Halt Stream' : 'Authorize Live'}</button></div>
-                            ))}
-                        </div></div>
+                    <div className="grid grid-cols-1 lg:grid-cols-3 divide-x divide-slate-200 h-full min-h-[600px]">
+                        <div className="p-8 bg-white border-r border-slate-100 flex flex-col">
+                            <div className="flex justify-between items-center mb-8">
+                                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{editingId ? 'Modify Stream' : 'Deploy Broadcast'}</h3>
+                                {editingId && (<button onClick={() => { setEditingId(null); setNewTitle(''); setNewContent(''); setNewType('info'); }} className="text-[9px] font-black text-rose-500 uppercase hover:underline tracking-widest">Discard Draft</button>)}
+                            </div>
+                            <form onSubmit={saveAnnouncement} className="space-y-6 flex-grow">
+                                <div><label className="text-[9px] font-black text-slate-500 uppercase mb-2 block tracking-widest">Subject Line</label><input type="text" required value={newTitle} onChange={e => setNewTitle(e.target.value)} className="w-full rounded-xl border-slate-200 text-sm font-bold p-3 outline-none focus:ring-2 focus:ring-indigo-100" /></div>
+                                <div><label className="text-[9px] font-black text-slate-500 uppercase mb-2 block tracking-widest">Severity Layer</label><select value={newType} onChange={e => setNewType(e.target.value as any)} className="w-full rounded-xl border-slate-200 text-sm font-bold p-3 outline-none"><option value="info">General System Information</option><option value="warning">System Warning Alert</option><option value="success">Resolution Notice</option><option value="error">Maintenance Protocol</option></select></div>
+                                <div className="flex-grow flex flex-col"><label className="text-[9px] font-black text-slate-500 uppercase mb-2 block tracking-widest">Payload Content</label><textarea required value={newContent} onChange={e => setNewContent(e.target.value)} className="w-full flex-grow rounded-xl border-slate-200 text-sm font-medium p-4 outline-none resize-none leading-relaxed" rows={8} /></div>
+                                <button type="submit" className={`w-full text-white font-black py-4 rounded-xl uppercase text-xs tracking-widest shadow-xl active:scale-95 transition-all ${editingId ? 'bg-indigo-600' : 'bg-slate-900'}`}>{editingId ? 'Update & Push' : 'Initialize Broadcast'}</button>
+                            </form>
+                        </div>
+                        <div className="lg:col-span-2 p-10 bg-slate-50/40 overflow-y-auto custom-scrollbar">
+                            <div className="mb-10"><h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.3em]">Transmission History</h3></div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                {announcements.map(a => (
+                                    <div key={a.id} className={`group flex flex-col p-8 border-2 rounded-[2.5rem] bg-white transition-all shadow-sm relative ${a.is_active ? 'border-emerald-500 ring-4 ring-emerald-50' : 'border-slate-100 opacity-90'}`}>
+                                        {a.is_active && <div className="absolute -top-3 right-8 px-4 py-1 bg-emerald-500 text-white text-[9px] font-black uppercase tracking-widest rounded-full shadow-lg border-2 border-white">LIVE STREAMING</div>}
+                                        <div className="flex justify-between items-start mb-6"><div className={`px-2 py-0.5 rounded-lg text-[8px] font-black uppercase border ${a.type === 'warning' ? 'bg-amber-50 text-amber-600 border-amber-200' : (a.type === 'error' ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-indigo-50 text-indigo-600 border-indigo-200')}`}>{a.type}</div><div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => editAnnouncement(a)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg></button><button onClick={() => deleteAnnouncement(a.id)} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button></div></div>
+                                        <h4 className="font-black text-sm uppercase text-slate-900 mb-2 leading-tight">{a.title}</h4>
+                                        <p className="text-[11px] text-slate-500 mb-8 line-clamp-4 leading-relaxed font-medium flex-grow">{a.content}</p>
+                                        <button onClick={() => activateAnnouncement(a.id)} className={`w-full py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border-2 active:scale-[0.98] ${a.is_active ? 'bg-rose-50 border-rose-200 text-rose-600 hover:bg-rose-600 hover:text-white' : 'bg-emerald-50 border-emerald-200 text-emerald-600 hover:bg-emerald-600 hover:text-white shadow-md'}`}>{a.is_active ? 'TERMINATE STREAM' : 'ACTIVATE BROADCAST'}</button>
+                                    </div>
+                                ))}
+                                {announcements.length === 0 && <div className="col-span-full py-20 text-center opacity-40"><p className="text-xs font-bold uppercase tracking-widest text-slate-400">No archived transmissions</p></div>}
+                            </div>
+                        </div>
                     </div>
                 )}
             </div>
