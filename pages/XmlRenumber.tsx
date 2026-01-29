@@ -217,9 +217,9 @@ const XmlRenumber: React.FC = () => {
 
                 const bibRefRegex = /(<ce:bib-reference\b[^>]*?\bid="([^"]+)"[^>]*>[\s\S]*?)<ce:label\b[^>]*>([\s\S]*?)<\/ce:label>/g;
                 
-                // Refactored to capture surrounding optional brackets and whitespace
-                const singleCrossRefRegex = /\[?\s*(<ce:cross-ref\b[^>]*?\brefid="([^"]+)"[^>]*?>)[\s\S]*?<\/ce:cross-ref>\s*\]?/g;
-                const rangeCrossRefRegex = /\[?\s*(<ce:cross-refs\b[^>]*?\brefid="([^"]+)"[^>]*?>)[\s\S]*?<\/ce:cross-refs>\s*\]?/g;
+                // Refactored: Targets optional [ with its own internal space, but ignores external sentence spaces
+                const singleCrossRefRegex = /(?:\[\s*)?(<ce:cross-ref\b[^>]*?\brefid="([^"]+)"[^>]*?>)[\s\S]*?<\/ce:cross-ref>(?:\s*\])?/g;
+                const rangeCrossRefRegex = /(?:\[\s*)?(<ce:cross-refs\b[^>]*?\brefid="([^"]+)"[^>]*?>)[\s\S]*?<\/ce:cross-refs>(?:\s*\])?/g;
 
                 let counter = 1;
                 let bibMatchCount = 0;
@@ -253,7 +253,7 @@ const XmlRenumber: React.FC = () => {
                     return;
                 }
 
-                // Refactored: Strips external brackets and whitespace, ensuring internal brackets are used
+                // Replacement: Strips the matched optional brackets without touching text that wasn't matched
                 renumberedText = renumberedText.replace(singleCrossRefRegex, (match, openTag, refId) => {
                     const newNumber = referenceMap[refId];
                     if (newNumber === undefined) return match; 
@@ -295,7 +295,7 @@ const XmlRenumber: React.FC = () => {
                     return ranges.join(',');
                 };
 
-                // Refactored: Strips external brackets and whitespace
+                // Replacement: Strips the matched optional brackets
                 renumberedText = renumberedText.replace(rangeCrossRefRegex, (match, openTag, refIdsString) => {
                     const refIds = refIdsString.split(/\s+/).filter((id: string) => id.trim() !== '');
                     const uniqueNumbers = [...new Set(refIds.map((id: string) => referenceMap[id]).filter((num: number) => num !== undefined))];
