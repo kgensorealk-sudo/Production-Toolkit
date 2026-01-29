@@ -93,6 +93,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const fetchProfile = async (userId: string) => {
         const profilePromise = (async () => {
             try {
+                // Immediate update on fetch request
                 updateLastSeen(userId);
 
                 const { data: profileData, error: profileError } = await supabase
@@ -203,6 +204,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     setSession(currentSession);
                     setUser(currentSession.user);
                     
+                    // START HEARTBEAT IMMEDIATELY
+                    updateLastSeen(currentSession.user.id);
+                    
                     if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
                     heartbeatTimerRef.current = setInterval(() => {
                         updateLastSeen(currentSession.user.id);
@@ -234,6 +238,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setLoading(false);
             } else if (event === 'SIGNED_IN' && newSession?.user) {
                 setSession(newSession); setUser(newSession.user);
+                
+                // TRIGGER IMMEDIATE HEARTBEAT ON LOGIN
+                updateLastSeen(newSession.user.id);
                 
                 if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
                 heartbeatTimerRef.current = setInterval(() => {
