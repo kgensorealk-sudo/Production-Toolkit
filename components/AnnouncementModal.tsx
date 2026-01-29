@@ -14,48 +14,48 @@ const AnnouncementModal: React.FC = () => {
     const [isOpen, setIsOpen] = useState(false);
     const [announcement, setAnnouncement] = useState<Announcement | null>(null);
 
-    useEffect(() => {
-        const fetchAnnouncement = async () => {
-            try {
-                // Fetch the single latest active announcement
-                const { data, error } = await supabase
-                    .from('announcements')
-                    .select('*')
-                    .eq('is_active', true)
-                    .order('created_at', { ascending: false })
-                    .limit(1)
-                    .maybeSingle();
+    const fetchAnnouncement = async (forceOpen = false) => {
+        try {
+            const { data, error } = await supabase
+                .from('announcements')
+                .select('*')
+                .eq('is_active', true)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
 
-                if (error) {
-                    if (error.code !== '42P01') {
-                        console.warn("Failed to fetch announcements:", error.message || error);
-                    }
+            if (error) return;
+
+            if (data) {
+                const typedData = data as Announcement;
+                setAnnouncement(typedData);
+                
+                if (forceOpen) {
+                    setIsOpen(true);
                     return;
                 }
 
-                if (data) {
-                    const typedData = data as Announcement;
-                    
-                    /**
-                     * SMART DISMISS LOGIC:
-                     * We store a hash key combining ID and a simplified version of the content.
-                     * If the admin updates the text (even if ID stays same), seenKey changes.
-                     */
-                    const contentHash = btoa(typedData.content.substring(0, 30)).substring(0, 8);
-                    const seenKey = `ann_seen_${typedData.id}_${contentHash}`;
-                    const hasSeen = localStorage.getItem(seenKey);
-                    
-                    if (!hasSeen) {
-                        setAnnouncement(typedData);
-                        setIsOpen(true);
-                    }
+                const contentHash = btoa(typedData.content.substring(0, 30)).substring(0, 8);
+                const seenKey = `ann_seen_${typedData.id}_${contentHash}`;
+                const hasSeen = localStorage.getItem(seenKey);
+                
+                if (!hasSeen) {
+                    setIsOpen(true);
                 }
-            } catch (err: any) {
-                console.warn("Announcement check failed:", err.message || err);
             }
-        };
+        } catch (err) {
+            console.warn("Announcement check failed");
+        }
+    };
 
+    useEffect(() => {
         fetchAnnouncement();
+
+        // Listen for manual trigger from Layout or Dashboard
+        const handleManualTrigger = () => fetchAnnouncement(true);
+        window.addEventListener('app:show-announcement', handleManualTrigger);
+        
+        return () => window.removeEventListener('app:show-announcement', handleManualTrigger);
     }, []);
 
     const close = () => {
@@ -110,11 +110,7 @@ const AnnouncementModal: React.FC = () => {
     return (
         <div className="fixed inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" role="dialog" aria-modal="true">
             <div className="bg-white rounded-[2rem] shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden animate-scale-in relative ring-1 ring-black/5 flex flex-col max-h-[85vh]">
-                
-                {/* Header Decoration */}
                 <div className={`h-1.5 w-full ${style.accent}`}></div>
-
-                {/* Title Section */}
                 <div className={`${style.header} py-6 px-8 border-b border-slate-100 flex items-center gap-5`}>
                     <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-sm border border-white/50 bg-white ${style.accent.replace('bg-', 'text-')}`}>
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -130,15 +126,11 @@ const AnnouncementModal: React.FC = () => {
                         </div>
                     </div>
                 </div>
-
-                {/* Content Area */}
                 <div className="p-8 overflow-y-auto custom-scrollbar flex-grow bg-white">
                     <div className="text-sm text-slate-600 leading-relaxed font-medium whitespace-pre-wrap break-words">
                         {announcement.content}
                     </div>
                 </div>
-
-                {/* Action Area */}
                 <div className="p-6 bg-slate-50 border-t border-slate-100">
                     <button 
                         onClick={close}

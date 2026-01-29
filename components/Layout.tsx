@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-/* Import hooks from react-router to resolve potential named export issues in react-router-dom types */
 import { useNavigate, useLocation } from 'react-router';
 import { ToolId } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../supabaseClient';
 import TrialTimer from './TrialTimer';
 import ExpiryReminderModal from './ExpiryReminderModal';
 
@@ -17,8 +17,9 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
     const location = useLocation();
     const { signOut, profile, isAdmin } = useAuth();
     const [isOnline, setIsOnline] = useState(navigator.onLine);
+    const [hasActiveAnnouncement, setHasActiveAnnouncement] = useState(false);
+    const [isAnnouncementUnread, setIsAnnouncementUnread] = useState(false);
     
-    // Detect if running in Electron (.exe) or Web (Vercel)
     const isDesktop = (window as any).electron !== undefined;
 
     useEffect(() => {
@@ -26,11 +27,43 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
         const handleOffline = () => setIsOnline(false);
         window.addEventListener('online', handleOnline);
         window.addEventListener('offline', handleOffline);
+
+        // Check for announcements periodically
+        const checkBroadcastStatus = async () => {
+            try {
+                const { data } = await supabase
+                    .from('announcements')
+                    .select('id, content')
+                    .eq('is_active', true)
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+
+                if (data) {
+                    setHasActiveAnnouncement(true);
+                    const contentHash = btoa(data.content.substring(0, 30)).substring(0, 8);
+                    const seenKey = `ann_seen_${data.id}_${contentHash}`;
+                    setIsAnnouncementUnread(!localStorage.getItem(seenKey));
+                } else {
+                    setHasActiveAnnouncement(false);
+                }
+            } catch (e) {}
+        };
+
+        checkBroadcastStatus();
+        const interval = setInterval(checkBroadcastStatus, 60000 * 5); // check every 5m
+
         return () => {
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('offline', handleOffline);
+            clearInterval(interval);
         };
     }, []);
+
+    const triggerAnnouncement = () => {
+        window.dispatchEvent(new CustomEvent('app:show-announcement'));
+        setIsAnnouncementUnread(false);
+    };
 
     const handleSignOut = async () => {
         await signOut();
@@ -44,10 +77,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
 
     return (
         <div className="min-h-screen flex flex-col font-sans text-slate-900 bg-slate-50 selection:bg-indigo-100 overflow-x-hidden">
-            {/* High-Impact Expiration & Warning Modals */}
             <ExpiryReminderModal />
 
-            {/* System Status Banner */}
             {!isOnline && (
                 <div className="bg-amber-500 text-white text-[10px] font-black uppercase tracking-[0.2em] py-0.5 text-center animate-pulse z-[60] sticky top-0">
                     System Offline - Local Processing Enabled
@@ -113,6 +144,21 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                         )}
 
                         <div className="flex items-center gap-2">
+                            {hasActiveAnnouncement && (
+                                <button 
+                                    onClick={triggerAnnouncement}
+                                    className={`p-1.5 rounded-lg transition-all relative ${isAnnouncementUnread ? 'text-indigo-600 bg-indigo-50' : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-50'}`}
+                                    title="View System Broadcasts"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                                    </svg>
+                                    {isAnnouncementUnread && (
+                                        <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-indigo-600 rounded-full ring-2 ring-white"></span>
+                                    )}
+                                </button>
+                            )}
+
                             {!isLanding && (
                                 <button 
                                     onClick={() => navigate('/dashboard')} 
