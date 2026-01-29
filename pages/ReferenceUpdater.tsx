@@ -117,7 +117,8 @@ const ReferenceUpdater: React.FC = () => {
             const maxRows = Math.max(leftLines.length, rightLines.length);
             for (let r = 0; r < maxRows; r++) {
                  const lContent = leftLines[r], rContent = rightLines[r];
-                 const lNum = lContent !== undefined ? leftLineNum++ : '', rNum = rContent !== undefined ? rightLineNum++ : '';
+                 const lNum = lContent !== undefined ? leftLineNum++ : '';
+                 const rNum = rContent !== undefined ? rightLineNum++ : '';
                  let lClass = lContent !== undefined && type === 'delete' ? 'bg-rose-50/50' : (type === 'replace' ? 'bg-rose-50/30' : '');
                  let rClass = rContent !== undefined && type === 'insert' ? 'bg-emerald-50/50' : (type === 'replace' ? 'bg-emerald-50/30' : '');
                  rows.push(
@@ -433,8 +434,15 @@ const ReferenceUpdater: React.FC = () => {
                                                     <div className="text-[10px] font-mono text-slate-400 uppercase tracking-tighter">ID: {ref.id}</div>
                                                 </div>
                                                 <div className="flex items-center gap-3">
-                                                    <span className={`text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-widest border ${ref.status === 'add' || ref.status === 'orphan' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>
-                                                        {ref.status === 'add' || ref.status === 'orphan' ? 'NEW' : 'ORIG'}
+                                                    <span className={`text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-widest border transition-colors ${
+                                                        (ref.status === 'add' || ref.status === 'orphan') 
+                                                            ? 'bg-emerald-50 text-emerald-600 border-emerald-100' 
+                                                            : (ref.status === 'update' || ref.status === 'smart_match')
+                                                                ? 'bg-amber-50 text-amber-600 border-amber-100'
+                                                                : 'bg-slate-50 text-slate-400 border-slate-200'
+                                                    }`}>
+                                                        {(ref.status === 'add' || ref.status === 'orphan') ? 'NEW' : 
+                                                         (ref.status === 'update' || ref.status === 'smart_match') ? 'UPDATED' : 'ORIG'}
                                                     </span>
                                                     <button 
                                                         onClick={(e) => { e.stopPropagation(); removeFromOutput(ref); }}
