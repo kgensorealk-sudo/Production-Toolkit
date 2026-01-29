@@ -347,7 +347,14 @@ const AdminDashboard: React.FC = () => {
                     <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-slate-100">
                             <thead className="bg-slate-50 font-black text-slate-400 uppercase tracking-widest text-[10px]">
-                                <tr><th className="px-6 py-4 text-left">Identity</th><th className="px-6 py-4 text-left">Role</th><th className="px-6 py-4 text-left">Status</th><th className="px-6 py-4 text-center">Activity</th><th className="px-6 py-4 text-left">Control</th></tr>
+                                <tr>
+                                    <th className="px-6 py-4 text-left">Identity</th>
+                                    <th className="px-6 py-4 text-left">Role</th>
+                                    <th className="px-6 py-4 text-left">Status</th>
+                                    <th className="px-6 py-4 text-left">Expiry</th>
+                                    <th className="px-6 py-4 text-center">Activity</th>
+                                    <th className="px-6 py-4 text-left">Control</th>
+                                </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-slate-100 font-medium">
                                 {users.filter(u => u.email.includes(search)).map(u => (
@@ -355,6 +362,16 @@ const AdminDashboard: React.FC = () => {
                                         <td className="px-6 py-4"><div className="flex flex-col"><span className="text-sm font-bold text-slate-900">{u.email}</span><span className="text-[10px] font-mono text-slate-400 uppercase">{u.id.slice(0, 13)}...</span></div></td>
                                         <td className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-tighter">{u.role}</td>
                                         <td className="px-6 py-4"><span className={`px-3 py-1 text-[10px] font-black rounded-full uppercase tracking-widest border ${u.is_subscribed ? 'bg-emerald-50 text-emerald-600 border-emerald-100 shadow-sm' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>{u.is_subscribed ? 'Authorized' : 'Dormant'}</span></td>
+                                        <td className="px-6 py-4">
+                                            <div className="flex flex-col">
+                                                <span className="text-[11px] font-bold text-slate-600">
+                                                    {u.subscription_end ? new Date(u.subscription_end).toLocaleDateString() : 'N/A'}
+                                                </span>
+                                                {u.subscription_end && new Date(u.subscription_end) < new Date() && (
+                                                    <span className="text-[8px] font-black text-rose-500 uppercase tracking-tighter">Terminated</span>
+                                                )}
+                                            </div>
+                                        </td>
                                         <td className="px-6 py-4 text-center"><div className="flex flex-col items-center"><span className="text-[11px] font-bold text-slate-600">{formatLastSeen(u.last_seen)}</span></div></td>
                                         <td className="px-6 py-4"><div className="flex items-center gap-3">{!u.is_subscribed && (<select value={selectedDurations[u.id] || 'sub_1y'} onChange={(e) => setSelectedDurations(prev => ({...prev, [u.id]: e.target.value}))} className="text-[10px] font-black uppercase py-1.5 rounded-lg border-slate-200 bg-white"><optgroup label="Access Term">{DURATION_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</optgroup></select>)}<button onClick={() => toggleSubscription(u)} className={`text-[10px] font-black px-4 py-2 rounded-xl border border-slate-200 uppercase transition-all shadow-sm ${u.is_subscribed ? 'text-rose-600 border-rose-100 bg-rose-50 hover:bg-rose-600 hover:text-white' : 'text-indigo-600 hover:bg-indigo-600 hover:text-white'}`}>{u.is_subscribed ? 'Terminate' : 'Authorize'}</button></div></td>
                                     </tr>
