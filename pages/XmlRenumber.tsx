@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { diffLines, diffWordsWithSpace, Change } from 'diff';
 import Toast from '../components/Toast';
@@ -217,8 +216,10 @@ const XmlRenumber: React.FC = () => {
                 }
 
                 const bibRefRegex = /(<ce:bib-reference\b[^>]*?\bid="([^"]+)"[^>]*>[\s\S]*?)<ce:label\b[^>]*>([\s\S]*?)<\/ce:label>/g;
-                const singleCrossRefRegex = /(<ce:cross-ref\b[^>]*?\brefid="([^"]+)"[^>]*?>)([\s\S]*?)(<\/ce:cross-ref>)/g;
-                const rangeCrossRefRegex = /(<ce:cross-refs\b[^>]*?\brefid="([^"]+)"[^>]*?>)([\s\S]*?)(<\/ce:cross-refs>)/g;
+                
+                // Refactored to capture surrounding optional brackets and whitespace
+                const singleCrossRefRegex = /\[?\s*(<ce:cross-ref\b[^>]*?\brefid="([^"]+)"[^>]*?>)[\s\S]*?<\/ce:cross-ref>\s*\]?/g;
+                const rangeCrossRefRegex = /\[?\s*(<ce:cross-refs\b[^>]*?\brefid="([^"]+)"[^>]*?>)[\s\S]*?<\/ce:cross-refs>\s*\]?/g;
 
                 let counter = 1;
                 let bibMatchCount = 0;
@@ -252,37 +253,54 @@ const XmlRenumber: React.FC = () => {
                     return;
                 }
 
-                renumberedText = renumberedText.replace(singleCrossRefRegex, (match, openTag, refId, content, closeTag) => {
+                // Refactored: Strips external brackets and whitespace, ensuring internal brackets are used
+                renumberedText = renumberedText.replace(singleCrossRefRegex, (match, openTag, refId) => {
                     const newNumber = referenceMap[refId];
                     if (newNumber === undefined) return match; 
-                    // Updated: include prefix and suffix within the tag
-                    return `${openTag}${prefix}${newNumber}${suffix}${closeTag}`;
+                    return `${openTag}${prefix}${newNumber}${suffix}</ce:cross-ref>`;
                 });
 
                 const collapseRanges = (numbers: number[]) => {
                     if (numbers.length === 0) return '';
-                    const sorted = numbers.sort((a, b) => a - b);
+                    // Rule: Strictly unique sorted numbers
+                    const sorted = [...new Set(numbers)].sort((a, b) => a - b);
                     const ranges: string[] = [];
-                    let start = sorted[0];
-                    let end = sorted[0];
-                    for (let i = 1; i < sorted.length; i++) {
-                        if (sorted[i] === end + 1) { end = sorted[i]; } 
-                        else {
-                            ranges.push(start === end ? start.toString() : `${start}–${end}`);
-                            start = sorted[i];
-                            end = sorted[i];
+                    
+                    let i = 0;
+                    while (i < sorted.length) {
+                        let start = sorted[i];
+                        let end = start;
+                        
+                        // Find end of consecutive sequence
+                        while (i + 1 < sorted.length && sorted[i + 1] === end + 1) {
+                            end = sorted[i + 1];
+                            i++;
                         }
+                        
+                        if (start === end) {
+                            // Lone number
+                            ranges.push(start.toString());
+                        } else if (end - start === 1) {
+                            // Rule: Exactly 2 consecutive numbers -> use comma
+                            ranges.push(start.toString());
+                            ranges.push(end.toString());
+                        } else {
+                            // Rule: 3 or more consecutive numbers -> use en-dash
+                            ranges.push(`${start}–${end}`);
+                        }
+                        i++;
                     }
-                    ranges.push(start === end ? start.toString() : `${start}–${end}`);
-                    return ranges.join(', ');
+                    
+                    // Rule: No space between commas
+                    return ranges.join(',');
                 };
 
-                renumberedText = renumberedText.replace(rangeCrossRefRegex, (match, openTag, refIdsString, content, closeTag) => {
+                // Refactored: Strips external brackets and whitespace
+                renumberedText = renumberedText.replace(rangeCrossRefRegex, (match, openTag, refIdsString) => {
                     const refIds = refIdsString.split(/\s+/).filter((id: string) => id.trim() !== '');
                     const uniqueNumbers = [...new Set(refIds.map((id: string) => referenceMap[id]).filter((num: number) => num !== undefined))];
                     if (uniqueNumbers.length === 0) return match; 
-                    // Updated: include prefix and suffix within the tag
-                    return `${openTag}${prefix}${collapseRanges(uniqueNumbers as number[])}${suffix}${closeTag}`;
+                    return `${openTag}${prefix}${collapseRanges(uniqueNumbers as number[])}${suffix}</ce:cross-refs>`;
                 });
 
                 // Extraction of Other Refs from the FINAL renumbered text
@@ -313,7 +331,6 @@ const XmlRenumber: React.FC = () => {
                             .replace(/<\/ce:inf>/gi, '</sub>');
 
                         // Strip all other tags, protecting our new HTML tags
-                        // Matches any tag that DOES NOT start with /, i, b, sup, sub
                         let cleanText = textOnly.replace(/<(?!\/?(i|b|sup|sub)\b)[^>]+>/gi, '');
                         
                         // Normalize whitespace
