@@ -23,6 +23,7 @@ const Docs: React.FC = () => {
                     <NavBtn id="otherref" label="Other-Ref Scanner" />
                     <NavBtn id="refgen" label="Reference Updater" />
                     <NavBtn id="dupe" label="Duplicate Ref Remover" />
+                    <NavBtn id="idaudit" label="ID Prefix Auditor" />
                     <NavBtn id="credit" label="CRediT Generator" />
                     <NavBtn id="highlights" label="Highlights Gen" />
                     <NavBtn id="fixer" label="Table Fixer" />
@@ -54,6 +55,22 @@ const Docs: React.FC = () => {
                                     </div>
                                     <h3 className="font-bold text-slate-800 mb-2">Smart Fingerprinting</h3>
                                     <p className="text-sm text-slate-500 leading-relaxed">Our matching engine uses content-based fingerprints (Author + Year + Title) to identify references even when labels have changed.</p>
+                                </div>
+                            </div>
+                        </section>
+                    )}
+
+                    {section === 'idaudit' && (
+                        <section className="animate-fade-in">
+                            <h2 className="text-3xl font-extrabold text-slate-900 mb-6 uppercase tracking-tight">ID Prefix Auditor</h2>
+                            <div className="prose prose-slate max-w-none">
+                                <p className="text-slate-600 mb-4">
+                                    Audits bibliography references to ensure <code>id</code> attributes match the required organizational prefix (e.g., <code>bib</code> or <code>bb</code>).
+                                </p>
+                                <div className="bg-indigo-50 border-l-4 border-indigo-400 p-4 mb-6">
+                                    <p className="text-sm text-indigo-800 font-medium">
+                                        <strong>Structural Safety:</strong> When fixing IDs, the tool automatically remaps all internal <code>refid</code> links in the body to prevent breaking document navigation.
+                                    </p>
                                 </div>
                             </div>
                         </section>
