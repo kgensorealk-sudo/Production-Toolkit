@@ -26,6 +26,7 @@ const TableFixer: React.FC = () => {
     // ID Configuration States
     const [tfStart, setTfStart] = useState<number>(4000);
     const [cfStart, setCfStart] = useState<number>(4000);
+    const [spStart, setSpStart] = useState<number>(4000);
 
     const escapeHtml = (unsafe: string) => unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -55,7 +56,7 @@ const TableFixer: React.FC = () => {
         };
 
         diffParts.forEach(part => {
-            if (part.removed && isLeft) append(part.value, 'bg-red-200 text-red-900 line-through decoration-red-900/50');
+            if (part.removed && isLeft) append(part.value, 'bg-rose-100 text-rose-900 line-through decoration-rose-900/50');
             else if (part.added && !isLeft) append(part.value, 'bg-emerald-200 text-emerald-900 font-bold');
             else if (!part.added && !part.removed) {
                 let cls = null;
@@ -144,8 +145,8 @@ const TableFixer: React.FC = () => {
                  const lNum = lContent !== undefined ? leftLineNum++ : '';
                  const rNum = rContent !== undefined ? rightLineNum++ : '';
                  
-                 let lClass = lContent !== undefined && type === 'delete' ? 'bg-red-50' : (type === 'replace' ? 'bg-red-50' : '');
-                 let rClass = rContent !== undefined && type === 'insert' ? 'bg-emerald-50' : (type === 'replace' ? 'bg-emerald-50' : '');
+                 let lClass = lContent !== undefined && type === 'delete' ? 'bg-rose-50/50' : (type === 'replace' ? 'bg-rose-50/30' : '');
+                 let rClass = rContent !== undefined && type === 'insert' ? 'bg-emerald-50/50' : (type === 'replace' ? 'bg-emerald-50/30' : '');
                  if (type === 'equal') { lClass = ''; rClass = ''; }
 
                  rows.push(
@@ -275,7 +276,7 @@ const TableFixer: React.FC = () => {
             let totalProcessedCount = 0;
 
             if (mode === 'detach') {
-                let spIdCounter = tfStart;
+                let spIdCounter = spStart;
                 
                 const processedBlocks = tableBlocks.map(tableMarkup => {
                     let currentTable = tableMarkup;
@@ -284,39 +285,42 @@ const TableFixer: React.FC = () => {
                     
                     tableFootnotes.forEach(fn => {
                         const refRegex = new RegExp(`<ce:cross-ref\\b[^>]*?refid="${fn.id}"[^>]*>([\\s\\S]*?)<\\/ce:cross-ref>`, 'g');
+                        
+                        const isStandardAsterisk = fn.label.trim() === '*';
+
                         currentTable = currentTable.replace(refRegex, (m, content) => {
-                            // RULE: Asterisk * sits on baseline (remove sup), Low-Profile ⁎ is sup
-                            if (fn.label === '*') return content.replace(/<ce:sup>|<\/ce:sup>/g, '');
-                            return content.includes('<ce:sup>') ? content : `<ce:sup>${content}</ce:sup>`;
+                            if (isStandardAsterisk) {
+                                return content.replace(/<ce:sup>|<\/ce:sup>/g, '');
+                            } else {
+                                return content.includes('<ce:sup>') ? content : `<ce:sup>${content}</ce:sup>`;
+                            }
                         });
                         
                         currentTable = currentTable.split(fn.fullTag).join('');
                         const spId = `sp${spIdCounter.toString().padStart(4, '0')}`;
                         spIdCounter += 5;
-                        const labelMarkup = fn.label === '*' ? fn.label : `<ce:sup>${fn.label}</ce:sup>`;
+                        
+                        const labelMarkup = isStandardAsterisk ? fn.label : `<ce:sup>${fn.label}</ce:sup>`;
                         legendsToAdd.push(`<ce:simple-para id="${spId}">${labelMarkup} ${fn.content}</ce:simple-para>`);
                         totalProcessedCount++;
                     });
 
                     if (legendsToAdd.length > 0) {
                         const legendMarkup = legendsToAdd.join('');
-                        const lastLegendIdx = currentTable.lastIndexOf('</ce:legend>');
-                        const lastTgroupIdx = currentTable.lastIndexOf('</tgroup>');
-                        let insertionPoint = -1;
-
-                        if (lastLegendIdx > lastTgroupIdx && lastLegendIdx !== -1) {
-                            insertionPoint = lastLegendIdx;
-                        } else if (lastTgroupIdx !== -1) {
-                            insertionPoint = lastTgroupIdx + '</tgroup>'.length;
-                        }
-
-                        if (insertionPoint !== -1) {
-                            const before = currentTable.slice(0, insertionPoint);
-                            const after = currentTable.slice(insertionPoint);
-                            const wrappedMarkup = lastLegendIdx === -1 ? `<ce:legend>${legendMarkup}</ce:legend>` : legendMarkup;
-                            currentTable = `${before}${wrappedMarkup}${after}`;
+                        const existingLegendMatch = currentTable.match(/<ce:legend\b[^>]*>([\s\S]*?)<\/ce:legend>/i);
+                        
+                        if (existingLegendMatch) {
+                            // Single Injection point: Append to existing legend before its closing tag
+                            currentTable = currentTable.replace(/<\/ce:legend>/i, `${legendMarkup}</ce:legend>`);
                         } else {
-                            currentTable = currentTable.replace('</ce:table>', `<ce:legend>${legendMarkup}</ce:legend></ce:table>`);
+                            // No legend exists: Find </tgroup> and insert a new legend after it
+                            const tgroupEndMatch = currentTable.match(/<\/tgroup>/i);
+                            if (tgroupEndMatch) {
+                                currentTable = currentTable.replace(/<\/tgroup>/i, `</tgroup><ce:legend>${legendMarkup}</ce:legend>`);
+                            } else {
+                                // Fallback: Inject before end of table
+                                currentTable = currentTable.replace(/<\/ce:table>/i, `<ce:legend>${legendMarkup}</ce:legend></ce:table>`);
+                            }
                         }
                     }
                     return currentTable;
@@ -325,7 +329,7 @@ const TableFixer: React.FC = () => {
                 const finalOutput = processedBlocks.join('\n\n');
                 setOutput(finalOutput);
                 generateDiff(input, finalOutput);
-                setToast({ msg: `Moved ${totalProcessedCount} footnotes to legends.`, type: "success" });
+                setToast({ msg: `Moved ${totalProcessedCount} footnotes to consolidated legend.`, type: "success" });
 
             } else {
                 let tfIdCounter = tfStart;
@@ -344,8 +348,8 @@ const TableFixer: React.FC = () => {
                         const labelStr = fn.label;
                         const escapedLabel = labelStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
                         
-                        // ADVANCED MARKER LOCATOR: Captures existing cross-refs, sups, AND surrounding bolds
-                        const existingTagged = `(?:<ce:cross-ref\\b[^>]*>\\s*)?(?:<ce:(?:sup|bold)>\\s*)*${escapedLabel}(?:\\s*<\\/ce:(?:sup|bold)>)*(?:\\s*<\\/ce:cross-ref>)?`;
+                        // Captures optional surrounding formatting tags for relocation inside cross-ref
+                        const existingTagged = `(?:<ce:cross-ref\\b[^>]*>\\s*)?(?:<ce:(?:sup|bold|italic)>\\s*)*${escapedLabel}(?:\\s*<\\/ce:(?:sup|bold|italic)>)*(?:\\s*<\\/ce:cross-ref>)?`;
                         const nakedPattern = `(?<![a-zA-Z0-9])${escapedLabel}(?![a-zA-Z0-9])`;
                         const targetRegex = new RegExp(`(${existingTagged}|${nakedPattern})`, 'g');
 
@@ -359,22 +363,22 @@ const TableFixer: React.FC = () => {
                             
                             if (fn.fullTag) currentTable = currentTable.split(fn.fullTag).join('');
                             
-                            // RULE: Standard asterisk (*) baseline, Low-profile (⁎) is sup
-                            const isStandardAsterisk = fn.label === '*';
+                            const isStandardAsterisk = fn.label.trim() === '*';
 
-                            // Replace all occurrences in body with unique cf IDs
                             currentTable = currentTable.replace(targetRegex, (match) => {
                                 const placeholder = `##TF_PH_${index}_${cfIdCounter}_${Math.random().toString(36).substring(7)}##`;
                                 const newCfId = `cf${cfIdCounter.toString().padStart(4, '0')}`;
                                 cfIdCounter += 5;
 
-                                // DTD HIERARCHY: cross-ref > sup > bold > Label
                                 const hasBold = match.includes('<ce:bold');
-                                const hasSup = match.includes('<ce:sup') || !isStandardAsterisk;
+                                const hasItalic = match.includes('<ce:italic');
+                                const shouldHaveSup = !isStandardAsterisk;
 
+                                // DTD HIERARCHY: cross-ref > sup > bold > italic > Label
                                 let innermost = fn.label;
+                                if (hasItalic) innermost = `<ce:italic>${innermost}</ce:italic>`;
                                 if (hasBold) innermost = `<ce:bold>${innermost}</ce:bold>`;
-                                if (hasSup) innermost = `<ce:sup>${innermost}</ce:sup>`;
+                                if (shouldHaveSup) innermost = `<ce:sup>${innermost}</ce:sup>`;
                                 
                                 const finalTag = `<ce:cross-ref id="${newCfId}" refid="${newFnId}">${innermost}</ce:cross-ref>`;
                                 
@@ -382,8 +386,7 @@ const TableFixer: React.FC = () => {
                                 return placeholder;
                             });
 
-                            // Strip label from content for the footnote para
-                            const stripPattern = new RegExp(`^\\s*(?:<ce:(?:label|sup|bold)>)*\\s*${escapedLabel}\\s*(?:<\\/ce:(?:label|sup|bold)>|[\\.,\\)\\s])+`, 'i');
+                            const stripPattern = new RegExp(`^\\s*(?:<ce:(?:label|sup|bold|italic)>)*\\s*${escapedLabel}\\s*(?:<\\/ce:(?:label|sup|bold|italic)>|[\\.,\\)\\s])+`, 'i');
                             let cleanContent = fn.content.replace(stripPattern, '').trim();
                             if (!cleanContent) cleanContent = '??';
                             
@@ -401,10 +404,8 @@ const TableFixer: React.FC = () => {
                         const lastLegendIdx = currentTable.lastIndexOf('</ce:legend>');
                         const lastTgroupIdx = currentTable.lastIndexOf('</tgroup>');
                         
-                        // FIX: Ensure footnotes are siblings to legend/tgroup, never children of legend
                         const legendEnd = lastLegendIdx !== -1 ? lastLegendIdx + '</ce:legend>'.length : -1;
                         const tgroupEnd = lastTgroupIdx !== -1 ? lastTgroupIdx + '</tgroup>'.length : -1;
-                        
                         const insertionPoint = Math.max(legendEnd, tgroupEnd);
 
                         if (insertionPoint !== -1) {
@@ -422,7 +423,7 @@ const TableFixer: React.FC = () => {
                 const finalOutput = processedBlocks.join('\n\n');
                 setOutput(finalOutput);
                 generateDiff(input, finalOutput);
-                setToast({ msg: `Attached ${totalProcessedCount} items as footnotes with unique cf IDs.`, type: "success" });
+                setToast({ msg: `Attached ${totalProcessedCount} items with correct hierarchy.`, type: "success" });
             }
 
             setActiveTab('result');
@@ -430,13 +431,11 @@ const TableFixer: React.FC = () => {
         }, 600);
     };
 
-    // Keyboard Shortcuts
     useKeyboardShortcuts({
         onPrimary: processTable,
         onCopy: () => { if (output && activeTab === 'result') { navigator.clipboard.writeText(output); setToast({msg: 'Copied output!', type:'success'}); } },
-        /* Fixed: Removed non-existent setLastRemovedKey call from onClear hook. */
         onClear: () => { setInput(''); setFootnotes([]); setOutput(''); }
-    }, [input, output, footnotes, selectedIds, activeTab, mode, tfStart, cfStart]);
+    }, [input, output, footnotes, selectedIds, activeTab, mode, tfStart, cfStart, spStart]);
 
     const themeColor = mode === 'detach' ? 'pink' : 'blue';
 
@@ -444,7 +443,7 @@ const TableFixer: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
             <div className="mb-8 text-center animate-fade-in">
                 <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase tracking-tighter">XML Table Fixer Pro</h1>
-                <p className="text-lg text-slate-500 max-w-2xl mx-auto font-medium">Surgical footnote management. DTD-strict tag nesting (cross-ref &gt; sup &gt; bold).</p>
+                <p className="text-lg text-slate-500 max-w-2xl mx-auto font-medium">Surgical footnote management. DTD-strict nesting hierarchy and consolidated legends.</p>
             </div>
 
             {/* Configuration Bar */}
@@ -459,7 +458,7 @@ const TableFixer: React.FC = () => {
                     
                     <div className="flex items-center gap-6">
                         <div className="flex flex-col gap-1">
-                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Footnote/Para Start (tf/np)</label>
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Footnote/Para (tf/np)</label>
                             <input 
                                 type="number" 
                                 value={tfStart} 
@@ -468,11 +467,20 @@ const TableFixer: React.FC = () => {
                             />
                         </div>
                         <div className="flex flex-col gap-1">
-                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Body Cross-Ref Start (cf)</label>
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Cross-Ref (cf)</label>
                             <input 
                                 type="number" 
                                 value={cfStart} 
                                 onChange={(e) => setCfStart(parseInt(e.target.value) || 0)} 
+                                className="w-24 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-mono font-bold text-slate-700 outline-none focus:ring-2 focus:ring-slate-100 transition-all"
+                            />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Legend Para (sp)</label>
+                            <input 
+                                type="number" 
+                                value={spStart} 
+                                onChange={(e) => setSpStart(parseInt(e.target.value) || 0)} 
                                 className="w-24 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-mono font-bold text-slate-700 outline-none focus:ring-2 focus:ring-slate-100 transition-all"
                             />
                         </div>
