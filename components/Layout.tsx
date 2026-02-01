@@ -129,6 +129,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                                     {currentTool === ToolId.REF_EXTRACTOR && 'Bib Extractor'}
                                     {currentTool === ToolId.REF_PURGER && 'Ref Purger'}
                                     {currentTool === ToolId.GRANT_TAGGER && 'Grant Tagger'}
+                                    {currentTool === ToolId.ID_AUDITOR && 'ID Prefix Auditor'}
                                 </span>
                             </div>
                         )}

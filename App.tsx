@@ -18,6 +18,7 @@ import OtherRefScanner from './pages/OtherRefScanner';
 import ReferenceExtractor from './pages/ReferenceExtractor';
 import RefListPurger from './pages/RefListPurger';
 import GrantTagger from './pages/GrantTagger';
+import IdAuditor from './pages/IdAuditor';
 import Docs from './pages/Docs';
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
@@ -128,6 +129,7 @@ const App: React.FC = () => {
                         <Route path="/refExtractor" element={<ProtectedRoute><Layout currentTool={ToolId.REF_EXTRACTOR}><NodeAccessController toolId={ToolId.REF_EXTRACTOR} displayName="Bibliography Extractor" mode="subscription-only"><ReferenceExtractor /></NodeAccessController></Layout></ProtectedRoute>} />
                         <Route path="/refPurger" element={<ProtectedRoute><Layout currentTool={ToolId.REF_PURGER}><NodeAccessController toolId={ToolId.REF_PURGER} displayName="Reference List Purger" mode="subscription-only"><RefListPurger /></NodeAccessController></Layout></ProtectedRoute>} />
                         <Route path="/grantTagger" element={<ProtectedRoute><Layout currentTool={ToolId.GRANT_TAGGER}><NodeAccessController toolId={ToolId.GRANT_TAGGER} displayName="Grant Tagger" mode="subscription-only"><GrantTagger /></NodeAccessController></Layout></ProtectedRoute>} />
+                        <Route path="/idAuditor" element={<ProtectedRoute><Layout currentTool={ToolId.ID_AUDITOR}><NodeAccessController toolId={ToolId.ID_AUDITOR} displayName="ID Prefix Auditor" mode="subscription-only"><IdAuditor /></NodeAccessController></Layout></ProtectedRoute>} />
                     </Routes>
                 </HashRouter>
             </AuthProvider>
