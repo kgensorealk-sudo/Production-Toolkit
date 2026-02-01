@@ -177,11 +177,12 @@ const IdAuditor: React.FC = () => {
                         const isInvalidId = !originalId.toLowerCase().startsWith(prefix);
                         const isOtherRef = elementContent.includes('<ce:other-ref');
                         
-                        // Name Spacing Logic: Check for spaces between initials in ce:given-name
+                        // Name Spacing Logic: Detect spaces between initials in <ce:given-name>
                         const nameSpacingRegex = /<ce:given-name\b[^>]*>(.*?)<\/ce:given-name>/gi;
                         let hasNameSpacingViolation = false;
                         let nameMatch;
                         while ((nameMatch = nameSpacingRegex.exec(elementContent)) !== null) {
+                            // Check for capital letters followed by period and then space + another capital/period
                             if (/\. +(?=[A-Z]\.)/.test(nameMatch[1])) {
                                 hasNameSpacingViolation = true;
                                 break;
@@ -216,10 +217,9 @@ const IdAuditor: React.FC = () => {
                     setStep('audit');
                     const invalidIdCount = results.filter(r => !r.id.toLowerCase().startsWith(r.expectedPrefix)).length;
                     const nameViolationCount = results.filter(r => r.hasNameSpacingViolation).length;
-                    const otherCount = results.filter(r => r.isOtherRef).length;
                     
-                    if (invalidIdCount > 0 || nameViolationCount > 0 || otherCount > 0) {
-                        setToast({ msg: `Audit found ${invalidIdCount} ID violations and ${nameViolationCount} initials errors.`, type: "warn" });
+                    if (invalidIdCount > 0 || nameViolationCount > 0) {
+                        setToast({ msg: `Found ${invalidIdCount} ID violations and ${nameViolationCount} name spacing issues.`, type: "warn" });
                     } else {
                         setToast({ msg: "System checks passed. All protocols compliant.", type: "success" });
                     }
@@ -237,18 +237,18 @@ const IdAuditor: React.FC = () => {
         setTimeout(() => {
             try {
                 let processedXml = input;
-                const mapping = new Map<string, string>();
                 
-                const counters: Record<string, number> = { bb: 3000, rf: 3000, se: 3000, ir: 3000 };
-                
-                // 1. Surgical Initial Normalization (Run inside ce:given-name tags)
+                // 1. Surgical Given-Name Spacing Fix (Run document-wide first)
+                // Targets: <ce:given-name>I. M. R.</ce:given-name> -> <ce:given-name>I.M.R.</ce:given-name>
                 processedXml = processedXml.replace(/(<ce:given-name\b[^>]*>)(.*?)(<\/ce:given-name>)/gi, (match, open, content, close) => {
-                    // Remove space following a period only if followed by another initial pattern
-                    const correctedContent = content.replace(/\. +(?=[A-Z]\.)/g, '.');
-                    return `${open}${correctedContent}${close}`;
+                    const sanitizedContent = content.replace(/\. +(?=[A-Z]\.)/g, '.');
+                    return `${open}${sanitizedContent}${close}`;
                 });
 
-                // 2. Identify and Map only the non-compliant IDs
+                // 2. ID Mapping Logic
+                const mapping = new Map<string, string>();
+                const counters: Record<string, number> = { bb: 3000, rf: 3000, se: 3000, ir: 3000 };
+                
                 auditResults.forEach(item => {
                     if (!item.id.toLowerCase().startsWith(item.expectedPrefix)) {
                         const prefix = item.expectedPrefix;
@@ -259,7 +259,7 @@ const IdAuditor: React.FC = () => {
                     }
                 });
 
-                // 3. ID Attribute replacements with temporary placeholders to prevent recursive corruption
+                // 3. ID Attribute replacements with temporary placeholders
                 mapping.forEach((newId, oldId) => {
                     const idPattern = new RegExp(`\\bid="${oldId}"`, 'g');
                     processedXml = processedXml.replace(idPattern, `id="##TEMP_ID_${newId}##"`);
@@ -279,7 +279,7 @@ const IdAuditor: React.FC = () => {
                 setOutput(processedXml);
                 generateDiff(input, processedXml);
                 setStep('result');
-                setToast({ msg: "Protocol normalized. Sequence 3000+ applied to IDs.", type: "success" });
+                setToast({ msg: "Protocols applied. IDs normalized to 3000+ and names collapsed.", type: "success" });
                 setIsLoading(false);
             } catch (err) {
                 setToast({ msg: "Remapping process failed.", type: "error" });
@@ -304,11 +304,13 @@ const IdAuditor: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
             <div className="mb-10 text-center animate-fade-in">
                 <h1 className="text-3xl font-black text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase tracking-tighter">ID Prefix Auditor</h1>
-                <p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic">Protocol validation for bb, rf, se, and ir. Automated initials normalization for given names.</p>
+                <p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic tracking-tight leading-relaxed">
+                    Protocol validation for bb, rf, se, and ir. Automated initials normalization for <code className="bg-indigo-50 px-1.5 py-0.5 rounded text-indigo-600 font-mono text-sm">ce:given-name</code> tags.
+                </p>
             </div>
 
             <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-200 overflow-hidden h-[750px] flex flex-col relative transition-all duration-500">
-                {isLoading && <LoadingOverlay message="Running Deep Protocol Audit..." color="slate" />}
+                {isLoading && <LoadingOverlay message="Executing Structural Protocol Check..." color="slate" />}
 
                 {step === 'input' && (
                     <div className="flex flex-col h-full animate-fade-in">
@@ -322,17 +324,17 @@ const IdAuditor: React.FC = () => {
                                         </span>
                                     ))}
                                     <span className="px-2 py-1 bg-indigo-600 border border-indigo-700 rounded text-[9px] font-black text-white shadow-sm uppercase">
-                                        Initials: COLLAPSED
+                                        given-name: Collapsed Initials
                                     </span>
                                 </div>
                             </div>
-                            <button onClick={() => setInput('')} className="text-[10px] font-black text-rose-500 uppercase tracking-widest hover:underline">Reset</button>
+                            <button onClick={() => setInput('')} className="text-[10px] font-black text-rose-500 uppercase tracking-widest hover:underline transition-all">Reset Input</button>
                         </div>
                         <textarea 
                             value={input} 
                             onChange={e => setInput(e.target.value)} 
-                            className="flex-grow p-10 font-mono text-[13px] border-0 focus:ring-0 resize-none bg-transparent leading-relaxed" 
-                            placeholder="Paste the full XML article source here. ID corrections start at 3000; given-name spacing will be surgically collapsed..."
+                            className="flex-grow p-10 font-mono text-[13px] border-0 focus:ring-0 resize-none bg-transparent leading-relaxed placeholder-slate-300" 
+                            placeholder="Paste the full XML article source here. Violations in ID prefixes and spaced initials will be reported..."
                             spellCheck={false}
                         />
                         <div className="p-8 border-t border-slate-100 flex justify-center bg-slate-50/50">
@@ -350,7 +352,7 @@ const IdAuditor: React.FC = () => {
                                 <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Audit Matrix</h3>
                                 <div className="flex items-center gap-4 mt-1">
                                     <p className={`text-[10px] font-bold uppercase tracking-widest ${auditResults.some(r => r.status === 'invalid') ? 'text-rose-500 animate-pulse' : 'text-emerald-500'}`}>
-                                        {auditResults.filter(r => r.status === 'invalid').length} Total Violations Found
+                                        {auditResults.filter(r => r.status === 'invalid').length} Total Non-Compliant Nodes
                                     </p>
                                     <div className="h-3 w-px bg-slate-200"></div>
                                     <p className="text-[10px] text-amber-600 font-bold uppercase tracking-widest">
@@ -364,7 +366,7 @@ const IdAuditor: React.FC = () => {
                                         onClick={() => setFilterInvalidOnly(!filterInvalidOnly)} 
                                         className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all ${filterInvalidOnly ? 'bg-rose-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                                     >
-                                        ID Violations
+                                        ID Errors
                                     </button>
                                     <button 
                                         onClick={() => setFilterNameSpacingOnly(!filterNameSpacingOnly)} 
@@ -381,7 +383,7 @@ const IdAuditor: React.FC = () => {
                                 </div>
                                 <button onClick={() => setStep('input')} className="px-6 py-2 rounded-xl text-xs font-black text-slate-400 hover:text-slate-600 uppercase transition-all tracking-widest">Return</button>
                                 <button onClick={executeFix} disabled={!auditResults.some(r => r.status === 'invalid')} className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-black py-4 px-12 rounded-2xl shadow-xl active:scale-95 transition-all uppercase text-xs tracking-widest">
-                                    Correct to Sequence 3000+
+                                    Fix All Violations
                                 </button>
                             </div>
                         </div>
@@ -414,14 +416,14 @@ const IdAuditor: React.FC = () => {
                                                     </span>
                                                 )}
                                             </div>
-                                            <p className="text-[11px] text-slate-500 italic truncate pr-8 leading-relaxed">{res.preview}</p>
+                                            <p className="text-[11px] text-slate-500 italic truncate pr-8 leading-relaxed font-serif">{res.preview}</p>
                                         </div>
                                         <div className="shrink-0 flex flex-col items-end">
                                             <div className={`text-[9px] font-black uppercase tracking-widest mb-1 ${res.status === 'invalid' ? 'text-rose-600' : 'text-emerald-600'}`}>
-                                                {res.status === 'invalid' ? 'Correction Pending' : 'Protocol Compliant'}
+                                                {res.status === 'invalid' ? 'Correction Required' : 'Protocol Compliant'}
                                             </div>
-                                            {res.status === 'invalid' && (
-                                                <div className="text-[10px] font-bold text-slate-400">Target Prefix: <span className="text-indigo-600 font-black">{res.expectedPrefix}</span></div>
+                                            {res.status === 'invalid' && !res.id.toLowerCase().startsWith(res.expectedPrefix) && (
+                                                <div className="text-[10px] font-bold text-slate-400">Prefix: <span className="text-indigo-600 font-black">{res.expectedPrefix}</span></div>
                                             )}
                                         </div>
                                     </div>
@@ -434,14 +436,14 @@ const IdAuditor: React.FC = () => {
                 {step === 'result' && (
                     <div className="flex flex-col h-full animate-fade-in overflow-hidden">
                         <div className="bg-slate-50 px-10 py-5 border-b border-slate-200 flex justify-between items-center">
-                            <h3 className="font-black text-slate-900 text-xs uppercase tracking-widest">Protocol Corrected Stream</h3>
+                            <h3 className="font-black text-slate-900 text-xs uppercase tracking-widest">Corrected Protocol Stream</h3>
                             <div className="flex gap-4">
-                                <button onClick={() => { navigator.clipboard.writeText(output); setToast({msg:'Normalized XML Copied!', type:'success'}); }} className="bg-emerald-600 text-white border border-emerald-700 px-6 py-2.5 rounded-xl text-[10px] font-black hover:bg-emerald-700 shadow-lg shadow-emerald-500/20 transition-all uppercase tracking-widest">Export Result</button>
+                                <button onClick={() => { navigator.clipboard.writeText(output); setToast({msg:'Corrected XML Copied!', type:'success'}); }} className="bg-emerald-600 text-white border border-emerald-700 px-6 py-2.5 rounded-xl text-[10px] font-black hover:bg-emerald-700 shadow-lg shadow-emerald-500/20 transition-all uppercase tracking-widest">Export Result</button>
                                 <button onClick={() => { setStep('input'); setAuditResults([]); }} className="text-xs font-bold text-slate-400 hover:text-slate-600 uppercase tracking-widest">Start New Session</button>
                             </div>
                         </div>
                         <div className="bg-white px-10 pt-4 border-b border-slate-100 flex space-x-4">
-                            <button onClick={() => setActiveTab('xml')} className={`px-8 py-4 text-[11px] font-black uppercase tracking-widest rounded-t-2xl transition-all border-t border-x ${activeTab === 'xml' ? 'bg-slate-50 text-indigo-600 border-slate-200 translate-y-[1px]' : 'bg-white text-slate-400 border-transparent'}`}>Corrected Source</button>
+                            <button onClick={() => setActiveTab('xml')} className={`px-8 py-4 text-[11px] font-black uppercase tracking-widest rounded-t-2xl transition-all border-t border-x ${activeTab === 'xml' ? 'bg-slate-50 text-indigo-600 border-slate-200 translate-y-[1px]' : 'bg-white text-slate-400 border-transparent'}`}>Normalized Source</button>
                             <button onClick={() => setActiveTab('diff')} className={`px-8 py-4 text-[11px] font-black uppercase tracking-widest rounded-t-2xl transition-all border-t border-x ${activeTab === 'diff' ? 'bg-slate-50 text-rose-600 border-slate-200 translate-y-[1px]' : 'bg-white text-slate-400 border-transparent'}`}>Correction Log (Diff)</button>
                         </div>
                         <div className="flex-grow relative bg-slate-50 overflow-hidden flex flex-col">
