@@ -203,7 +203,7 @@ const IdAuditor: React.FC = () => {
                 });
 
                 if (results.length === 0) {
-                    setToast({ msg: "No structural ID nodes detected.", type: "warn" });
+                    setToast({ msg: "No structural nodes detected for audit.", type: "warn" });
                     setIsLoading(false);
                 } else {
                     results.sort((a, b) => {
@@ -219,7 +219,7 @@ const IdAuditor: React.FC = () => {
                     const otherCount = results.filter(r => r.isOtherRef).length;
                     
                     if (invalidIdCount > 0 || nameViolationCount > 0 || otherCount > 0) {
-                        setToast({ msg: `Audit found ${invalidIdCount} ID errors and ${nameViolationCount} name spacing issues.`, type: "warn" });
+                        setToast({ msg: `Audit found ${invalidIdCount} ID violations and ${nameViolationCount} initials errors.`, type: "warn" });
                     } else {
                         setToast({ msg: "System checks passed. All protocols compliant.", type: "success" });
                     }
@@ -259,7 +259,7 @@ const IdAuditor: React.FC = () => {
                     }
                 });
 
-                // 3. ID Attribute replacements with temporary placeholders
+                // 3. ID Attribute replacements with temporary placeholders to prevent recursive corruption
                 mapping.forEach((newId, oldId) => {
                     const idPattern = new RegExp(`\\bid="${oldId}"`, 'g');
                     processedXml = processedXml.replace(idPattern, `id="##TEMP_ID_${newId}##"`);
@@ -279,7 +279,7 @@ const IdAuditor: React.FC = () => {
                 setOutput(processedXml);
                 generateDiff(input, processedXml);
                 setStep('result');
-                setToast({ msg: "Protocol normalized. Sequence 3000+ applied.", type: "success" });
+                setToast({ msg: "Protocol normalized. Sequence 3000+ applied to IDs.", type: "success" });
                 setIsLoading(false);
             } catch (err) {
                 setToast({ msg: "Remapping process failed.", type: "error" });
@@ -304,7 +304,7 @@ const IdAuditor: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
             <div className="mb-10 text-center animate-fade-in">
                 <h1 className="text-3xl font-black text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase tracking-tighter">ID Prefix Auditor</h1>
-                <p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic">Protocol validation for bb, rf, se, and ir. Automated initials normalization in given names.</p>
+                <p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic">Protocol validation for bb, rf, se, and ir. Automated initials normalization for given names.</p>
             </div>
 
             <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-200 overflow-hidden h-[750px] flex flex-col relative transition-all duration-500">
@@ -332,7 +332,7 @@ const IdAuditor: React.FC = () => {
                             value={input} 
                             onChange={e => setInput(e.target.value)} 
                             className="flex-grow p-10 font-mono text-[13px] border-0 focus:ring-0 resize-none bg-transparent leading-relaxed" 
-                            placeholder="Paste the full XML article source here. Corrections will start at ID 3000 and given-name spacing will be collapsed..."
+                            placeholder="Paste the full XML article source here. ID corrections start at 3000; given-name spacing will be surgically collapsed..."
                             spellCheck={false}
                         />
                         <div className="p-8 border-t border-slate-100 flex justify-center bg-slate-50/50">
