@@ -275,7 +275,7 @@ const TableFixer: React.FC = () => {
             let totalProcessedCount = 0;
 
             if (mode === 'detach') {
-                let spIdCounter = tfStart; // Re-use configuration for detach too
+                let spIdCounter = tfStart;
                 
                 const processedBlocks = tableBlocks.map(tableMarkup => {
                     let currentTable = tableMarkup;
@@ -285,13 +285,16 @@ const TableFixer: React.FC = () => {
                     tableFootnotes.forEach(fn => {
                         const refRegex = new RegExp(`<ce:cross-ref\\b[^>]*?refid="${fn.id}"[^>]*>([\\s\\S]*?)<\\/ce:cross-ref>`, 'g');
                         currentTable = currentTable.replace(refRegex, (m, content) => {
+                            // RULE: Asterisk * sits on baseline (remove sup), Low-Profile ⁎ is sup
+                            if (fn.label === '*') return content.replace(/<ce:sup>|<\/ce:sup>/g, '');
                             return content.includes('<ce:sup>') ? content : `<ce:sup>${content}</ce:sup>`;
                         });
                         
                         currentTable = currentTable.split(fn.fullTag).join('');
                         const spId = `sp${spIdCounter.toString().padStart(4, '0')}`;
                         spIdCounter += 5;
-                        legendsToAdd.push(`<ce:simple-para id="${spId}"><ce:sup>${fn.label}</ce:sup> ${fn.content}</ce:simple-para>`);
+                        const labelMarkup = fn.label === '*' ? fn.label : `<ce:sup>${fn.label}</ce:sup>`;
+                        legendsToAdd.push(`<ce:simple-para id="${spId}">${labelMarkup} ${fn.content}</ce:simple-para>`);
                         totalProcessedCount++;
                     });
 
@@ -341,9 +344,10 @@ const TableFixer: React.FC = () => {
                         const labelStr = fn.label;
                         const escapedLabel = labelStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
                         
-                        const existingPattern = `(?:<ce:cross-ref[^>]*>\\s*)?<ce:sup>${escapedLabel}<\\/ce:sup>`;
+                        // ADVANCED MARKER LOCATOR: Captures existing cross-refs, sups, AND surrounding bolds
+                        const existingTagged = `(?:<ce:cross-ref\\b[^>]*>\\s*)?(?:<ce:(?:sup|bold)>\\s*)*${escapedLabel}(?:\\s*<\\/ce:(?:sup|bold)>)*(?:\\s*<\\/ce:cross-ref>)?`;
                         const nakedPattern = `(?<![a-zA-Z0-9])${escapedLabel}(?![a-zA-Z0-9])`;
-                        const targetRegex = new RegExp(`(${existingPattern}|${nakedPattern})`, 'g');
+                        const targetRegex = new RegExp(`(${existingTagged}|${nakedPattern})`, 'g');
 
                         const isPresentInTable = (fn.fullTag && currentTable.includes(fn.fullTag)) || (!fn.fullTag && targetRegex.test(currentTable));
                         
@@ -355,29 +359,31 @@ const TableFixer: React.FC = () => {
                             
                             if (fn.fullTag) currentTable = currentTable.split(fn.fullTag).join('');
                             
-                            // Perform replacement for markers in body with unique cf IDs
+                            // RULE: Standard asterisk (*) baseline, Low-profile (⁎) is sup
+                            const isStandardAsterisk = fn.label === '*';
+
+                            // Replace all occurrences in body with unique cf IDs
                             currentTable = currentTable.replace(targetRegex, (match) => {
                                 const placeholder = `##TF_PH_${index}_${cfIdCounter}_${Math.random().toString(36).substring(7)}##`;
                                 const newCfId = `cf${cfIdCounter.toString().padStart(4, '0')}`;
                                 cfIdCounter += 5;
 
-                                let finalTag = '';
-                                if (match.includes('<ce:cross-ref')) {
-                                    finalTag = match.replace(/refid="[^"]*"/, `refid="${newFnId}"`).replace(/id="[^"]*"/, `id="${newCfId}"`);
-                                    if (!finalTag.includes('id=')) {
-                                        finalTag = finalTag.replace('<ce:cross-ref', `<ce:cross-ref id="${newCfId}"`);
-                                    }
-                                } else {
-                                    finalTag = match.includes('<ce:sup>') 
-                                        ? `<ce:cross-ref id="${newCfId}" refid="${newFnId}">${match.trim()}</ce:cross-ref>`
-                                        : `<ce:cross-ref id="${newCfId}" refid="${newFnId}"><ce:sup>${fn.label}</ce:sup></ce:cross-ref>`;
-                                }
+                                // DTD HIERARCHY: cross-ref > sup > bold > Label
+                                const hasBold = match.includes('<ce:bold');
+                                const hasSup = match.includes('<ce:sup') || !isStandardAsterisk;
+
+                                let innermost = fn.label;
+                                if (hasBold) innermost = `<ce:bold>${innermost}</ce:bold>`;
+                                if (hasSup) innermost = `<ce:sup>${innermost}</ce:sup>`;
+                                
+                                const finalTag = `<ce:cross-ref id="${newCfId}" refid="${newFnId}">${innermost}</ce:cross-ref>`;
                                 
                                 replacementMap.set(placeholder, finalTag);
                                 return placeholder;
                             });
 
-                            const stripPattern = new RegExp(`^\\s*(?:<ce:(?:label|sup|bold)>)?\\s*${escapedLabel}\\s*(?:<\\/ce:(?:label|sup|bold)>|[\\.,\\)\\s])+`, 'i');
+                            // Strip label from content for the footnote para
+                            const stripPattern = new RegExp(`^\\s*(?:<ce:(?:label|sup|bold)>)*\\s*${escapedLabel}\\s*(?:<\\/ce:(?:label|sup|bold)>|[\\.,\\)\\s])+`, 'i');
                             let cleanContent = fn.content.replace(stripPattern, '').trim();
                             if (!cleanContent) cleanContent = '??';
                             
@@ -394,13 +400,12 @@ const TableFixer: React.FC = () => {
                         const footnotesMarkup = footnotesToAdd.join('');
                         const lastLegendIdx = currentTable.lastIndexOf('</ce:legend>');
                         const lastTgroupIdx = currentTable.lastIndexOf('</tgroup>');
-                        let insertionPoint = -1;
-
-                        if (lastLegendIdx > lastTgroupIdx && lastLegendIdx !== -1) {
-                            insertionPoint = lastLegendIdx;
-                        } else if (lastTgroupIdx !== -1) {
-                            insertionPoint = lastTgroupIdx + '</tgroup>'.length;
-                        }
+                        
+                        // FIX: Ensure footnotes are siblings to legend/tgroup, never children of legend
+                        const legendEnd = lastLegendIdx !== -1 ? lastLegendIdx + '</ce:legend>'.length : -1;
+                        const tgroupEnd = lastTgroupIdx !== -1 ? lastTgroupIdx + '</tgroup>'.length : -1;
+                        
+                        const insertionPoint = Math.max(legendEnd, tgroupEnd);
 
                         if (insertionPoint !== -1) {
                             const before = currentTable.slice(0, insertionPoint);
@@ -425,10 +430,12 @@ const TableFixer: React.FC = () => {
         }, 600);
     };
 
+    // Keyboard Shortcuts
     useKeyboardShortcuts({
         onPrimary: processTable,
         onCopy: () => { if (output && activeTab === 'result') { navigator.clipboard.writeText(output); setToast({msg: 'Copied output!', type:'success'}); } },
-        onClear: () => { setInput(''); setFootnotes([]); setOutput(''); setToast({msg: 'Input cleared', type:'warn'}); }
+        /* Fixed: Removed non-existent setLastRemovedKey call from onClear hook. */
+        onClear: () => { setInput(''); setFootnotes([]); setOutput(''); }
     }, [input, output, footnotes, selectedIds, activeTab, mode, tfStart, cfStart]);
 
     const themeColor = mode === 'detach' ? 'pink' : 'blue';
@@ -437,7 +444,7 @@ const TableFixer: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
             <div className="mb-8 text-center animate-fade-in">
                 <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase tracking-tighter">XML Table Fixer Pro</h1>
-                <p className="text-lg text-slate-500 max-w-2xl mx-auto font-medium">Surgical footnote management. Precision marker detection and structural placement logic.</p>
+                <p className="text-lg text-slate-500 max-w-2xl mx-auto font-medium">Surgical footnote management. DTD-strict tag nesting (cross-ref &gt; sup &gt; bold).</p>
             </div>
 
             {/* Configuration Bar */}
@@ -495,7 +502,7 @@ const TableFixer: React.FC = () => {
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col relative">
                      <div className="flex border-b border-slate-100 bg-slate-50">
                         <button onClick={() => setActiveTab('selection')} className={`flex-1 py-3 text-sm font-bold transition-all border-r border-slate-100 ${activeTab === 'selection' ? `bg-white ${mode === 'detach' ? 'text-pink-600' : 'text-blue-600'}` : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'}`}><span className="flex items-center justify-center gap-2"><span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${activeTab === 'selection' ? (mode === 'detach' ? 'bg-pink-100 text-pink-600' : 'bg-blue-100 text-blue-600') : 'bg-slate-200 text-slate-500'}`}>2</span>Selection</span></button>
-                        <button onClick={() => setActiveTab('result')} className={`flex-1 py-3 text-sm font-bold transition-all border-r border-slate-100 ${activeTab === 'result' ? 'bg-white text-emerald-600' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'}`}><span className="flex items-center justify-center gap-2"><span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${activeTab === 'result' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-500'}`}>3</span>Result</span></button>
+                        <button onClick={() => setActiveTab('result')} className={`flex-1 py-3 text-sm font-bold transition-all border-r border-slate-100 ${activeTab === 'result' ? `bg-white text-emerald-600` : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'}`}><span className="flex items-center justify-center gap-2"><span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${activeTab === 'result' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-500'}`}>3</span>Result</span></button>
                         <button onClick={() => setActiveTab('diff')} className={`flex-1 py-3 text-sm font-bold transition-all ${activeTab === 'diff' ? 'bg-white text-orange-600' : 'text-slate-500 hover:text-slate-700'}`}><span className="flex items-center justify-center gap-2"><span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${activeTab === 'diff' ? 'bg-orange-100 text-orange-600' : 'bg-slate-200 text-slate-500'}`}>4</span>Diff</span></button>
                      </div>
 
@@ -516,7 +523,7 @@ const TableFixer: React.FC = () => {
                                                     <div className="flex-grow min-w-0">
                                                         <div className="flex items-center justify-between mb-1">
                                                             <div className="flex items-center gap-2">
-                                                                <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 uppercase">{fn.id}</span>
+                                                                <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 uppercase tracking-tighter">{fn.id}</span>
                                                                 <span className="text-sm font-bold text-slate-800 flex items-center gap-1">Label: <span className={`px-1.5 rounded ${mode === 'detach' ? 'bg-pink-50 text-pink-700' : 'bg-blue-50 text-blue-700'}`}>{fn.label}</span></span>
                                                                 {fn.isNakedMarker && <span className="text-[9px] font-black uppercase bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded border border-rose-200">Naked Marker</span>}
                                                             </div>
