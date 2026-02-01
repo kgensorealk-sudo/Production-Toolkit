@@ -23,6 +23,10 @@ const TableFixer: React.FC = () => {
     const [diffElements, setDiffElements] = useState<React.ReactNode>(null);
     const [mode, setMode] = useState<'detach' | 'attach'>('detach');
 
+    // ID Configuration States
+    const [tfStart, setTfStart] = useState<number>(4000);
+    const [cfStart, setCfStart] = useState<number>(4000);
+
     const escapeHtml = (unsafe: string) => unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
     const buildLines = (diffParts: Change[], isLeft: boolean) => {
@@ -190,38 +194,51 @@ const TableFixer: React.FC = () => {
                 matches.push({ id, label, content, fullTag });
             }
         } else {
-            const spRegex = /<ce:simple-para\b[^>]*>([\s\S]*?)<\/ce:simple-para>/g;
-            let match;
-            while ((match = spRegex.exec(input)) !== null) {
-                const fullTag = match[0];
-                const inner = match[1].trim();
-                let label = '';
-                const labelTagMatch = /^\s*<ce:label>(.*?)<\/ce:label>/.exec(inner);
-                const supMatch = /^\s*<ce:sup>(.*?)<\/ce:sup>/.exec(inner);
-                const boldMatch = /^\s*<ce:bold>(.*?)<\/ce:bold>/.exec(inner);
-                const plainMatch = /^\s*([a-zA-Z0-9\*\†\‡\§\⁎]{1,3})[\.\)]\s+/.exec(inner);
+            const legendBlocks = input.match(/<ce:legend\b[^>]*>([\s\S]*?)<\/ce:legend>/g) || [];
+            
+            legendBlocks.forEach(legendMarkup => {
+                const spRegex = /<ce:simple-para\b[^>]*>([\s\S]*?)<\/ce:simple-para>/g;
+                let spMatch;
+                while ((spMatch = spRegex.exec(legendMarkup)) !== null) {
+                    const fullTag = spMatch[0];
+                    const inner = spMatch[1].trim();
+                    let label = '';
+                    const labelTagMatch = /^\s*<ce:label>(.*?)<\/ce:label>/.exec(inner);
+                    const supMatch = /^\s*<ce:sup>(.*?)<\/ce:sup>/.exec(inner);
+                    const boldMatch = /^\s*<ce:bold>(.*?)<\/ce:bold>/.exec(inner);
+                    const plainMatch = /^\s*([\*\†\‡\§\⁎a-zA-Z0-9]{1,3})(?:[\.\),\s])/.exec(inner);
 
-                if (labelTagMatch) label = labelTagMatch[1];
-                else if (supMatch) label = supMatch[1];
-                else if (boldMatch) label = boldMatch[1];
-                else if (plainMatch) label = plainMatch[1];
+                    if (labelTagMatch) label = labelTagMatch[1];
+                    else if (supMatch) label = supMatch[1];
+                    else if (boldMatch) label = boldMatch[1];
+                    else if (plainMatch) label = plainMatch[1];
 
-                if (label) {
-                    const idMatch = /id="([^"]+)"/.exec(fullTag);
-                    const id = idMatch ? idMatch[1] : `sp_gen_${matches.length}`;
-                    matches.push({ id, label, content: inner, fullTag });
+                    if (label) {
+                        const idMatch = /id="([^"]+)"/.exec(fullTag);
+                        const id = idMatch ? idMatch[1] : `sp_gen_${matches.length}`;
+                        matches.push({ id, label, content: inner, fullTag });
+                    }
                 }
-            }
+            });
 
             const nakedMarkers = ['⁎', '†', '‡', '§', '*'];
             nakedMarkers.forEach(sym => {
                 const escapedSym = sym.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const nakedRegex = new RegExp(`(?<!<ce:sup>)${escapedSym}(?!<\\/ce:sup>)`, 'g');
-                if (nakedRegex.test(input) && !matches.some(m => m.label === sym)) {
+                const nakedRegex = new RegExp(`(?<![a-zA-Z0-9])${escapedSym}(?![a-zA-Z0-9])`, 'g');
+                
+                const occurrences = [...input.matchAll(nakedRegex)];
+                const hasValidOccurrence = occurrences.some(occ => {
+                    const prevPart = input.substring(0, occ.index);
+                    const openCount = (prevPart.match(/</g) || []).length;
+                    const closeCount = (prevPart.match(/>/g) || []).length;
+                    return openCount === closeCount; 
+                });
+
+                if (hasValidOccurrence && !matches.some(m => m.label === sym)) {
                     matches.push({
                         id: `naked_sym_${sym.charCodeAt(0)}`,
                         label: sym,
-                        content: `Untagged marker "${sym}" detected in document body.`,
+                        content: `Untagged marker "${sym}" detected.`,
                         fullTag: '',
                         isNakedMarker: true
                     });
@@ -258,28 +275,21 @@ const TableFixer: React.FC = () => {
             let totalProcessedCount = 0;
 
             if (mode === 'detach') {
-                const existingSpMatches = input.match(/id="sp(\d+)"/g);
-                let spIdCounter = 4000;
-                if (existingSpMatches) {
-                    const maxId = existingSpMatches.reduce((max, curr) => {
-                        const m = curr.match(/id="sp(\d+)"/);
-                        return m ? Math.max(max, parseInt(m[1])) : max;
-                    }, 0);
-                    spIdCounter = Math.ceil((maxId + 1) / 5) * 5;
-                    if (spIdCounter < 4000) spIdCounter = 4000;
-                }
-
+                let spIdCounter = tfStart; // Re-use configuration for detach too
+                
                 const processedBlocks = tableBlocks.map(tableMarkup => {
                     let currentTable = tableMarkup;
                     let legendsToAdd: string[] = [];
-                    
                     const tableFootnotes = footnotes.filter(fn => selectedIds.has(fn.id) && tableMarkup.includes(fn.fullTag));
                     
                     tableFootnotes.forEach(fn => {
                         const refRegex = new RegExp(`<ce:cross-ref\\b[^>]*?refid="${fn.id}"[^>]*>([\\s\\S]*?)<\\/ce:cross-ref>`, 'g');
-                        currentTable = currentTable.replace(refRegex, '$1');
+                        currentTable = currentTable.replace(refRegex, (m, content) => {
+                            return content.includes('<ce:sup>') ? content : `<ce:sup>${content}</ce:sup>`;
+                        });
+                        
                         currentTable = currentTable.split(fn.fullTag).join('');
-                        const spId = `sp${spIdCounter}`;
+                        const spId = `sp${spIdCounter.toString().padStart(4, '0')}`;
                         spIdCounter += 5;
                         legendsToAdd.push(`<ce:simple-para id="${spId}"><ce:sup>${fn.label}</ce:sup> ${fn.content}</ce:simple-para>`);
                         totalProcessedCount++;
@@ -287,32 +297,22 @@ const TableFixer: React.FC = () => {
 
                     if (legendsToAdd.length > 0) {
                         const legendMarkup = legendsToAdd.join('');
-                        
-                        // Locate the Final Structural Element for insertion
                         const lastLegendIdx = currentTable.lastIndexOf('</ce:legend>');
                         const lastTgroupIdx = currentTable.lastIndexOf('</tgroup>');
-                        
                         let insertionPoint = -1;
-                        let anchorLength = 0;
 
                         if (lastLegendIdx > lastTgroupIdx && lastLegendIdx !== -1) {
                             insertionPoint = lastLegendIdx;
-                            anchorLength = '</ce:legend>'.length;
                         } else if (lastTgroupIdx !== -1) {
-                            insertionPoint = lastTgroupIdx;
-                            anchorLength = '</tgroup>'.length;
+                            insertionPoint = lastTgroupIdx + '</tgroup>'.length;
                         }
 
                         if (insertionPoint !== -1) {
-                            const splitAt = insertionPoint + anchorLength;
-                            const before = currentTable.slice(0, splitAt);
-                            const after = currentTable.slice(splitAt);
-                            
-                            // If we don't have a legend, wrap in ce:legend tags
+                            const before = currentTable.slice(0, insertionPoint);
+                            const after = currentTable.slice(insertionPoint);
                             const wrappedMarkup = lastLegendIdx === -1 ? `<ce:legend>${legendMarkup}</ce:legend>` : legendMarkup;
                             currentTable = `${before}${wrappedMarkup}${after}`;
                         } else {
-                            // Fallback to before closing table tag
                             currentTable = currentTable.replace('</ce:table>', `<ce:legend>${legendMarkup}</ce:legend></ce:table>`);
                         }
                     }
@@ -325,15 +325,8 @@ const TableFixer: React.FC = () => {
                 setToast({ msg: `Moved ${totalProcessedCount} footnotes to legends.`, type: "success" });
 
             } else {
-                const existingTfMatches = input.match(/id="tf(\d+)"/g);
-                let tfIdCounter = 4000;
-                if (existingTfMatches) {
-                     const maxId = existingTfMatches.reduce((max, curr) => {
-                        const m = curr.match(/id="tf(\d+)"/);
-                        return m ? Math.max(max, parseInt(m[1])) : max;
-                    }, 0);
-                    if (maxId >= 4000) tfIdCounter = Math.ceil((maxId + 1) / 5) * 5;
-                }
+                let tfIdCounter = tfStart;
+                let cfIdCounter = cfStart;
 
                 const sortedSelected = footnotes
                     .filter(fn => selectedIds.has(fn.id))
@@ -347,11 +340,9 @@ const TableFixer: React.FC = () => {
                     sortedSelected.forEach((fn, index) => {
                         const labelStr = fn.label;
                         const escapedLabel = labelStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                        const firstChar = labelStr.charAt(0).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                        const lastChar = labelStr.charAt(labelStr.length - 1).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
+                        
                         const existingPattern = `(?:<ce:cross-ref[^>]*>\\s*)?<ce:sup>${escapedLabel}<\\/ce:sup>`;
-                        const nakedPattern = `(?<!${firstChar})${escapedLabel}(?!${lastChar})`;
+                        const nakedPattern = `(?<![a-zA-Z0-9])${escapedLabel}(?![a-zA-Z0-9])`;
                         const targetRegex = new RegExp(`(${existingPattern}|${nakedPattern})`, 'g');
 
                         const isPresentInTable = (fn.fullTag && currentTable.includes(fn.fullTag)) || (!fn.fullTag && targetRegex.test(currentTable));
@@ -364,29 +355,32 @@ const TableFixer: React.FC = () => {
                             
                             if (fn.fullTag) currentTable = currentTable.split(fn.fullTag).join('');
                             
-                            const placeholder = `##TF_PH_${index}##`;
+                            // Perform replacement for markers in body with unique cf IDs
                             currentTable = currentTable.replace(targetRegex, (match) => {
+                                const placeholder = `##TF_PH_${index}_${cfIdCounter}_${Math.random().toString(36).substring(7)}##`;
+                                const newCfId = `cf${cfIdCounter.toString().padStart(4, '0')}`;
+                                cfIdCounter += 5;
+
+                                let finalTag = '';
                                 if (match.includes('<ce:cross-ref')) {
-                                    replacementMap.set(placeholder, match); 
-                                    return placeholder;
+                                    finalTag = match.replace(/refid="[^"]*"/, `refid="${newFnId}"`).replace(/id="[^"]*"/, `id="${newCfId}"`);
+                                    if (!finalTag.includes('id=')) {
+                                        finalTag = finalTag.replace('<ce:cross-ref', `<ce:cross-ref id="${newCfId}"`);
+                                    }
+                                } else {
+                                    finalTag = match.includes('<ce:sup>') 
+                                        ? `<ce:cross-ref id="${newCfId}" refid="${newFnId}">${match.trim()}</ce:cross-ref>`
+                                        : `<ce:cross-ref id="${newCfId}" refid="${newFnId}"><ce:sup>${fn.label}</ce:sup></ce:cross-ref>`;
                                 }
-                                let finalTag = match.includes('<ce:sup>') 
-                                    ? `<ce:cross-ref refid="${newFnId}">${match.trim()}</ce:cross-ref>`
-                                    : `<ce:cross-ref refid="${newFnId}"><ce:sup>${fn.label}</ce:sup></ce:cross-ref>`;
+                                
                                 replacementMap.set(placeholder, finalTag);
                                 return placeholder;
                             });
 
-                            let cleanContent = fn.content;
-                            if (fn.isNakedMarker) cleanContent = '??'; 
-                            else {
-                                cleanContent = cleanContent
-                                    .replace(new RegExp(`^\\s*<ce:label>${escapedLabel}<\\/ce:label>\\s*`), '')
-                                    .replace(new RegExp(`^\\s*<ce:sup>${escapedLabel}<\\/ce:sup>\\s*`), '')
-                                    .replace(new RegExp(`^\\s*<ce:bold>${escapedLabel}<\\/ce:bold>\\s*`), '')
-                                    .replace(new RegExp(`^\\s*${escapedLabel}[\\.\\)]\\s+`), '')
-                                    .trim();
-                            }
+                            const stripPattern = new RegExp(`^\\s*(?:<ce:(?:label|sup|bold)>)?\\s*${escapedLabel}\\s*(?:<\\/ce:(?:label|sup|bold)>|[\\.,\\)\\s])+`, 'i');
+                            let cleanContent = fn.content.replace(stripPattern, '').trim();
+                            if (!cleanContent) cleanContent = '??';
+                            
                             footnotesToAdd.push(`<ce:table-footnote id="${newFnId}"><ce:label>${fn.label}</ce:label><ce:note-para id="${newNpId}">${cleanContent}</ce:note-para></ce:table-footnote>`);
                             totalProcessedCount++;
                         }
@@ -396,27 +390,21 @@ const TableFixer: React.FC = () => {
                         currentTable = currentTable.split(placeholder).join(xml);
                     });
 
-                    // STRUCTURAL AWARENESS: Locate the Final Structural Element
                     if (footnotesToAdd.length > 0) {
                         const footnotesMarkup = footnotesToAdd.join('');
                         const lastLegendIdx = currentTable.lastIndexOf('</ce:legend>');
                         const lastTgroupIdx = currentTable.lastIndexOf('</tgroup>');
-                        
                         let insertionPoint = -1;
-                        let anchorLength = 0;
 
                         if (lastLegendIdx > lastTgroupIdx && lastLegendIdx !== -1) {
                             insertionPoint = lastLegendIdx;
-                            anchorLength = '</ce:legend>'.length;
                         } else if (lastTgroupIdx !== -1) {
-                            insertionPoint = lastTgroupIdx;
-                            anchorLength = '</tgroup>'.length;
+                            insertionPoint = lastTgroupIdx + '</tgroup>'.length;
                         }
 
                         if (insertionPoint !== -1) {
-                            const splitAt = insertionPoint + anchorLength;
-                            const before = currentTable.slice(0, splitAt);
-                            const after = currentTable.slice(splitAt);
+                            const before = currentTable.slice(0, insertionPoint);
+                            const after = currentTable.slice(insertionPoint);
                             currentTable = `${before}${footnotesMarkup}${after}`;
                         } else {
                             currentTable = currentTable.replace('</ce:table>', `${footnotesMarkup}</ce:table>`);
@@ -429,7 +417,7 @@ const TableFixer: React.FC = () => {
                 const finalOutput = processedBlocks.join('\n\n');
                 setOutput(finalOutput);
                 generateDiff(input, finalOutput);
-                setToast({ msg: `Attached ${totalProcessedCount} items as footnotes across tables.`, type: "success" });
+                setToast({ msg: `Attached ${totalProcessedCount} items as footnotes with unique cf IDs.`, type: "success" });
             }
 
             setActiveTab('result');
@@ -441,15 +429,48 @@ const TableFixer: React.FC = () => {
         onPrimary: processTable,
         onCopy: () => { if (output && activeTab === 'result') { navigator.clipboard.writeText(output); setToast({msg: 'Copied output!', type:'success'}); } },
         onClear: () => { setInput(''); setFootnotes([]); setOutput(''); setToast({msg: 'Input cleared', type:'warn'}); }
-    }, [input, output, footnotes, selectedIds, activeTab, mode]);
+    }, [input, output, footnotes, selectedIds, activeTab, mode, tfStart, cfStart]);
 
     const themeColor = mode === 'detach' ? 'pink' : 'blue';
 
     return (
         <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
             <div className="mb-8 text-center animate-fade-in">
-                <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3">XML Table Fixer</h1>
-                <p className="text-lg text-slate-500 max-w-2xl mx-auto">Manage table footnotes by detaching them to legends or attaching legends back to cells.</p>
+                <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase tracking-tighter">XML Table Fixer Pro</h1>
+                <p className="text-lg text-slate-500 max-w-2xl mx-auto font-medium">Surgical footnote management. Precision marker detection and structural placement logic.</p>
+            </div>
+
+            {/* Configuration Bar */}
+            <div className="flex justify-center mb-6">
+                <div className="bg-white px-6 py-4 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap items-center gap-8">
+                    <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${mode === 'detach' ? 'bg-pink-50 text-pink-600' : 'bg-blue-50 text-blue-600'}`}>
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
+                        </div>
+                        <span className="text-xs font-bold text-slate-700 uppercase tracking-widest">ID Matrix Config</span>
+                    </div>
+                    
+                    <div className="flex items-center gap-6">
+                        <div className="flex flex-col gap-1">
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Footnote/Para Start (tf/np)</label>
+                            <input 
+                                type="number" 
+                                value={tfStart} 
+                                onChange={(e) => setTfStart(parseInt(e.target.value) || 0)} 
+                                className="w-24 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-mono font-bold text-slate-700 outline-none focus:ring-2 focus:ring-slate-100 transition-all"
+                            />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Body Cross-Ref Start (cf)</label>
+                            <input 
+                                type="number" 
+                                value={cfStart} 
+                                onChange={(e) => setCfStart(parseInt(e.target.value) || 0)} 
+                                className="w-24 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-mono font-bold text-slate-700 outline-none focus:ring-2 focus:ring-slate-100 transition-all"
+                            />
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div className="flex justify-center mb-8">
@@ -459,7 +480,7 @@ const TableFixer: React.FC = () => {
                 </div>
             </div>
 
-            <div className={`grid gap-8 h-[650px] transition-all duration-300 ${activeTab === 'diff' ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
+            <div className={`grid gap-8 h-[600px] transition-all duration-300 ${activeTab === 'diff' ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
                 <div className={`bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col group focus-within:ring-2 ${mode === 'detach' ? 'focus-within:ring-pink-100' : 'focus-within:ring-blue-100'} transition-all duration-300 ${activeTab === 'diff' ? 'hidden' : 'flex'}`}>
                     <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center">
                         <label className="font-bold text-slate-700 text-sm flex items-center gap-2"><span className="flex h-6 w-6 items-center justify-center rounded-md bg-white border border-slate-200 text-xs text-slate-500 font-mono shadow-sm">1</span>Input XML</label>
@@ -475,7 +496,7 @@ const TableFixer: React.FC = () => {
                      <div className="flex border-b border-slate-100 bg-slate-50">
                         <button onClick={() => setActiveTab('selection')} className={`flex-1 py-3 text-sm font-bold transition-all border-r border-slate-100 ${activeTab === 'selection' ? `bg-white ${mode === 'detach' ? 'text-pink-600' : 'text-blue-600'}` : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'}`}><span className="flex items-center justify-center gap-2"><span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${activeTab === 'selection' ? (mode === 'detach' ? 'bg-pink-100 text-pink-600' : 'bg-blue-100 text-blue-600') : 'bg-slate-200 text-slate-500'}`}>2</span>Selection</span></button>
                         <button onClick={() => setActiveTab('result')} className={`flex-1 py-3 text-sm font-bold transition-all border-r border-slate-100 ${activeTab === 'result' ? 'bg-white text-emerald-600' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'}`}><span className="flex items-center justify-center gap-2"><span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${activeTab === 'result' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-500'}`}>3</span>Result</span></button>
-                        <button onClick={() => setActiveTab('diff')} className={`flex-1 py-3 text-sm font-bold transition-all ${activeTab === 'diff' ? 'bg-white text-orange-600' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'}`}><span className="flex items-center justify-center gap-2"><span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${activeTab === 'diff' ? 'bg-orange-100 text-orange-600' : 'bg-slate-200 text-slate-500'}`}>4</span>Diff View</span></button>
+                        <button onClick={() => setActiveTab('diff')} className={`flex-1 py-3 text-sm font-bold transition-all ${activeTab === 'diff' ? 'bg-white text-orange-600' : 'text-slate-500 hover:text-slate-700'}`}><span className="flex items-center justify-center gap-2"><span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${activeTab === 'diff' ? 'bg-orange-100 text-orange-600' : 'bg-slate-200 text-slate-500'}`}>4</span>Diff</span></button>
                      </div>
 
                     <div className="flex-grow relative overflow-hidden bg-slate-50/50">
@@ -495,7 +516,7 @@ const TableFixer: React.FC = () => {
                                                     <div className="flex-grow min-w-0">
                                                         <div className="flex items-center justify-between mb-1">
                                                             <div className="flex items-center gap-2">
-                                                                <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">{fn.id}</span>
+                                                                <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 uppercase">{fn.id}</span>
                                                                 <span className="text-sm font-bold text-slate-800 flex items-center gap-1">Label: <span className={`px-1.5 rounded ${mode === 'detach' ? 'bg-pink-50 text-pink-700' : 'bg-blue-50 text-blue-700'}`}>{fn.label}</span></span>
                                                                 {fn.isNakedMarker && <span className="text-[9px] font-black uppercase bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded border border-rose-200">Naked Marker</span>}
                                                             </div>
