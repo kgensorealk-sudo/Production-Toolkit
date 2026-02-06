@@ -12,6 +12,7 @@ interface AuditItem {
     status: 'valid' | 'invalid';
     isOtherRef: boolean;
     hasNameSpacingViolation: boolean;
+    isLengthViolation: boolean;
     preview: string;
     fullTag: string;
 }
@@ -20,7 +21,9 @@ const ID_CONFIG = [
     { tag: 'ce:bib-reference', prefix: 'bb' },
     { tag: 'sb:reference', prefix: 'rf' },
     { tag: 'ce:source-text', prefix: 'se' },
-    { tag: 'ce:inter-ref', prefix: 'ir' }
+    { tag: 'ce:inter-ref', prefix: 'ir' },
+    { tag: 'ce:caption', prefix: 'ca' },
+    { tag: 'ce:cross-ref', prefix: 'cf' }
 ];
 
 const IdAuditor: React.FC = () => {
@@ -164,6 +167,7 @@ const IdAuditor: React.FC = () => {
                 
                 ID_CONFIG.forEach(({ tag, prefix }) => {
                     const tagRegex = new RegExp(`<${tag}\\b[^>]*?\\bid="([^"]+)"[^>]*>`, 'g');
+                    const strictIdRegex = new RegExp(`^${prefix}\\d{4}$`, 'i');
                     let match;
                     while ((match = tagRegex.exec(input)) !== null) {
                         const originalId = match[1];
@@ -174,7 +178,11 @@ const IdAuditor: React.FC = () => {
                             ? input.substring(match.index, elementEndIdx + `</${tag}>`.length)
                             : fullOpeningTag;
 
-                        const isInvalidId = !originalId.toLowerCase().startsWith(prefix);
+                        const isValidId = strictIdRegex.test(originalId);
+                        const isPrefixValid = originalId.toLowerCase().startsWith(prefix);
+                        const isLengthViolation = isPrefixValid && !isValidId;
+                        const isInvalidId = !isValidId;
+
                         const isOtherRef = elementContent.includes('<ce:other-ref');
                         
                         // Name Spacing Logic: Detect spaces between initials in <ce:given-name>
@@ -182,7 +190,6 @@ const IdAuditor: React.FC = () => {
                         let hasNameSpacingViolation = false;
                         let nameMatch;
                         while ((nameMatch = nameSpacingRegex.exec(elementContent)) !== null) {
-                            // Check for capital letters followed by period and then space + another capital/period
                             if (/\. +(?=[A-Z]\.)/.test(nameMatch[1])) {
                                 hasNameSpacingViolation = true;
                                 break;
@@ -197,6 +204,7 @@ const IdAuditor: React.FC = () => {
                             status: (isInvalidId || hasNameSpacingViolation) ? 'invalid' : 'valid',
                             isOtherRef,
                             hasNameSpacingViolation,
+                            isLengthViolation,
                             preview: elementContent.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 100) + '...',
                             fullTag: fullOpeningTag
                         });
@@ -215,11 +223,11 @@ const IdAuditor: React.FC = () => {
                     
                     setAuditResults(results);
                     setStep('audit');
-                    const invalidIdCount = results.filter(r => !r.id.toLowerCase().startsWith(r.expectedPrefix)).length;
+                    const invalidCount = results.filter(r => r.status === 'invalid').length;
                     const nameViolationCount = results.filter(r => r.hasNameSpacingViolation).length;
                     
-                    if (invalidIdCount > 0 || nameViolationCount > 0) {
-                        setToast({ msg: `Found ${invalidIdCount} ID violations and ${nameViolationCount} name spacing issues.`, type: "warn" });
+                    if (invalidCount > 0) {
+                        setToast({ msg: `Found ${invalidCount} structural violations.`, type: "warn" });
                     } else {
                         setToast({ msg: "System checks passed. All protocols compliant.", type: "success" });
                     }
@@ -238,8 +246,7 @@ const IdAuditor: React.FC = () => {
             try {
                 let processedXml = input;
                 
-                // 1. Surgical Given-Name Spacing Fix (Run document-wide first)
-                // Targets: <ce:given-name>I. M. R.</ce:given-name> -> <ce:given-name>I.M.R.</ce:given-name>
+                // 1. Surgical Given-Name Spacing Fix
                 processedXml = processedXml.replace(/(<ce:given-name\b[^>]*>)(.*?)(<\/ce:given-name>)/gi, (match, open, content, close) => {
                     const sanitizedContent = content.replace(/\. +(?=[A-Z]\.)/g, '.');
                     return `${open}${sanitizedContent}${close}`;
@@ -247,10 +254,11 @@ const IdAuditor: React.FC = () => {
 
                 // 2. ID Mapping Logic
                 const mapping = new Map<string, string>();
-                const counters: Record<string, number> = { bb: 3000, rf: 3000, se: 3000, ir: 3000 };
+                const counters: Record<string, number> = { bb: 3000, rf: 3000, se: 3000, ir: 3000, ca: 3000, cf: 3000 };
                 
                 auditResults.forEach(item => {
-                    if (!item.id.toLowerCase().startsWith(item.expectedPrefix)) {
+                    const strictIdRegex = new RegExp(`^${item.expectedPrefix}\\d{4}$`, 'i');
+                    if (!strictIdRegex.test(item.id)) {
                         const prefix = item.expectedPrefix;
                         const newIdNum = counters[prefix].toString().padStart(4, '0');
                         const newId = `${prefix}${newIdNum}`;
@@ -279,7 +287,7 @@ const IdAuditor: React.FC = () => {
                 setOutput(processedXml);
                 generateDiff(input, processedXml);
                 setStep('result');
-                setToast({ msg: "Protocols applied. IDs normalized to 3000+ and names collapsed.", type: "success" });
+                setToast({ msg: "Protocols applied. IDs normalized to 4-digit sequences.", type: "success" });
                 setIsLoading(false);
             } catch (err) {
                 setToast({ msg: "Remapping process failed.", type: "error" });
@@ -290,7 +298,7 @@ const IdAuditor: React.FC = () => {
 
     const filteredResults = auditResults.filter(item => {
         if (filterOtherOnly && !item.isOtherRef) return false;
-        if (filterInvalidOnly && (item.id.toLowerCase().startsWith(item.expectedPrefix))) return false;
+        if (filterInvalidOnly && item.status === 'valid') return false;
         if (filterNameSpacingOnly && !item.hasNameSpacingViolation) return false;
         return true;
     });
@@ -305,7 +313,7 @@ const IdAuditor: React.FC = () => {
             <div className="mb-10 text-center animate-fade-in">
                 <h1 className="text-3xl font-black text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase tracking-tighter">ID Prefix Auditor</h1>
                 <p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic tracking-tight leading-relaxed">
-                    Protocol validation for bb, rf, se, and ir. Automated initials normalization for <code className="bg-indigo-50 px-1.5 py-0.5 rounded text-indigo-600 font-mono text-sm">ce:given-name</code> tags.
+                    Protocol validation for bb, rf, se, ir, ca, and cf. Enforcing strict 4-digit numeric suffixes and collapsed initials.
                 </p>
             </div>
 
@@ -314,27 +322,24 @@ const IdAuditor: React.FC = () => {
 
                 {step === 'input' && (
                     <div className="flex flex-col h-full animate-fade-in">
-                        <div className="bg-slate-50 px-10 py-6 border-b border-slate-100 flex justify-between items-center">
+                        <div className="bg-slate-50 px-10 py-6 border-b border-slate-100 flex justify-between items-center overflow-x-auto whitespace-nowrap">
                             <div className="flex items-center gap-6">
-                                <label className="font-black text-slate-800 text-[10px] uppercase tracking-[0.2em]">Mandatory Protocols</label>
+                                <label className="font-black text-slate-800 text-[10px] uppercase tracking-[0.2em]">Protocols</label>
                                 <div className="flex gap-2">
                                     {ID_CONFIG.map(c => (
                                         <span key={c.tag} className="px-2 py-1 bg-white border border-slate-200 rounded text-[9px] font-bold text-slate-50 shadow-sm uppercase">
-                                            <span className="text-slate-500">{c.tag}:</span> <span className="text-indigo-600 font-black">{c.prefix}</span>
+                                            <span className="text-slate-500">{c.tag}:</span> <span className="text-indigo-600 font-black">{c.prefix}####</span>
                                         </span>
                                     ))}
-                                    <span className="px-2 py-1 bg-indigo-600 border border-indigo-700 rounded text-[9px] font-black text-white shadow-sm uppercase">
-                                        given-name: Collapsed Initials
-                                    </span>
                                 </div>
                             </div>
-                            <button onClick={() => setInput('')} className="text-[10px] font-black text-rose-500 uppercase tracking-widest hover:underline transition-all">Reset Input</button>
+                            <button onClick={() => setInput('')} className="text-[10px] font-black text-rose-500 uppercase tracking-widest hover:underline transition-all ml-4">Reset Input</button>
                         </div>
                         <textarea 
                             value={input} 
                             onChange={e => setInput(e.target.value)} 
                             className="flex-grow p-10 font-mono text-[13px] border-0 focus:ring-0 resize-none bg-transparent leading-relaxed placeholder-slate-300" 
-                            placeholder="Paste the full XML article source here. Violations in ID prefixes and spaced initials will be reported..."
+                            placeholder="Paste the full XML article source here. Violations in ID prefixes, length, and spaced initials will be reported..."
                             spellCheck={false}
                         />
                         <div className="p-8 border-t border-slate-100 flex justify-center bg-slate-50/50">
@@ -347,32 +352,32 @@ const IdAuditor: React.FC = () => {
 
                 {step === 'audit' && (
                     <div className="flex flex-col h-full bg-slate-50 animate-fade-in overflow-hidden">
-                        <div className="px-10 py-6 border-b border-slate-200 bg-white flex justify-between items-center shadow-sm z-10">
-                            <div className="flex flex-col">
+                        <div className="px-10 py-6 border-b border-slate-200 bg-white flex justify-between items-center shadow-sm z-10 overflow-x-auto">
+                            <div className="flex flex-col shrink-0">
                                 <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Audit Matrix</h3>
                                 <div className="flex items-center gap-4 mt-1">
                                     <p className={`text-[10px] font-bold uppercase tracking-widest ${auditResults.some(r => r.status === 'invalid') ? 'text-rose-500 animate-pulse' : 'text-emerald-500'}`}>
-                                        {auditResults.filter(r => r.status === 'invalid').length} Total Non-Compliant Nodes
+                                        {auditResults.filter(r => r.status === 'invalid').length} Non-Compliant Nodes
                                     </p>
                                     <div className="h-3 w-px bg-slate-200"></div>
                                     <p className="text-[10px] text-amber-600 font-bold uppercase tracking-widest">
-                                        {auditResults.filter(r => r.isOtherRef).length} Other-Refs Listed
+                                        {auditResults.filter(r => r.isOtherRef).length} Other-Refs
                                     </p>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-4">
-                                <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 mr-4">
+                            <div className="flex items-center gap-4 shrink-0 ml-4">
+                                <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
                                     <button 
                                         onClick={() => setFilterInvalidOnly(!filterInvalidOnly)} 
                                         className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all ${filterInvalidOnly ? 'bg-rose-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                                     >
-                                        ID Errors
+                                        Violations
                                     </button>
                                     <button 
                                         onClick={() => setFilterNameSpacingOnly(!filterNameSpacingOnly)} 
                                         className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all ${filterNameSpacingOnly ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                                     >
-                                        Name Spacing
+                                        Names
                                     </button>
                                     <button 
                                         onClick={() => setFilterOtherOnly(!filterOtherOnly)} 
@@ -389,7 +394,7 @@ const IdAuditor: React.FC = () => {
                         </div>
                         <div className="flex-grow overflow-auto p-10 space-y-4 custom-scrollbar">
                             {filteredResults.length === 0 ? (
-                                <div className="h-full flex items-center justify-center text-slate-300 italic uppercase tracking-widest text-sm">No items matching current matrix filters</div>
+                                <div className="h-full flex items-center justify-center text-slate-300 italic uppercase tracking-widest text-sm text-center">No items matching current matrix filters</div>
                             ) : (
                                 filteredResults.map((res, idx) => (
                                     <div 
@@ -398,13 +403,18 @@ const IdAuditor: React.FC = () => {
                                     >
                                         <div className={`w-3 h-3 rounded-full shrink-0 ${res.status === 'invalid' ? 'bg-rose-500 animate-pulse' : 'bg-emerald-500'}`}></div>
                                         <div className="min-w-0 flex-grow">
-                                            <div className="flex items-center gap-3 mb-2">
+                                            <div className="flex flex-wrap items-center gap-2 mb-2">
                                                 <span className={`text-[10px] font-mono font-black px-2 py-1 rounded-lg border uppercase tracking-widest ${res.status === 'invalid' && !res.id.toLowerCase().startsWith(res.expectedPrefix) ? 'bg-rose-100 text-rose-700 border-rose-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
                                                     {res.originalId}
                                                 </span>
                                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 py-1 bg-slate-50 rounded border border-slate-100">
                                                     Tag: {res.tagName}
                                                 </span>
+                                                {res.isLengthViolation && (
+                                                    <span className="text-[9px] font-black uppercase bg-rose-500 text-white px-2 py-1 rounded border border-rose-600 shadow-sm">
+                                                        ID Length Violation
+                                                    </span>
+                                                )}
                                                 {res.isOtherRef && (
                                                     <span className="text-[9px] font-black uppercase bg-amber-100 text-amber-700 px-2 py-1 rounded border border-amber-200 shadow-sm">
                                                         Other-Ref
@@ -422,8 +432,10 @@ const IdAuditor: React.FC = () => {
                                             <div className={`text-[9px] font-black uppercase tracking-widest mb-1 ${res.status === 'invalid' ? 'text-rose-600' : 'text-emerald-600'}`}>
                                                 {res.status === 'invalid' ? 'Correction Required' : 'Protocol Compliant'}
                                             </div>
-                                            {res.status === 'invalid' && !res.id.toLowerCase().startsWith(res.expectedPrefix) && (
-                                                <div className="text-[10px] font-bold text-slate-400">Prefix: <span className="text-indigo-600 font-black">{res.expectedPrefix}</span></div>
+                                            {res.status === 'invalid' && (
+                                                <div className="text-[10px] font-bold text-slate-400 text-right">
+                                                    Expected: <span className="text-indigo-600 font-black">{res.expectedPrefix}####</span>
+                                                </div>
                                             )}
                                         </div>
                                     </div>
