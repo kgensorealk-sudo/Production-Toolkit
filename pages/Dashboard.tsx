@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router';
 import { ToolId } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import AnnouncementModal from '../components/AnnouncementModal';
+import ToolTipsModal from '../components/ToolTipsModal';
 import Toast from '../components/Toast';
 
 interface ToolCardProps {
@@ -15,15 +16,19 @@ interface ToolCardProps {
     borderColor: string;
     Icon: React.FC<any>;
     onClick: () => void;
+    onTipClick: (e: React.MouseEvent) => void;
     delay: number;
     lockType: 'key' | 'subscription' | 'none';
     isFree: boolean;
     expiry?: string;
 }
 
-const ToolCard: React.FC<ToolCardProps> = ({ id, title, desc, iconBg, iconText, borderColor, Icon, onClick, delay, lockType, isFree, expiry }) => {
+const ToolCard: React.FC<ToolCardProps> = ({ id, title, desc, iconBg, iconText, borderColor, Icon, onClick, onTipClick, delay, lockType, isFree, expiry }) => {
     const isLocked = lockType !== 'none' && !isFree;
     const [timeLeft, setTimeLeft] = useState<string>('');
+    const [hasSeenTips, setHasSeenTips] = useState(() => {
+        return localStorage.getItem(`tips_seen_${id}`) === 'true';
+    });
 
     useEffect(() => {
         if (!isFree || !expiry) return;
@@ -43,6 +48,13 @@ const ToolCard: React.FC<ToolCardProps> = ({ id, title, desc, iconBg, iconText, 
         const timer = setInterval(update, 60000);
         return () => clearInterval(timer);
     }, [isFree, expiry]);
+
+    const handleTipInternal = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        localStorage.setItem(`tips_seen_${id}`, 'true');
+        setHasSeenTips(true);
+        onTipClick(e);
+    };
     
     return (
         <div 
@@ -53,15 +65,29 @@ const ToolCard: React.FC<ToolCardProps> = ({ id, title, desc, iconBg, iconText, 
             <div className={`h-full bg-white rounded-[2.2rem] p-8 flex flex-col border border-slate-100 relative overflow-hidden ${isLocked ? 'grayscale-[0.9]' : ''}`}>
                 <div className={`absolute top-0 left-0 w-full h-1.5 ${isLocked ? 'bg-slate-200' : (isFree ? 'bg-emerald-50' : borderColor)}`}></div>
                 
+                {/* PRO TIP ICON - Positioned top-left */}
+                <button 
+                    onClick={handleTipInternal}
+                    className="absolute top-4 left-4 z-30 w-9 h-9 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-500 shadow-sm hover:scale-110 hover:bg-amber-500 hover:text-white transition-all duration-300 group/tip"
+                    title="Expert Editorial Tips"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                    {!hasSeenTips && (
+                        <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-400 rounded-full animate-ping opacity-75"></span>
+                    )}
+                </button>
+
                 {isFree ? (
-                    <div className="absolute top-5 right-5 z-20">
+                    <div className="absolute top-4 right-4 z-20">
                         <span className="bg-emerald-500 text-white text-[9px] font-black px-3 py-1.5 rounded-full border border-emerald-400 uppercase tracking-widest flex items-center gap-1.5 shadow-lg shadow-emerald-500/30 animate-pulse">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" /></svg>
                             Free Access {timeLeft && `• ${timeLeft}`}
                         </span>
                     </div>
                 ) : isLocked && (
-                    <div className="absolute top-5 right-5 z-20">
+                    <div className="absolute top-4 right-4 z-20">
                         <span className={`text-[8px] font-black px-2 py-1 rounded-md border uppercase tracking-widest flex items-center gap-1.5 shadow-sm bg-slate-50 text-slate-400 border-slate-100`}>
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                             Locked
@@ -69,7 +95,7 @@ const ToolCard: React.FC<ToolCardProps> = ({ id, title, desc, iconBg, iconText, 
                     </div>
                 )}
 
-                <div className="flex items-start justify-between mb-8">
+                <div className="flex items-start justify-between mt-12 mb-8">
                     <div className={`w-16 h-16 ${isLocked ? 'bg-slate-50' : (isFree ? 'bg-emerald-50' : iconBg)} rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform duration-500 shadow-sm border border-slate-100`}>
                         <Icon className={`h-8 w-8 ${isLocked ? 'text-slate-300' : (isFree ? 'text-emerald-600' : iconText)}`} />
                     </div>
@@ -98,6 +124,7 @@ const Dashboard: React.FC = () => {
     const { profile, freeTools, freeToolsData, refreshProfile, isAdmin } = useAuth();
     const [isSyncing, setIsSyncing] = useState(false);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
+    const [activeTipTool, setActiveTipTool] = useState<{id: string, name: string} | null>(null);
 
     const getLockType = (toolId: ToolId): 'key' | 'subscription' | 'none' => {
         if (isAdmin) return 'none';
@@ -111,13 +138,10 @@ const Dashboard: React.FC = () => {
 
     const handleSync = async () => {
         setIsSyncing(true);
-        
-        // FORCED CUTOFF: If AuthContext doesn't finish in 6s, we stop the spinner here.
         const timer = setTimeout(() => {
             setIsSyncing(false);
             setToast({ msg: "Database timed out. Check network connection.", type: "warn" });
         }, 6000);
-
         try {
             await refreshProfile();
             clearTimeout(timer);
@@ -133,6 +157,7 @@ const Dashboard: React.FC = () => {
         { id: ToolId.XML_RENUMBER, title: "XML Normalizer", desc: "Automatically renumbers bibliography citations and updates all cross-references.", iconBg: "bg-blue-50", iconText: "text-blue-600", borderColor: "bg-blue-500", Icon: (props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg> },
         { id: ToolId.REF_EXTRACTOR, title: "Bibliography Extractor", desc: "Pure-text bibliography isolation with automated punctuation and spacing normalization for Word.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: (props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> },
         { id: ToolId.GRANT_TAGGER, title: "Grant Tagger", desc: "Identify and tag grant sponsors and numbers within funding statements with XML cross-linking.", iconBg: "bg-emerald-50", iconText: "text-emerald-600", borderColor: "bg-emerald-500", Icon: (props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.407 2.67 1M12 8V7m0 1v8m0 0v1m-2.67-1c.59.593 1.56 1 2.67 1m0-1c-1.11 0-2.08-.407-2.67-1M12 16V17" /></svg> },
+        { id: ToolId.COMMENT_REPLACER, title: "Comment Replacer", desc: "Extract and clean reference replacements buried in XML editorial comment tags.", iconBg: "bg-amber-50", iconText: "text-amber-600", borderColor: "bg-amber-500", Icon: (props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" /></svg> },
         { id: ToolId.REF_PURGER, title: "Ref List Purger", desc: "Surgically remove reported uncited items from your XML source with high-precision matching.", iconBg: "bg-rose-50", iconText: "text-rose-600", borderColor: "bg-rose-500", Icon: (props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg> },
         { id: ToolId.UNCITED_CLEANER, title: "Uncited Ref Cleaner", desc: "Detect references with no body citations. Perform bulk purging while preserving document integrity.", iconBg: "bg-rose-50", iconText: "text-rose-600", borderColor: "bg-rose-600", Icon: (props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg> },
         { id: ToolId.ID_AUDITOR, title: "ID Prefix Auditor", desc: "Audit and normalize ID sequences in references. Fixes non-standard prefixes while maintaining internal document links.", iconBg: "bg-violet-50", iconText: "text-violet-600", borderColor: "bg-violet-500", Icon: (props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg> },
@@ -153,9 +178,23 @@ const Dashboard: React.FC = () => {
         return { active, locked };
     }, [profile, freeTools, isAdmin]);
 
+    const handleTipClick = (toolId: string, toolName: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setActiveTipTool({ id: toolId, name: toolName });
+    };
+
     return (
         <div className="max-w-7xl mx-auto px-4 py-20 sm:px-6 lg:px-8">
             <AnnouncementModal />
+            {activeTipTool && (
+                <ToolTipsModal 
+                    toolId={activeTipTool.id} 
+                    toolName={activeTipTool.name} 
+                    isOpen={!!activeTipTool} 
+                    onClose={() => setActiveTipTool(null)} 
+                />
+            )}
+
             <div className="text-center mb-16 animate-fade-in">
                 <h2 className="text-5xl md:text-6xl font-black text-slate-900 tracking-tighter mb-6 uppercase">
                     Workspace <span className="text-indigo-600">Console</span>
@@ -203,6 +242,7 @@ const Dashboard: React.FC = () => {
                                 isFree={freeTools.includes(tool.id)}
                                 expiry={freeToolsData[tool.id]}
                                 onClick={() => navigate(`/${tool.id}`)}
+                                onTipClick={(e) => handleTipClick(tool.id, tool.title, e)}
                             />
                         ))}
                     </div>
@@ -225,6 +265,7 @@ const Dashboard: React.FC = () => {
                                 lockType={getLockType(tool.id)}
                                 isFree={freeTools.includes(tool.id)}
                                 onClick={() => navigate(`/${tool.id}`)}
+                                onTipClick={(e) => handleTipClick(tool.id, tool.title, e)}
                             />
                         ))}
                     </div>

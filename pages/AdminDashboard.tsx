@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import { UserProfile, ToolId } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -24,6 +24,12 @@ interface AccessKeyRecord {
     user_id?: string;
     device_id?: string;
     created_at: string;
+}
+
+interface UsageLog {
+    tool_id: string;
+    user_id: string;
+    timestamp: string;
 }
 
 const DURATION_OPTIONS = [
@@ -78,7 +84,7 @@ const formatLastSeen = (timestamp?: string) => {
 };
 
 const AdminDashboard: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'users' | 'keys' | 'announcements' | 'config'>('users');
+    const [activeTab, setActiveTab] = useState<'users' | 'keys' | 'announcements' | 'config' | 'intelligence'>('users');
     const [isLoading, setIsLoading] = useState(false);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
     const { freeToolsData, refreshFreeTools } = useAuth();
@@ -96,6 +102,8 @@ const AdminDashboard: React.FC = () => {
     const [accessKeys, setAccessKeys] = useState<AccessKeyRecord[]>([]);
     const [keyTool, setKeyTool] = useState<string>('universal');
     const [keyQty, setKeyQty] = useState<number>(1);
+
+    const [usageLogs, setUsageLogs] = useState<UsageLog[]>([]);
 
     const [confirmConfig, setConfirmConfig] = useState<{
         isOpen: boolean; title: string; message: string; confirmLabel?: string; type: 'primary' | 'danger'; onConfirm: () => void;
@@ -117,6 +125,8 @@ const AdminDashboard: React.FC = () => {
             case ToolId.REF_EXTRACTOR: return "Bibliography Extractor";
             case ToolId.REF_PURGER: return "Reference List Purger";
             case ToolId.GRANT_TAGGER: return "Grant XML Tagger";
+            case ToolId.ID_AUDITOR: return "ID Prefix Auditor";
+            case ToolId.COMMENT_REPLACER: return "Comment Replacer";
             case 'universal': return "Universal Access";
             default: return tid;
         }
@@ -148,6 +158,19 @@ const AdminDashboard: React.FC = () => {
             setToast({ msg: 'Key matrix fetch failed', type: 'error' });
         } finally { setIsLoading(false); }
     }, []);
+
+    const fetchIntelligence = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const { data, error } = await supabase.from('usage_logs').select('tool_id, user_id, timestamp');
+            if (error) throw error;
+            setUsageLogs(data || []);
+            // Also need fresh user list for mapping
+            await fetchUsers(true);
+        } catch (error: any) {
+            console.warn("Usage logs might not exist yet.");
+        } finally { setIsLoading(false); }
+    }, [fetchUsers]);
 
     const handleRevokeKey = async (keyRecord: AccessKeyRecord) => {
         setIsLoading(true);
@@ -190,7 +213,8 @@ const AdminDashboard: React.FC = () => {
         else if (activeTab === 'announcements') fetchAnnouncements();
         else if (activeTab === 'keys') fetchUsers(true).then(() => fetchAccessKeys());
         else if (activeTab === 'config') refreshFreeTools();
-    }, [activeTab, fetchUsers, fetchAnnouncements, fetchAccessKeys, refreshFreeTools]);
+        else if (activeTab === 'intelligence') fetchIntelligence();
+    }, [activeTab, fetchUsers, fetchAnnouncements, fetchAccessKeys, refreshFreeTools, fetchIntelligence]);
 
     useEffect(() => {
         if (activeTab === 'users') {
@@ -314,6 +338,42 @@ const AdminDashboard: React.FC = () => {
         return (Date.now() - new Date(u.last_seen).getTime()) < 300000;
     }).length;
 
+    // --- Intelligence Analytics ---
+    const intelligenceMetrics = useMemo(() => {
+        if (usageLogs.length === 0) return { globalRanking: [], userAffinities: [], rareTools: [] };
+
+        const toolCounts: Record<string, number> = {};
+        const userToolCounts: Record<string, Record<string, number>> = {};
+
+        usageLogs.forEach(log => {
+            toolCounts[log.tool_id] = (toolCounts[log.tool_id] || 0) + 1;
+            if (!userToolCounts[log.user_id]) userToolCounts[log.user_id] = {};
+            userToolCounts[log.user_id][log.tool_id] = (userToolCounts[log.user_id][log.tool_id] || 0) + 1;
+        });
+
+        const allAvailableTools = Object.values(ToolId).filter(id => id !== 'dashboard' && id !== 'docs');
+        
+        const globalRanking = allAvailableTools.map(id => ({
+            id,
+            name: getToolName(id),
+            count: toolCounts[id] || 0
+        })).sort((a, b) => b.count - a.count);
+
+        const rareTools = globalRanking.filter(r => r.count < 5).reverse();
+
+        const userAffinities = users.map(user => {
+            const counts = userToolCounts[user.id] || {};
+            const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+            return {
+                email: user.email,
+                topTool: sorted.length > 0 ? getToolName(sorted[0][0]) : 'None',
+                totalActions: Object.values(counts).reduce((a, b) => a + b, 0)
+            };
+        }).filter(ua => ua.totalActions > 0).sort((a, b) => b.totalActions - a.totalActions);
+
+        return { globalRanking, userAffinities, rareTools };
+    }, [usageLogs, users]);
+
     return (
         <div className="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
             <ConfirmationModal isOpen={confirmConfig.isOpen} title={confirmConfig.title} message={confirmConfig.message} confirmLabel={confirmConfig.confirmLabel} type={confirmConfig.type} onConfirm={() => { confirmConfig.onConfirm(); setConfirmConfig(prev => ({ ...prev, isOpen: false })); }} onCancel={() => setConfirmConfig(prev => ({ ...prev, isOpen: false }))} />
@@ -333,10 +393,11 @@ const AdminDashboard: React.FC = () => {
                 </div>
             </div>
 
-            <div className="flex space-x-1 bg-slate-200/50 p-1 rounded-xl mb-6 w-full max-w-2xl overflow-x-auto">
+            <div className="flex space-x-1 bg-slate-200/50 p-1 rounded-xl mb-6 w-full max-w-3xl overflow-x-auto">
                 <button onClick={() => setActiveTab('users')} className={`flex-1 py-2.5 px-6 text-sm font-bold rounded-lg transition-all ${activeTab === 'users' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Personnel</button>
                 <button onClick={() => setActiveTab('keys')} className={`flex-1 py-2.5 px-6 text-sm font-bold rounded-lg transition-all ${activeTab === 'keys' ? 'bg-white text-indigo-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Key Matrix</button>
-                <button onClick={() => setActiveTab('config')} className={`flex-1 py-2.5 px-6 text-sm font-bold rounded-lg transition-all ${activeTab === 'config' ? 'bg-white text-emerald-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Global Config</button>
+                <button onClick={() => setActiveTab('intelligence')} className={`flex-1 py-2.5 px-6 text-sm font-bold rounded-lg transition-all ${activeTab === 'intelligence' ? 'bg-white text-purple-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Intelligence</button>
+                <button onClick={() => setActiveTab('config')} className={`flex-1 py-2.5 px-6 text-sm font-bold rounded-lg transition-all ${activeTab === 'config' ? 'bg-white text-emerald-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Protocols</button>
                 <button onClick={() => setActiveTab('announcements')} className={`flex-1 py-2.5 px-6 text-sm font-bold rounded-lg transition-all ${activeTab === 'announcements' ? 'bg-white text-indigo-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Broadcasts</button>
             </div>
 
@@ -381,6 +442,100 @@ const AdminDashboard: React.FC = () => {
                     </div>
                 )}
 
+                {activeTab === 'intelligence' && (
+                    <div className="p-8 lg:p-12 space-y-12">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                            {/* POPULARITY LEADERBOARD */}
+                            <section>
+                                <div className="flex items-center gap-4 mb-6">
+                                    <div className="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center text-purple-600 shadow-sm">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+                                    </div>
+                                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">System Node Adoption</h3>
+                                </div>
+                                <div className="space-y-6">
+                                    {intelligenceMetrics.globalRanking.slice(0, 8).map((tool, idx) => (
+                                        <div key={tool.id} className="relative">
+                                            <div className="flex justify-between items-end mb-2">
+                                                <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider">{tool.name}</span>
+                                                <span className="text-[10px] font-bold text-indigo-500">{tool.count} Sessions</span>
+                                            </div>
+                                            <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                                                <div 
+                                                    className="h-full bg-indigo-500 transition-all duration-1000" 
+                                                    style={{ width: `${Math.min(100, (tool.count / Math.max(1, usageLogs.length)) * 500)}%` }}
+                                                ></div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+
+                            {/* RARELY USED */}
+                            <section>
+                                <div className="flex items-center gap-4 mb-6">
+                                    <div className="w-10 h-10 bg-rose-50 rounded-xl flex items-center justify-center text-rose-600 shadow-sm">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                                    </div>
+                                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Cold Nodes</h3>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {intelligenceMetrics.rareTools.length > 0 ? (
+                                        intelligenceMetrics.rareTools.map(tool => (
+                                            <div key={tool.id} className="p-5 bg-slate-50 border border-slate-100 rounded-[1.5rem] flex flex-col items-center text-center">
+                                                <span className="text-[10px] font-black text-rose-400 uppercase tracking-[0.2em] mb-1">Underutilized</span>
+                                                <h4 className="text-xs font-bold text-slate-700 uppercase mb-3 line-clamp-1">{tool.name}</h4>
+                                                <span className="text-[10px] font-mono bg-white px-2 py-1 rounded-md border border-slate-200 text-slate-400">{tool.count} hits</span>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div className="col-span-full py-10 flex flex-col items-center opacity-30 grayscale">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                            <p className="text-xs font-bold uppercase tracking-widest">Global saturation optimal</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </section>
+                        </div>
+
+                        {/* STAFF ENGAGEMENT */}
+                        <section>
+                            <div className="flex items-center gap-4 mb-8">
+                                <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 shadow-sm">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                                </div>
+                                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Personnel Engagement Audit</h3>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full divide-y divide-slate-100 bg-slate-50/50 rounded-3xl border border-slate-100 overflow-hidden">
+                                    <thead className="bg-white/50">
+                                        <tr>
+                                            <th className="px-8 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Operator</th>
+                                            <th className="px-8 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Primary Module</th>
+                                            <th className="px-8 py-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">Action Index</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {intelligenceMetrics.userAffinities.map((ua, i) => (
+                                            <tr key={i} className="hover:bg-white transition-colors">
+                                                <td className="px-8 py-4 text-sm font-bold text-slate-900">{ua.email}</td>
+                                                <td className="px-8 py-4">
+                                                    <span className="px-3 py-1 bg-white border border-indigo-100 text-indigo-600 text-[10px] font-black rounded-lg shadow-sm uppercase tracking-tighter">
+                                                        {ua.topTool}
+                                                    </span>
+                                                </td>
+                                                <td className="px-8 py-4 text-center">
+                                                    <span className="text-[11px] font-mono font-bold text-slate-500">{ua.totalActions} logged</span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </section>
+                    </div>
+                )}
+
                 {activeTab === 'keys' && (
                     <div className="p-8 space-y-8">
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end bg-slate-50 p-6 rounded-2xl border border-slate-100 shadow-inner">
@@ -388,11 +543,40 @@ const AdminDashboard: React.FC = () => {
                             <div><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block tracking-widest">Quantity</label><input type="number" min="1" max="50" value={keyQty} onChange={e => setKeyQty(parseInt(e.target.value))} className="w-full rounded-xl border-slate-200 text-sm font-bold bg-white focus:ring-2 focus:ring-indigo-100 outline-none" /></div>
                             <button onClick={generateKeys} className="bg-slate-900 text-white font-black py-2.5 rounded-xl uppercase text-xs tracking-widest shadow-lg active:scale-95 transition-all">Generate</button>
                         </div>
-                        <div className="overflow-x-auto"><table className="min-w-full divide-y divide-slate-100"><thead className="bg-slate-50 font-black text-slate-400 uppercase text-[10px]"><tr><th className="px-6 py-4 text-left">Key</th><th className="px-6 py-4 text-left">Target</th><th className="px-6 py-4 text-left">Status</th><th className="px-6 py-4 text-left">User</th><th className="px-6 py-4 text-left">Control</th></tr></thead><tbody className="divide-y divide-slate-100">
-                            {accessKeys.map(k => (
-                                <tr key={k.id} className="hover:bg-slate-50/50 transition-colors"><td className="px-6 py-4 font-mono font-black text-indigo-600 text-sm tracking-widest">{k.key}</td><td className="px-6 py-4 text-[11px] font-bold text-slate-600">{getToolName(k.tool)}</td><td className="px-6 py-4"><span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border ${k.is_used ? 'text-rose-500 bg-rose-50 border-rose-100' : 'text-emerald-500 bg-emerald-50 border-emerald-100'}`}>{k.is_used ? 'LOCKED' : 'AVAIL'}</span></td><td className="px-6 py-4 text-[11px] font-bold text-slate-600">{users.find(u => u.id === k.user_id)?.email || 'Unbound'}</td><td className="px-6 py-4"><div className="flex gap-2">{k.is_used && <button onClick={() => handleRevokeKey(k)} className="p-1.5 text-amber-500 hover:bg-amber-50 rounded transition-colors"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg></button>}<button onClick={() => handleDeleteKey(k.id)} className="p-1.5 text-rose-300 hover:text-rose-600 transition-colors"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button></div></td></tr>
-                            ))}
-                        </tbody></table></div>
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-slate-100">
+                                <thead className="bg-slate-50 font-black text-slate-400 uppercase text-[10px]">
+                                    <tr>
+                                        <th className="px-6 py-4 text-left">Key</th>
+                                        <th className="px-6 py-4 text-left">Target</th>
+                                        <th className="px-6 py-4 text-left">Status</th>
+                                        <th className="px-6 py-4 text-left">User</th>
+                                        <th className="px-6 py-4 text-left">Hardware Node</th>
+                                        <th className="px-6 py-4 text-left">Control</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {accessKeys.map(k => (
+                                        <tr key={k.id} className="hover:bg-slate-50/50 transition-colors">
+                                            <td className="px-6 py-4 font-mono font-black text-indigo-600 text-sm tracking-widest">{k.key}</td>
+                                            <td className="px-6 py-4 text-[11px] font-bold text-slate-600">{getToolName(k.tool)}</td>
+                                            <td className="px-6 py-4"><span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border ${k.is_used ? 'text-rose-500 bg-rose-50 border-rose-100' : 'text-emerald-500 bg-emerald-50 border-emerald-100'}`}>{k.is_used ? 'LOCKED' : 'AVAIL'}</span></td>
+                                            <td className="px-6 py-4 text-[11px] font-bold text-slate-600">{users.find(u => u.id === k.user_id)?.email || 'Unbound'}</td>
+                                            <td className="px-6 py-4">
+                                                {k.device_id ? (
+                                                    <span className="font-mono text-[9px] font-black text-slate-500 bg-slate-100 px-2 py-1 rounded-md border border-slate-200" title={k.device_id}>
+                                                        NODE_{k.device_id.substring(4, 12).toUpperCase()}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-[9px] font-bold text-slate-300 uppercase italic">Unbound</span>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-4"><div className="flex gap-2">{k.is_used && <button onClick={() => handleRevokeKey(k)} className="p-1.5 text-amber-500 hover:bg-amber-50 rounded transition-colors"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg></button>}<button onClick={() => handleDeleteKey(k.id)} className="p-1.5 text-rose-300 hover:text-rose-600 transition-colors"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button></div></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 )}
 

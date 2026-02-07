@@ -1,3 +1,4 @@
+
 -- 1. TABLE STRUCTURE (Baseline)
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
@@ -10,9 +11,16 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   last_seen TIMESTAMPTZ DEFAULT now()
 );
 
+-- 6. TOOL TIPS TABLE
+CREATE TABLE IF NOT EXISTS public.tool_tips (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  tool_id TEXT NOT NULL,
+  content TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  author_id UUID REFERENCES public.profiles(id)
+);
+
 -- 2. SECURE PROFILE INITIALIZATION
--- Ensures that no matter what the signup request contains, 
--- the user is ALWAYS created as a non-subscribed 'user'.
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -41,33 +49,22 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- 4. HARDENED SECURITY POLICIES
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
--- SELECT: Users see themselves, Admins see everyone
 DROP POLICY IF EXISTS "Users view own profile" ON public.profiles;
 CREATE POLICY "Users view own profile" 
 ON public.profiles FOR SELECT 
 USING ( auth.uid() = id OR is_admin() );
 
--- UPDATE: This is the critical security fix.
--- Users can ONLY update their 'last_seen' timestamp.
--- We use a trigger or a strict policy check to prevent role/subscription tampering.
 DROP POLICY IF EXISTS "Users update own heartbeat" ON public.profiles;
 CREATE POLICY "Users update own heartbeat" 
 ON public.profiles FOR UPDATE 
 USING ( auth.uid() = id )
 WITH CHECK (
-  -- Prevent modification of sensitive columns by regular users
-  (
-    is_admin() -- Admins can do anything
-  ) OR (
-    -- Users can only modify last_seen
-    -- RLS doesn't natively support column-level 'WITH CHECK' easily, 
-    -- so we ensure the user stays a 'user' and stays 'unsubscribed' if they weren't already.
+  (is_admin()) OR (
     role = 'user' AND 
     (is_subscribed = (SELECT is_subscribed FROM public.profiles WHERE id = auth.uid()))
   )
 );
 
--- ADMIN MASTER: Full access for true admins
 DROP POLICY IF EXISTS "Admin Master Control Profiles" ON public.profiles;
 CREATE POLICY "Admin Master Control Profiles" 
 ON public.profiles FOR ALL 
@@ -84,3 +81,19 @@ CREATE POLICY "Secure Key Binding"
 ON public.access_keys FOR UPDATE
 USING ( (is_used = false) OR (user_id = auth.uid()) OR is_admin() )
 WITH CHECK ( (user_id = auth.uid()) OR is_admin() );
+
+-- 7. TOOL TIPS POLICIES
+ALTER TABLE public.tool_tips ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Tips visible to all" ON public.tool_tips;
+CREATE POLICY "Tips visible to all" 
+ON public.tool_tips FOR SELECT 
+TO authenticated
+USING (true);
+
+DROP POLICY IF EXISTS "Admins manage tips" ON public.tool_tips;
+CREATE POLICY "Admins manage tips" 
+ON public.tool_tips FOR ALL 
+TO authenticated
+USING (is_admin())
+WITH CHECK (is_admin());

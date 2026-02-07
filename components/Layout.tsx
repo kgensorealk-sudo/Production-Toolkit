@@ -15,12 +15,29 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => {
     const navigate = useNavigate();
     const location = useLocation();
-    const { signOut, profile, isAdmin } = useAuth();
+    const { signOut, profile, isAdmin, user } = useAuth();
     const [isOnline, setIsOnline] = useState(navigator.onLine);
     const [hasActiveAnnouncement, setHasActiveAnnouncement] = useState(false);
     const [isAnnouncementUnread, setIsAnnouncementUnread] = useState(false);
     
     const isDesktop = (window as any).electron !== undefined;
+
+    // Automated Telemetry: Log tool usage
+    useEffect(() => {
+        if (currentTool && user?.id) {
+            const logUsage = async () => {
+                try {
+                    await supabase.from('usage_logs').insert([{
+                        user_id: user.id,
+                        tool_id: currentTool
+                    }]);
+                } catch (e) {
+                    // Silently fail telemetry to not disrupt user experience
+                }
+            };
+            logUsage();
+        }
+    }, [currentTool, user?.id]);
 
     useEffect(() => {
         const handleOnline = () => setIsOnline(true);
@@ -28,7 +45,6 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
         window.addEventListener('online', handleOnline);
         window.addEventListener('offline', handleOffline);
 
-        // Check for announcements periodically
         const checkBroadcastStatus = async () => {
             try {
                 const { data } = await supabase
@@ -51,7 +67,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
         };
 
         checkBroadcastStatus();
-        const interval = setInterval(checkBroadcastStatus, 60000 * 5); // check every 5m
+        const interval = setInterval(checkBroadcastStatus, 60000 * 5);
 
         return () => {
             window.removeEventListener('online', handleOnline);
@@ -130,6 +146,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                                     {currentTool === ToolId.REF_PURGER && 'Ref Purger'}
                                     {currentTool === ToolId.GRANT_TAGGER && 'Grant Tagger'}
                                     {currentTool === ToolId.ID_AUDITOR && 'ID Prefix Auditor'}
+                                    {currentTool === ToolId.COMMENT_REPLACER && 'Comment Replacer'}
                                 </span>
                             </div>
                         )}

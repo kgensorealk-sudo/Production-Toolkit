@@ -3,7 +3,8 @@ import React from 'react';
 
 interface LoadingOverlayProps {
     message?: string;
-    color?: 'indigo' | 'purple' | 'teal' | 'emerald' | 'orange' | 'rose' | 'blue' | 'pink' | 'slate';
+    // Added 'amber' to allowed color types to support components like CommentReplacer
+    color?: 'indigo' | 'purple' | 'teal' | 'emerald' | 'orange' | 'rose' | 'blue' | 'pink' | 'slate' | 'amber';
 }
 
 const LoadingOverlay: React.FC<LoadingOverlayProps> = ({ message = 'Processing...', color = 'indigo' }) => {
@@ -16,7 +17,9 @@ const LoadingOverlay: React.FC<LoadingOverlayProps> = ({ message = 'Processing..
         rose: { bg: 'bg-rose-600', border: 'border-rose-600', text: 'text-rose-600' },
         blue: { bg: 'bg-blue-600', border: 'border-blue-600', text: 'text-blue-600' },
         pink: { bg: 'bg-pink-600', border: 'border-pink-600', text: 'text-pink-600' },
-        slate: { bg: 'bg-slate-600', border: 'border-slate-600', text: 'text-slate-600' }
+        slate: { bg: 'bg-slate-600', border: 'border-slate-600', text: 'text-slate-600' },
+        // Added amber theme definition for use in editorial comment processing
+        amber: { bg: 'bg-amber-600', border: 'border-amber-600', text: 'text-amber-600' }
     };
 
     const theme = themes[color];

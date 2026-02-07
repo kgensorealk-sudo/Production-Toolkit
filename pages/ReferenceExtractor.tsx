@@ -8,7 +8,7 @@ interface ExtractedRef {
     label: string;
     rawText: string;
     formattedHtml: string;
-    sourceType: 'other-ref' | 'structured' | 'fallback';
+    sourceType: 'source-text' | 'other-ref' | 'structured' | 'fallback';
 }
 
 const ReferenceExtractor: React.FC = () => {
@@ -20,34 +20,34 @@ const ReferenceExtractor: React.FC = () => {
     const [toast, setToast] = useState<{ msg: string, type: 'success' | 'warn' | 'error' | 'info' } | null>(null);
 
     /**
-     * NUCLEAR CLEANLINESS PROTOCOL
-     * Purges all hidden Unicode artifacts (ZWSP, NBSP, Soft Hyphens, Control Codes)
-     * and fixes punctuation spacing to ensure Word treats it as manual input.
+     * CLEANING PROTOCOL
+     * Purges artifacts and fixes punctuation spacing.
      */
     const sanitizeForWord = (text: string): string => {
         if (!text) return '';
-        return text
-            // 1. Normalize Unicode
+        let sanitized = text
             .normalize('NFKC')
-            // 2. Replace all special spaces with standard space
             .replace(/[\u00A0\u1680\u180e\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]/g, ' ')
-            // 3. Purge invisible gremlins (ZWSP, Soft Hyphen, etc.)
             .replace(/[\u200B-\u200D\uFEFF\u00AD\u2060\u200E\u200F]/g, '')
-            // 4. Remove ASCII control chars
             .replace(/[\x00-\x1F\x7F]/g, '')
-            // 5. SURGICAL PUNCTUATION CLEANUP (Fixes the "Space + Period" issue)
-            .replace(/\s+,/g, ',')           // "word ," -> "word,"
-            .replace(/\s+\./g, '.')           // "word ." -> "word."
-            .replace(/\s+:/g, ':')           // "word :" -> "word:"
-            .replace(/\s+;/g, ';')           // "word ;" -> "word;"
-            .replace(/,\s*,/g, ', ')         // ", ," -> ", "
-            .replace(/,\s*\./g, '.')         // ", ." -> "."
-            .replace(/\.\s*,/g, '.')         // ". ," -> "."
-            .replace(/\(\s+/g, '(')          // "( " -> "("
-            .replace(/\s+\)/g, ')')          // " )" -> ")"
-            // 6. Collapse multiple spaces
+            .replace(/\s+,/g, ',')
+            .replace(/\s+\./g, '.')
+            .replace(/\s+:/g, ':')
+            .replace(/\s+;/g, ';')
+            .replace(/,\s*,/g, ', ')
+            .replace(/,\s*\./g, '.')
+            .replace(/\.\s*,/g, '.')
+            .replace(/\(\s+/g, '(')
+            .replace(/\s+\)/g, ')')
             .replace(/\s+/g, ' ')
             .trim();
+        
+        // Final Rule: Enforce trailing period
+        if (sanitized && !sanitized.endsWith('.')) {
+            sanitized += '.';
+        }
+        
+        return sanitized;
     };
 
     const runExtraction = () => {
@@ -61,91 +61,58 @@ const ReferenceExtractor: React.FC = () => {
             try {
                 const found: ExtractedRef[] = [];
                 const bibRegex = /<ce:bib-reference\b[^>]*?\bid="([^"]+)"[^>]*>([\s\S]*?)<\/ce:bib-reference>/g;
-                const monthNames = [
-                    "January", "February", "March", "April", "May", "June",
-                    "July", "August", "September", "October", "November", "December"
-                ];
                 
                 let match;
                 while ((match = bibRegex.exec(input)) !== null) {
                     const id = match[1];
-                    const originalFullContent = match[2];
-
-                    // 1. DEDUPLICATION: Remove source-text
-                    const contentWithoutSource = originalFullContent.replace(/<ce:source-text\b[^>]*>([\s\S]*?)<\/ce:source-text>/gi, '');
+                    const content = match[2];
                     
-                    // 2. Extract Label
-                    const labelMatch = originalFullContent.match(/<ce:label>(.*?)<\/ce:label>/);
-                    const label = labelMatch ? labelMatch[1].trim() : '';
+                    const labelMatch = content.match(/<ce:label>(.*?)<\/ce:label>/);
+                    const originalLabel = labelMatch ? labelMatch[1].trim() : '';
+                    
+                    // Supress Name-date labels for clean Word output
+                    const isNumericLabel = originalLabel.length > 0 && !/[a-zA-Z]/.test(originalLabel);
+                    const displayLabel = isNumericLabel ? originalLabel : '';
 
-                    // 3. Determine Source
                     let bestSource = '';
-                    let sourceType: 'other-ref' | 'structured' | 'fallback' = 'fallback';
-                    const otherRefMatch = contentWithoutSource.match(/<ce:other-ref[^>]*>([\s\S]*?)<\/ce:other-ref>/i);
-                    const structuredMatch = contentWithoutSource.match(/<(?:sb|ce):reference[^>]*>([\s\S]*?)<\/(?:sb|ce):reference>/i);
+                    let sourceType: 'source-text' | 'other-ref' | 'structured' | 'fallback' = 'fallback';
 
-                    if (otherRefMatch) {
+                    // 1. Priority: ce:source-text (Contains pre-formatted string)
+                    const sourceTextMatch = content.match(/<ce:source-text\b[^>]*>([\s\S]*?)<\/ce:source-text>/i);
+                    const otherRefMatch = content.match(/<ce:other-ref[^>]*>([\s\S]*?)<\/ce:other-ref>/i);
+                    const structuredMatch = content.match(/<(?:sb|ce):reference[^>]*>([\s\S]*?)<\/(?:sb|ce):reference>/i);
+
+                    if (sourceTextMatch) {
+                        bestSource = sourceTextMatch[1];
+                        sourceType = 'source-text';
+                    } else if (otherRefMatch) {
                         bestSource = otherRefMatch[1];
                         sourceType = 'other-ref';
                     } else if (structuredMatch) {
-                        bestSource = structuredMatch[1];
+                        // Manual reconstruction for structured but without source-text
+                        let reconstructed = structuredMatch[1]
+                            .replace(/\s*<\/c[be]:surname>\s*<c[be]:given-name>/gi, ', ')
+                            .replace(/\s*<\/s[be]:author>/gi, ',</sb:author>')
+                            .replace(/\s*<\/ce:author>/gi, ',</ce:author>')
+                            .replace(/\s*<\/s[be]:maintitle>/gi, '. </sb:maintitle>')
+                            .replace(/\s*<\/ce:maintitle>/gi, '. </ce:maintitle>')
+                            // Volume and Issue with Comma
+                            .replace(/<s[be]:volume-nr\b[^>]*>([\s\S]*?)<\/s[be]:volume-nr>\s*<s[be]:issue-nr\b[^>]*>([\s\S]*?)<\/s[be]:issue-nr>/gi, '$1($2)')
+                            .replace(/<s[be]:volume-nr\b[^>]*>([\s\S]*?)<\/s[be]:volume-nr>/gi, '$1,')
+                            // Article number prepended with comma if volume exists
+                            .replace(/<s[be]:article-number\b[^>]*>([\s\S]*?)<\/s[be]:article-number>/gi, ' $1')
+                            .replace(/<s[be]:date\b[^>]*>([\s\S]*?)<\/s[be]:date>/gi, ', $1.')
+                            .replace(/<ce:doi\b[^>]*>([\s\S]*?)<\/ce:doi>/gi, '. doi:$1');
+                        
+                        bestSource = reconstructed;
                         sourceType = 'structured';
                     } else {
-                        bestSource = contentWithoutSource.replace(/<ce:label>.*?<\/ce:label>/i, '');
+                        bestSource = content.replace(/<ce:label>.*?<\/ce:label>/i, '');
                         sourceType = 'fallback';
                     }
 
-                    // 4. Pre-process formatting and punctuation
+                    // Handle Bold/Italic/Sup/Sub markers
                     let processingHtml = bestSource
-                        // Authors: comma between name parts, comma after blocks
-                        .replace(/\s*<\/c[be]:surname>\s*<c[be]:given-name>/gi, ', ')
-                        .replace(/\s*<\/s[be]:author>/gi, ',</sb:author>')
-                        .replace(/\s*<\/ce:author>/gi, ',</ce:author>')
-                        
-                        // Main Title: trailing comma
-                        .replace(/\s*<\/s[be]:maintitle>/gi, ',</sb:maintitle>')
-                        .replace(/\s*<\/ce:maintitle>/gi, ',</ce:maintitle>')
-
-                        // VOLUME AND ISSUE: ABSOLUTELY NO SPACE
-                        // Use a regex that allows attributes and join immediately to prevent stripper spacing
-                        .replace(/<s[be]:volume-nr\b[^>]*>([\s\S]*?)<\/s[be]:volume-nr>\s*<s[be]:issue-nr\b[^>]*>([\s\S]*?)<\/s[be]:issue-nr>/gi, (m, vol, iss) => {
-                             const v = vol.replace(/<[^>]+>/g, '').trim();
-                             const i = iss.replace(/<[^>]+>/g, '').trim();
-                             return `${v}(${i})`;
-                        })
-                        // Fallback for standalone issue
-                        .replace(/<s[be]:issue-nr\b[^>]*>([\s\S]*?)<\/s[be]:issue-nr>/gi, '($1)')
-
-                        // Date: Enclose in parentheses with leading space
-                        .replace(/<s[be]:date\b[^>]*>([\s\S]*?)<\/s[be]:date>/gi, (m, content) => {
-                             const cleanDate = content.replace(/<[^>]+>/g, '').trim();
-                             return cleanDate ? ` (${cleanDate})` : '';
-                        })
-
-                        // Pages: en-dash between first/last and add comma
-                        .replace(/<s[be]:first-page\b[^>]*>([\s\S]*?)<\/s[be]:first-page>\s*<s[be]:last-page\b[^>]*>([\s\S]*?)<\/s[be]:last-page>/gi, '$1\u2013$2,')
-                        
-                        // Article Number: add comma
-                        .replace(/<s[be]:article-number\b[^>]*>([\s\S]*?)<\/s[be]:article-number>/gi, '$1,')
-
-                        // DOI: PREPEND COMMA and space, prefix with "doi: "
-                        // Tightened string for better cleanup later
-                        .replace(/<ce:doi\b[^>]*>([\s\S]*?)<\/ce:doi>/gi, ', doi: $1')
-
-                        // Metadata tags like sb:date-accessed
-                        .replace(/<sb:date-accessed\b([^>]*?)\/?>/gi, (m, attrs) => {
-                            const d = attrs.match(/day="(\d+)"/)?.[1];
-                            const mNum = attrs.match(/month="(\d+)"/)?.[1];
-                            const y = attrs.match(/year="(\d+)"/)?.[1];
-                            if (d && mNum && y) {
-                                const monthName = monthNames[parseInt(mNum) - 1] || mNum;
-                                return ` (Accessed ${d} ${monthName} ${y})`;
-                            }
-                            return m;
-                        });
-
-                    // 5. Preserve Formatting Markers
-                    processingHtml = processingHtml
                         .replace(/<ce:italic[^>]*>/gi, '|ITALIC_OPEN|')
                         .replace(/<\/ce:italic>/gi, '|ITALIC_CLOSE|')
                         .replace(/<ce:bold[^>]*>/gi, '|BOLD_OPEN|')
@@ -155,13 +122,9 @@ const ReferenceExtractor: React.FC = () => {
                         .replace(/<ce:inf[^>]*>/gi, '|SUB_OPEN|')
                         .replace(/<\/ce:inf>/gi, '|SUB_CLOSE|');
 
-                    // 6. Strip Tags & Clean Punctuation
-                    // We use a space to separate words when tags are removed, 
-                    // but sanitizeForWord will collapse them surgically.
                     let cleanRaw = processingHtml.replace(/<[^>]+>/g, ' ');
                     cleanRaw = sanitizeForWord(cleanRaw);
 
-                    // 7. Restore Clean HTML tags for Clipboard
                     let formattedHtml = cleanRaw
                         .replace(/\|ITALIC_OPEN\|/g, '<i>').replace(/\|ITALIC_CLOSE\|/g, '</i>')
                         .replace(/\|BOLD_OPEN\|/g, '<b>').replace(/\|BOLD_CLOSE\|/g, '</b>')
@@ -171,25 +134,25 @@ const ReferenceExtractor: React.FC = () => {
 
                     found.push({
                         id,
-                        label: sanitizeForWord(label),
+                        label: displayLabel,
                         rawText: cleanRaw.replace(/\|[A-Z_]+\|/g, ''),
-                        formattedHtml: label ? `<b>${sanitizeForWord(label)}</b> ${formattedHtml}` : formattedHtml,
+                        formattedHtml: displayLabel ? `<b>${displayLabel}</b> ${formattedHtml}` : formattedHtml,
                         sourceType
                     });
                 }
 
                 if (found.length === 0) {
-                    setToast({ msg: "No bibliography items detected.", type: "info" });
+                    setToast({ msg: "No items detected.", type: "info" });
                     setIsLoading(false);
                 } else {
                     setResults(found);
                     setSelectedIndices(new Set(found.map((_, i) => i)));
                     setStep('report');
-                    setToast({ msg: `Extracted ${found.length} clean items.`, type: "success" });
+                    setToast({ msg: `Extracted ${found.length} items.`, type: "success" });
                     setIsLoading(false);
                 }
             } catch (err) {
-                setToast({ msg: "Extraction failed.", type: "error" });
+                setToast({ msg: "Extraction error.", type: "error" });
                 setIsLoading(false);
             }
         }, 600);
@@ -208,12 +171,8 @@ const ReferenceExtractor: React.FC = () => {
     };
 
     const copyToClipboard = (items: ExtractedRef[]) => {
-        if (items.length === 0) {
-            setToast({ msg: "No items selected.", type: "warn" });
-            return;
-        }
+        if (items.length === 0) return;
         try {
-            // Using pure <p> tags with NO STYLING ensures Word uses its own defaults.
             const htmlContent = items.map(item => `<p>${item.formattedHtml}</p>`).join('');
             const plainText = items.map(item => `${item.label ? item.label + ' ' : ''}${item.rawText}`).join('\n');
 
@@ -222,15 +181,13 @@ const ReferenceExtractor: React.FC = () => {
 
             if (typeof ClipboardItem !== 'undefined') {
                 const data = [new ClipboardItem({ "text/html": htmlBlob, "text/plain": textBlob })];
-                navigator.clipboard.write(data).then(() => {
-                    setToast({ msg: `Copied ${items.length} clean items.`, type: "success" });
-                });
+                navigator.clipboard.write(data).then(() => setToast({ msg: `Copied ${items.length} items.`, type: "success" }));
             } else {
                 navigator.clipboard.writeText(plainText);
-                setToast({ msg: "Text copied (Formatting lost).", type: "warn" });
+                setToast({ msg: "Formatting stripped (Browser limitation).", type: "warn" });
             }
         } catch (e) {
-            setToast({ msg: "Clipboard error.", type: "error" });
+            setToast({ msg: "Clipboard failure.", type: "error" });
         }
     };
 
@@ -249,30 +206,30 @@ const ReferenceExtractor: React.FC = () => {
             <div className="mb-10 text-center animate-fade-in">
                 <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase tracking-tighter">Bibliography Extractor</h1>
                 <p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic">
-                    Pure-text bibliography isolation. Punctuation rules now enforce zero-space between volume/issue and clean URL endings.
+                    Prioritizing pre-formatted source text with enforced punctuation and trailing periods.
                 </p>
             </div>
 
-            <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-200 overflow-hidden h-[700px] flex flex-col relative">
-                {isLoading && <LoadingOverlay message="Purging Unicode artifacts..." color="indigo" />}
+            <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-200 overflow-hidden h-[700px] flex flex-col relative transition-all duration-500">
+                {isLoading && <LoadingOverlay message="Executing precision extraction..." color="indigo" />}
 
                 {step === 'input' && (
                     <div className="flex flex-col h-full animate-fade-in">
                         <div className="bg-slate-50 px-10 py-5 border-b border-slate-100 flex justify-between items-center">
-                            <label className="font-bold text-slate-800 text-xs uppercase tracking-widest">XML Source Payload</label>
-                            <button onClick={() => setInput('')} className="text-xs font-bold text-indigo-600 uppercase tracking-widest">Clear</button>
+                            <label className="font-black text-slate-800 text-xs uppercase tracking-widest">Master Source Feed</label>
+                            <button onClick={() => setInput('')} className="text-xs font-bold text-indigo-600 uppercase tracking-widest">Clear Input</button>
                         </div>
                         <textarea 
                             value={input} 
                             onChange={e => setInput(e.target.value)} 
                             className="flex-grow p-10 font-mono text-sm border-0 focus:ring-0 resize-none bg-transparent leading-relaxed" 
-                            placeholder="Paste your XML document here. Volume/Issue spacing and URL punctuation will be auto-corrected..."
+                            placeholder="Paste your XML document here..."
                             spellCheck={false}
                         />
                         <div className="p-8 border-t border-slate-100 flex justify-center bg-slate-50/50">
                             <button onClick={runExtraction} className="bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 px-12 rounded-2xl shadow-xl shadow-indigo-200 transition-all active:scale-95 uppercase text-xs tracking-widest flex items-center gap-3">
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                                Extract & Sanitize Bibliography
+                                Run System Extraction
                             </button>
                         </div>
                     </div>
@@ -285,26 +242,23 @@ const ReferenceExtractor: React.FC = () => {
                                 <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Audit Report</h3>
                                 <div className="flex items-center gap-3 mt-1">
                                     <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
-                                        {selectedIndices.size} of {results.length} items
+                                        {selectedIndices.size} items ready
                                     </span>
                                     <div className="h-3 w-px bg-slate-200"></div>
-                                    <button 
-                                        onClick={toggleAll}
-                                        className="text-[10px] text-indigo-600 font-black uppercase tracking-wider hover:underline"
-                                    >
+                                    <button onClick={toggleAll} className="text-[10px] text-indigo-600 font-black uppercase tracking-wider hover:underline">
                                         {selectedIndices.size === results.length ? 'Deselect All' : 'Select All'}
                                     </button>
                                 </div>
                             </div>
                             <div className="flex gap-4">
-                                <button onClick={() => { setStep('input'); setSelectedIndices(new Set()); }} className="px-6 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-slate-600 uppercase transition-all">New Extraction</button>
+                                <button onClick={() => { setStep('input'); setSelectedIndices(new Set()); }} className="px-6 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-slate-600 uppercase transition-all">New Session</button>
                                 <button 
                                     onClick={handleCopySelected} 
                                     disabled={selectedIndices.size === 0}
                                     className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-black py-4 px-10 rounded-2xl shadow-xl active:scale-95 transition-all uppercase text-xs tracking-widest flex items-center gap-3"
                                 >
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
-                                    Copy Safe Text for Word
+                                    Copy for Word
                                 </button>
                             </div>
                         </div>
@@ -312,11 +266,6 @@ const ReferenceExtractor: React.FC = () => {
                         <div className="flex-grow overflow-auto p-10 space-y-4 custom-scrollbar">
                             {results.map((item, idx) => {
                                 const isSelected = selectedIndices.has(idx);
-                                const ribbonColor = 
-                                    item.sourceType === 'other-ref' ? 'bg-amber-100 text-amber-700 border-amber-200' :
-                                    item.sourceType === 'structured' ? 'bg-indigo-100 text-indigo-700 border-indigo-200' :
-                                    'bg-slate-100 text-slate-500 border-slate-200';
-                                
                                 return (
                                     <div 
                                         key={idx} 
@@ -331,7 +280,7 @@ const ReferenceExtractor: React.FC = () => {
                                         <div className="flex-grow min-w-0">
                                             <div className="flex items-center gap-3 mb-2">
                                                 <span className="text-[10px] font-mono font-black bg-slate-50 text-slate-400 px-2 py-1 rounded border border-slate-200 uppercase tracking-tighter">ID: {item.id}</span>
-                                                <span className={`text-[9px] font-black px-2 py-0.5 rounded border uppercase tracking-widest ${ribbonColor}`}>
+                                                <span className={`text-[9px] font-black px-2 py-0.5 rounded border uppercase tracking-widest bg-slate-100 text-slate-500 border-slate-200`}>
                                                     {item.sourceType.replace('-', ' ')}
                                                 </span>
                                             </div>

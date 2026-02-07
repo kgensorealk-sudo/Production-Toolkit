@@ -52,6 +52,7 @@ export enum ToolId {
     REF_PURGER = 'refPurger',
     GRANT_TAGGER = 'grantTagger',
     ID_AUDITOR = 'idAuditor',
+    COMMENT_REPLACER = 'commentReplacer',
     DOCS = 'docs',
     DASHBOARD = 'dashboard'
 }
