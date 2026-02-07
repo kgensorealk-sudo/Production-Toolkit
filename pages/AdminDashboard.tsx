@@ -32,6 +32,8 @@ interface UsageLog {
     timestamp: string;
 }
 
+type IntelligenceRange = '24h' | '7d' | '30d' | 'all';
+
 const DURATION_OPTIONS = [
     { label: '1 Min (Testing)', value: 'trial_1m', type: 'trial' },
     { label: '3 Days', value: 'trial_3d', type: 'trial' },
@@ -104,6 +106,8 @@ const AdminDashboard: React.FC = () => {
     const [keyQty, setKeyQty] = useState<number>(1);
 
     const [usageLogs, setUsageLogs] = useState<UsageLog[]>([]);
+    const [intelRange, setIntelRange] = useState<IntelligenceRange>('7d');
+    const [focusedUserId, setFocusedUserId] = useState<string | null>(null);
 
     const [confirmConfig, setConfirmConfig] = useState<{
         isOpen: boolean; title: string; message: string; confirmLabel?: string; type: 'primary' | 'danger'; onConfirm: () => void;
@@ -111,8 +115,8 @@ const AdminDashboard: React.FC = () => {
 
     const getToolName = (tid: string) => {
         switch (tid) {
-            case ToolId.XML_RENUMBER: return "XML Reference Normalizer";
-            case ToolId.CREDIT_GENERATOR: return "CRediT Author Tagging";
+            case ToolId.XML_RENUMBER: return "XML Normalizer";
+            case ToolId.CREDIT_GENERATOR: return "CRediT Tagging";
             case ToolId.UNCITED_CLEANER: return "Uncited Ref Cleaner";
             case ToolId.OTHER_REF_SCANNER: return "Other-Ref Scanner";
             case ToolId.REFERENCE_GEN: return "Reference Updater";
@@ -122,7 +126,7 @@ const AdminDashboard: React.FC = () => {
             case ToolId.TAG_CLEANER: return "XML Tag Cleaner";
             case ToolId.TABLE_FIXER: return "XML Table Fixer";
             case ToolId.VIEW_SYNC: return "View Synchronizer";
-            case ToolId.REF_EXTRACTOR: return "Bibliography Extractor";
+            case ToolId.REF_EXTRACTOR: return "Bib Extractor";
             case ToolId.REF_PURGER: return "Reference List Purger";
             case ToolId.GRANT_TAGGER: return "Grant XML Tagger";
             case ToolId.ID_AUDITOR: return "ID Prefix Auditor";
@@ -162,10 +166,9 @@ const AdminDashboard: React.FC = () => {
     const fetchIntelligence = useCallback(async () => {
         setIsLoading(true);
         try {
-            const { data, error } = await supabase.from('usage_logs').select('tool_id, user_id, timestamp');
+            const { data, error } = await supabase.from('usage_logs').select('tool_id, user_id, timestamp').order('timestamp', { ascending: false });
             if (error) throw error;
             setUsageLogs(data || []);
-            // Also need fresh user list for mapping
             await fetchUsers(true);
         } catch (error: any) {
             console.warn("Usage logs might not exist yet.");
@@ -338,17 +341,33 @@ const AdminDashboard: React.FC = () => {
         return (Date.now() - new Date(u.last_seen).getTime()) < 300000;
     }).length;
 
-    // --- Intelligence Analytics ---
+    // --- Intelligence Analytics with Temporal & Per-User Filters ---
     const intelligenceMetrics = useMemo(() => {
-        if (usageLogs.length === 0) return { globalRanking: [], userAffinities: [], rareTools: [] };
+        if (usageLogs.length === 0) return { globalRanking: [], userAffinities: [], rareTools: [], filteredTotal: 0 };
+
+        const now = new Date().getTime();
+        const filteredLogs = usageLogs.filter(log => {
+            if (intelRange === 'all') return true;
+            const logTime = new Date(log.timestamp).getTime();
+            const diff = now - logTime;
+            if (intelRange === '24h') return diff <= 24 * 60 * 60 * 1000;
+            if (intelRange === '7d') return diff <= 7 * 24 * 60 * 60 * 1000;
+            if (intelRange === '30d') return diff <= 30 * 24 * 60 * 60 * 1000;
+            return true;
+        });
 
         const toolCounts: Record<string, number> = {};
         const userToolCounts: Record<string, Record<string, number>> = {};
+        const userLastAction: Record<string, { tool: string, time: string }> = {};
 
-        usageLogs.forEach(log => {
+        filteredLogs.forEach(log => {
             toolCounts[log.tool_id] = (toolCounts[log.tool_id] || 0) + 1;
             if (!userToolCounts[log.user_id]) userToolCounts[log.user_id] = {};
             userToolCounts[log.user_id][log.tool_id] = (userToolCounts[log.user_id][log.tool_id] || 0) + 1;
+            
+            if (!userLastAction[log.user_id]) {
+                userLastAction[log.user_id] = { tool: log.tool_id, time: log.timestamp };
+            }
         });
 
         const allAvailableTools = Object.values(ToolId).filter(id => id !== 'dashboard' && id !== 'docs');
@@ -359,20 +378,28 @@ const AdminDashboard: React.FC = () => {
             count: toolCounts[id] || 0
         })).sort((a, b) => b.count - a.count);
 
-        const rareTools = globalRanking.filter(r => r.count < 5).reverse();
+        const rareTools = globalRanking.filter(r => r.count < (intelRange === 'all' ? 10 : (intelRange === '30d' ? 5 : 2))).reverse();
 
         const userAffinities = users.map(user => {
             const counts = userToolCounts[user.id] || {};
             const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
             return {
+                id: user.id,
                 email: user.email,
                 topTool: sorted.length > 0 ? getToolName(sorted[0][0]) : 'None',
-                totalActions: Object.values(counts).reduce((a, b) => a + b, 0)
+                totalActions: Object.values(counts).reduce((a, b) => a + b, 0),
+                breakdown: sorted.map(([tid, count]) => ({ name: getToolName(tid), count })),
+                lastAction: userLastAction[user.id]
             };
         }).filter(ua => ua.totalActions > 0).sort((a, b) => b.totalActions - a.totalActions);
 
-        return { globalRanking, userAffinities, rareTools };
-    }, [usageLogs, users]);
+        return { globalRanking, userAffinities, rareTools, filteredTotal: filteredLogs.length };
+    }, [usageLogs, users, intelRange]);
+
+    const focusedUser = useMemo(() => {
+        if (!focusedUserId) return null;
+        return intelligenceMetrics.userAffinities.find(u => u.id === focusedUserId);
+    }, [focusedUserId, intelligenceMetrics.userAffinities]);
 
     return (
         <div className="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
@@ -380,20 +407,20 @@ const AdminDashboard: React.FC = () => {
 
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
                 <div className="flex flex-col">
-                    <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight uppercase tracking-widest">Admin Console</h1>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Control Layer Access & Protocols</p>
+                    <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl uppercase tracking-widest leading-none">Admin Console</h1>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.3em] mt-2">Central Authorization & Intelligence Node</p>
                 </div>
                 <div className="bg-slate-100 px-4 py-2 rounded-xl flex items-center gap-4 border border-slate-200 shadow-sm">
                     <div className="flex items-center gap-2">
                         <span className={`w-2.5 h-2.5 rounded-full ${activeNodesCount > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`}></span>
                         <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">
-                            {activeNodesCount} Active Nodes
+                            {activeNodesCount} Active Operator Nodes
                         </span>
                     </div>
                 </div>
             </div>
 
-            <div className="flex space-x-1 bg-slate-200/50 p-1 rounded-xl mb-6 w-full max-w-3xl overflow-x-auto">
+            <div className="flex space-x-1 bg-slate-200/50 p-1 rounded-xl mb-6 w-full max-w-4xl overflow-x-auto">
                 <button onClick={() => setActiveTab('users')} className={`flex-1 py-2.5 px-6 text-sm font-bold rounded-lg transition-all ${activeTab === 'users' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Personnel</button>
                 <button onClick={() => setActiveTab('keys')} className={`flex-1 py-2.5 px-6 text-sm font-bold rounded-lg transition-all ${activeTab === 'keys' ? 'bg-white text-indigo-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Key Matrix</button>
                 <button onClick={() => setActiveTab('intelligence')} className={`flex-1 py-2.5 px-6 text-sm font-bold rounded-lg transition-all ${activeTab === 'intelligence' ? 'bg-white text-purple-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Intelligence</button>
@@ -443,96 +470,198 @@ const AdminDashboard: React.FC = () => {
                 )}
 
                 {activeTab === 'intelligence' && (
-                    <div className="p-8 lg:p-12 space-y-12">
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                    <div className="p-8 lg:p-12 space-y-12 animate-fade-in">
+                        {/* Intelligence Range Selector */}
+                        <div className="flex flex-col sm:flex-row items-center justify-between gap-6 bg-slate-50 p-8 rounded-[2.5rem] border border-slate-200 shadow-inner">
+                            <div className="flex items-center gap-5">
+                                <div className="w-14 h-14 bg-purple-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-purple-500/30">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                                </div>
+                                <div>
+                                    <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Intelligence Node</h2>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mt-1">{intelligenceMetrics.filteredTotal} System Actions Logged</p>
+                                </div>
+                            </div>
+                            
+                            <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm">
+                                {(['24h', '7d', '30d', 'all'] as const).map(range => (
+                                    <button 
+                                        key={range}
+                                        onClick={() => setIntelRange(range)}
+                                        className={`px-8 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all ${intelRange === range ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/20' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+                                    >
+                                        {range === '24h' ? 'Daily' : range === '7d' ? 'Weekly' : range === '30d' ? 'Monthly' : 'Yearly/All'}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
                             {/* POPULARITY LEADERBOARD */}
                             <section>
-                                <div className="flex items-center gap-4 mb-6">
-                                    <div className="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center text-purple-600 shadow-sm">
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+                                <div className="flex items-center gap-4 mb-8">
+                                    <div className="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center text-purple-600 shadow-sm border border-purple-100">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
                                     </div>
-                                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">System Node Adoption</h3>
+                                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Global Node Usage</h3>
                                 </div>
-                                <div className="space-y-6">
+                                <div className="space-y-8">
                                     {intelligenceMetrics.globalRanking.slice(0, 8).map((tool, idx) => (
                                         <div key={tool.id} className="relative">
-                                            <div className="flex justify-between items-end mb-2">
-                                                <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider">{tool.name}</span>
-                                                <span className="text-[10px] font-bold text-indigo-500">{tool.count} Sessions</span>
+                                            <div className="flex justify-between items-end mb-2.5">
+                                                <span className="text-[11px] font-black text-slate-700 uppercase tracking-widest">{tool.name}</span>
+                                                <span className="text-[10px] font-black text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">{tool.count}</span>
                                             </div>
-                                            <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                                            <div className="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden shadow-inner border border-slate-200/50">
                                                 <div 
-                                                    className="h-full bg-indigo-500 transition-all duration-1000" 
-                                                    style={{ width: `${Math.min(100, (tool.count / Math.max(1, usageLogs.length)) * 500)}%` }}
+                                                    className="h-full bg-gradient-to-r from-indigo-500 to-purple-600 transition-all duration-1000 ease-out" 
+                                                    style={{ width: `${Math.min(100, (tool.count / Math.max(1, intelligenceMetrics.filteredTotal)) * 500)}%` }}
                                                 ></div>
                                             </div>
                                         </div>
                                     ))}
+                                    {intelligenceMetrics.globalRanking.length === 0 && (
+                                        <div className="py-20 text-center opacity-30 bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200">
+                                            <p className="text-xs font-bold uppercase tracking-widest text-slate-400">No protocol traffic recorded for this window</p>
+                                        </div>
+                                    )}
                                 </div>
                             </section>
 
                             {/* RARELY USED */}
                             <section>
-                                <div className="flex items-center gap-4 mb-6">
-                                    <div className="w-10 h-10 bg-rose-50 rounded-xl flex items-center justify-center text-rose-600 shadow-sm">
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                                <div className="flex items-center gap-4 mb-8">
+                                    <div className="w-10 h-10 bg-rose-50 rounded-xl flex items-center justify-center text-rose-600 shadow-sm border border-rose-100">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
                                     </div>
                                     <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Cold Nodes</h3>
                                 </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                                     {intelligenceMetrics.rareTools.length > 0 ? (
-                                        intelligenceMetrics.rareTools.map(tool => (
-                                            <div key={tool.id} className="p-5 bg-slate-50 border border-slate-100 rounded-[1.5rem] flex flex-col items-center text-center">
-                                                <span className="text-[10px] font-black text-rose-400 uppercase tracking-[0.2em] mb-1">Underutilized</span>
-                                                <h4 className="text-xs font-bold text-slate-700 uppercase mb-3 line-clamp-1">{tool.name}</h4>
-                                                <span className="text-[10px] font-mono bg-white px-2 py-1 rounded-md border border-slate-200 text-slate-400">{tool.count} hits</span>
+                                        intelligenceMetrics.rareTools.slice(0, 4).map(tool => (
+                                            <div key={tool.id} className="p-6 bg-white border border-slate-200 rounded-[2rem] flex flex-col items-center text-center shadow-sm hover:shadow-md transition-all hover:border-rose-200">
+                                                <span className="text-[10px] font-black text-rose-500 uppercase tracking-[0.2em] mb-2">Underutilized</span>
+                                                <h4 className="text-xs font-bold text-slate-800 uppercase mb-4 leading-snug">{tool.name}</h4>
+                                                <span className="text-[9px] font-mono font-black bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 text-slate-400">{tool.count} hits</span>
                                             </div>
                                         ))
                                     ) : (
-                                        <div className="col-span-full py-10 flex flex-col items-center opacity-30 grayscale">
-                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                            <p className="text-xs font-bold uppercase tracking-widest">Global saturation optimal</p>
+                                        <div className="col-span-full py-20 flex flex-col items-center justify-center bg-emerald-50/30 rounded-[2.5rem] border-2 border-dashed border-emerald-100 opacity-60">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mb-3 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                            <p className="text-xs font-black uppercase tracking-widest text-emerald-600">Global saturation optimal</p>
                                         </div>
                                     )}
                                 </div>
                             </section>
                         </div>
 
-                        {/* STAFF ENGAGEMENT */}
-                        <section>
-                            <div className="flex items-center gap-4 mb-8">
-                                <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 shadow-sm">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                        {/* STAFF ENGAGEMENT & USER BREAKDOWN */}
+                        <div className="grid grid-cols-1 xl:grid-cols-3 gap-10">
+                            {/* TABLE */}
+                            <section className="xl:col-span-2">
+                                <div className="flex items-center gap-4 mb-8">
+                                    <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 shadow-sm border border-indigo-100">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                                    </div>
+                                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Personnel Engagement Audit</h3>
                                 </div>
-                                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Personnel Engagement Audit</h3>
-                            </div>
-                            <div className="overflow-x-auto">
-                                <table className="min-w-full divide-y divide-slate-100 bg-slate-50/50 rounded-3xl border border-slate-100 overflow-hidden">
-                                    <thead className="bg-white/50">
-                                        <tr>
-                                            <th className="px-8 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Operator</th>
-                                            <th className="px-8 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Primary Module</th>
-                                            <th className="px-8 py-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">Action Index</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {intelligenceMetrics.userAffinities.map((ua, i) => (
-                                            <tr key={i} className="hover:bg-white transition-colors">
-                                                <td className="px-8 py-4 text-sm font-bold text-slate-900">{ua.email}</td>
-                                                <td className="px-8 py-4">
-                                                    <span className="px-3 py-1 bg-white border border-indigo-100 text-indigo-600 text-[10px] font-black rounded-lg shadow-sm uppercase tracking-tighter">
-                                                        {ua.topTool}
-                                                    </span>
-                                                </td>
-                                                <td className="px-8 py-4 text-center">
-                                                    <span className="text-[11px] font-mono font-bold text-slate-500">{ua.totalActions} logged</span>
-                                                </td>
+                                <div className="overflow-x-auto shadow-sm rounded-3xl border border-slate-200">
+                                    <table className="min-w-full divide-y divide-slate-100 bg-slate-50/30">
+                                        <thead className="bg-white/80 backdrop-blur-sm">
+                                            <tr>
+                                                <th className="px-8 py-5 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Operator</th>
+                                                <th className="px-8 py-5 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Primary Protocol</th>
+                                                <th className="px-8 py-5 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">Action Index</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </section>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {intelligenceMetrics.userAffinities.map((ua) => (
+                                                <tr 
+                                                    key={ua.id} 
+                                                    onClick={() => setFocusedUserId(ua.id)}
+                                                    className={`cursor-pointer transition-all ${focusedUserId === ua.id ? 'bg-indigo-600 ring-4 ring-indigo-100' : 'hover:bg-white'}`}
+                                                >
+                                                    <td className={`px-8 py-5 text-sm font-bold ${focusedUserId === ua.id ? 'text-white' : 'text-slate-900'}`}>{ua.email}</td>
+                                                    <td className="px-8 py-5">
+                                                        <span className={`px-4 py-1.5 text-[10px] font-black rounded-xl shadow-sm uppercase tracking-tighter border ${focusedUserId === ua.id ? 'bg-white/10 border-white/20 text-white' : 'bg-white border-indigo-100 text-indigo-600'}`}>
+                                                            {ua.topTool}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-8 py-5 text-center">
+                                                        <span className={`text-[11px] font-mono font-bold ${focusedUserId === ua.id ? 'text-indigo-200' : 'text-slate-500'}`}>{ua.totalActions} logged</span>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                            {intelligenceMetrics.userAffinities.length === 0 && (
+                                                <tr>
+                                                    <td colSpan={3} className="px-8 py-20 text-center opacity-30">
+                                                        <p className="text-xs font-black uppercase tracking-widest text-slate-400">No personnel logs for this window</p>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </section>
+
+                            {/* FOCUS CARD */}
+                            <section className="xl:col-span-1">
+                                {focusedUser ? (
+                                    <div className="bg-slate-900 rounded-[2.5rem] p-10 text-white shadow-2xl shadow-slate-900/40 sticky top-12 animate-slide-up ring-4 ring-slate-800">
+                                        <div className="flex justify-between items-start mb-12">
+                                            <div className="flex flex-col">
+                                                <span className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.4em] mb-3">Operator DNA</span>
+                                                <h4 className="text-2xl font-black truncate max-w-[200px] uppercase tracking-tighter leading-none">{focusedUser.email.split('@')[0]}</h4>
+                                                <p className="text-[10px] text-slate-500 truncate lowercase mt-2 font-mono">{focusedUser.email}</p>
+                                            </div>
+                                            <button onClick={() => setFocusedUserId(null)} className="p-3 hover:bg-white/10 rounded-2xl transition-colors text-slate-500 hover:text-white border border-white/10">
+                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" /></svg>
+                                            </button>
+                                        </div>
+
+                                        <div className="space-y-10">
+                                            <div>
+                                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-6 border-b border-white/5 pb-2">Module Utilization Profile</p>
+                                                <div className="space-y-6">
+                                                    {focusedUser.breakdown.map((item, i) => (
+                                                        <div key={i} className="group">
+                                                            <div className="flex justify-between text-[11px] font-bold mb-2.5">
+                                                                <span className="text-slate-300 group-hover:text-white transition-colors uppercase tracking-wider">{item.name}</span>
+                                                                <span className="text-indigo-400 font-mono">{item.count}</span>
+                                                            </div>
+                                                            <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden shadow-inner">
+                                                                <div 
+                                                                    className="h-full bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.6)] transition-all duration-1000 ease-out" 
+                                                                    style={{ width: `${(item.count / focusedUser.totalActions) * 100}%` }}
+                                                                ></div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {focusedUser.lastAction && (
+                                                <div className="pt-10 border-t border-white/10">
+                                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-4">Last Protocol Access</p>
+                                                    <div className="p-5 bg-white/5 rounded-3xl border border-white/5 shadow-inner">
+                                                        <span className="text-[11px] font-black text-indigo-300 block mb-2 uppercase tracking-widest">{getToolName(focusedUser.lastAction.tool)}</span>
+                                                        <span className="text-[10px] text-slate-500 font-mono italic">{new Date(focusedUser.lastAction.time).toLocaleString()}</span>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="h-full flex flex-col items-center justify-center p-12 text-center bg-slate-50 rounded-[2.5rem] border-2 border-dashed border-slate-200 opacity-60">
+                                        <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center text-slate-300 mb-6 shadow-sm border border-slate-100">
+                                            <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                        </div>
+                                        <p className="text-sm font-black uppercase tracking-[0.2em] text-slate-400">Telemetry Disengaged</p>
+                                        <p className="text-[10px] text-slate-400 mt-3 font-medium px-8 leading-relaxed italic">Select an operator node from the table to inspect their specific module usage DNA.</p>
+                                    </div>
+                                )}
+                            </section>
+                        </div>
                     </div>
                 )}
 
@@ -551,7 +680,7 @@ const AdminDashboard: React.FC = () => {
                                         <th className="px-6 py-4 text-left">Target</th>
                                         <th className="px-6 py-4 text-left">Status</th>
                                         <th className="px-6 py-4 text-left">User</th>
-                                        <th className="px-6 py-4 text-left">Hardware Node</th>
+                                        <th className="px-6 py-4 text-left">Device ID</th>
                                         <th className="px-6 py-4 text-left">Control</th>
                                     </tr>
                                 </thead>
@@ -565,13 +694,13 @@ const AdminDashboard: React.FC = () => {
                                             <td className="px-6 py-4">
                                                 {k.device_id ? (
                                                     <span className="font-mono text-[9px] font-black text-slate-500 bg-slate-100 px-2 py-1 rounded-md border border-slate-200" title={k.device_id}>
-                                                        NODE_{k.device_id.substring(4, 12).toUpperCase()}
+                                                        {k.device_id.replace('dev_', '').substring(0, 16).toUpperCase()}
                                                     </span>
                                                 ) : (
                                                     <span className="text-[9px] font-bold text-slate-300 uppercase italic">Unbound</span>
                                                 )}
                                             </td>
-                                            <td className="px-6 py-4"><div className="flex gap-2">{k.is_used && <button onClick={() => handleRevokeKey(k)} className="p-1.5 text-amber-500 hover:bg-amber-50 rounded transition-colors"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg></button>}<button onClick={() => handleDeleteKey(k.id)} className="p-1.5 text-rose-300 hover:text-rose-600 transition-colors"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button></div></td>
+                                            <td className="px-6 py-4"><div className="flex gap-2">{k.is_used && <button onClick={() => handleRevokeKey(k)} className="p-1.5 text-amber-500 hover:bg-amber-50 rounded transition-colors" title="Revoke Device Bind"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg></button>}<button onClick={() => handleDeleteKey(k.id)} className="p-1.5 text-rose-300 hover:text-rose-600 transition-colors" title="Delete Key"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button></div></td>
                                         </tr>
                                     ))}
                                 </tbody>
