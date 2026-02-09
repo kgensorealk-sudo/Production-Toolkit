@@ -33,30 +33,37 @@ import ErrorBoundary from './components/ErrorBoundary';
 /**
  * NODE ACCESS CONTROLLER
  * Hardened to prevent unauthorized DOM access.
+ * Modes:
+ * - key-allowed: Available via Sub OR Key.
+ * - subscription-only: Available ONLY via Sub.
+ * - key-exclusive: Available ONLY via Key (Sub ignored).
  */
 const NodeAccessController: React.FC<{ 
     children: React.ReactElement, 
     toolId: ToolId, 
     displayName: string,
-    mode: 'key-allowed' | 'subscription-only'
+    mode: 'key-allowed' | 'subscription-only' | 'key-exclusive'
 }> = ({ children, toolId, displayName, mode }) => {
     const { profile, freeTools, isAdmin } = useAuth();
     const navigate = useNavigate();
 
     // 1. Check for valid authorization state
     const isFree = freeTools.includes(toolId);
-    const isSubscribed = profile?.is_subscribed;
-    const isUnlockedViaKey = mode === 'key-allowed' && (profile?.unlocked_tools?.includes(toolId) || profile?.unlocked_tools?.includes('universal'));
+    
+    // In key-exclusive mode, we ignore the global subscription status
+    const isSubscribed = mode !== 'key-exclusive' && profile?.is_subscribed;
+    
+    const isUnlockedViaKey = (mode === 'key-allowed' || mode === 'key-exclusive') && 
+        (profile?.unlocked_tools?.includes(toolId) || profile?.unlocked_tools?.includes('universal'));
 
     const hasAccess = isAdmin || isFree || isSubscribed || isUnlockedViaKey;
 
     if (hasAccess) return children;
 
     // 2. Handle specific lock screens
-    if (mode === 'key-allowed') {
+    if (mode === 'key-allowed' || mode === 'key-exclusive') {
         return (
             <div className="relative h-full w-full overflow-hidden flex items-center justify-center bg-slate-50">
-                {/* We don't render children at all here to prevent memory inspection/DOM reveals */}
                 <div className="absolute inset-0 bg-slate-100 opacity-50 pointer-events-none" />
                 <AuthModal toolId={toolId} toolDisplayName={displayName} onSuccess={() => {}} />
             </div>
@@ -114,7 +121,10 @@ const App: React.FC = () => {
                         <Route path="/dashboard" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />
                         <Route path="/docs" element={<ProtectedRoute><Layout><Docs /></Layout></ProtectedRoute>} />
                         
-                        {/* KEY-ALLOWED TOOLS */}
+                        {/* KEY-EXCLUSIVE TOOLS (Subscription Ignored) */}
+                        <Route path="/tableBeautifier" element={<ProtectedRoute><Layout currentTool={ToolId.TABLE_BEAUTIFIER}><NodeAccessController toolId={ToolId.TABLE_BEAUTIFIER} displayName="Table XML Beautifier" mode="key-exclusive"><TableBeautifier /></NodeAccessController></Layout></ProtectedRoute>} />
+
+                        {/* KEY-ALLOWED TOOLS (Sub OR Key) */}
                         <Route path="/xmlRenumber" element={<ProtectedRoute><Layout currentTool={ToolId.XML_RENUMBER}><NodeAccessController toolId={ToolId.XML_RENUMBER} displayName="XML Normalizer" mode="key-allowed"><XmlRenumber /></NodeAccessController></Layout></ProtectedRoute>} />
                         <Route path="/creditGenerator" element={<ProtectedRoute><Layout currentTool={ToolId.CREDIT_GENERATOR}><NodeAccessController toolId={ToolId.CREDIT_GENERATOR} displayName="CRediT Tagging" mode="key-allowed"><CreditGenerator /></NodeAccessController></Layout></ProtectedRoute>} />
                         
@@ -124,7 +134,6 @@ const App: React.FC = () => {
                         <Route path="/quickDiff" element={<ProtectedRoute><Layout currentTool={ToolId.QUICK_DIFF}><NodeAccessController toolId={ToolId.QUICK_DIFF} displayName="Quick Text Diff" mode="subscription-only"><QuickDiff /></NodeAccessController></Layout></ProtectedRoute>} />
                         <Route path="/tagCleaner" element={<ProtectedRoute><Layout currentTool={ToolId.TAG_CLEANER}><NodeAccessController toolId={ToolId.TAG_CLEANER} displayName="XML Tag Cleaner" mode="subscription-only"><TagCleaner /></NodeAccessController></Layout></ProtectedRoute>} />
                         <Route path="/tableFixer" element={<ProtectedRoute><Layout currentTool={ToolId.TABLE_FIXER}><NodeAccessController toolId={ToolId.TABLE_FIXER} displayName="XML Table Fixer" mode="subscription-only"><TableFixer /></NodeAccessController></Layout></ProtectedRoute>} />
-                        <Route path="/tableBeautifier" element={<ProtectedRoute><Layout currentTool={ToolId.TABLE_BEAUTIFIER}><NodeAccessController toolId={ToolId.TABLE_BEAUTIFIER} displayName="Table XML Beautifier" mode="subscription-only"><TableBeautifier /></NodeAccessController></Layout></ProtectedRoute>} />
                         <Route path="/highlightsGen" element={<ProtectedRoute><Layout currentTool={ToolId.HIGHLIGHTS_GEN}><NodeAccessController toolId={ToolId.HIGHLIGHTS_GEN} displayName="Article Highlights Gen" mode="subscription-only"><ArticleHighlights /></NodeAccessController></Layout></ProtectedRoute>} />
                         <Route path="/viewSync" element={<ProtectedRoute><Layout currentTool={ToolId.VIEW_SYNC}><NodeAccessController toolId={ToolId.VIEW_SYNC} displayName="View Synchronizer" mode="subscription-only"><ViewSync /></NodeAccessController></Layout></ProtectedRoute>} />
                         <Route path="/referenceGen" element={<ProtectedRoute><Layout currentTool={ToolId.REFERENCE_GEN}><NodeAccessController toolId={ToolId.REFERENCE_GEN} displayName="Reference Updater" mode="subscription-only"><ReferenceUpdater /></NodeAccessController></Layout></ProtectedRoute>} />

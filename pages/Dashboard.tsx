@@ -26,7 +26,10 @@ interface ToolCardProps {
 }
 
 const ToolCard: React.FC<ToolCardProps> = ({ id, title, desc, iconBg, iconText, borderColor, Icon, onClick, onTipClick, onPinClick, isPinned, delay, lockType, isFree, expiry }) => {
+    // Key-exclusive logic check for UI
+    const isKeyExclusive = id === ToolId.TABLE_BEAUTIFIER;
     const isLocked = lockType !== 'none' && !isFree;
+    
     const [timeLeft, setTimeLeft] = useState<string>('');
     const [hasSeenTips, setHasSeenTips] = useState(() => {
         return localStorage.getItem(`tips_seen_${id}`) === 'true';
@@ -61,11 +64,11 @@ const ToolCard: React.FC<ToolCardProps> = ({ id, title, desc, iconBg, iconText, 
     return (
         <div 
             onClick={onClick}
-            className={`glass-panel rounded-[2.5rem] p-1 shadow-sm hover:shadow-2xl hover:shadow-indigo-500/10 transition-all duration-500 cursor-pointer group animate-slide-up bg-white/80 ${isLocked ? 'opacity-60' : ''}`}
+            className={`glass-panel rounded-[2.5rem] p-1 shadow-sm hover:shadow-2xl transition-all duration-500 cursor-pointer group animate-slide-up bg-white/80 ${isLocked ? 'opacity-60' : ''} ${isFree && isKeyExclusive ? 'ring-4 ring-emerald-400/20 shadow-emerald-500/10' : 'hover:shadow-indigo-500/10'}`}
             style={{ animationDelay: `${delay}ms`, animationFillMode: 'backwards' }}
         >
             <div className={`h-full bg-white rounded-[2.2rem] p-8 flex flex-col border border-slate-100 relative overflow-hidden ${isLocked ? 'grayscale-[0.9]' : ''}`}>
-                <div className={`absolute top-0 left-0 w-full h-1.5 ${isLocked ? 'bg-slate-200' : (isFree ? 'bg-emerald-50' : borderColor)}`}></div>
+                <div className={`absolute top-0 left-0 w-full h-1.5 ${isLocked ? 'bg-slate-200' : (isFree ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : borderColor)}`}></div>
                 
                 {/* Header Actions */}
                 <div className="absolute top-4 left-4 right-4 z-30 flex justify-between items-center">
@@ -95,9 +98,18 @@ const ToolCard: React.FC<ToolCardProps> = ({ id, title, desc, iconBg, iconText, 
 
                 {isFree ? (
                     <div className="absolute top-16 right-4 z-20">
-                        <span className="bg-emerald-500 text-white text-[9px] font-black px-3 py-1.5 rounded-full border border-emerald-400 uppercase tracking-widest flex items-center gap-1.5 shadow-lg shadow-emerald-500/30 animate-pulse">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" /></svg>
-                            Free Access {timeLeft && `• ${timeLeft}`}
+                        <span className={`text-[9px] font-black px-3 py-1.5 rounded-full border uppercase tracking-widest flex items-center gap-1.5 shadow-lg shadow-emerald-500/30 animate-pulse ${isKeyExclusive ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-emerald-500 text-white border-emerald-400'}`}>
+                            {isKeyExclusive ? (
+                                <>
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-7.714 2.143L11 21l-2.286-6.857L1 12l7.714-2.143L11 3z" /></svg>
+                                    Limited Promo • {timeLeft || 'Active'}
+                                </>
+                            ) : (
+                                <>
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" /></svg>
+                                    Free Access • {timeLeft || 'Active'}
+                                </>
+                            )}
                         </span>
                     </div>
                 ) : isLocked && (
@@ -110,7 +122,7 @@ const ToolCard: React.FC<ToolCardProps> = ({ id, title, desc, iconBg, iconText, 
                 )}
 
                 <div className="flex items-start justify-between mt-12 mb-8">
-                    <div className={`w-16 h-16 ${isLocked ? 'bg-slate-50' : (isFree ? 'bg-emerald-50' : iconBg)} rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform duration-500 shadow-sm border border-slate-100`}>
+                    <div className={`w-16 h-16 ${isLocked ? 'bg-slate-50' : (isFree ? 'bg-emerald-50 shadow-inner' : iconBg)} rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform duration-500 shadow-sm border border-slate-100`}>
                         <Icon className={`h-8 w-8 ${isLocked ? 'text-slate-300' : (isFree ? 'text-emerald-600' : iconText)}`} />
                     </div>
                     <div className={`transition-all transform translate-x-2 -translate-y-2 opacity-0 group-hover:opacity-100 group-hover:translate-x-0 group-hover:translate-y-0 duration-500 ${isLocked ? 'text-slate-200' : 'text-indigo-500'}`}>
@@ -153,11 +165,22 @@ const Dashboard: React.FC = () => {
 
     const getLockType = (toolId: ToolId): 'key' | 'subscription' | 'none' => {
         if (isAdmin) return 'none';
-        if (profile?.is_subscribed) return 'none';
-        if (toolId === ToolId.XML_RENUMBER || toolId === ToolId.CREDIT_GENERATOR) {
-            if (profile?.unlocked_tools?.includes(toolId) || profile?.unlocked_tools?.includes('universal')) return 'none';
+
+        // Designated Key-Exclusive Tools (Subscription is ignored)
+        const isKeyExclusive = toolId === ToolId.TABLE_BEAUTIFIER;
+
+        // Regular subscription check (Only if tool is not exclusive)
+        if (profile?.is_subscribed && !isKeyExclusive) return 'none';
+
+        // Check if specific key is already bound to this account
+        const hasSpecificKey = profile?.unlocked_tools?.includes(toolId) || profile?.unlocked_tools?.includes('universal');
+        if (hasSpecificKey) return 'none';
+
+        // Identification for the UI label
+        if (toolId === ToolId.XML_RENUMBER || toolId === ToolId.CREDIT_GENERATOR || isKeyExclusive) {
             return 'key';
         }
+        
         return 'subscription';
     };
 
@@ -269,7 +292,7 @@ const Dashboard: React.FC = () => {
 
                     <div className="flex flex-wrap justify-center gap-4">
                         {freeTools.length > 0 && !profile?.is_subscribed && (
-                            <div className="inline-flex items-center gap-3 px-6 py-3 bg-emerald-50 rounded-full border border-emerald-100 text-emerald-600 text-xs font-black uppercase tracking-widest shadow-lg shadow-emerald-500/10">
+                            <div className="inline-flex items-center gap-3 px-6 py-3 bg-emerald-50 rounded-full border border-emerald-100 text-emerald-600 text-xs font-black uppercase tracking-widest shadow-lg shadow-emerald-500/10 animate-fade-in">
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                                 Automatic Provisioning: {freeTools.length} Modules Active
                             </div>

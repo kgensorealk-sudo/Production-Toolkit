@@ -46,6 +46,13 @@ const DURATION_OPTIONS = [
     { label: '1 Year', value: 'sub_1y', type: 'sub' },
 ];
 
+const PROMO_DURATIONS = [
+    { label: '24 Hours', value: 1 },
+    { label: '7 Days', value: 7 },
+    { label: '14 Days', value: 14 },
+    { label: '30 Days', value: 30 }
+];
+
 const getDurationMs = (val: string) => {
     switch (val) {
         case 'trial_1m': return 60 * 1000;
@@ -108,6 +115,8 @@ const AdminDashboard: React.FC = () => {
     const [usageLogs, setUsageLogs] = useState<UsageLog[]>([]);
     const [intelRange, setIntelRange] = useState<IntelligenceRange>('7d');
     const [focusedUserId, setFocusedUserId] = useState<string | null>(null);
+    
+    const [promoDuration, setPromoDuration] = useState<number>(7);
 
     const [confirmConfig, setConfirmConfig] = useState<{
         isOpen: boolean; title: string; message: string; confirmLabel?: string; type: 'primary' | 'danger'; onConfirm: () => void;
@@ -262,13 +271,14 @@ const AdminDashboard: React.FC = () => {
             const nextData = { ...latest?.free_tools_data || {} };
             if (nextData[tid]) delete nextData[tid];
             else {
-                const expiry = new Date(); expiry.setDate(expiry.getDate() + 7);
+                const expiry = new Date(); 
+                expiry.setDate(expiry.getDate() + promoDuration);
                 nextData[tid] = expiry.toISOString();
             }
             const { error } = await supabase.from('system_settings').update({ free_tools_data: nextData, updated_at: new Date().toISOString() }).eq('id', 'global');
             if (error) throw error;
             await refreshFreeTools();
-            setToast({ msg: `System protocol synchronized`, type: 'success' });
+            setToast({ msg: `System protocol synchronized (${promoDuration}d Promo)`, type: 'success' });
         } catch (err) { setToast({ msg: 'Protocol update rejected', type: 'error' }); } finally { setIsLoading(false); }
     };
 
@@ -669,7 +679,7 @@ const AdminDashboard: React.FC = () => {
                 {activeTab === 'keys' && (
                     <div className="p-8 space-y-8">
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end bg-slate-50 p-6 rounded-2xl border border-slate-100 shadow-inner">
-                            <div><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block tracking-widest">Target Module</label><select value={keyTool} onChange={e => setKeyTool(e.target.value)} className="w-full rounded-xl border-slate-200 text-sm font-bold bg-white focus:ring-2 focus:ring-indigo-100 outline-none"><option value="universal">Universal Access</option><option value={ToolId.XML_RENUMBER}>XML Normalizer</option><option value={ToolId.CREDIT_GENERATOR}>CRediT Tagging</option></select></div>
+                            <div><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block tracking-widest">Target Module</label><select value={keyTool} onChange={e => setKeyTool(e.target.value)} className="w-full rounded-xl border-slate-200 text-sm font-bold bg-white focus:ring-2 focus:ring-indigo-100 outline-none"><option value="universal">Universal Access</option><option value={ToolId.XML_RENUMBER}>XML Normalizer</option><option value={ToolId.CREDIT_GENERATOR}>CRediT Tagging</option><option value={ToolId.TABLE_BEAUTIFIER}>Table XML Beautifier</option></select></div>
                             <div><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block tracking-widest">Quantity</label><input type="number" min="1" max="50" value={keyQty} onChange={e => setKeyQty(parseInt(e.target.value))} className="w-full rounded-xl border-slate-200 text-sm font-bold bg-white focus:ring-2 focus:ring-indigo-100 outline-none" /></div>
                             <button onClick={generateKeys} className="bg-slate-900 text-white font-black py-2.5 rounded-xl uppercase text-xs tracking-widest shadow-lg active:scale-95 transition-all">Generate</button>
                         </div>
@@ -712,13 +722,41 @@ const AdminDashboard: React.FC = () => {
 
                 {activeTab === 'config' && (
                     <div className="p-10 space-y-10">
-                        <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">System Protocols</h3>
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-slate-100 pb-8">
+                            <div className="flex flex-col">
+                                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">System Protocols</h3>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Automatic Node Provisioning (Free Zone)</p>
+                            </div>
+                            
+                            <div className="flex flex-col gap-2">
+                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] ml-1">Provisioning Term</label>
+                                <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-inner">
+                                    {PROMO_DURATIONS.map(d => (
+                                        <button 
+                                            key={d.value}
+                                            onClick={() => setPromoDuration(d.value)}
+                                            className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${promoDuration === d.value ? 'bg-white text-emerald-600 shadow-sm border border-emerald-100' : 'text-slate-400 hover:text-slate-600'}`}
+                                        >
+                                            {d.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                             {Object.values(ToolId).filter(id => id !== 'dashboard' && id !== 'docs').map(tid => {
                                 const expiry = freeToolsData[tid]; const isFree = !!expiry && new Date(expiry) > new Date();
                                 return (
                                     <div key={tid} onClick={() => toggleFreeTool(tid)} className={`p-8 rounded-[2rem] border-2 cursor-pointer transition-all flex items-center justify-between group ${isFree ? 'border-emerald-500 bg-emerald-50 shadow-lg' : 'border-slate-100 bg-white hover:border-slate-200'}`}>
-                                        <div className="flex flex-col"><span className={`text-xs font-black uppercase ${isFree ? 'text-emerald-700' : 'text-slate-700'}`}>{getToolName(tid)}</span>{isFree && <span className="text-[9px] font-black text-emerald-600 mt-1 uppercase">ACTIVE FREE ZONE</span>}</div>
+                                        <div className="flex flex-col">
+                                            <span className={`text-xs font-black uppercase ${isFree ? 'text-emerald-700' : 'text-slate-700'}`}>{getToolName(tid)}</span>
+                                            {isFree ? (
+                                                <span className="text-[9px] font-black text-emerald-600 mt-1 uppercase">EXPIRES: {new Date(expiry!).toLocaleDateString()}</span>
+                                            ) : (
+                                                <span className="text-[9px] font-bold text-slate-300 mt-1 uppercase">LOCKED STATUS</span>
+                                            )}
+                                        </div>
                                         <div className={`w-10 h-5 rounded-full relative transition-colors border ${isFree ? 'bg-emerald-500 border-emerald-600' : 'bg-slate-200 border-slate-300'}`}><div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${isFree ? 'left-[22px]' : 'left-1'}`}></div></div>
                                     </div>
                                 );
