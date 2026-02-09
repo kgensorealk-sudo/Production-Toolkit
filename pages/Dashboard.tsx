@@ -17,13 +17,15 @@ interface ToolCardProps {
     Icon: React.FC<any>;
     onClick: () => void;
     onTipClick: (e: React.MouseEvent) => void;
+    onPinClick: (e: React.MouseEvent) => void;
+    isPinned: boolean;
     delay: number;
     lockType: 'key' | 'subscription' | 'none';
     isFree: boolean;
     expiry?: string;
 }
 
-const ToolCard: React.FC<ToolCardProps> = ({ id, title, desc, iconBg, iconText, borderColor, Icon, onClick, onTipClick, delay, lockType, isFree, expiry }) => {
+const ToolCard: React.FC<ToolCardProps> = ({ id, title, desc, iconBg, iconText, borderColor, Icon, onClick, onTipClick, onPinClick, isPinned, delay, lockType, isFree, expiry }) => {
     const isLocked = lockType !== 'none' && !isFree;
     const [timeLeft, setTimeLeft] = useState<string>('');
     const [hasSeenTips, setHasSeenTips] = useState(() => {
@@ -65,29 +67,41 @@ const ToolCard: React.FC<ToolCardProps> = ({ id, title, desc, iconBg, iconText, 
             <div className={`h-full bg-white rounded-[2.2rem] p-8 flex flex-col border border-slate-100 relative overflow-hidden ${isLocked ? 'grayscale-[0.9]' : ''}`}>
                 <div className={`absolute top-0 left-0 w-full h-1.5 ${isLocked ? 'bg-slate-200' : (isFree ? 'bg-emerald-50' : borderColor)}`}></div>
                 
-                {/* PRO TIP ICON - Positioned top-left */}
-                <button 
-                    onClick={handleTipInternal}
-                    className="absolute top-4 left-4 z-30 w-9 h-9 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-500 shadow-sm hover:scale-110 hover:bg-amber-500 hover:text-white transition-all duration-300 group/tip"
-                    title="Expert Editorial Tips"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                    </svg>
-                    {!hasSeenTips && (
-                        <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-400 rounded-full animate-ping opacity-75"></span>
-                    )}
-                </button>
+                {/* Header Actions */}
+                <div className="absolute top-4 left-4 right-4 z-30 flex justify-between items-center">
+                    <button 
+                        onClick={handleTipInternal}
+                        className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-500 shadow-sm hover:scale-110 hover:bg-amber-500 hover:text-white transition-all duration-300 group/tip"
+                        title="Expert Editorial Tips"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        </svg>
+                        {!hasSeenTips && (
+                            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-400 rounded-full animate-ping opacity-75"></span>
+                        )}
+                    </button>
+
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); onPinClick(e); }}
+                        className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-all duration-300 shadow-sm hover:scale-110 ${isPinned ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-slate-100 text-slate-300 hover:text-indigo-600 hover:border-indigo-100'}`}
+                        title={isPinned ? "Unpin Module" : "Pin Module"}
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill={isPinned ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                        </svg>
+                    </button>
+                </div>
 
                 {isFree ? (
-                    <div className="absolute top-4 right-4 z-20">
+                    <div className="absolute top-16 right-4 z-20">
                         <span className="bg-emerald-500 text-white text-[9px] font-black px-3 py-1.5 rounded-full border border-emerald-400 uppercase tracking-widest flex items-center gap-1.5 shadow-lg shadow-emerald-500/30 animate-pulse">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" /></svg>
                             Free Access {timeLeft && `• ${timeLeft}`}
                         </span>
                     </div>
                 ) : isLocked && (
-                    <div className="absolute top-4 right-4 z-20">
+                    <div className="absolute top-16 right-4 z-20">
                         <span className={`text-[8px] font-black px-2 py-1 rounded-md border uppercase tracking-widest flex items-center gap-1.5 shadow-sm bg-slate-50 text-slate-400 border-slate-100`}>
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                             Locked
@@ -123,8 +137,19 @@ const Dashboard: React.FC = () => {
     const navigate = useNavigate();
     const { profile, freeTools, freeToolsData, refreshProfile, isAdmin } = useAuth();
     const [isSyncing, setIsSyncing] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [pinnedTools, setPinnedTools] = useState<ToolId[]>(() => {
+        try {
+            const saved = localStorage.getItem('pinned_tools');
+            return saved ? JSON.parse(saved) : [];
+        } catch (e) { return []; }
+    });
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
     const [activeTipTool, setActiveTipTool] = useState<{id: string, name: string} | null>(null);
+
+    useEffect(() => {
+        localStorage.setItem('pinned_tools', JSON.stringify(pinnedTools));
+    }, [pinnedTools]);
 
     const getLockType = (toolId: ToolId): 'key' | 'subscription' | 'none' => {
         if (isAdmin) return 'none';
@@ -153,7 +178,7 @@ const Dashboard: React.FC = () => {
         }
     };
 
-    const ALL_TOOLS = [
+    const ALL_TOOLS_RAW = [
         { id: ToolId.XML_RENUMBER, title: "XML Normalizer", desc: "Automatically renumbers bibliography citations and updates all cross-references.", iconBg: "bg-blue-50", iconText: "text-blue-600", borderColor: "bg-blue-500", Icon: (props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg> },
         { id: ToolId.REF_EXTRACTOR, title: "Bibliography Extractor", desc: "Pure-text bibliography isolation with automated punctuation and spacing normalization for Word.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: (props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> },
         { id: ToolId.GRANT_TAGGER, title: "Grant Tagger", desc: "Identify and tag grant sponsors and numbers within funding statements with XML cross-linking.", iconBg: "bg-emerald-50", iconText: "text-emerald-600", borderColor: "bg-emerald-500", Icon: (props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.407 2.67 1M12 8V7m0 1v8m0 0v1m-2.67-1c.59.593 1.56 1 2.67 1m0-1c-1.11 0-2.08-.407-2.67-1M12 16V17" /></svg> },
@@ -173,15 +198,26 @@ const Dashboard: React.FC = () => {
         { id: ToolId.VIEW_SYNC, title: "View Synchronizer", desc: "Mirror content between paragraph views while maintaining ID integrity and references.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: (props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg> }
     ];
 
+    const filteredTools = useMemo(() => {
+        if (!searchTerm.trim()) return ALL_TOOLS_RAW;
+        const low = searchTerm.toLowerCase();
+        return ALL_TOOLS_RAW.filter(t => t.title.toLowerCase().includes(low) || t.desc.toLowerCase().includes(low));
+    }, [searchTerm]);
+
     const sections = useMemo(() => {
-        const active = ALL_TOOLS.filter(t => freeTools.includes(t.id) || getLockType(t.id) === 'none');
-        const locked = ALL_TOOLS.filter(t => !freeTools.includes(t.id) && getLockType(t.id) !== 'none');
-        return { active, locked };
-    }, [profile, freeTools, isAdmin]);
+        const pinned = filteredTools.filter(t => pinnedTools.includes(t.id));
+        const active = filteredTools.filter(t => !pinnedTools.includes(t.id) && (freeTools.includes(t.id) || getLockType(t.id) === 'none'));
+        const locked = filteredTools.filter(t => !pinnedTools.includes(t.id) && !freeTools.includes(t.id) && getLockType(t.id) !== 'none');
+        return { pinned, active, locked };
+    }, [profile, freeTools, isAdmin, pinnedTools, filteredTools]);
 
     const handleTipClick = (toolId: string, toolName: string, e: React.MouseEvent) => {
         e.stopPropagation();
         setActiveTipTool({ id: toolId, name: toolName });
+    };
+
+    const handlePinClick = (toolId: ToolId) => {
+        setPinnedTools(prev => prev.includes(toolId) ? prev.filter(id => id !== toolId) : [...prev, toolId]);
     };
 
     return (
@@ -204,27 +240,84 @@ const Dashboard: React.FC = () => {
                     Integrated environment for technical XML production and citation integrity management.
                 </p>
                 
-                <div className="mt-10 flex flex-wrap justify-center gap-4">
-                    {freeTools.length > 0 && !profile?.is_subscribed && (
-                        <div className="inline-flex items-center gap-3 px-6 py-3 bg-emerald-50 rounded-full border border-emerald-100 text-emerald-600 text-xs font-black uppercase tracking-widest shadow-lg shadow-emerald-500/10">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                            Automatic Provisioning: {freeTools.length} Modules Active
+                {/* Search and Action Bar */}
+                <div className="mt-12 flex flex-col items-center gap-6">
+                    <div className="relative w-full max-w-xl group">
+                        <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none">
+                            <svg className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
                         </div>
-                    )}
-                    
-                    <button 
-                        onClick={handleSync}
-                        disabled={isSyncing}
-                        className="inline-flex items-center gap-2 px-6 py-3 bg-white hover:bg-slate-50 rounded-full border border-slate-200 text-slate-500 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-sm"
-                        title="Force refresh account permissions"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 ${isSyncing ? 'animate-spin text-indigo-500' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                        {isSyncing ? 'Syncing...' : 'Node Integrity Sync'}
-                    </button>
+                        <input 
+                            type="text"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full pl-14 pr-14 py-5 bg-white border border-slate-200 rounded-[2rem] shadow-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none font-bold text-slate-700 uppercase tracking-widest text-xs placeholder:text-slate-300"
+                            placeholder="Search Node Library..."
+                        />
+                        {searchTerm && (
+                            <button 
+                                onClick={() => setSearchTerm('')}
+                                className="absolute inset-y-0 right-4 flex items-center px-2 text-slate-400 hover:text-rose-500 transition-colors"
+                            >
+                                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        )}
+                    </div>
+
+                    <div className="flex flex-wrap justify-center gap-4">
+                        {freeTools.length > 0 && !profile?.is_subscribed && (
+                            <div className="inline-flex items-center gap-3 px-6 py-3 bg-emerald-50 rounded-full border border-emerald-100 text-emerald-600 text-xs font-black uppercase tracking-widest shadow-lg shadow-emerald-500/10">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                Automatic Provisioning: {freeTools.length} Modules Active
+                            </div>
+                        )}
+                        
+                        <button 
+                            onClick={handleSync}
+                            disabled={isSyncing}
+                            className="inline-flex items-center gap-2 px-6 py-3 bg-white hover:bg-slate-50 rounded-full border border-slate-200 text-slate-500 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-sm"
+                            title="Force refresh account permissions"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 ${isSyncing ? 'animate-spin text-indigo-500' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            {isSyncing ? 'Syncing...' : 'Node Integrity Sync'}
+                        </button>
+                    </div>
                 </div>
             </div>
+
+            {/* Pinned Modules Section */}
+            {sections.pinned.length > 0 && (
+                <div className="mb-20 animate-fade-in">
+                    <div className="flex items-center gap-4 mb-10 px-2">
+                        <div className="flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-indigo-600" fill="currentColor" viewBox="0 0 24 24"><path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" /></svg>
+                            <h3 className="text-xs font-black text-slate-900 uppercase tracking-[0.4em] whitespace-nowrap">Pinned Operations</h3>
+                        </div>
+                        <div className="h-px bg-slate-200 w-full shadow-inner"></div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                        {sections.pinned.map((tool, index) => (
+                            <ToolCard 
+                                key={tool.id}
+                                {...tool}
+                                delay={50}
+                                isPinned={true}
+                                onPinClick={() => handlePinClick(tool.id)}
+                                lockType={getLockType(tool.id)}
+                                isFree={freeTools.includes(tool.id)}
+                                expiry={freeToolsData[tool.id]}
+                                onClick={() => navigate(`/${tool.id}`)}
+                                onTipClick={(e) => handleTipClick(tool.id, tool.title, e)}
+                            />
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* Active Modules Section */}
             {sections.active.length > 0 && (
@@ -239,6 +332,8 @@ const Dashboard: React.FC = () => {
                                 key={tool.id}
                                 {...tool}
                                 delay={100 + (index * 50)}
+                                isPinned={false}
+                                onPinClick={() => handlePinClick(tool.id)}
                                 lockType={getLockType(tool.id)}
                                 isFree={freeTools.includes(tool.id)}
                                 expiry={freeToolsData[tool.id]}
@@ -263,6 +358,8 @@ const Dashboard: React.FC = () => {
                                 key={tool.id}
                                 {...tool}
                                 delay={200 + (index * 50)}
+                                isPinned={false}
+                                onPinClick={() => handlePinClick(tool.id)}
                                 lockType={getLockType(tool.id)}
                                 isFree={freeTools.includes(tool.id)}
                                 onClick={() => navigate(`/${tool.id}`)}
@@ -270,6 +367,15 @@ const Dashboard: React.FC = () => {
                             />
                         ))}
                     </div>
+                </div>
+            )}
+
+            {filteredTools.length === 0 && (
+                <div className="py-40 text-center animate-fade-in grayscale opacity-40">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-20 w-20 mx-auto text-slate-300 mb-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <p className="text-lg font-black uppercase tracking-[0.25em] text-slate-400">No matching protocols detected</p>
                 </div>
             )}
 
