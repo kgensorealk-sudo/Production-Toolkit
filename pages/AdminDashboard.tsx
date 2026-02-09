@@ -125,6 +125,7 @@ const AdminDashboard: React.FC = () => {
             case ToolId.QUICK_DIFF: return "Quick Text Diff";
             case ToolId.TAG_CLEANER: return "XML Tag Cleaner";
             case ToolId.TABLE_FIXER: return "XML Table Fixer";
+            case ToolId.TABLE_BEAUTIFIER: return "Table XML Beautifier";
             case ToolId.VIEW_SYNC: return "View Synchronizer";
             case ToolId.REF_EXTRACTOR: return "Bib Extractor";
             case ToolId.REF_PURGER: return "Reference List Purger";
@@ -414,7 +415,7 @@ const AdminDashboard: React.FC = () => {
                     <div className="flex items-center gap-2">
                         <span className={`w-2.5 h-2.5 rounded-full ${activeNodesCount > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`}></span>
                         <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">
-                            {activeNodesCount} Active Operator Nodes
+                            {activeNodesCount} Active Nodes
                         </span>
                     </div>
                 </div>
@@ -657,7 +658,7 @@ const AdminDashboard: React.FC = () => {
                                             <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                                         </div>
                                         <p className="text-sm font-black uppercase tracking-[0.2em] text-slate-400">Telemetry Disengaged</p>
-                                        <p className="text-[10px] text-slate-400 mt-3 font-medium px-8 leading-relaxed italic">Select an operator node from the table to inspect their specific module usage DNA.</p>
+                                        <p className="text-[10px] text-slate-400 mt-3 font-medium px-8 leading-relaxed italic text-center">Select an operator from the table to inspect their specific module usage DNA.</p>
                                     </div>
                                 )}
                             </section>

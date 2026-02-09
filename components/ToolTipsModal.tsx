@@ -109,7 +109,7 @@ const ToolTipsModal: React.FC<ToolTipsModalProps> = ({ toolId, toolName, isOpen,
     };
 
     const handleDelete = async (id: string) => {
-        if (!window.confirm('Delete this expert protocol?')) return;
+        if (!window.confirm('Delete this instruction tip?')) return;
         setLoading(true);
         try {
             const { error } = await supabase.from('tool_tips').delete().eq('id', id);
@@ -149,7 +149,7 @@ const ToolTipsModal: React.FC<ToolTipsModalProps> = ({ toolId, toolName, isOpen,
                     </div>
                 </div>
 
-                {/* Progress Bar (Visual indicator of how many tips) */}
+                {/* Progress Bar */}
                 {totalTips > 0 && (
                     <div className="h-1 w-full bg-slate-100 shrink-0">
                         <div 
@@ -171,9 +171,9 @@ const ToolTipsModal: React.FC<ToolTipsModalProps> = ({ toolId, toolName, isOpen,
                                 </svg>
                             </div>
                             <div>
-                                <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight">System Node Offline</h4>
+                                <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight">Node Error</h4>
                                 <p className="text-xs text-slate-500 font-medium mt-2 leading-relaxed px-6">
-                                    The Pro-Tip database table has not been initialized.
+                                    The instruction database is currently unavailable.
                                 </p>
                             </div>
                         </div>
@@ -182,16 +182,15 @@ const ToolTipsModal: React.FC<ToolTipsModalProps> = ({ toolId, toolName, isOpen,
                              <svg className="w-12 h-12 text-slate-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                             </svg>
-                            <p className="text-sm font-bold uppercase tracking-widest text-slate-400">Manual Empty</p>
-                            <p className="text-xs font-medium text-slate-400 mt-1">No protocols listed for this node.</p>
+                            <p className="text-sm font-bold uppercase tracking-widest text-slate-400">Empty Library</p>
+                            <p className="text-xs font-medium text-slate-400 mt-1">No instructions have been published for this module.</p>
                         </div>
                     ) : (
                         <div className="flex flex-col h-full">
-                            {/* Tip Viewer Card */}
                             <div key={currentTip.id} className="animate-fade-in flex flex-col flex-grow">
                                 <div className="flex items-center justify-between mb-8">
                                     <span className="inline-flex items-center px-4 py-1.5 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-black uppercase tracking-widest border border-indigo-100">
-                                        Protocol Step {currentIndex + 1} of {totalTips}
+                                        Protocol {currentIndex + 1} of {totalTips}
                                     </span>
                                     
                                     {isAdmin && (
@@ -199,7 +198,7 @@ const ToolTipsModal: React.FC<ToolTipsModalProps> = ({ toolId, toolName, isOpen,
                                             <button 
                                                 onClick={() => { setEditingId(currentTip.id); setNewTip(currentTip.content); }} 
                                                 className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors border border-transparent hover:border-indigo-100"
-                                                title="Edit current step"
+                                                title="Edit tip"
                                             >
                                                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -208,7 +207,7 @@ const ToolTipsModal: React.FC<ToolTipsModalProps> = ({ toolId, toolName, isOpen,
                                             <button 
                                                 onClick={() => handleDelete(currentTip.id)} 
                                                 className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors border border-transparent hover:border-rose-100"
-                                                title="Delete current step"
+                                                title="Delete tip"
                                             >
                                                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -263,14 +262,14 @@ const ToolTipsModal: React.FC<ToolTipsModalProps> = ({ toolId, toolName, isOpen,
                 {isAdmin && !isTableMissing && (
                     <div className="p-8 bg-slate-50 border-t border-slate-100 shrink-0">
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">
-                            {editingId ? 'Modify Knowledge Node' : 'Broadcast New Protocol'}
+                            {editingId ? 'Modify Protocol' : 'Add New Protocol Instruction'}
                         </label>
                         <div className="flex flex-col gap-4">
                             <textarea 
                                 value={newTip}
                                 onChange={(e) => setNewTip(e.target.value)}
                                 className="w-full p-4 rounded-2xl border border-slate-200 text-sm font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none resize-none bg-white h-24 shadow-sm"
-                                placeholder="Enter expert advice for this tool..."
+                                placeholder="Enter expert protocol advice for this tool..."
                             />
                             <div className="flex gap-3">
                                 {editingId && (
@@ -286,7 +285,7 @@ const ToolTipsModal: React.FC<ToolTipsModalProps> = ({ toolId, toolName, isOpen,
                                     disabled={!newTip.trim()}
                                     className="flex-[2] bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 text-white font-black py-4 px-6 rounded-2xl transition-all active:scale-95 shadow-xl shadow-indigo-100 uppercase tracking-widest text-[10px]"
                                 >
-                                    {editingId ? 'Update Step' : 'Publish Protocol Step'}
+                                    {editingId ? 'Update Protocol' : 'Publish Protocol'}
                                 </button>
                             </div>
                         </div>

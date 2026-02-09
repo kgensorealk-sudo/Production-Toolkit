@@ -27,6 +27,7 @@ const Docs: React.FC = () => {
                     <NavBtn id="credit" label="CRediT Generator" />
                     <NavBtn id="highlights" label="Highlights Gen" />
                     <NavBtn id="fixer" label="Table Fixer" />
+                    <NavBtn id="beautifier" label="Table Beautifier" />
                     <NavBtn id="sync" label="View Sync" />
                     <NavBtn id="diff" label="Quick Text Diff" />
                     <NavBtn id="tag" label="XML Tag Cleaner" />
@@ -56,6 +57,17 @@ const Docs: React.FC = () => {
                                     <h3 className="font-bold text-slate-800 mb-2">Smart Fingerprinting</h3>
                                     <p className="text-sm text-slate-500 leading-relaxed">Our matching engine uses content-based fingerprints (Author + Year + Title) to identify references even when labels have changed.</p>
                                 </div>
+                            </div>
+                        </section>
+                    )}
+
+                    {section === 'beautifier' && (
+                        <section className="animate-fade-in">
+                            <h2 className="text-3xl font-extrabold text-slate-900 mb-6 uppercase tracking-tight">Table XML Beautifier</h2>
+                            <div className="prose prose-slate max-w-none">
+                                <p className="text-slate-600 mb-4">
+                                    Used to fix single-line table rows. This tool inserts line breaks after <code>&lt;row&gt;</code> and <code>&lt;/entry&gt;</code> tags to make XML structurally readable in editors.
+                                </p>
                             </div>
                         </section>
                     )}
