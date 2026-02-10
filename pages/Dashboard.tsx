@@ -228,10 +228,31 @@ const Dashboard: React.FC = () => {
     }, [searchTerm]);
 
     const sections = useMemo(() => {
-        const pinned = filteredTools.filter(t => pinnedTools.includes(t.id));
-        const active = filteredTools.filter(t => !pinnedTools.includes(t.id) && (freeTools.includes(t.id) || getLockType(t.id) === 'none'));
-        const locked = filteredTools.filter(t => !pinnedTools.includes(t.id) && !freeTools.includes(t.id) && getLockType(t.id) !== 'none');
-        return { pinned, active, locked };
+        const filtered = filteredTools;
+        
+        // Featured tools: Key-exclusive and currently Free (Promo)
+        const featured = filtered.filter(t => 
+            !pinnedTools.includes(t.id) && 
+            freeTools.includes(t.id) && 
+            t.id === ToolId.TABLE_BEAUTIFIER
+        );
+
+        const pinned = filtered.filter(t => pinnedTools.includes(t.id));
+        
+        const active = filtered.filter(t => 
+            !pinnedTools.includes(t.id) && 
+            !featured.some(f => f.id === t.id) &&
+            (freeTools.includes(t.id) || getLockType(t.id) === 'none')
+        );
+        
+        const locked = filtered.filter(t => 
+            !pinnedTools.includes(t.id) && 
+            !featured.some(f => f.id === t.id) &&
+            !freeTools.includes(t.id) && 
+            getLockType(t.id) !== 'none'
+        );
+        
+        return { featured, pinned, active, locked };
     }, [profile, freeTools, isAdmin, pinnedTools, filteredTools]);
 
     const handleTipClick = (toolId: string, toolName: string, e: React.MouseEvent) => {
@@ -312,6 +333,35 @@ const Dashboard: React.FC = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Featured Protocols (Limited Promo) Section */}
+            {sections.featured.length > 0 && (
+                <div className="mb-20 animate-fade-in">
+                    <div className="flex items-center gap-4 mb-10 px-2">
+                        <div className="flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-indigo-600 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-7.714 2.143L11 21l-2.286-6.857L1 12l7.714-2.143L11 3z" /></svg>
+                            <h3 className="text-xs font-black text-slate-900 uppercase tracking-[0.4em] whitespace-nowrap">Priority Protocol Access</h3>
+                        </div>
+                        <div className="h-px bg-slate-200 w-full shadow-inner"></div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                        {sections.featured.map((tool, index) => (
+                            <ToolCard 
+                                key={tool.id}
+                                {...tool}
+                                delay={50}
+                                isPinned={pinnedTools.includes(tool.id)}
+                                onPinClick={() => handlePinClick(tool.id)}
+                                lockType={getLockType(tool.id)}
+                                isFree={freeTools.includes(tool.id)}
+                                expiry={freeToolsData[tool.id]}
+                                onClick={() => navigate(`/${tool.id}`)}
+                                onTipClick={(e) => handleTipClick(tool.id, tool.title, e)}
+                            />
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* Pinned Modules Section */}
             {sections.pinned.length > 0 && (
