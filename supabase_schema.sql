@@ -1,5 +1,5 @@
 
--- 1. TABLE STRUCTURE (Baseline)
+-- 1. BASELINE PROFILES
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
   email TEXT,
@@ -11,89 +11,93 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   last_seen TIMESTAMPTZ DEFAULT now()
 );
 
--- 6. TOOL TIPS TABLE
-CREATE TABLE IF NOT EXISTS public.tool_tips (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  tool_id TEXT NOT NULL,
-  content TEXT NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  author_id UUID REFERENCES public.profiles(id)
+-- 2. SYSTEM SETTINGS (Consolidated Matrix)
+CREATE TABLE IF NOT EXISTS public.system_settings (
+  id TEXT PRIMARY KEY DEFAULT 'global',
+  free_tools_data JSONB DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 2. SECURE PROFILE INITIALIZATION
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
+-- MIGRATION: Add tool_access_configs column if missing
+DO $$
 BEGIN
-  INSERT INTO public.profiles (id, email, role, is_subscribed)
-  VALUES (new.id, new.email, 'user', false);
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+    IF NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = 'public.system_settings'::regclass AND attname = 'tool_access_configs') THEN
+        ALTER TABLE public.system_settings ADD COLUMN tool_access_configs JSONB DEFAULT '{}'::jsonb;
+    END IF;
+END $$;
 
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+-- Ensure a global configuration row exists for the dashboard to target
+INSERT INTO public.system_settings (id, free_tools_data, tool_access_configs) 
+VALUES ('global', '{}'::jsonb, '{}'::jsonb) 
+ON CONFLICT (id) DO NOTHING;
 
--- 3. HELPER: Admin Check
+-- 3. ACCESS KEYS
+CREATE TABLE IF NOT EXISTS public.access_keys (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  key TEXT UNIQUE NOT NULL,
+  tool TEXT NOT NULL,
+  is_used BOOLEAN DEFAULT false,
+  used_at TIMESTAMPTZ,
+  user_id UUID REFERENCES public.profiles(id),
+  device_id TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- 4. USAGE LOGS (Telemetry)
+CREATE TABLE IF NOT EXISTS public.usage_logs (
+  id BIGSERIAL PRIMARY KEY,
+  user_id UUID REFERENCES public.profiles(id),
+  tool_id TEXT NOT NULL,
+  timestamp TIMESTAMPTZ DEFAULT now()
+);
+
+-- 5. ANNOUNCEMENTS
+CREATE TABLE IF NOT EXISTS public.announcements (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  type TEXT DEFAULT 'info',
+  is_active BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- 6. SECURITY: RLS POLICIES
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.access_keys ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.usage_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.announcements ENABLE ROW LEVEL SECURITY;
+
+-- Helper: Admin Check
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN AS $$
 BEGIN
-  RETURN EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE id = auth.uid() AND role = 'admin'
+  RETURN (
+    SELECT (email = 'generalkevin53@gmail.com' OR role = 'admin')
+    FROM public.profiles
+    WHERE id = auth.uid()
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 4. HARDENED SECURITY POLICIES
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+-- Settings Policies
+DROP POLICY IF EXISTS "Public read config" ON public.system_settings;
+CREATE POLICY "Public read config" ON public.system_settings FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Admin manage config" ON public.system_settings;
+CREATE POLICY "Admin manage config" ON public.system_settings FOR ALL USING ( is_admin() );
+
+-- Profiles Policies
 DROP POLICY IF EXISTS "Users view own profile" ON public.profiles;
-CREATE POLICY "Users view own profile" 
-ON public.profiles FOR SELECT 
-USING ( auth.uid() = id OR is_admin() );
-
-DROP POLICY IF EXISTS "Users update own heartbeat" ON public.profiles;
-CREATE POLICY "Users update own heartbeat" 
-ON public.profiles FOR UPDATE 
-USING ( auth.uid() = id )
-WITH CHECK (
-  (is_admin()) OR (
-    role = 'user' AND 
-    (is_subscribed = (SELECT is_subscribed FROM public.profiles WHERE id = auth.uid()))
-  )
-);
+CREATE POLICY "Users view own profile" ON public.profiles FOR SELECT USING ( auth.uid() = id OR is_admin() );
 
 DROP POLICY IF EXISTS "Admin Master Control Profiles" ON public.profiles;
-CREATE POLICY "Admin Master Control Profiles" 
-ON public.profiles FOR ALL 
-USING ( is_admin() );
+CREATE POLICY "Admin Master Control Profiles" ON public.profiles FOR ALL USING ( is_admin() );
 
--- 5. ACCESS KEYS POLICIES
-DROP POLICY IF EXISTS "Ghost Key Discovery" ON public.access_keys;
-CREATE POLICY "Ghost Key Discovery" 
-ON public.access_keys FOR SELECT 
-USING ( auth.uid() = user_id OR is_used = false OR is_admin() );
+-- Usage Logs Policies
+DROP POLICY IF EXISTS "Users can log their own usage" ON public.usage_logs;
+CREATE POLICY "Users can log their own usage" ON public.usage_logs FOR INSERT WITH CHECK (auth.uid() = user_id);
 
-DROP POLICY IF EXISTS "Secure Key Binding" ON public.access_keys;
-CREATE POLICY "Secure Key Binding"
-ON public.access_keys FOR UPDATE
-USING ( (is_used = false) OR (user_id = auth.uid()) OR is_admin() )
-WITH CHECK ( (user_id = auth.uid()) OR is_admin() );
-
--- 7. TOOL TIPS POLICIES
-ALTER TABLE public.tool_tips ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "Tips visible to all" ON public.tool_tips;
-CREATE POLICY "Tips visible to all" 
-ON public.tool_tips FOR SELECT 
-TO authenticated
-USING (true);
-
-DROP POLICY IF EXISTS "Admins manage tips" ON public.tool_tips;
-CREATE POLICY "Admins manage tips" 
-ON public.tool_tips FOR ALL 
-TO authenticated
-USING (is_admin())
-WITH CHECK (is_admin());
+DROP POLICY IF EXISTS "Admins can view all logs" ON public.usage_logs;
+CREATE POLICY "Admins can view all logs" ON public.usage_logs FOR SELECT USING (is_admin());

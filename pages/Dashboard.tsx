@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 /* Import useNavigate from react-router to resolve potential named export issues in react-router-dom types */
 import { useNavigate } from 'react-router';
-import { ToolId } from '../types';
+import { ToolId, ToolAccessMode } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import AnnouncementModal from '../components/AnnouncementModal';
 import ToolTipsModal from '../components/ToolTipsModal';
@@ -26,8 +26,11 @@ interface ToolCardProps {
 }
 
 const ToolCard: React.FC<ToolCardProps> = ({ id, title, desc, iconBg, iconText, borderColor, Icon, onClick, onTipClick, onPinClick, isPinned, delay, lockType, isFree, expiry }) => {
-    // Key-exclusive logic check for UI
-    const isKeyExclusive = id === ToolId.TABLE_BEAUTIFIER;
+    const { toolAccessConfigs } = useAuth();
+    
+    // Check if tool is currently in a "Key Only" mode
+    const mode = toolAccessConfigs[id] || ToolAccessMode.SUBSCRIPTION;
+    const isKeyOnlyMode = mode === ToolAccessMode.KEY_ONLY;
     const isLocked = lockType !== 'none' && !isFree;
     
     const [timeLeft, setTimeLeft] = useState<string>('');
@@ -64,7 +67,7 @@ const ToolCard: React.FC<ToolCardProps> = ({ id, title, desc, iconBg, iconText, 
     return (
         <div 
             onClick={onClick}
-            className={`glass-panel rounded-[2.5rem] p-1 shadow-sm hover:shadow-2xl transition-all duration-500 cursor-pointer group animate-slide-up bg-white/80 ${isLocked ? 'opacity-60' : ''} ${isFree && isKeyExclusive ? 'ring-4 ring-emerald-400/20 shadow-emerald-500/10' : 'hover:shadow-indigo-500/10'}`}
+            className={`glass-panel rounded-[2.5rem] p-1 shadow-sm hover:shadow-2xl transition-all duration-500 cursor-pointer group animate-slide-up bg-white/80 ${isLocked ? 'opacity-60' : ''} ${isFree ? 'ring-4 ring-emerald-400/20 shadow-emerald-500/10' : 'hover:shadow-indigo-500/10'}`}
             style={{ animationDelay: `${delay}ms`, animationFillMode: 'backwards' }}
         >
             <div className={`h-full bg-white rounded-[2.2rem] p-8 flex flex-col border border-slate-100 relative overflow-hidden ${isLocked ? 'grayscale-[0.9]' : ''}`}>
@@ -98,8 +101,8 @@ const ToolCard: React.FC<ToolCardProps> = ({ id, title, desc, iconBg, iconText, 
 
                 {isFree ? (
                     <div className="absolute top-16 right-4 z-20">
-                        <span className={`text-[9px] font-black px-3 py-1.5 rounded-full border uppercase tracking-widest flex items-center gap-1.5 shadow-lg shadow-emerald-500/30 animate-pulse ${isKeyExclusive ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-emerald-500 text-white border-emerald-400'}`}>
-                            {isKeyExclusive ? (
+                        <span className={`text-[9px] font-black px-3 py-1.5 rounded-full border uppercase tracking-widest flex items-center gap-1.5 shadow-lg shadow-emerald-500/30 animate-pulse ${isKeyOnlyMode ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-emerald-500 text-white border-emerald-400'}`}>
+                            {isKeyOnlyMode ? (
                                 <>
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-7.714 2.143L11 21l-2.286-6.857L1 12l7.714-2.143L11 3z" /></svg>
                                     Limited Promo • {timeLeft || 'Active'}
@@ -137,7 +140,11 @@ const ToolCard: React.FC<ToolCardProps> = ({ id, title, desc, iconBg, iconText, 
                 
                 {isLocked && (
                     <div className="mt-6 pt-4 border-t border-slate-50">
-                        <span className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">{lockType === 'key' ? 'Persistent Key Required' : 'Enterprise Subscription Only'}</span>
+                        <span className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">
+                            {mode === ToolAccessMode.KEY_ONLY ? 'Strictly Key Required' : 
+                             mode === ToolAccessMode.SUBSCRIPTION ? 'Subscription Only' :
+                             'Key or Subscription'}
+                        </span>
                     </div>
                 )}
             </div>
@@ -147,7 +154,7 @@ const ToolCard: React.FC<ToolCardProps> = ({ id, title, desc, iconBg, iconText, 
 
 const Dashboard: React.FC = () => {
     const navigate = useNavigate();
-    const { profile, freeTools, freeToolsData, refreshProfile, isAdmin } = useAuth();
+    const { profile, freeTools, freeToolsData, toolAccessConfigs, refreshProfile, isAdmin } = useAuth();
     const [isSyncing, setIsSyncing] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [pinnedTools, setPinnedTools] = useState<ToolId[]>(() => {
@@ -166,39 +173,22 @@ const Dashboard: React.FC = () => {
     const getLockType = (toolId: ToolId): 'key' | 'subscription' | 'none' => {
         if (isAdmin) return 'none';
 
-        // Designated Key-Exclusive Tools (Subscription is ignored)
-        const isKeyExclusive = toolId === ToolId.TABLE_BEAUTIFIER;
+        // Get dynamic mode from config
+        const mode = toolAccessConfigs[toolId] || ToolAccessMode.SUBSCRIPTION;
 
-        // Regular subscription check (Only if tool is not exclusive)
-        if (profile?.is_subscribed && !isKeyExclusive) return 'none';
+        // Common Check: Is specific key already bound?
+        const hasSpecificKey = profile?.unlocked_tools?.includes(toolId) || 
+                              profile?.unlocked_tools?.includes('universal');
 
-        // Check if specific key is already bound to this account
-        const hasSpecificKey = profile?.unlocked_tools?.includes(toolId) || profile?.unlocked_tools?.includes('universal');
-        if (hasSpecificKey) return 'none';
-
-        // Identification for the UI label
-        if (toolId === ToolId.XML_RENUMBER || toolId === ToolId.CREDIT_GENERATOR || isKeyExclusive) {
-            return 'key';
+        if (mode === ToolAccessMode.SUBSCRIPTION) {
+            return profile?.is_subscribed ? 'none' : 'subscription';
+        } else if (mode === ToolAccessMode.KEY_OR_SUBSCRIPTION) {
+            return (profile?.is_subscribed || hasSpecificKey) ? 'none' : 'key';
+        } else if (mode === ToolAccessMode.KEY_ONLY) {
+            return hasSpecificKey ? 'none' : 'key';
         }
         
         return 'subscription';
-    };
-
-    const handleSync = async () => {
-        setIsSyncing(true);
-        const timer = setTimeout(() => {
-            setIsSyncing(false);
-            setToast({ msg: "Database timed out. Check network connection.", type: "warn" });
-        }, 6000);
-        try {
-            await refreshProfile();
-            clearTimeout(timer);
-            setToast({ msg: "Node integrity synchronized with database.", type: "success" });
-        } catch (e) {
-            setToast({ msg: "Synchronization failed.", type: "error" });
-        } finally {
-            setIsSyncing(false);
-        }
     };
 
     const ALL_TOOLS_RAW = [
@@ -221,6 +211,23 @@ const Dashboard: React.FC = () => {
         { id: ToolId.VIEW_SYNC, title: "View Synchronizer", desc: "Mirror content between paragraph views while maintaining ID integrity and references.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: (props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg> }
     ];
 
+    const handleSync = async () => {
+        setIsSyncing(true);
+        const timer = setTimeout(() => {
+            setIsSyncing(false);
+            setToast({ msg: "Database timed out. Check network connection.", type: "warn" });
+        }, 6000);
+        try {
+            await refreshProfile();
+            clearTimeout(timer);
+            setToast({ msg: "Node integrity synchronized with database.", type: "success" });
+        } catch (e) {
+            setToast({ msg: "Synchronization failed.", type: "error" });
+        } finally {
+            setIsSyncing(false);
+        }
+    };
+
     const filteredTools = useMemo(() => {
         if (!searchTerm.trim()) return ALL_TOOLS_RAW;
         const low = searchTerm.toLowerCase();
@@ -228,11 +235,27 @@ const Dashboard: React.FC = () => {
     }, [searchTerm]);
 
     const sections = useMemo(() => {
-        const pinned = filteredTools.filter(t => pinnedTools.includes(t.id));
-        const active = filteredTools.filter(t => !pinnedTools.includes(t.id) && (freeTools.includes(t.id) || getLockType(t.id) === 'none'));
-        const locked = filteredTools.filter(t => !pinnedTools.includes(t.id) && !freeTools.includes(t.id) && getLockType(t.id) !== 'none');
-        return { pinned, active, locked };
-    }, [profile, freeTools, isAdmin, pinnedTools, filteredTools]);
+        const filtered = filteredTools;
+        
+        // Featured tools: Any tool currently set to Free (Promo) regardless of pinned status
+        const featured = filtered.filter(t => freeTools.includes(t.id));
+
+        const pinned = filtered.filter(t => pinnedTools.includes(t.id) && !featured.some(f => f.id === t.id));
+        
+        const active = filtered.filter(t => 
+            !pinnedTools.includes(t.id) && 
+            !featured.some(f => f.id === t.id) &&
+            (getLockType(t.id) === 'none')
+        );
+        
+        const locked = filtered.filter(t => 
+            !pinnedTools.includes(t.id) && 
+            !featured.some(f => f.id === t.id) &&
+            getLockType(t.id) !== 'none'
+        );
+        
+        return { featured, pinned, active, locked };
+    }, [profile, freeTools, isAdmin, pinnedTools, filteredTools, toolAccessConfigs]);
 
     const handleTipClick = (toolId: string, toolName: string, e: React.MouseEvent) => {
         e.stopPropagation();
@@ -312,6 +335,35 @@ const Dashboard: React.FC = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Featured Protocols (Limited Promo) Section */}
+            {sections.featured.length > 0 && (
+                <div className="mb-20 animate-fade-in">
+                    <div className="flex items-center gap-4 mb-10 px-2">
+                        <div className="flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-indigo-600 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-7.714 2.143L11 21l-2.286-6.857L1 12l7.714-2.143L11 3z" /></svg>
+                            <h3 className="text-xs font-black text-slate-900 uppercase tracking-[0.4em] whitespace-nowrap">Priority Protocol Access</h3>
+                        </div>
+                        <div className="h-px bg-slate-200 w-full shadow-inner"></div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                        {sections.featured.map((tool, index) => (
+                            <ToolCard 
+                                key={tool.id}
+                                {...tool}
+                                delay={50}
+                                isPinned={pinnedTools.includes(tool.id)}
+                                onPinClick={() => handlePinClick(tool.id)}
+                                lockType={getLockType(tool.id)}
+                                isFree={freeTools.includes(tool.id)}
+                                expiry={freeToolsData[tool.id]}
+                                onClick={() => navigate(`/${tool.id}`)}
+                                onTipClick={(e) => handleTipClick(tool.id, tool.title, e)}
+                            />
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* Pinned Modules Section */}
             {sections.pinned.length > 0 && (
