@@ -23,7 +23,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const SUPER_ADMIN_EMAIL = 'generalkevin53@gmail.com';
-const HEARTBEAT_INTERVAL = 120 * 1000; 
+const HEARTBEAT_INTERVAL = 60 * 1000; // Reduced to 60s for higher resolution node tracking
 
 /**
  * Resiliency Protocol: withRetry
@@ -63,7 +63,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const updateLastSeen = async (uid: string) => {
         try {
-            await supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', uid);
+            await withRetry(() => supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', uid), 2);
         } catch (err) {}
     };
 
@@ -169,6 +169,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             window.location.replace('/');
         }
     }, []);
+
+    // Wake-on-interaction Protocol:
+    // Ensures that if the app was suspended or throttled by the OS/Browser,
+    // it immediately re-synchronizes when the user returns.
+    useEffect(() => {
+        const handleWake = async () => {
+            if (document.visibilityState === 'visible' && user?.id) {
+                console.log("RE-ESTABLISHING NODE SYNC...");
+                // Verify session is still valid
+                const { data } = await (supabase.auth as any).getSession();
+                if (data?.session) {
+                    setSession(data.session);
+                    setUser(data.session.user);
+                    await Promise.allSettled([fetchProfile(user.id), fetchFreeTools()]);
+                } else {
+                    // Session lost or expired during sleep
+                    signOut(true);
+                }
+            }
+        };
+
+        window.addEventListener('visibilitychange', handleWake);
+        window.addEventListener('focus', handleWake);
+        return () => {
+            window.removeEventListener('visibilitychange', handleWake);
+            window.removeEventListener('focus', handleWake);
+        };
+    }, [user?.id, fetchProfile, fetchFreeTools, signOut]);
 
     // REAL-TIME PROTOCOL SUBSCRIPTION
     useEffect(() => {
