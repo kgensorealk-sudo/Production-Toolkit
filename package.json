@@ -1,6 +1,7 @@
+
 {
   "name": "production-toolkit",
-  "version": "1.7.0",
+  "version": "1.6.0",
   "description": "Professional Editorial Workflow Suite with Security Hardening",
   "main": "electron/main.js",
   "author": "Editorial Systems Pro",

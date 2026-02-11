@@ -1,11 +1,12 @@
-const { contextBridge } = require('electron');
 
-// Expose protected methods that allow the renderer process to use
-// the ipcRenderer without exposing the entire object
+const { contextBridge, ipcRenderer } = require('electron');
+
 contextBridge.exposeInMainWorld(
   'electron',
   {
-    // Add custom APIs here if needed in the future
-    // Example: getVersion: () => process.versions.electron
+    isElectron: true,
+    saveFile: async (content, defaultName, extension) => {
+      return await ipcRenderer.invoke('SAVE_FILE', { content, defaultName, extension });
+    }
   }
 );

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { supabase } from '../supabaseClient';
-import { UserProfile, ToolAccessMode } from '../types';
+import { UserProfile } from '../types';
 import { INACTIVITY_LIMIT } from '../constants';
 
 type Session = any;
@@ -12,7 +12,6 @@ interface AuthContextType {
     profile: UserProfile | null;
     freeTools: string[];
     freeToolsData: Record<string, string>;
-    toolAccessConfigs: Record<string, ToolAccessMode>;
     loading: boolean;
     isAdmin: boolean;
     signOut: (isAuto?: boolean) => Promise<void>;
@@ -32,7 +31,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [freeTools, setFreeTools] = useState<string[]>([]);
     const [freeToolsData, setFreeToolsData] = useState<Record<string, string>>({});
-    const [toolAccessConfigs, setToolAccessConfigs] = useState<Record<string, ToolAccessMode>>({});
     const [loading, setLoading] = useState(true);
     
     const initTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -72,30 +70,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
             const { data, error } = await supabase
                 .from('system_settings')
-                .select('free_tools_data, tool_access_configs')
+                .select('free_tools_data')
                 .eq('id', 'global')
                 .maybeSingle();
             
-            if (data) {
-                // Handle Free Zone
-                if (data.free_tools_data) {
-                    const now = new Date();
-                    const activeMap: Record<string, string> = {};
-                    const activeIds: string[] = [];
-                    Object.entries(data.free_tools_data).forEach(([tid, expiry]) => {
-                        if (new Date(expiry as string) > now) {
-                            activeMap[tid] = expiry as string;
-                            activeIds.push(tid);
-                        }
-                    });
-                    setFreeTools(activeIds);
-                    setFreeToolsData(activeMap);
-                }
-
-                // Handle Access Modes
-                if (data.tool_access_configs) {
-                    setToolAccessConfigs(data.tool_access_configs);
-                }
+            if (data?.free_tools_data) {
+                const now = new Date();
+                const activeMap: Record<string, string> = {};
+                const activeIds: string[] = [];
+                Object.entries(data.free_tools_data).forEach(([tid, expiry]) => {
+                    if (new Date(expiry as string) > now) {
+                        activeMap[tid] = expiry as string;
+                        activeIds.push(tid);
+                    }
+                });
+                setFreeTools(activeIds);
+                setFreeToolsData(activeMap);
             }
         } catch (err) {}
     };
@@ -273,7 +263,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return (
         <AuthContext.Provider value={{ 
-            session, user, profile, freeTools, freeToolsData, toolAccessConfigs, loading, isAdmin,
+            session, user, profile, freeTools, freeToolsData, loading, isAdmin,
             signOut, refreshProfile: () => user ? fetchProfile(user.id) : Promise.resolve(), 
             refreshFreeTools: fetchFreeTools 
         }}>

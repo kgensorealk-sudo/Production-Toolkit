@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { ToolId } from '../types';
@@ -22,7 +23,6 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
     
     const isDesktop = (window as any).electron !== undefined;
 
-    // Automated Telemetry: Log tool usage
     useEffect(() => {
         if (currentTool && user?.id) {
             const logUsage = async () => {
@@ -31,9 +31,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                         user_id: user.id,
                         tool_id: currentTool
                     }]);
-                } catch (e) {
-                    // Silently fail telemetry to not disrupt user experience
-                }
+                } catch (e) {}
             };
             logUsage();
         }
@@ -117,8 +115,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                             <div className="flex flex-col">
                                 <h1 className="text-xs font-black text-slate-900 tracking-tight uppercase leading-none">Production Toolkit Pro</h1>
                                 <div className="flex items-center gap-2 mt-0.5">
-                                    <span className={`text-[8px] font-bold uppercase tracking-widest ${isDesktop ? 'text-indigo-500' : 'text-slate-400'}`}>
-                                        {isDesktop ? 'Desktop Node' : 'Web Node'}
+                                    <span className={`text-[8px] font-black uppercase tracking-[0.2em] px-1.5 rounded border ${isDesktop ? 'text-indigo-600 bg-indigo-50 border-indigo-200 shadow-[0_0_8px_rgba(79,70,229,0.2)]' : 'text-slate-400 bg-slate-100 border-slate-200'}`}>
+                                        {isDesktop ? 'DESKTOP NODE PRO' : 'Web Node'}
                                     </span>
                                     {isAdmin && (
                                         <span className="text-[7px] font-black bg-indigo-600 text-white px-1 py-0.5 rounded uppercase tracking-widest shadow-lg animate-pulse ring-1 ring-indigo-300">Admin</span>
@@ -220,8 +218,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center text-[8px] font-bold text-slate-300 uppercase tracking-[0.2em]">
                     <p>&copy; 2025 Editorial Systems Pro</p>
                     <div className="flex gap-4">
-                        <span>Environment: {isDesktop ? 'Desktop Node' : 'Web Node'}</span>
-                        <span>v1.6.5_SECURED</span>
+                        <span className={isDesktop ? 'text-indigo-400 font-black' : ''}>Environment: {isDesktop ? 'DESKTOP NODE PRO' : 'Web Node'}</span>
+                        <span>v1.7.0_STABLE</span>
                     </div>
                 </div>
             </footer>

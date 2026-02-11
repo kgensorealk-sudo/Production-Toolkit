@@ -1,12 +1,11 @@
 
-const { app, BrowserWindow, shell, Menu, ipcMain } = require('electron');
+const { app, BrowserWindow, shell, Menu, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
 const isDev = !app.isPackaged;
 let mainWindow;
 
-// Security: Disable remote debugging and other switches in production
 if (!isDev) {
   app.commandLine.appendSwitch('disable-features', 'DevTools');
 }
@@ -41,6 +40,23 @@ function loadState() {
   return { width: 1366, height: 900 };
 }
 
+// IPC Handlers
+ipcMain.handle('SAVE_FILE', async (event, { content, defaultName, extension }) => {
+  const { filePath } = await dialog.showSaveDialog(mainWindow, {
+    defaultPath: path.join(app.getPath('downloads'), defaultName || `export.${extension || 'xml'}`),
+    filters: [
+      { name: extension ? extension.toUpperCase() : 'XML', extensions: [extension || 'xml'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  });
+
+  if (filePath) {
+    fs.writeFileSync(filePath, content);
+    return { success: true, path: filePath };
+  }
+  return { success: false };
+});
+
 function createWindow() {
   const state = loadState();
   const iconPath = path.join(__dirname, '../favicon.png');
@@ -61,7 +77,6 @@ function createWindow() {
       contextIsolation: true,
       webSecurity: true,
       spellcheck: true,
-      // SECURITY: Disable devTools in production
       devTools: isDev 
     },
     icon: iconPath
@@ -77,7 +92,6 @@ function createWindow() {
 
   mainWindow.on('close', saveState);
 
-  // Custom Menu without "Toggle DevTools" in production
   const template = [
     {
       label: 'File',
@@ -129,7 +143,6 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 
-  // Security: Prevent navigation to untrusted sites
   mainWindow.webContents.on('will-navigate', (event, url) => {
     if (!url.startsWith('file://') && !url.startsWith('http://localhost')) {
       event.preventDefault();

@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { diffLines, diffWordsWithSpace, Change } from 'diff';
 import Toast from '../components/Toast';
@@ -20,32 +21,40 @@ const XmlRenumber: React.FC = () => {
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     
-    // View State
     const [activeTab, setActiveTab] = useState<'raw' | 'diff' | 'report' | 'extraction'>('raw');
     const [reportData, setReportData] = useState<ReferenceChange[]>([]);
     const [extractedRefs, setExtractedRefs] = useState<string[]>([]);
     const [diffElements, setDiffElements] = useState<React.ReactNode>(null);
     
-    // Report Filter State
     const [searchQuery, setSearchQuery] = useState('');
     const [filterChangedOnly, setFilterChangedOnly] = useState(false);
     const [filterOtherRefOnly, setFilterOtherRefOnly] = useState(false);
 
+    const isDesktop = (window as any).electron !== undefined;
+
     const escapeHtml = (unsafe: string) => unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-    // Copy Helper for Rich Text
+    const handleSaveToFile = async () => {
+        if (!output) return;
+        try {
+            const res = await (window as any).electron.saveFile(output, 'renumbered_bib.xml', 'xml');
+            if (res.success) {
+                setToast({ msg: "File written to disk.", type: "success" });
+            }
+        } catch (e) {
+            setToast({ msg: "Export failed.", type: "error" });
+        }
+    };
+
     const copyRichText = (htmlContent: string, isBatch: boolean = false) => {
         try {
-            // Strip tags for plain text fallback
             let plainText = htmlContent.replace(/<[^>]+>/g, '');
-            // Simple entity decode for plain text
             plainText = plainText
                 .replace(/&amp;/g, '&')
                 .replace(/&lt;/g, '<')
                 .replace(/&gt;/g, '>')
                 .replace(/&nbsp;/g, ' ');
 
-            // For batch copy, use paragraphs for HTML, double newline for plain
             const finalHtml = isBatch 
                 ? htmlContent 
                 : `<span>${htmlContent}</span>`;
@@ -53,7 +62,6 @@ const XmlRenumber: React.FC = () => {
             const htmlBlob = new Blob([finalHtml], { type: 'text/html' });
             const textBlob = new Blob([plainText], { type: 'text/plain' });
             
-            // Use ClipboardItem if available
             if (typeof ClipboardItem !== 'undefined') {
                 const data = [new ClipboardItem({ 
                     "text/html": htmlBlob, 
@@ -63,14 +71,11 @@ const XmlRenumber: React.FC = () => {
                     setToast({ msg: 'Copied with formatting!', type: 'success' });
                 });
             } else {
-                // Fallback for environments without ClipboardItem
                 navigator.clipboard.writeText(plainText).then(() => {
                     setToast({ msg: 'Copied plain text (Browser limit)', type: 'warn' });
                 });
             }
         } catch (err) {
-            console.error('Copy failed', err);
-            // Ultimate fallback
             navigator.clipboard.writeText(htmlContent);
             setToast({ msg: 'Copied raw HTML (Rich text failed)', type: 'warn' });
         }
@@ -205,7 +210,6 @@ const XmlRenumber: React.FC = () => {
 
         setTimeout(() => {
             try {
-                // Pre-scan for other-refs to verify IDs
                 const otherRefIds = new Set<string>();
                 const fullRefRegexScan = /<ce:bib-reference\b[^>]*?\bid="([^"]+)"[^>]*>([\s\S]*?)<\/ce:bib-reference>/g;
                 let m;
@@ -216,8 +220,6 @@ const XmlRenumber: React.FC = () => {
                 }
 
                 const bibRefRegex = /(<ce:bib-reference\b[^>]*?\bid="([^"]+)"[^>]*>[\s\S]*?)<ce:label\b[^>]*>([\s\S]*?)<\/ce:label>/g;
-                
-                // Refactored: Targets optional [ with its own internal space, but ignores external sentence spaces
                 const singleCrossRefRegex = /(?:\[\s*)?(<ce:cross-ref\b[^>]*?\brefid="([^"]+)"[^>]*?>)[\s\S]*?<\/ce:cross-ref>(?:\s*\])?/g;
                 const rangeCrossRefRegex = /(?:\[\s*)?(<ce:cross-refs\b[^>]*?\brefid="([^"]+)"[^>]*?>)[\s\S]*?<\/ce:cross-refs>(?:\s*\])?/g;
 
@@ -253,7 +255,6 @@ const XmlRenumber: React.FC = () => {
                     return;
                 }
 
-                // Replacement: Strips the matched optional brackets without touching text that wasn't matched
                 renumberedText = renumberedText.replace(singleCrossRefRegex, (match, openTag, refId) => {
                     const newNumber = referenceMap[refId];
                     if (newNumber === undefined) return match; 
@@ -262,7 +263,6 @@ const XmlRenumber: React.FC = () => {
 
                 const collapseRanges = (numbers: number[]) => {
                     if (numbers.length === 0) return '';
-                    // Rule: Strictly unique sorted numbers
                     const sorted = [...new Set(numbers)].sort((a, b) => a - b);
                     const ranges: string[] = [];
                     
@@ -270,32 +270,23 @@ const XmlRenumber: React.FC = () => {
                     while (i < sorted.length) {
                         let start = sorted[i];
                         let end = start;
-                        
-                        // Find end of consecutive sequence
                         while (i + 1 < sorted.length && sorted[i + 1] === end + 1) {
                             end = sorted[i + 1];
                             i++;
                         }
-                        
                         if (start === end) {
-                            // Lone number
                             ranges.push(start.toString());
                         } else if (end - start === 1) {
-                            // Rule: Exactly 2 consecutive numbers -> use comma
                             ranges.push(start.toString());
                             ranges.push(end.toString());
                         } else {
-                            // Rule: 3 or more consecutive numbers -> use en-dash
                             ranges.push(`${start}–${end}`);
                         }
                         i++;
                     }
-                    
-                    // Rule: No space between commas
                     return ranges.join(',');
                 };
 
-                // Replacement: Strips the matched optional brackets
                 renumberedText = renumberedText.replace(rangeCrossRefRegex, (match, openTag, refIdsString) => {
                     const refIds = refIdsString.split(/\s+/).filter((id: string) => id.trim() !== '');
                     const uniqueNumbers = [...new Set(refIds.map((id: string) => referenceMap[id]).filter((num: number) => num !== undefined))];
@@ -303,7 +294,6 @@ const XmlRenumber: React.FC = () => {
                     return `${openTag}${prefix}${collapseRanges(uniqueNumbers as number[])}${suffix}</ce:cross-refs>`;
                 });
 
-                // Extraction of Other Refs from the FINAL renumbered text
                 const extracted: string[] = [];
                 const fullRefRegexExtract = /<ce:bib-reference\b[^>]*?\bid="([^"]+)"[^>]*>([\s\S]*?)<\/ce:bib-reference>/g;
                 let exMatch;
@@ -312,14 +302,9 @@ const XmlRenumber: React.FC = () => {
                     const innerContent = exMatch[2];
                     
                     if (innerContent.indexOf('<ce:other-ref') !== -1) {
-                        // Extract Label
                         const labelMatch = /<ce:label\b[^>]*>([\s\S]*?)<\/ce:label>/.exec(fullContent);
                         const label = labelMatch ? labelMatch[1].trim() : '';
-                        
-                        // Remove label tag to avoid double text but keep the text content
                         let textOnly = fullContent.replace(/<ce:label\b[^>]*>[\s\S]*?<\/ce:label>/, ' ');
-                        
-                        // Replace common formatting tags with HTML equivalents
                         textOnly = textOnly
                             .replace(/<ce:italic\b[^>]*>/gi, '<i>')
                             .replace(/<\/ce:italic>/gi, '</i>')
@@ -330,25 +315,17 @@ const XmlRenumber: React.FC = () => {
                             .replace(/<ce:inf\b[^>]*>/gi, '<sub>')
                             .replace(/<\/ce:inf>/gi, '</sub>');
 
-                        // Strip all other tags, protecting our new HTML tags
                         let cleanText = textOnly.replace(/<(?!\/?(i|b|sup|sub)\b)[^>]+>/gi, '');
-                        
-                        // Normalize whitespace
                         cleanText = cleanText.replace(/\s+/g, ' ').trim();
 
-                        if (label) {
-                            extracted.push(`${label} ${cleanText}`);
-                        } else {
-                            extracted.push(cleanText);
-                        }
+                        if (label) extracted.push(`${label} ${cleanText}`);
+                        else extracted.push(cleanText);
                     }
                 }
                 setExtractedRefs(extracted);
-
                 setOutput(renumberedText);
                 setReportData(changes);
                 generateDiff(input, renumberedText);
-                
                 setActiveTab('report');
                 setToast({ msg: `Successfully processed ${bibMatchCount} references.`, type: 'success' });
             } catch (e) {
@@ -359,7 +336,6 @@ const XmlRenumber: React.FC = () => {
         }, 600);
     };
 
-    // Keyboard Shortcuts
     useKeyboardShortcuts({
         onPrimary: renumber,
         onCopy: () => {
@@ -376,7 +352,6 @@ const XmlRenumber: React.FC = () => {
         }
     }, [input, output, activeTab, extractedRefs]);
 
-    // QC Report Logic
     const downloadCSV = () => {
         if (reportData.length === 0) return;
         const headers = ['ID', 'Old Label', 'New Label', 'Status', 'Type'];
@@ -391,7 +366,6 @@ const XmlRenumber: React.FC = () => {
             headers.join(','),
             ...rows.map(row => row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(','))
         ].join('\n');
-        
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
@@ -453,11 +427,7 @@ const XmlRenumber: React.FC = () => {
                     title="Ctrl+Enter"
                     className={`bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-8 rounded-xl shadow-lg shadow-indigo-500/30 transform transition-all active:scale-95 flex items-center gap-2 ${isLoading ? 'opacity-75 cursor-not-allowed' : 'hover:-translate-y-0.5'}`}
                 >
-                    {isLoading ? (
-                        <>
-                            <span>Processing...</span>
-                        </>
-                    ) : (
+                    {isLoading ? <span>Processing...</span> : (
                         <>
                             <span>Process XML</span>
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
@@ -467,7 +437,6 @@ const XmlRenumber: React.FC = () => {
             </div>
 
              <div className={`grid gap-8 h-[calc(100vh-280px)] min-h-[600px] transition-all duration-300 ${activeTab === 'diff' ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
-                {/* Input Column - Hidden when Diff view is active */}
                 <div className={`bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col group focus-within:ring-2 focus-within:ring-indigo-100 transition-all duration-300 ${activeTab === 'diff' ? 'hidden' : 'flex'}`}>
                     <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center">
                          <label className="font-bold text-slate-700 text-sm flex items-center gap-2">
@@ -485,17 +454,20 @@ const XmlRenumber: React.FC = () => {
                     />
                 </div>
                 
-                {/* Output Column - Full width when Diff view is active */}
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
                      <div className="bg-slate-50 px-5 py-2 border-b border-slate-100 flex justify-between items-center">
                          <label className="font-bold text-slate-700 text-sm flex items-center gap-2">
                             <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white border border-slate-200 text-xs text-emerald-600 font-mono shadow-sm">OUT</span>
                             Result
                         </label>
-                         {activeTab === 'raw' && <button onClick={() => { navigator.clipboard.writeText(output); setToast({msg: 'Copied to clipboard!', type:'success'}); }} title="Ctrl+Shift+C" className="text-xs font-bold text-emerald-600 hover:bg-emerald-50 px-3 py-1.5 rounded border border-transparent hover:border-emerald-100 transition-colors">Copy XML</button>}
+                         <div className="flex gap-2">
+                            {output && isDesktop && (
+                                <button onClick={handleSaveToFile} className="text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded border border-indigo-100 transition-colors">Save As File</button>
+                            )}
+                            {activeTab === 'raw' && <button onClick={() => { navigator.clipboard.writeText(output); setToast({msg: 'Copied to clipboard!', type:'success'}); }} title="Ctrl+Shift+C" className="text-xs font-bold text-emerald-600 hover:bg-emerald-50 px-3 py-1.5 rounded border border-transparent hover:border-emerald-100 transition-colors">Copy XML</button>}
+                         </div>
                     </div>
                     
-                    {/* Modern Tabs */}
                     <div className="bg-white px-2 pt-2 border-b border-slate-100 flex space-x-1">
                          {['raw', 'diff', 'report', 'extraction'].map((tab) => (
                              <button 

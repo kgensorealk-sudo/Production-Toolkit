@@ -36,12 +36,6 @@ export interface UserProfile {
     unlocked_tools: string[]; // List of tool IDs unlocked via keys
 }
 
-export enum ToolAccessMode {
-    SUBSCRIPTION = 'subscription',
-    KEY_OR_SUBSCRIPTION = 'key_or_subscription',
-    KEY_ONLY = 'key_only'
-}
-
 export enum ToolId {
     XML_RENUMBER = 'xmlRenumber',
     CREDIT_GENERATOR = 'creditGenerator',
