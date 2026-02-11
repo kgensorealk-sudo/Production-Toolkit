@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import { UserProfile, ToolId } from '../types';
@@ -275,7 +276,7 @@ const AdminDashboard: React.FC = () => {
                 expiry.setDate(expiry.getDate() + promoDuration);
                 nextData[tid] = expiry.toISOString();
             }
-            const { error } = await supabase.from('system_settings').update({ free_tools_data: nextData, updated_at: new Date().toISOString() }).eq('id', 'global');
+            const { error } = await supabase.from('system_settings').upsert({ id: 'global', free_tools_data: nextData, updated_at: new Date().toISOString() });
             if (error) throw error;
             await refreshFreeTools();
             setToast({ msg: `System protocol synchronized (${promoDuration}d Promo)`, type: 'success' });
@@ -352,11 +353,13 @@ const AdminDashboard: React.FC = () => {
         return (Date.now() - new Date(u.last_seen).getTime()) < 300000;
     }).length;
 
-    // --- Intelligence Analytics with Temporal & Per-User Filters ---
+    // --- Intelligence Analytics with Temporal, Per-User, and Segment Filters ---
     const intelligenceMetrics = useMemo(() => {
-        if (usageLogs.length === 0) return { globalRanking: [], userAffinities: [], rareTools: [], filteredTotal: 0 };
+        if (usageLogs.length === 0) return { globalRanking: [], userAffinities: [], rareTools: [], filteredTotal: 0, segments: { premium: 0, standard: 0, segmentCounts: {} } };
 
         const now = new Date().getTime();
+        const userMap = new Map(users.map(u => [u.id, u]));
+
         const filteredLogs = usageLogs.filter(log => {
             if (intelRange === 'all') return true;
             const logTime = new Date(log.timestamp).getTime();
@@ -370,8 +373,26 @@ const AdminDashboard: React.FC = () => {
         const toolCounts: Record<string, number> = {};
         const userToolCounts: Record<string, Record<string, number>> = {};
         const userLastAction: Record<string, { tool: string, time: string }> = {};
+        
+        let premiumUsage = 0;
+        let standardUsage = 0;
+        const segmentCounts: Record<string, Record<string, number>> = {
+            premium: {},
+            standard: {}
+        };
 
         filteredLogs.forEach(log => {
+            const user = userMap.get(log.user_id);
+            const isPremium = !!user?.is_subscribed;
+            
+            if (isPremium) {
+                premiumUsage++;
+                segmentCounts.premium[log.tool_id] = (segmentCounts.premium[log.tool_id] || 0) + 1;
+            } else {
+                standardUsage++;
+                segmentCounts.standard[log.tool_id] = (segmentCounts.standard[log.tool_id] || 0) + 1;
+            }
+
             toolCounts[log.tool_id] = (toolCounts[log.tool_id] || 0) + 1;
             if (!userToolCounts[log.user_id]) userToolCounts[log.user_id] = {};
             userToolCounts[log.user_id][log.tool_id] = (userToolCounts[log.user_id][log.tool_id] || 0) + 1;
@@ -404,7 +425,7 @@ const AdminDashboard: React.FC = () => {
             };
         }).filter(ua => ua.totalActions > 0).sort((a, b) => b.totalActions - a.totalActions);
 
-        return { globalRanking, userAffinities, rareTools, filteredTotal: filteredLogs.length };
+        return { globalRanking, userAffinities, rareTools, filteredTotal: filteredLogs.length, segments: { premium: premiumUsage, standard: standardUsage, segmentCounts } };
     }, [usageLogs, users, intelRange]);
 
     const focusedUser = useMemo(() => {
@@ -507,6 +528,20 @@ const AdminDashboard: React.FC = () => {
                             </div>
                         </div>
 
+                        {/* SEGMENT PULSE SECTION */}
+                        <section className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div className="p-8 bg-indigo-50 border border-indigo-100 rounded-[2.5rem] shadow-sm flex flex-col justify-center text-center">
+                                <div className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.4em] mb-3">Premium Node Pulse</div>
+                                <div className="text-5xl font-black text-indigo-900 leading-none mb-4">{intelligenceMetrics.segments.premium}</div>
+                                <div className="text-[9px] font-bold text-indigo-300 uppercase tracking-widest">Successful Authorized Queries</div>
+                            </div>
+                            <div className="p-8 bg-emerald-50 border border-emerald-100 rounded-[2.5rem] shadow-sm flex flex-col justify-center text-center">
+                                <div className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.4em] mb-3">Standard Node Pulse</div>
+                                <div className="text-5xl font-black text-emerald-900 leading-none mb-4">{intelligenceMetrics.segments.standard}</div>
+                                <div className="text-[9px] font-bold text-emerald-300 uppercase tracking-widest">Public / Trial Level Traffic</div>
+                            </div>
+                        </section>
+
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
                             {/* POPULARITY LEADERBOARD */}
                             <section>
@@ -517,20 +552,37 @@ const AdminDashboard: React.FC = () => {
                                     <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Global Node Usage</h3>
                                 </div>
                                 <div className="space-y-8">
-                                    {intelligenceMetrics.globalRanking.slice(0, 8).map((tool, idx) => (
-                                        <div key={tool.id} className="relative">
-                                            <div className="flex justify-between items-end mb-2.5">
-                                                <span className="text-[11px] font-black text-slate-700 uppercase tracking-widest">{tool.name}</span>
-                                                <span className="text-[10px] font-black text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">{tool.count}</span>
+                                    {intelligenceMetrics.globalRanking.slice(0, 8).map((tool, idx) => {
+                                        const premCount = intelligenceMetrics.segments.segmentCounts.premium[tool.id] || 0;
+                                        const stdCount = intelligenceMetrics.segments.segmentCounts.standard[tool.id] || 0;
+                                        const premPercent = tool.count > 0 ? (premCount / tool.count) * 100 : 0;
+                                        
+                                        return (
+                                            <div key={tool.id} className="relative">
+                                                <div className="flex justify-between items-end mb-2.5">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[11px] font-black text-slate-700 uppercase tracking-widest">{tool.name}</span>
+                                                        <div className="flex items-center gap-2 mt-1">
+                                                            <span className="text-[8px] font-black text-indigo-400 uppercase">Premium: {premCount}</span>
+                                                            <span className="text-[8px] font-black text-slate-300">/</span>
+                                                            <span className="text-[8px] font-black text-emerald-400 uppercase">Std: {stdCount}</span>
+                                                        </div>
+                                                    </div>
+                                                    <span className="text-[10px] font-black text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">{tool.count}</span>
+                                                </div>
+                                                <div className="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden shadow-inner border border-slate-200/50 flex">
+                                                    <div 
+                                                        className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 transition-all duration-1000 ease-out" 
+                                                        style={{ width: `${premPercent}%` }}
+                                                    ></div>
+                                                    <div 
+                                                        className="h-full bg-emerald-400 transition-all duration-1000 ease-out" 
+                                                        style={{ width: `${100 - premPercent}%` }}
+                                                    ></div>
+                                                </div>
                                             </div>
-                                            <div className="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden shadow-inner border border-slate-200/50">
-                                                <div 
-                                                    className="h-full bg-gradient-to-r from-indigo-500 to-purple-600 transition-all duration-1000 ease-out" 
-                                                    style={{ width: `${Math.min(100, (tool.count / Math.max(1, intelligenceMetrics.filteredTotal)) * 500)}%` }}
-                                                ></div>
-                                            </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                     {intelligenceMetrics.globalRanking.length === 0 && (
                                         <div className="py-20 text-center opacity-30 bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200">
                                             <p className="text-xs font-bold uppercase tracking-widest text-slate-400">No protocol traffic recorded for this window</p>
@@ -550,7 +602,7 @@ const AdminDashboard: React.FC = () => {
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                                     {intelligenceMetrics.rareTools.length > 0 ? (
                                         intelligenceMetrics.rareTools.slice(0, 4).map(tool => (
-                                            <div key={tool.id} className="p-6 bg-white border border-slate-200 rounded-[2rem] flex flex-col items-center text-center shadow-sm hover:shadow-md transition-all hover:border-rose-200">
+                                            <div key={tool.id} className="p-6 bg-white border border-slate-200 rounded-[2.5rem] flex flex-col items-center text-center shadow-sm hover:shadow-md transition-all hover:border-rose-200">
                                                 <span className="text-[10px] font-black text-rose-500 uppercase tracking-[0.2em] mb-2">Underutilized</span>
                                                 <h4 className="text-xs font-bold text-slate-800 uppercase mb-4 leading-snug">{tool.name}</h4>
                                                 <span className="text-[9px] font-mono font-black bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 text-slate-400">{tool.count} hits</span>
