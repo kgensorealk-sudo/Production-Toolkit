@@ -98,7 +98,7 @@ const AdminDashboard: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'users' | 'keys' | 'announcements' | 'config' | 'intelligence'>('users');
     const [isLoading, setIsLoading] = useState(false);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
-    const { freeToolsData, refreshFreeTools } = useAuth();
+    const { freeToolsData, refreshFreeTools, refreshProfile } = useAuth();
 
     const [users, setUsers] = useState<UserProfile[]>([]);
     const [search, setSearch] = useState('');
@@ -168,7 +168,7 @@ const AdminDashboard: React.FC = () => {
                 });
             }
         } catch (error: any) {
-            if (!isSilent) setToast({ msg: 'Personnel check failed', type: 'error' });
+            if (!isSilent) setToast({ msg: `Personnel fetch failed: ${error.message}`, type: 'error' });
         } finally { setIsLoading(false); }
     }, []);
 
@@ -176,15 +176,10 @@ const AdminDashboard: React.FC = () => {
         setIsLoading(true);
         try {
             const { data, error } = await supabase.from('access_keys').select('*').order('created_at', { ascending: false });
-            if (error) {
-                if (error.code === 'PGRST204' || error.message.includes('not found')) {
-                    throw new Error("System Key Database not initialized.");
-                }
-                throw error;
-            }
+            if (error) throw error;
             setAccessKeys(data || []);
         } catch (error: any) {
-            setToast({ msg: error.message || 'Key matrix fetch failed', type: 'error' });
+            setToast({ msg: `Key database fetch failed: ${error.message}`, type: 'error' });
         } finally { setIsLoading(false); }
     }, []);
 
@@ -195,9 +190,28 @@ const AdminDashboard: React.FC = () => {
             if (error) throw error;
             setUsageLogs(data || []);
         } catch (error: any) {
-            console.warn("Usage logs might not exist yet.");
+            console.warn("Usage logs sync pending.");
         } finally { setIsLoading(false); }
     }, []);
+
+    const systemHardReset = async () => {
+        setIsLoading(true);
+        try {
+            // Re-authenticate and force re-fetch everything
+            await Promise.all([
+                refreshProfile(),
+                refreshFreeTools(),
+                fetchUsers(),
+                fetchAccessKeys(),
+                fetchIntelligence()
+            ]);
+            setToast({ msg: "System Integrity Synchronized.", type: "success" });
+        } catch (e: any) {
+            setToast({ msg: `Synchronization Protocol Failed: ${e.message}`, type: "error" });
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     const purgeTelemetry = () => {
         setConfirmConfig({
@@ -574,6 +588,13 @@ const AdminDashboard: React.FC = () => {
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.3em] mt-2">Central Authorization & Intelligence Node</p>
                 </div>
                 <div className="flex gap-4">
+                    <button 
+                        onClick={systemHardReset}
+                        className="bg-white border border-slate-200 px-6 py-2.5 rounded-xl text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] shadow-sm hover:bg-slate-50 transition-all flex items-center gap-3"
+                    >
+                        <svg className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                        Integrity Sync
+                    </button>
                     <div className="bg-slate-100 px-4 py-2 rounded-xl flex items-center gap-4 border border-slate-200 shadow-sm">
                         <div className="flex items-center gap-2">
                             <span className={`w-2.5 h-2.5 rounded-full ${activeNodesCount > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`}></span>
@@ -1141,18 +1162,11 @@ const AdminDashboard: React.FC = () => {
                                         success: 'border-emerald-100 text-emerald-600 bg-emerald-50',
                                         error: 'border-rose-100 text-rose-600 bg-rose-50'
                                     };
-                                    const ledColors = {
-                                        info: 'bg-indigo-500',
-                                        warning: 'bg-amber-500',
-                                        success: 'bg-emerald-500',
-                                        error: 'bg-rose-500'
-                                    };
                                     
                                     return (
                                         <div key={a.id} className={`group relative flex flex-col p-8 bg-white border-2 rounded-[2.5rem] transition-all duration-500 ${
                                             a.is_active ? 'border-indigo-500 ring-8 ring-indigo-50 shadow-2xl' : 'border-slate-100 hover:border-slate-200 shadow-sm opacity-80 hover:opacity-100'
                                         }`}>
-                                            {/* CARD HEADER */}
                                             <div className="flex justify-between items-start mb-6">
                                                 <div className="flex flex-col gap-2">
                                                     <div className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border w-max ${typeColors[a.type]}`}>
@@ -1173,13 +1187,11 @@ const AdminDashboard: React.FC = () => {
                                                 </div>
                                             </div>
 
-                                            {/* CARD BODY */}
                                             <h4 className="text-lg font-black text-slate-900 mb-3 uppercase tracking-tight leading-none truncate pr-4">{a.title}</h4>
                                             <div className="text-[12px] text-slate-500 font-medium leading-relaxed mb-10 flex-grow h-20 overflow-hidden line-clamp-4 italic">
                                                 {a.content}
                                             </div>
 
-                                            {/* CARD FOOTER */}
                                             <div className="mt-auto flex items-center justify-between border-t border-slate-50 pt-6">
                                                 <div className="flex flex-col">
                                                     <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest leading-none mb-1">Time Marker</span>
@@ -1198,14 +1210,6 @@ const AdminDashboard: React.FC = () => {
                                                     {a.is_active ? 'Terminate' : 'Deploy'}
                                                 </button>
                                             </div>
-
-                                            {/* LIVE BACKGROUND EFFECT */}
-                                            {a.is_active && (
-                                                <div className="absolute inset-0 rounded-[2.5rem] pointer-events-none overflow-hidden">
-                                                    <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-bl-full animate-pulse"></div>
-                                                    <div className="absolute top-2 left-10 text-[6px] font-black text-emerald-500/20 uppercase tracking-[1em] whitespace-nowrap">LIVE_DATA_STREAMING_SIGNAL_ACTIVE</div>
-                                                </div>
-                                            )}
                                         </div>
                                     );
                                 })}

@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
 import TrialTimer from './TrialTimer';
 import ExpiryReminderModal from './ExpiryReminderModal';
+import LoadingOverlay from './LoadingOverlay';
 
 interface LayoutProps {
     children: React.ReactNode;
@@ -20,6 +21,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
     const [isOnline, setIsOnline] = useState(navigator.onLine);
     const [hasActiveAnnouncement, setHasActiveAnnouncement] = useState(false);
     const [isAnnouncementUnread, setIsAnnouncementUnread] = useState(false);
+    const [isExiting, setIsExiting] = useState(false);
     
     const isDesktop = (window as any).electron !== undefined;
 
@@ -80,8 +82,14 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
     };
 
     const handleSignOut = async () => {
-        await signOut();
-        navigate('/login');
+        if (isExiting) return;
+        setIsExiting(true);
+        try {
+            await signOut();
+        } catch (e) {
+            // If signout process fails, we reload to force state clear
+            window.location.reload();
+        }
     };
 
     const isTrial = !!profile?.trial_end;
@@ -90,8 +98,15 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
         : "glass-header sticky top-0 py-2 shadow-sm border-b border-slate-200/60";
 
     return (
-        <div className="min-h-screen flex flex-col font-sans text-slate-900 bg-slate-50 selection:bg-indigo-100 overflow-x-hidden">
+        <div className={`min-h-screen flex flex-col font-sans text-slate-900 bg-slate-50 selection:bg-indigo-100 overflow-x-hidden ${isExiting ? 'grayscale cursor-wait' : ''}`}>
             <ExpiryReminderModal />
+
+            {/* FULL SCREEN DEAUTHORIZATION OVERLAY */}
+            {isExiting && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-md">
+                    <LoadingOverlay message="Closing Environment..." color="rose" />
+                </div>
+            )}
 
             {!isOnline && (
                 <div className="bg-amber-500 text-white text-[10px] font-black uppercase tracking-[0.2em] py-0.5 text-center animate-pulse z-[60] sticky top-0">
@@ -103,8 +118,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                 <div className="max-w-7xl mx-auto flex justify-between items-center">
                     <div className="flex items-center gap-6">
                          <div 
-                            onClick={() => navigate('/')} 
-                            className="flex items-center gap-3 cursor-pointer group"
+                            onClick={() => !isExiting && navigate('/')} 
+                            className={`flex items-center gap-3 cursor-pointer group ${isExiting ? 'opacity-50 pointer-events-none' : ''}`}
                             title="Return to Product Home"
                          >
                             <div className="bg-slate-900 text-white p-1.5 rounded-lg shadow-lg group-hover:scale-105 group-active:scale-95 transition-all">
@@ -160,7 +175,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                         )}
 
                         <div className="flex items-center gap-2">
-                            {hasActiveAnnouncement && (
+                            {hasActiveAnnouncement && !isExiting && (
                                 <button 
                                     onClick={triggerAnnouncement}
                                     className={`p-1.5 rounded-lg transition-all relative ${isAnnouncementUnread ? 'text-indigo-600 bg-indigo-50' : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-50'}`}
@@ -175,7 +190,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                                 </button>
                             )}
 
-                            {!isLanding && (
+                            {!isLanding && !isExiting && (
                                 <button 
                                     onClick={() => navigate('/dashboard')} 
                                     className={`p-1.5 rounded-lg transition-all ${location.pathname === '/dashboard' ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'text-slate-400 hover:text-indigo-600'}`} 
@@ -187,30 +202,33 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                                 </button>
                             )}
 
-                            {isAdmin && (
+                            {isAdmin && !isExiting && (
                                 <button onClick={() => navigate('/admin')} className={`p-1.5 rounded-lg transition-all ${location.pathname === '/admin' ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'text-slate-400 hover:text-indigo-600'}`} title="Admin Console">
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37a1.724 1.724 0 002.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                                 </button>
                             )}
                             
-                            <button onClick={() => navigate('/docs')} className={`p-1.5 rounded-lg transition-all ${location.pathname === '/docs' ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'text-slate-400 hover:text-indigo-600'}`} title="Help/Docs">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
-                            </button>
+                            {!isExiting && (
+                                <button onClick={() => navigate('/docs')} className={`p-1.5 rounded-lg transition-all ${location.pathname === '/docs' ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'text-slate-400 hover:text-indigo-600'}`} title="Help/Docs">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+                                </button>
+                            )}
                             
                             <div className="h-3 w-px bg-slate-200 mx-1"></div>
                             
                             <button 
                                 onClick={handleSignOut}
-                                className="text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-rose-600 px-2 py-1 transition-all"
+                                disabled={isExiting}
+                                className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 transition-all ${isExiting ? 'text-indigo-500 animate-pulse' : 'text-slate-400 hover:text-rose-600'}`}
                             >
-                                Exit
+                                {isExiting ? 'Disconnecting...' : 'Exit'}
                             </button>
                         </div>
                     </div>
                 </div>
             </header>
 
-            <main key={location.pathname} className="flex-grow w-full relative z-10 animate-fade-in overflow-y-auto custom-scrollbar">
+            <main key={location.pathname} className={`flex-grow w-full relative z-10 animate-fade-in overflow-y-auto custom-scrollbar ${isExiting ? 'pointer-events-none blur-[2px]' : ''}`}>
                 {children}
             </main>
 
@@ -219,7 +237,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                     <p>&copy; 2025 Editorial Systems Pro</p>
                     <div className="flex gap-4">
                         <span className={isDesktop ? 'text-indigo-400 font-black' : ''}>Environment: {isDesktop ? 'DESKTOP NODE PRO' : 'Web Node'}</span>
-                        <span>v1.7.0_STABLE</span>
+                        <span>v1.7.5_STABLE</span>
                     </div>
                 </div>
             </footer>

@@ -22,7 +22,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const SB_STORAGE_KEY = 'sb-jtrvpqxhjqpifglrhbzu-auth-token';
 const SUPER_ADMIN_EMAIL = 'generalkevin53@gmail.com';
 const HEARTBEAT_INTERVAL = 120 * 1000; // 2 Minutes
 
@@ -47,14 +46,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const clearLocalSession = () => {
         try {
-            localStorage.removeItem(SB_STORAGE_KEY);
             Object.keys(localStorage).forEach(key => {
-                if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+                if (key.includes('sb-') || key.includes('supabase.auth')) {
                     localStorage.removeItem(key);
                 }
             });
-            sessionStorage.removeItem('session_expired');
-        } catch (e) {}
+            localStorage.removeItem('prod_toolkit_device_fingerprint'); 
+            localStorage.setItem('toolkit_logout_event', Date.now().toString());
+        } catch (e) {
+            console.error("Local storage purge failed", e);
+        }
     };
 
     const updateLastSeen = async (uid: string) => {
@@ -63,9 +64,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 .from('profiles')
                 .update({ last_seen: new Date().toISOString() })
                 .eq('id', uid);
-        } catch (err) {
-            console.warn("Heartbeat failed to sync.");
-        }
+        } catch (err) {}
     };
 
     const fetchFreeTools = useCallback(async () => {
@@ -86,7 +85,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         activeIds.push(tid);
                     }
                 });
-                // Only update state if data has actually changed to prevent render loops
                 setFreeTools(prev => JSON.stringify(prev) === JSON.stringify(activeIds) ? prev : activeIds);
                 setFreeToolsData(prev => JSON.stringify(prev) === JSON.stringify(activeMap) ? prev : activeMap);
             }
@@ -98,11 +96,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
             updateLastSeen(userId);
 
-            const { data: profileData, error: profileError } = await supabase
+            let { data: profileData, error: profileError } = await supabase
                 .from('profiles')
                 .select('*')
                 .eq('id', userId)
                 .maybeSingle();
+
+            // FALLBACK: Lazy Profile Creation
+            // If the database trigger failed, we create the profile now
+            if (!profileData && !profileError) {
+                const { data: newData, error: createError } = await supabase
+                    .from('profiles')
+                    .insert([{ id: userId, email: user?.email, role: 'user' }])
+                    .select()
+                    .maybeSingle();
+                if (!createError) profileData = newData;
+            }
 
             if (profileError || !profileData) return;
 
@@ -127,42 +136,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, [user?.email]);
 
     const signOut = useCallback(async (isAuto: boolean = false) => {
+        setLoading(true);
         if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
         if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
         if (protocolPollRef.current) clearInterval(protocolPollRef.current);
         
         try {
-            setLoading(true); 
+            supabase.removeAllChannels();
             await (supabase.auth as any).signOut();
-        } catch (e) {} finally {
+        } catch (e) {
+            console.warn("Signout sequence intercepted/failed, wiping local storage.");
+        } finally {
             clearLocalSession();
-            if (isAuto) {
-                sessionStorage.setItem('session_expired', 'true');
-            }
             setProfile(null); setSession(null); setUser(null);
-            setLoading(false);
-            window.location.hash = '#/login';
+            if (isAuto) sessionStorage.setItem('session_expired', 'true');
+            const cleanAppRoot = window.location.href.split('#')[0];
+            window.location.replace(cleanAppRoot);
+            setTimeout(() => window.location.reload(), 50);
         }
     }, []);
 
     const resetIdleTimer = useCallback(() => {
         if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
         if (session) {
-            idleTimerRef.current = setTimeout(() => {
-                signOut(true);
-            }, INACTIVITY_LIMIT);
+            idleTimerRef.current = setTimeout(() => signOut(true), INACTIVITY_LIMIT);
         }
     }, [session, signOut]);
 
     useEffect(() => {
+        const handleStorageChange = (e: StorageEvent) => {
+            if (e.key === 'toolkit_logout_event' && session) {
+                const cleanAppRoot = window.location.href.split('#')[0];
+                window.location.replace(cleanAppRoot);
+            }
+        };
+        window.addEventListener('storage', handleStorageChange);
+        return () => window.removeEventListener('storage', handleStorageChange);
+    }, [session]);
+
+    useEffect(() => {
         const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
         const handler = () => resetIdleTimer();
-
         if (session) {
             events.forEach(event => window.addEventListener(event, handler));
             resetIdleTimer();
         }
-
         return () => {
             events.forEach(event => window.removeEventListener(event, handler));
             if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
@@ -171,21 +189,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     useEffect(() => {
         let mounted = true;
-
         const init = async () => {
             try {
+                // Safety Valve: Never block the UI for more than 5 seconds
                 initTimeoutRef.current = setTimeout(() => {
-                    if (mounted && loading) {
-                        setLoading(false);
-                    }
-                }, 4000);
+                    if (mounted && loading) setLoading(false);
+                }, 5000);
 
                 const { data, error } = await (supabase.auth as any).getSession();
                 
                 if (error) {
-                    if (error.status === 400 || error.message.toLowerCase().includes('refresh_token')) {
-                        clearLocalSession();
-                    }
+                    if (error.status === 400) clearLocalSession();
                     throw error;
                 }
 
@@ -194,12 +208,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     setSession(currentSession);
                     setUser(currentSession.user);
                     
-                    updateLastSeen(currentSession.user.id);
-                    
                     if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
-                    heartbeatTimerRef.current = setInterval(() => {
-                        updateLastSeen(currentSession.user.id);
-                    }, HEARTBEAT_INTERVAL);
+                    heartbeatTimerRef.current = setInterval(() => updateLastSeen(currentSession.user.id), HEARTBEAT_INTERVAL);
 
                     if (protocolPollRef.current) clearInterval(protocolPollRef.current);
                     protocolPollRef.current = setInterval(() => fetchFreeTools(), 300000);
@@ -211,17 +221,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
                     supabase
                         .channel('system-protocols')
-                        .on(
-                            'postgres_changes', 
-                            { event: 'UPDATE', schema: 'public', table: 'system_settings', filter: 'id=eq.global' },
-                            () => {
-                                fetchFreeTools();
-                            }
-                        )
+                        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'system_settings', filter: 'id=eq.global' }, () => fetchFreeTools())
                         .subscribe();
                 }
             } catch (err) {
-                console.error("Auth: Bootstrap failed", err);
+                console.error("Auth: Initialization failure", err);
             } finally {
                 if (mounted) {
                     if (initTimeoutRef.current) clearTimeout(initTimeoutRef.current);
@@ -242,14 +246,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setLoading(false);
             } else if (event === 'SIGNED_IN' && newSession?.user) {
                 setSession(newSession); setUser(newSession.user);
-                
-                updateLastSeen(newSession.user.id);
-                
-                if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
-                heartbeatTimerRef.current = setInterval(() => {
-                    updateLastSeen(newSession.user.id);
-                }, HEARTBEAT_INTERVAL);
-
                 await fetchProfile(newSession.user.id);
                 await fetchFreeTools();
                 setLoading(false);
@@ -265,7 +261,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (authListener?.subscription) authListener.subscription.unsubscribe(); 
             supabase.removeAllChannels();
         };
-    }, [fetchFreeTools, fetchProfile]); // Added fetch dependencies to init effect
+    }, [fetchFreeTools, fetchProfile]);
 
     return (
         <AuthContext.Provider value={{ 
