@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import { UserProfile } from '../types';
@@ -27,18 +26,16 @@ const SUPER_ADMIN_EMAIL = 'generalkevin53@gmail.com';
 const HEARTBEAT_INTERVAL = 120 * 1000; 
 
 /**
- * Advanced Resiliency: withRetry
- * Specifically tuned for Supabase cold starts and high-latency desktop environments.
+ * Resiliency Protocol: withRetry
+ * Tuned for Vercel/Edge network conditions and Supabase cold starts.
  */
-async function withRetry<T>(fn: () => Promise<T>, retries = 4, delay = 2000): Promise<T> {
+async function withRetry<T>(fn: () => Promise<T>, retries = 5, delay = 1500): Promise<T> {
     try {
         return await fn();
     } catch (err: any) {
-        // Retry on network failures, 5xx server errors, or generic "fetch" errors
-        const shouldRetry = !err.status || err.status >= 500 || err.message === 'Failed to fetch';
+        const shouldRetry = !err.status || err.status >= 500 || err.message === 'Failed to fetch' || err.message?.includes('network');
         if (retries > 0 && shouldRetry) {
             await new Promise(r => setTimeout(r, delay));
-            // Exponential backoff
             return withRetry(fn, retries - 1, delay * 1.5);
         }
         throw err;
@@ -57,7 +54,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const refreshingPromise = useRef<Promise<void> | null>(null);
     const initTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-    const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const isAdmin = (
         user?.email === SUPER_ADMIN_EMAIL ||
@@ -71,16 +67,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch (err) {}
     };
 
-    /**
-     * DATABASE WARM-UP
-     * Fires a lightweight request to "wake up" the database if it's on a free tier/idle.
-     */
     const warmUpDatabase = async () => {
         try {
-            const { error } = await supabase.from('system_settings').select('id').eq('id', 'global').limit(1).single();
-            if (error) throw error;
+            await supabase.from('system_settings').select('id').eq('id', 'global').limit(1).single();
         } catch (e) {
-            console.warn("Warm-up ping failed, system might still be waking up.");
+            console.warn("Waking up database node...");
+        }
+    };
+
+    const processFreeToolsPayload = (payload: any) => {
+        if (payload?.free_tools_data) {
+            const now = new Date();
+            const activeMap: Record<string, string> = {};
+            const activeIds: string[] = [];
+            Object.entries(payload.free_tools_data).forEach(([tid, expiry]) => {
+                if (new Date(expiry as string) > now) {
+                    activeMap[tid] = expiry as string;
+                    activeIds.push(tid);
+                }
+            });
+            setFreeTools(activeIds);
+            setFreeToolsData(activeMap);
+        } else {
+            setFreeTools([]);
+            setFreeToolsData({});
         }
     };
 
@@ -91,20 +101,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 if (error) throw error;
                 return data;
             });
-            
-            if (data?.free_tools_data) {
-                const now = new Date();
-                const activeMap: Record<string, string> = {};
-                const activeIds: string[] = [];
-                Object.entries(data.free_tools_data).forEach(([tid, expiry]) => {
-                    if (new Date(expiry as string) > now) {
-                        activeMap[tid] = expiry as string;
-                        activeIds.push(tid);
-                    }
-                });
-                setFreeTools(activeIds);
-                setFreeToolsData(activeMap);
-            }
+            processFreeToolsPayload(data);
         } catch (err) {}
     }, []);
 
@@ -115,18 +112,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         refreshingPromise.current = (async () => {
             try {
                 setIsWakingUp(true);
-                // Ensure DB is alive before heavy profile calls
                 await warmUpDatabase();
 
                 const profileData = await withRetry(async () => {
-                    let { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
-                    if (error) throw error;
-                    if (!data) {
-                        const { data: newData, error: createError } = await supabase.from('profiles').insert([{ id: userId, email: user?.email, role: 'user' }]).select().maybeSingle();
-                        if (createError) throw createError;
-                        data = newData;
+                    let profileRow = null;
+                    for (let i = 0; i < 3; i++) {
+                        const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+                        if (data) { profileRow = data; break; }
+                        await new Promise(r => setTimeout(r, 1000));
                     }
-                    return data;
+
+                    if (!profileRow) {
+                        const { data: newData, error: createError } = await supabase.from('profiles').upsert([{ id: userId, email: user?.email, role: 'user' }]).select().maybeSingle();
+                        if (createError) throw createError;
+                        profileRow = newData;
+                    }
+                    return profileRow;
                 });
 
                 if (!profileData) return;
@@ -145,7 +146,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setProfile({ ...profileData, is_subscribed: isActive, unlocked_tools: unlockedTools });
                 updateLastSeen(userId);
             } catch (e) {
-                console.error("Critical Auth Sync Error:", e);
+                console.error("CRITICAL_SYNC_FAILURE:", e);
             } finally {
                 setIsWakingUp(false);
                 refreshingPromise.current = null;
@@ -158,29 +159,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const signOut = useCallback(async (isAuto: boolean = false) => {
         setLoading(true);
         if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
-        if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
         try {
-            supabase.removeAllChannels();
             await (supabase.auth as any).signOut();
         } catch (e) {
         } finally {
             Object.keys(localStorage).forEach(key => { if (key.includes('sb-')) localStorage.removeItem(key); });
             setProfile(null); setSession(null); setUser(null);
             if (isAuto) sessionStorage.setItem('session_expired', 'true');
-            window.location.replace(window.location.href.split('#')[0]);
+            window.location.replace('/');
         }
     }, []);
 
-    const resetIdleTimer = useCallback(() => {
-        if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-        if (session) idleTimerRef.current = setTimeout(() => signOut(true), INACTIVITY_LIMIT);
-    }, [session, signOut]);
+    // REAL-TIME PROTOCOL SUBSCRIPTION
+    useEffect(() => {
+        if (!session) return;
+
+        // Listen for Global System Settings Changes
+        const systemChannel = supabase
+            .channel('system-logic-sync')
+            .on(
+                'postgres_changes',
+                { event: 'UPDATE', schema: 'public', table: 'system_settings', filter: 'id=eq.global' },
+                (payload) => {
+                    console.log('REALTIME_PROTOCOL_SYNC:', payload.new);
+                    processFreeToolsPayload(payload.new);
+                }
+            )
+            .subscribe();
+
+        // Listen for User Profile Changes (forced expirations, admin overrides)
+        const profileChannel = supabase
+            .channel(`user-sync-${user.id}`)
+            .on(
+                'postgres_changes',
+                { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` },
+                () => {
+                    console.log('REALTIME_IDENTITY_SYNC: Triggering profile refresh...');
+                    fetchProfile(user.id);
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(systemChannel);
+            supabase.removeChannel(profileChannel);
+        };
+    }, [session, user?.id, fetchProfile]);
 
     useEffect(() => {
         let mounted = true;
         const init = async () => {
             try {
-                initTimeoutRef.current = setTimeout(() => { if (mounted && loading) setLoading(false); }, 15000); 
+                initTimeoutRef.current = setTimeout(() => { if (mounted && loading) setLoading(false); }, 20000); 
 
                 const { data, error } = await withRetry(async () => {
                     const result = await (supabase.auth as any).getSession();
@@ -197,7 +227,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     await Promise.allSettled([fetchProfile(currentSession.user.id), fetchFreeTools()]);
                 }
             } catch (err) {
-                console.error("Auth Init Failure:", err);
+                console.error("INIT_FAILED:", err);
             } finally {
                 if (mounted) {
                     if (initTimeoutRef.current) clearTimeout(initTimeoutRef.current);

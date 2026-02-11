@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { ToolId } from '../types';
@@ -23,17 +22,20 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
     const [isAnnouncementUnread, setIsAnnouncementUnread] = useState(false);
     const [isExiting, setIsExiting] = useState(false);
     
-    const isDesktop = (window as any).electron !== undefined;
+    // Check if running in a browser or Vercel
+    const isVercel = window.location.hostname.includes('vercel.app');
 
     /**
-     * RESILIENT TELEMETRY LOGGING
-     * Uses a retry queue to ensure clicks are recorded even if the DB is cold-starting.
+     * CLOUD TELEMETRY:
+     * Decoupled from full profile check to ensure clicks are recorded as long as 
+     * the auth user ID is present.
      */
     useEffect(() => {
-        if (!currentTool || !user?.id || authLoading || !profile) return;
+        if (!currentTool || !user?.id || authLoading) return;
 
         const logUsage = async (attempt = 1) => {
             try {
+                // We use user.id directly. RLS allows 'authenticated' inserts for their own ID.
                 const { error } = await supabase.from('usage_logs').insert([{
                     user_id: user.id,
                     tool_id: currentTool
@@ -41,19 +43,17 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                 
                 if (error) {
                     if (attempt < 3) {
-                        console.warn(`Telemetry attempt ${attempt} deferred. Re-queuing...`);
-                        setTimeout(() => logUsage(attempt + 1), 2500);
-                    } else {
-                        console.error("Telemetry node reached max retries:", error.message);
+                        console.warn(`Telemetry retry ${attempt}/3...`);
+                        setTimeout(() => logUsage(attempt + 1), 2000);
                     }
                 }
             } catch (e) {
-                if (attempt < 3) setTimeout(() => logUsage(attempt + 1), 2500);
+                if (attempt < 3) setTimeout(() => logUsage(attempt + 1), 2000);
             }
         };
 
         logUsage();
-    }, [currentTool, user?.id, authLoading, !!profile]);
+    }, [currentTool, user?.id, authLoading]);
 
     useEffect(() => {
         const handleOnline = () => setIsOnline(true);
@@ -143,8 +143,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                             <div className="flex flex-col">
                                 <h1 className="text-xs font-black text-slate-900 tracking-tight uppercase leading-none">Production Toolkit Pro</h1>
                                 <div className="flex items-center gap-2 mt-0.5">
-                                    <span className={`text-[8px] font-black uppercase tracking-[0.2em] px-1.5 rounded border ${isDesktop ? 'text-indigo-600 bg-indigo-50 border-indigo-200 shadow-sm' : 'text-slate-400 bg-slate-100 border-slate-200'}`}>
-                                        {isDesktop ? 'DESKTOP NODE PRO' : 'Web Node'}
+                                    <span className={`text-[8px] font-black uppercase tracking-[0.2em] px-1.5 rounded border ${isVercel ? 'text-indigo-600 bg-indigo-50 border-indigo-200' : 'text-slate-400 bg-slate-100 border-slate-200'}`}>
+                                        {isVercel ? 'Cloud Node' : 'Web Node'}
                                     </span>
                                     {isAdmin && (
                                         <span className="text-[7px] font-black bg-indigo-600 text-white px-1 py-0.5 rounded uppercase tracking-widest shadow-lg animate-pulse ring-1 ring-indigo-300">Admin</span>
@@ -172,7 +172,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
 
                             {!isLanding && !isExiting && (
                                 <button onClick={() => navigate('/dashboard')} className={`p-1.5 rounded-lg transition-all ${location.pathname === '/dashboard' ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'text-slate-400 hover:text-indigo-600'}`}>
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2-2v-2z" /></svg>
                                 </button>
                             )}
 
@@ -204,8 +204,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                 <div className="max-w-7xl mx-auto px-4 flex justify-between items-center text-[8px] font-bold text-slate-300 uppercase tracking-[0.2em]">
                     <p>&copy; 2025 Editorial Systems Pro</p>
                     <div className="flex gap-4">
-                        <span className={isDesktop ? 'text-indigo-400 font-black' : ''}>Environment: {isDesktop ? 'DESKTOP NODE PRO' : 'Web Node'}</span>
-                        <span>v1.7.6_RELIANT</span>
+                        <span>Environment: {isVercel ? 'Cloud Edge' : 'Web Node'}</span>
+                        <span>v1.8.0_STABLE</span>
                     </div>
                 </div>
             </footer>

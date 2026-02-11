@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import { UserProfile, ToolId } from '../types';
@@ -197,7 +196,6 @@ const AdminDashboard: React.FC = () => {
     const systemHardReset = async () => {
         setIsLoading(true);
         try {
-            // Re-authenticate and force re-fetch everything
             await Promise.all([
                 refreshProfile(),
                 refreshFreeTools(),
@@ -239,7 +237,7 @@ const AdminDashboard: React.FC = () => {
     const exportRawTelemetry = () => {
         if (usageLogs.length === 0) return;
         const headers = ['Timestamp', 'Operator_ID', 'Protocol_ID', 'Status_Role'];
-        const userMap = new Map(users.map(u => [u.id, u]));
+        const userMap = new Map<string, UserProfile>(users.map(u => [u.id, u]));
         
         const rows = usageLogs.map(log => {
             const user = userMap.get(log.user_id);
@@ -468,7 +466,7 @@ const AdminDashboard: React.FC = () => {
         if (usageLogs.length === 0) return { globalRanking: [], userAffinities: [], rareTools: [], filteredTotal: 0, growth: 0, segments: { premium: 0, standard: 0, segmentCounts: {} }, hourlyIntensity: new Array(24).fill(0), recentActivity: [], toolUsage24h: {} };
 
         const now = new Date().getTime();
-        const userMap = new Map(users.map(u => [u.id, u]));
+        const userMap = new Map<string, UserProfile>(users.map(u => [u.id, u]));
 
         const getRangeMs = (r: IntelligenceRange) => {
             switch(r) {
@@ -652,6 +650,174 @@ const AdminDashboard: React.FC = () => {
                                 ))}
                             </tbody>
                         </table>
+                    </div>
+                )}
+
+                {activeTab === 'keys' && (
+                    <div className="p-10 flex flex-col h-full animate-fade-in">
+                        <div className="bg-slate-50 border border-slate-200 rounded-[2rem] p-8 mb-10 shadow-inner">
+                            <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest mb-6 flex items-center gap-3">
+                                <svg className="w-5 h-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+                                Cryptographic Key Provisioning
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div className="flex flex-col gap-2">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Target Module Node</label>
+                                    <select value={keyTool} onChange={e => setKeyTool(e.target.value)} className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all appearance-none">
+                                        <option value="universal">UNIVERSAL_ACCESS (Master)</option>
+                                        {Object.values(ToolId)
+                                            .filter(tid => 
+                                                tid === ToolId.XML_RENUMBER || 
+                                                tid === ToolId.CREDIT_GENERATOR || 
+                                                tid === ToolId.TABLE_BEAUTIFIER
+                                            )
+                                            .map(tid => (
+                                                <option key={tid} value={tid}>{getToolName(tid).toUpperCase()}</option>
+                                            ))
+                                        }
+                                    </select>
+                                </div>
+                                <div className="flex flex-col gap-2">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Provision Quantity</label>
+                                    <input type="number" min="1" max="50" value={keyQty} onChange={e => setKeyQty(parseInt(e.target.value) || 1)} className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all" />
+                                </div>
+                                <div className="flex flex-col justify-end">
+                                    <button onClick={generateKeys} className="bg-indigo-600 hover:bg-indigo-700 text-white font-black py-3.5 rounded-xl shadow-lg shadow-indigo-200 transition-all active:scale-95 uppercase text-[10px] tracking-widest">Initialize Key Sequence</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex-grow overflow-x-auto">
+                            <table className="min-w-full divide-y divide-slate-100">
+                                <thead className="bg-slate-50 font-black text-slate-400 uppercase tracking-widest text-[9px]">
+                                    <tr>
+                                        <th className="px-6 py-4 text-left">Secret Key</th>
+                                        <th className="px-6 py-4 text-left">Assigned Module</th>
+                                        <th className="px-6 py-4 text-left">Protocol Status</th>
+                                        <th className="px-6 py-4 text-left">Bound Identity</th>
+                                        <th className="px-6 py-4 text-center">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-slate-100">
+                                    {accessKeys.map(k => {
+                                        const boundUser = users.find(u => u.id === k.user_id);
+                                        return (
+                                            <tr key={k.id} className="hover:bg-slate-50 transition-colors">
+                                                <td className="px-6 py-4 font-mono text-xs font-black text-indigo-600">{k.key}</td>
+                                                <td className="px-6 py-4 text-[10px] font-black uppercase text-slate-500">{getToolName(k.tool)}</td>
+                                                <td className="px-6 py-4">
+                                                    <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter border ${k.is_used ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
+                                                        {k.is_used ? 'Bound_Active' : 'Unused_Available'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    {k.is_used ? (
+                                                        <div className="flex flex-col">
+                                                            <span className="text-[10px] font-bold text-slate-800">{boundUser?.email || 'Unknown User'}</span>
+                                                            <span className="text-[8px] font-mono text-slate-400 uppercase">HWID: {k.device_id?.slice(0, 12)}...</span>
+                                                        </div>
+                                                    ) : <span className="text-slate-300 font-bold text-[10px] italic">No Binding</span>}
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center justify-center gap-3">
+                                                        {k.is_used && (
+                                                            <button onClick={() => handleRevokeKey(k)} className="p-2 text-amber-500 hover:bg-amber-50 rounded-lg transition-colors border border-transparent hover:border-amber-100" title="Unbind Key">
+                                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>
+                                                            </button>
+                                                        )}
+                                                        <button onClick={() => handleDeleteKey(k.id)} className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-100" title="Purge Key">
+                                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'config' && (
+                    <div className="p-10 space-y-12 animate-fade-in flex flex-col pb-32">
+                        <div className="flex flex-col md:flex-row items-center justify-between gap-8 mb-12">
+                            <div className="flex items-center gap-6">
+                                <div className="w-16 h-16 bg-emerald-600 rounded-[1.5rem] flex items-center justify-center text-white shadow-xl shadow-emerald-500/20 border-4 border-emerald-100">
+                                    <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37a1.724 1.724 0 002.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                </div>
+                                <div>
+                                    <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight leading-none">System Access Controller</h3>
+                                    <div className="flex items-center gap-2 mt-2">
+                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Global Protocol Management</span>
+                                        <div className="w-1 h-1 rounded-full bg-slate-200"></div>
+                                        <span className="text-[10px] font-bold text-indigo-600 uppercase">Live Database Sync</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex flex-col gap-2">
+                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Temporary Protocol Offset (Days)</label>
+                                <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200 shadow-inner">
+                                    {PROMO_DURATIONS.map(d => (
+                                        <button key={d.value} onClick={() => setPromoDuration(d.value)} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${promoDuration === d.value ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>{d.label}</button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-16">
+                            {Object.values(ToolId).filter(tid => tid !== 'dashboard' && tid !== 'docs').map(tid => {
+                                const isFree = !!freeToolsData[tid];
+                                const toolName = getToolName(tid);
+                                return (
+                                    <div key={tid} className={`p-6 border-2 rounded-[2rem] transition-all flex flex-col ${isFree ? 'border-emerald-500 bg-emerald-50 shadow-lg' : 'border-slate-100 bg-white hover:border-slate-200'}`}>
+                                        <div className="flex justify-between items-start mb-6">
+                                            <div className="flex flex-col">
+                                                <span className={`text-[10px] font-black uppercase tracking-widest mb-1 ${isFree ? 'text-emerald-600' : 'text-slate-400'}`}>{isFree ? 'System_Unlocked' : 'Strict_Lock'}</span>
+                                                <h4 className="text-sm font-black text-slate-800 uppercase leading-none">{toolName}</h4>
+                                            </div>
+                                            <button onClick={() => toggleFreeTool(tid)} className={`w-12 h-6 rounded-full transition-all relative p-1 ${isFree ? 'bg-emerald-500 shadow-inner shadow-emerald-700/20' : 'bg-slate-200'}`}>
+                                                <div className={`w-4 h-4 rounded-full bg-white transition-transform ${isFree ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                                            </button>
+                                        </div>
+                                        {isFree && (
+                                            <div className="mt-auto pt-4 border-t border-emerald-100 flex items-center justify-between">
+                                                <span className="text-[9px] font-black text-emerald-700 uppercase tracking-widest">Protocol Reset:</span>
+                                                <span className="text-[10px] font-mono font-black text-emerald-800">{getCountdown(freeToolsData[tid])}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        <div className="p-10 bg-slate-900 rounded-[3rem] shadow-2xl relative overflow-hidden border border-white/5">
+                            <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full -mr-32 -mt-32 blur-3xl"></div>
+                            <div className="relative z-10">
+                                <div className="flex items-center gap-4 mb-8">
+                                    <div className="w-12 h-12 bg-rose-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-rose-900/40">
+                                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                                    </div>
+                                    <div>
+                                        <h4 className="text-xl font-black text-white uppercase tracking-tight">Master Integrity Overrides</h4>
+                                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Global node authorization & restriction protocols</p>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <button onClick={masterUnlock} className="flex flex-col items-start p-8 bg-white/5 border border-white/10 rounded-[2rem] hover:bg-indigo-600/20 hover:border-indigo-500/50 transition-all text-left group">
+                                        <span className="text-indigo-400 font-black text-[11px] uppercase tracking-[0.3em] mb-3 group-hover:text-indigo-300 transition-colors">Emergency Deployment</span>
+                                        <h5 className="text-lg font-black text-white uppercase mb-4 leading-none">Global Master Unlock</h5>
+                                        <p className="text-xs text-slate-500 leading-relaxed font-medium group-hover:text-slate-400">Temporarily authorizes all nodes for 24 hours. Used for system testing or mass-release periods.</p>
+                                    </button>
+                                    <button onClick={masterRevoke} className="flex flex-col items-start p-8 bg-white/5 border border-white/10 rounded-[2rem] hover:bg-rose-600/20 hover:border-rose-500/50 transition-all text-left group">
+                                        <span className="text-rose-400 font-black text-[11px] uppercase tracking-[0.3em] mb-3 group-hover:text-rose-300 transition-colors">Restrictive Protocol</span>
+                                        <h5 className="text-lg font-black text-white uppercase mb-4 leading-none">Global Master Revoke</h5>
+                                        <p className="text-xs text-slate-500 leading-relaxed font-medium group-hover:text-slate-400">Instantly terminates all active node promotions. Strictly enforces subscription and license check gates.</p>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 )}
 
@@ -945,138 +1111,8 @@ const AdminDashboard: React.FC = () => {
                     </div>
                 )}
 
-                {activeTab === 'keys' && (
-                    <div className="p-8 space-y-8">
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end bg-slate-50 p-6 rounded-2xl border border-slate-100 shadow-inner">
-                            <div><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block tracking-widest">Target Module</label><select value={keyTool} onChange={e => setKeyTool(e.target.value)} className="w-full rounded-xl border-slate-200 text-sm font-bold bg-white focus:ring-2 focus:ring-indigo-100 outline-none"><option value="universal">Universal Access</option><option value={ToolId.XML_RENUMBER}>XML Normalizer</option><option value={ToolId.CREDIT_GENERATOR}>CRediT Tagging</option><option value={ToolId.TABLE_BEAUTIFIER}>Table XML Beautifier</option></select></div>
-                            <div><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block tracking-widest">Quantity</label><input type="number" min="1" max="50" value={keyQty} onChange={e => setKeyQty(parseInt(e.target.value))} className="w-full rounded-xl border-slate-200 text-sm font-bold bg-white focus:ring-2 focus:ring-indigo-100 outline-none" /></div>
-                            <button onClick={generateKeys} className="bg-slate-900 text-white font-black py-2.5 rounded-xl uppercase text-xs tracking-widest shadow-lg active:scale-95 transition-all">Generate</button>
-                        </div>
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-slate-100">
-                                <thead className="bg-slate-50 font-black text-slate-400 uppercase text-[10px]">
-                                    <tr>
-                                        <th className="px-6 py-4 text-left">Key</th>
-                                        <th className="px-6 py-4 text-left">Target</th>
-                                        <th className="px-6 py-4 text-left">Status</th>
-                                        <th className="px-6 py-4 text-left">User</th>
-                                        <th className="px-6 py-4 text-left">Device ID</th>
-                                        <th className="px-6 py-4 text-left">Control</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {accessKeys.length === 0 ? (
-                                        <tr>
-                                            <td colSpan={6} className="px-6 py-20 text-center text-slate-400 italic">No keys found. Generate some above.</td>
-                                        </tr>
-                                    ) : accessKeys.map(k => (
-                                        <tr key={k.id} className="hover:bg-slate-50/50 transition-colors">
-                                            <td className="px-6 py-4 font-mono font-black text-indigo-600 text-sm tracking-widest">{k.key}</td>
-                                            <td className="px-6 py-4 text-[11px] font-bold text-slate-600">{getToolName(k.tool)}</td>
-                                            <td className="px-6 py-4"><span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border ${k.is_used ? 'text-rose-500 bg-rose-50 border-rose-100' : 'text-emerald-500 bg-emerald-50 border-emerald-100'}`}>{k.is_used ? 'LOCKED' : 'AVAIL'}</span></td>
-                                            <td className="px-6 py-4 text-[11px] font-bold text-slate-600">{users.find(u => u.id === k.user_id)?.email || 'Unbound'}</td>
-                                            <td className="px-6 py-4">
-                                                {k.device_id ? (
-                                                    <span className="font-mono text-[9px] font-black text-slate-500 bg-slate-100 px-2 py-1 rounded-md border border-slate-200" title={k.device_id}>
-                                                        {k.device_id.replace('dev_', '').substring(0, 16).toUpperCase()}
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-[9px] font-bold text-slate-300 uppercase italic">Unbound</span>
-                                                )}
-                                            </td>
-                                            <td className="px-6 py-4"><div className="flex gap-2">{k.is_used && <button onClick={() => handleRevokeKey(k)} className="p-1.5 text-amber-500 hover:bg-amber-50 rounded transition-colors" title="Revoke Device Bind"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg></button>}<button onClick={() => handleDeleteKey(k.id)} className="p-1.5 text-rose-300 hover:text-rose-600 transition-colors" title="Delete Key"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button></div></td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                )}
-
-                {activeTab === 'config' && (
-                    <div className="p-10 space-y-12">
-                        <div className="flex flex-col md:flex-row md:items-start justify-between gap-10">
-                            <div className="flex flex-col">
-                                <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Node Rack Control</h3>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Free Tier & Emergency Overrides</p>
-                            </div>
-                            
-                            <div className="flex flex-col sm:flex-row gap-6 bg-slate-900 p-8 rounded-[2.5rem] shadow-2xl ring-4 ring-slate-800 relative overflow-hidden">
-                                <div className="absolute top-0 right-0 w-24 h-24 bg-white/5 rounded-bl-full"></div>
-                                <div className="flex flex-col gap-4 relative z-10">
-                                    <span className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.3em]">Master Overrides</span>
-                                    <div className="flex gap-3">
-                                        <button onClick={masterUnlock} className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-lg active:scale-95">Emergency Unlock All</button>
-                                        <button onClick={masterRevoke} className="px-6 py-3 bg-rose-600 hover:bg-rose-50 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-lg active:scale-95">Global Protocol Wipe</button>
-                                    </div>
-                                </div>
-                                <div className="w-px bg-white/10 hidden sm:block"></div>
-                                <div className="flex flex-col gap-4 relative z-10">
-                                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Term Config</span>
-                                    <div className="flex bg-white/5 p-1 rounded-xl border border-white/10">
-                                        {PROMO_DURATIONS.map(d => (
-                                            <button 
-                                                key={d.value}
-                                                onClick={() => setPromoDuration(d.value)}
-                                                className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${promoDuration === d.value ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
-                                            >
-                                                {d.label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-                            {Object.values(ToolId).filter(id => id !== 'dashboard' && id !== 'docs').map(tid => {
-                                const expiry = freeToolsData[tid]; 
-                                const isFree = !!expiry && new Date(expiry) > new Date();
-                                const usage24h = intelligenceMetrics.toolUsage24h[tid] || 0;
-                                const isHighUsage = usage24h > 10;
-                                
-                                return (
-                                    <div key={tid} onClick={() => toggleFreeTool(tid)} className={`p-8 rounded-[2.5rem] border-2 cursor-pointer transition-all flex flex-col justify-between group h-52 relative overflow-hidden ${isFree ? 'border-emerald-500 bg-emerald-50/30 shadow-lg' : 'border-slate-100 bg-white hover:border-slate-200'}`}>
-                                        <div className="flex justify-between items-start">
-                                            <div className="flex flex-col">
-                                                <span className={`text-xs font-black uppercase tracking-tight ${isFree ? 'text-emerald-700' : 'text-slate-700'}`}>{getToolName(tid)}</span>
-                                                <span className="text-[9px] font-mono text-slate-400 uppercase mt-0.5">{tid}</span>
-                                            </div>
-                                            <div className={`w-3 h-3 rounded-full border-2 ${isFree ? 'bg-emerald-500 border-emerald-600 animate-pulse' : 'bg-slate-200 border-slate-300'}`}></div>
-                                        </div>
-
-                                        <div className="flex flex-col gap-2">
-                                            <div className="flex items-center gap-3 h-6">
-                                                <div className={`px-3 py-1.5 rounded-xl border flex items-center gap-2 ${isHighUsage ? 'bg-emerald-100 border-emerald-200 text-emerald-700' : 'bg-slate-100 border-slate-200 text-slate-500'}`}>
-                                                    <span className={`w-1.5 h-1.5 rounded-full ${isHighUsage ? 'bg-emerald-500 animate-ping' : 'bg-slate-300'}`}></span>
-                                                    <span className="text-[10px] font-black">{usage24h} 24h Hits</span>
-                                                </div>
-                                                {isFree && (
-                                                    <div className="text-[9px] font-bold text-emerald-600 uppercase italic whitespace-nowrap">
-                                                        {getCountdown(expiry!)}
-                                                    </div>
-                                                )}
-                                            </div>
-                                            
-                                            <div className="flex items-center justify-between mt-2">
-                                                <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${isFree ? 'text-emerald-500' : 'text-slate-300'}`}>
-                                                    {isFree ? 'Active Protocol' : 'Locked Node'}
-                                                </span>
-                                                <div className={`w-12 h-6 rounded-full relative transition-colors border-2 ${isFree ? 'bg-emerald-500 border-emerald-600' : 'bg-slate-200 border-slate-300'}`}>
-                                                    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all shadow-sm ${isFree ? 'left-[22px]' : 'left-1'}`}></div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                )}
-
                 {activeTab === 'announcements' && (
                     <div className="grid grid-cols-1 lg:grid-cols-3 divide-x divide-slate-200 h-full min-h-[700px] bg-slate-50/50">
-                        {/* SIGNAL TRANSMITTER PANEL */}
                         <div className="p-10 bg-white border-r border-slate-200 flex flex-col shadow-inner">
                             <div className="flex justify-between items-center mb-10">
                                 <div className="flex flex-col">
@@ -1144,7 +1180,6 @@ const AdminDashboard: React.FC = () => {
                             </form>
                         </div>
 
-                        {/* SIGNAL HISTORY FEED */}
                         <div className="lg:col-span-2 p-12 overflow-y-auto custom-scrollbar">
                             <div className="flex items-center justify-between mb-10">
                                 <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.4em]">Signal Logs</h3>
@@ -1216,7 +1251,7 @@ const AdminDashboard: React.FC = () => {
                                 
                                 {announcements.length === 0 && (
                                     <div className="col-span-full py-40 text-center opacity-30 grayscale flex flex-col items-center justify-center">
-                                        <svg className="w-20 h-20 mb-6 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+                                        <svg className="w-20 h-20 mb-6 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 v2M7 7h10" /></svg>
                                         <p className="text-sm font-black uppercase tracking-[0.4em] text-slate-400">Signal Archive Empty</p>
                                     </div>
                                 )}

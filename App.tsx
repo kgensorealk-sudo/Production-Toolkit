@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { HashRouter } from 'react-router-dom';
 import { Routes, Route, Navigate, useNavigate } from 'react-router';
@@ -25,6 +26,7 @@ import Docs from './pages/Docs';
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
 import AuthModal from './components/AuthModal';
+import InactivityTracker from './components/InactivityTracker';
 import { ToolId } from './types';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import LoadingOverlay from './components/LoadingOverlay';
@@ -99,14 +101,22 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
     const { session, loading } = useAuth();
     if (loading) return <LoadingOverlay message="Validating Session..." color="indigo" />;
     if (!session) return <Navigate to="/login" replace />;
-    return <>{children}</>;
+    return (
+        <InactivityTracker>
+            {children}
+        </InactivityTracker>
+    );
 };
 
 const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { session, isAdmin, loading } = useAuth();
     if (loading) return <LoadingOverlay message="Checking Authority..." color="slate" />;
     if (!session || !isAdmin) return <Navigate to="/" replace />;
-    return <>{children}</>;
+    return (
+        <InactivityTracker>
+            {children}
+        </InactivityTracker>
+    );
 };
 
 const App: React.FC = () => {
