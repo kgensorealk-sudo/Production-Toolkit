@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+
+import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import { UserProfile } from '../types';
 import { INACTIVITY_LIMIT } from '../constants';
@@ -36,6 +37,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const initTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const protocolPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     const isAdmin = (
         user?.email === SUPER_ADMIN_EMAIL ||
@@ -66,7 +68,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     };
 
-    const fetchFreeTools = async () => {
+    const fetchFreeTools = useCallback(async () => {
         try {
             const { data, error } = await supabase
                 .from('system_settings')
@@ -84,59 +86,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         activeIds.push(tid);
                     }
                 });
-                setFreeTools(activeIds);
-                setFreeToolsData(activeMap);
+                // Only update state if data has actually changed to prevent render loops
+                setFreeTools(prev => JSON.stringify(prev) === JSON.stringify(activeIds) ? prev : activeIds);
+                setFreeToolsData(prev => JSON.stringify(prev) === JSON.stringify(activeMap) ? prev : activeMap);
             }
         } catch (err) {}
-    };
+    }, []);
 
-    const fetchProfile = async (userId: string) => {
-        const profilePromise = (async () => {
-            try {
-                // Immediate update on fetch request
-                updateLastSeen(userId);
+    const fetchProfile = useCallback(async (userId: string) => {
+        if (!userId) return;
+        try {
+            updateLastSeen(userId);
 
-                const { data: profileData, error: profileError } = await supabase
-                    .from('profiles')
-                    .select('*')
-                    .eq('id', userId)
-                    .maybeSingle();
+            const { data: profileData, error: profileError } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', userId)
+                .maybeSingle();
 
-                if (profileError || !profileData) return null;
+            if (profileError || !profileData) return;
 
-                const { data: keysData } = await supabase
-                    .from('access_keys')
-                    .select('tool')
-                    .eq('user_id', userId)
-                    .eq('is_used', true);
+            const { data: keysData } = await supabase
+                .from('access_keys')
+                .select('tool')
+                .eq('user_id', userId)
+                .eq('is_used', true);
 
-                const unlockedTools = keysData ? keysData.map(k => k.tool) : [];
-                let isActive = profileData.is_subscribed;
-                
-                if (user?.email === SUPER_ADMIN_EMAIL) isActive = true;
-                else if (profileData.subscription_end && new Date(profileData.subscription_end) < new Date()) {
-                    isActive = false;
-                }
-
-                return { ...profileData, is_subscribed: isActive, unlocked_tools: unlockedTools };
-            } catch (e) {
-                return null;
+            const unlockedTools = keysData ? keysData.map(k => k.tool) : [];
+            let isActive = profileData.is_subscribed;
+            
+            if (user?.email === SUPER_ADMIN_EMAIL) isActive = true;
+            else if (profileData.subscription_end && new Date(profileData.subscription_end) < new Date()) {
+                isActive = false;
             }
-        })();
 
-        const result = await Promise.race([
-            profilePromise,
-            new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 5000))
-        ]).catch(() => null);
-
-        if (result) {
-            setProfile(result as any);
+            setProfile({ ...profileData, is_subscribed: isActive, unlocked_tools: unlockedTools });
+        } catch (e) {
+            console.error("Profile sync failure", e);
         }
-    };
+    }, [user?.email]);
 
-    const signOut = async (isAuto: boolean = false) => {
+    const signOut = useCallback(async (isAuto: boolean = false) => {
         if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
         if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+        if (protocolPollRef.current) clearInterval(protocolPollRef.current);
         
         try {
             setLoading(true); 
@@ -150,18 +143,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setLoading(false);
             window.location.hash = '#/login';
         }
-    };
+    }, []);
 
-    // Idle Monitoring Logic
-    const resetIdleTimer = () => {
+    const resetIdleTimer = useCallback(() => {
         if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
         if (session) {
             idleTimerRef.current = setTimeout(() => {
-                console.log("Session expired due to inactivity.");
                 signOut(true);
             }, INACTIVITY_LIMIT);
         }
-    };
+    }, [session, signOut]);
 
     useEffect(() => {
         const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
@@ -176,7 +167,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             events.forEach(event => window.removeEventListener(event, handler));
             if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
         };
-    }, [session]);
+    }, [session, resetIdleTimer]);
 
     useEffect(() => {
         let mounted = true;
@@ -185,7 +176,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             try {
                 initTimeoutRef.current = setTimeout(() => {
                     if (mounted && loading) {
-                        console.warn("Auth: Initialization forced to complete via timeout.");
                         setLoading(false);
                     }
                 }, 4000);
@@ -204,7 +194,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     setSession(currentSession);
                     setUser(currentSession.user);
                     
-                    // START HEARTBEAT IMMEDIATELY
                     updateLastSeen(currentSession.user.id);
                     
                     if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
@@ -212,10 +201,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         updateLastSeen(currentSession.user.id);
                     }, HEARTBEAT_INTERVAL);
 
+                    if (protocolPollRef.current) clearInterval(protocolPollRef.current);
+                    protocolPollRef.current = setInterval(() => fetchFreeTools(), 300000);
+
                     await Promise.allSettled([
                         fetchProfile(currentSession.user.id),
                         fetchFreeTools()
                     ]);
+
+                    supabase
+                        .channel('system-protocols')
+                        .on(
+                            'postgres_changes', 
+                            { event: 'UPDATE', schema: 'public', table: 'system_settings', filter: 'id=eq.global' },
+                            () => {
+                                fetchFreeTools();
+                            }
+                        )
+                        .subscribe();
                 }
             } catch (err) {
                 console.error("Auth: Bootstrap failed", err);
@@ -234,12 +237,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (event === 'SIGNED_OUT') {
                 if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
                 if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+                if (protocolPollRef.current) clearInterval(protocolPollRef.current);
                 setProfile(null); setUser(null); setSession(null);
                 setLoading(false);
             } else if (event === 'SIGNED_IN' && newSession?.user) {
                 setSession(newSession); setUser(newSession.user);
                 
-                // TRIGGER IMMEDIATE HEARTBEAT ON LOGIN
                 updateLastSeen(newSession.user.id);
                 
                 if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
@@ -248,6 +251,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 }, HEARTBEAT_INTERVAL);
 
                 await fetchProfile(newSession.user.id);
+                await fetchFreeTools();
                 setLoading(false);
             }
         });
@@ -257,9 +261,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (initTimeoutRef.current) clearTimeout(initTimeoutRef.current);
             if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
             if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+            if (protocolPollRef.current) clearInterval(protocolPollRef.current);
             if (authListener?.subscription) authListener.subscription.unsubscribe(); 
+            supabase.removeAllChannels();
         };
-    }, []);
+    }, [fetchFreeTools, fetchProfile]); // Added fetch dependencies to init effect
 
     return (
         <AuthContext.Provider value={{ 

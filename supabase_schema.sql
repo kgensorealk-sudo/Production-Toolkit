@@ -47,6 +47,17 @@ CREATE TABLE IF NOT EXISTS public.usage_logs (
   timestamp TIMESTAMPTZ DEFAULT now()
 );
 
+-- 12. ANNOUNCEMENTS TABLE
+CREATE TABLE IF NOT EXISTS public.announcements (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  type TEXT DEFAULT 'info',
+  is_active BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- Insert global record if not exists
 INSERT INTO public.system_settings (id, free_tools_data)
 VALUES ('global', '{}'::jsonb)
@@ -71,9 +82,10 @@ CREATE TRIGGER on_auth_user_created
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN AS $$
 BEGIN
+  -- Super admin email or role check
   RETURN EXISTS (
     SELECT 1 FROM public.profiles
-    WHERE id = auth.uid() AND role = 'admin'
+    WHERE id = auth.uid() AND (role = 'admin' OR email = 'generalkevin53@gmail.com')
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -171,3 +183,30 @@ CREATE POLICY "Admins view telemetry"
 ON public.usage_logs FOR SELECT 
 TO authenticated
 USING (is_admin());
+
+DROP POLICY IF EXISTS "Admins purge telemetry" ON public.usage_logs;
+CREATE POLICY "Admins purge telemetry" 
+ON public.usage_logs FOR DELETE 
+TO authenticated
+USING (is_admin());
+
+-- 13. ANNOUNCEMENTS POLICIES
+ALTER TABLE public.announcements ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Broadcasts visible to all" ON public.announcements;
+CREATE POLICY "Broadcasts visible to all" 
+ON public.announcements FOR SELECT 
+TO authenticated
+USING (true);
+
+DROP POLICY IF EXISTS "Admins control broadcasts" ON public.announcements;
+CREATE POLICY "Admins control broadcasts" 
+ON public.announcements FOR ALL 
+TO authenticated
+USING (is_admin())
+WITH CHECK (is_admin());
+
+-- 14. REALTIME ENABLEMENT
+-- Ensure system_settings table is part of the realtime publication
+-- Note: This requires superuser privileges in a standard SQL editor.
+ALTER PUBLICATION supabase_realtime ADD TABLE public.system_settings;

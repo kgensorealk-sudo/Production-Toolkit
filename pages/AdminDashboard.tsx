@@ -28,6 +28,7 @@ interface AccessKeyRecord {
 }
 
 interface UsageLog {
+    id: string;
     tool_id: string;
     user_id: string;
     timestamp: string;
@@ -154,21 +155,28 @@ const AdminDashboard: React.FC = () => {
             if (error) throw error;
             if (data) {
                 setUsers(data);
-                const durMap: Record<string, string> = {};
-                data.forEach(u => { if (!selectedDurations[u.id]) durMap[u.id] = 'sub_1y'; });
-                if (Object.keys(durMap).length > 0) setSelectedDurations(prev => ({ ...prev, ...durMap }));
+                setSelectedDurations(prev => {
+                    const next = { ...prev };
+                    let changed = false;
+                    data.forEach(u => {
+                        if (!next[u.id]) {
+                            next[u.id] = 'sub_1y';
+                            changed = true;
+                        }
+                    });
+                    return changed ? next : prev;
+                });
             }
         } catch (error: any) {
             if (!isSilent) setToast({ msg: 'Personnel check failed', type: 'error' });
         } finally { setIsLoading(false); }
-    }, [selectedDurations]);
+    }, []);
 
     const fetchAccessKeys = useCallback(async () => {
         setIsLoading(true);
         try {
             const { data, error } = await supabase.from('access_keys').select('*').order('created_at', { ascending: false });
             if (error) {
-                // Specific check for table existence error
                 if (error.code === 'PGRST204' || error.message.includes('not found')) {
                     throw new Error("System Key Database not initialized.");
                 }
@@ -183,14 +191,61 @@ const AdminDashboard: React.FC = () => {
     const fetchIntelligence = useCallback(async () => {
         setIsLoading(true);
         try {
-            const { data, error } = await supabase.from('usage_logs').select('tool_id, user_id, timestamp').order('timestamp', { ascending: false });
+            const { data, error } = await supabase.from('usage_logs').select('*').order('timestamp', { ascending: false });
             if (error) throw error;
             setUsageLogs(data || []);
-            await fetchUsers(true);
         } catch (error: any) {
             console.warn("Usage logs might not exist yet.");
         } finally { setIsLoading(false); }
-    }, [fetchUsers]);
+    }, []);
+
+    const purgeTelemetry = () => {
+        setConfirmConfig({
+            isOpen: true,
+            title: 'Wipe Intelligence Node',
+            message: 'This will permanently delete all production usage logs. This action cannot be reversed. Proceed with system reset?',
+            confirmLabel: 'Purge Database',
+            type: 'danger',
+            onConfirm: async () => {
+                setIsLoading(true);
+                try {
+                    const { error } = await supabase.from('usage_logs').delete().neq('tool_id', 'SYSTEM_RESERVED_VAL');
+                    if (error) throw error;
+                    setUsageLogs([]);
+                    setToast({ msg: "Telemetry databases purged successfully.", type: "success" });
+                } catch (err: any) {
+                    setToast({ msg: `Purge protocol rejected: ${err.message}`, type: "error" });
+                } finally {
+                    setIsLoading(false);
+                }
+            }
+        });
+    };
+
+    const exportRawTelemetry = () => {
+        if (usageLogs.length === 0) return;
+        const headers = ['Timestamp', 'Operator_ID', 'Protocol_ID', 'Status_Role'];
+        const userMap = new Map(users.map(u => [u.id, u]));
+        
+        const rows = usageLogs.map(log => {
+            const user = userMap.get(log.user_id);
+            return [
+                log.timestamp,
+                user?.email || `DELETED_USER_${log.user_id.substring(0,8)}`,
+                log.tool_id,
+                user?.is_subscribed ? 'PREMIUM' : 'STANDARD'
+            ];
+        });
+
+        const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `production_telemetry_${new Date().toISOString().split('T')[0]}.csv`;
+        a.click();
+        setToast({ msg: "Telemetry dump successful.", type: "success" });
+    };
 
     const handleRevokeKey = async (keyRecord: AccessKeyRecord) => {
         setIsLoading(true);
@@ -231,17 +286,10 @@ const AdminDashboard: React.FC = () => {
     useEffect(() => {
         if (activeTab === 'users') fetchUsers();
         else if (activeTab === 'announcements') fetchAnnouncements();
-        else if (activeTab === 'keys') fetchUsers(true).then(() => fetchAccessKeys());
-        else if (activeTab === 'config') refreshFreeTools();
+        else if (activeTab === 'keys') { fetchUsers(true); fetchAccessKeys(); }
+        else if (activeTab === 'config') { fetchIntelligence(); refreshFreeTools(); }
         else if (activeTab === 'intelligence') fetchIntelligence();
     }, [activeTab, fetchUsers, fetchAnnouncements, fetchAccessKeys, refreshFreeTools, fetchIntelligence]);
-
-    useEffect(() => {
-        if (activeTab === 'users') {
-            const interval = setInterval(() => fetchUsers(true), 45000); 
-            return () => clearInterval(interval);
-        }
-    }, [activeTab, fetchUsers]);
 
     const toggleSubscription = async (user: UserProfile) => {
         const newVal = !user.is_subscribed;
@@ -287,6 +335,49 @@ const AdminDashboard: React.FC = () => {
             await refreshFreeTools();
             setToast({ msg: `System protocol synchronized (${promoDuration}d Promo)`, type: 'success' });
         } catch (err) { setToast({ msg: 'Protocol update rejected', type: 'error' }); } finally { setIsLoading(false); }
+    };
+
+    const masterUnlock = async () => {
+        setConfirmConfig({
+            isOpen: true,
+            title: 'Master Protocol Unlock',
+            message: 'This will unlock ALL production tools for the next 24 hours. Proceed with emergency node deployment?',
+            confirmLabel: 'Initialize Unlock',
+            type: 'primary',
+            onConfirm: async () => {
+                setIsLoading(true);
+                try {
+                    const expiry = new Date(); 
+                    expiry.setDate(expiry.getDate() + 1);
+                    const nextData: Record<string, string> = {};
+                    Object.values(ToolId).forEach(tid => { if (tid !== 'dashboard' && tid !== 'docs') nextData[tid] = expiry.toISOString(); });
+                    
+                    const { error } = await supabase.from('system_settings').upsert({ id: 'global', free_tools_data: nextData, updated_at: new Date().toISOString() });
+                    if (error) throw error;
+                    await refreshFreeTools();
+                    setToast({ msg: 'Master protocol deployed: All nodes unlocked.', type: 'success' });
+                } catch (err) { setToast({ msg: 'Unlock sequence failed', type: 'error' }); } finally { setIsLoading(false); }
+            }
+        });
+    };
+
+    const masterRevoke = async () => {
+        setConfirmConfig({
+            isOpen: true,
+            title: 'Master Protocol Revocation',
+            message: 'This will instantly lock ALL free-tier tools. Persistent keys will still function. Proceed?',
+            confirmLabel: 'Revoke All Access',
+            type: 'danger',
+            onConfirm: async () => {
+                setIsLoading(true);
+                try {
+                    const { error } = await supabase.from('system_settings').upsert({ id: 'global', free_tools_data: {}, updated_at: new Date().toISOString() });
+                    if (error) throw error;
+                    await refreshFreeTools();
+                    setToast({ msg: 'Protocol strictly enforced: All free access revoked.', type: 'warn' });
+                } catch (err) { setToast({ msg: 'Revocation failed', type: 'error' }); } finally { setIsLoading(false); }
+            }
+        });
     };
 
     const generateKeys = async () => {
@@ -359,22 +450,55 @@ const AdminDashboard: React.FC = () => {
         return (Date.now() - new Date(u.last_seen).getTime()) < 300000;
     }).length;
 
-    // --- Intelligence Analytics with Temporal, Per-User, and Segment Filters ---
     const intelligenceMetrics = useMemo(() => {
-        if (usageLogs.length === 0) return { globalRanking: [], userAffinities: [], rareTools: [], filteredTotal: 0, segments: { premium: 0, standard: 0, segmentCounts: {} } };
+        if (usageLogs.length === 0) return { globalRanking: [], userAffinities: [], rareTools: [], filteredTotal: 0, growth: 0, segments: { premium: 0, standard: 0, segmentCounts: {} }, hourlyIntensity: new Array(24).fill(0), recentActivity: [], toolUsage24h: {} };
 
         const now = new Date().getTime();
         const userMap = new Map(users.map(u => [u.id, u]));
 
+        const getRangeMs = (r: IntelligenceRange) => {
+            switch(r) {
+                case '24h': return 24 * 60 * 60 * 1000;
+                case '7d': return 7 * 24 * 60 * 60 * 1000;
+                case '30d': return 30 * 24 * 60 * 60 * 1000;
+                default: return Infinity;
+            }
+        };
+
+        const rangeMs = getRangeMs(intelRange);
+        
         const filteredLogs = usageLogs.filter(log => {
             if (intelRange === 'all') return true;
             const logTime = new Date(log.timestamp).getTime();
-            const diff = now - logTime;
-            if (intelRange === '24h') return diff <= 24 * 60 * 60 * 1000;
-            if (intelRange === '7d') return diff <= 7 * 24 * 60 * 60 * 1000;
-            if (intelRange === '30d') return diff <= 30 * 24 * 60 * 60 * 1000;
-            return true;
+            return (now - logTime) <= rangeMs;
         });
+
+        const toolUsage24h: Record<string, number> = {};
+        usageLogs.forEach(log => {
+            if ((now - new Date(log.timestamp).getTime()) <= (24 * 60 * 60 * 1000)) {
+                toolUsage24h[log.tool_id] = (toolUsage24h[log.tool_id] || 0) + 1;
+            }
+        });
+
+        const hourlyIntensity = new Array(24).fill(0);
+        filteredLogs.forEach(log => {
+            const hour = new Date(log.timestamp).getHours();
+            hourlyIntensity[hour]++;
+        });
+
+        let growth = 0;
+        if (intelRange !== 'all') {
+            const prevWindowLogs = usageLogs.filter(log => {
+                const logTime = new Date(log.timestamp).getTime();
+                const diff = now - logTime;
+                return diff > rangeMs && diff <= (rangeMs * 2);
+            });
+            if (prevWindowLogs.length > 0) {
+                growth = Math.round(((filteredLogs.length - prevWindowLogs.length) / prevWindowLogs.length) * 100);
+            } else {
+                growth = filteredLogs.length > 0 ? 100 : 0;
+            }
+        }
 
         const toolCounts: Record<string, number> = {};
         const userToolCounts: Record<string, Record<string, number>> = {};
@@ -382,15 +506,11 @@ const AdminDashboard: React.FC = () => {
         
         let premiumUsage = 0;
         let standardUsage = 0;
-        const segmentCounts: Record<string, Record<string, number>> = {
-            premium: {},
-            standard: {}
-        };
+        const segmentCounts: Record<string, Record<string, number>> = { premium: {}, standard: {} };
 
         filteredLogs.forEach(log => {
             const user = userMap.get(log.user_id);
             const isPremium = !!user?.is_subscribed;
-            
             if (isPremium) {
                 premiumUsage++;
                 segmentCounts.premium[log.tool_id] = (segmentCounts.premium[log.tool_id] || 0) + 1;
@@ -398,24 +518,14 @@ const AdminDashboard: React.FC = () => {
                 standardUsage++;
                 segmentCounts.standard[log.tool_id] = (segmentCounts.standard[log.tool_id] || 0) + 1;
             }
-
             toolCounts[log.tool_id] = (toolCounts[log.tool_id] || 0) + 1;
             if (!userToolCounts[log.user_id]) userToolCounts[log.user_id] = {};
             userToolCounts[log.user_id][log.tool_id] = (userToolCounts[log.user_id][log.tool_id] || 0) + 1;
-            
-            if (!userLastAction[log.user_id]) {
-                userLastAction[log.user_id] = { tool: log.tool_id, time: log.timestamp };
-            }
+            if (!userLastAction[log.user_id]) userLastAction[log.user_id] = { tool: log.tool_id, time: log.timestamp };
         });
 
         const allAvailableTools = Object.values(ToolId).filter(id => id !== 'dashboard' && id !== 'docs');
-        
-        const globalRanking = allAvailableTools.map(id => ({
-            id,
-            name: getToolName(id),
-            count: toolCounts[id] || 0
-        })).sort((a, b) => b.count - a.count);
-
+        const globalRanking = allAvailableTools.map(id => ({ id, name: getToolName(id), count: toolCounts[id] || 0 })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
         const rareTools = globalRanking.filter(r => r.count < (intelRange === 'all' ? 10 : (intelRange === '30d' ? 5 : 2))).reverse();
 
         const userAffinities = users.map(user => {
@@ -431,13 +541,28 @@ const AdminDashboard: React.FC = () => {
             };
         }).filter(ua => ua.totalActions > 0).sort((a, b) => b.totalActions - a.totalActions);
 
-        return { globalRanking, userAffinities, rareTools, filteredTotal: filteredLogs.length, segments: { premium: premiumUsage, standard: standardUsage, segmentCounts } };
+        const recentActivity = usageLogs.slice(0, 10).map(log => ({
+            id: log.id,
+            timestamp: log.timestamp,
+            toolName: getToolName(log.tool_id),
+            user: userMap.get(log.user_id)?.email || `Anonymous_${log.user_id.slice(0,4)}`
+        }));
+
+        return { globalRanking, userAffinities, rareTools, filteredTotal: filteredLogs.length, growth, segments: { premium: premiumUsage, standard: standardUsage, segmentCounts }, hourlyIntensity, recentActivity, toolUsage24h };
     }, [usageLogs, users, intelRange]);
 
     const focusedUser = useMemo(() => {
         if (!focusedUserId) return null;
         return intelligenceMetrics.userAffinities.find(u => u.id === focusedUserId);
     }, [focusedUserId, intelligenceMetrics.userAffinities]);
+
+    const getCountdown = (expiry: string) => {
+        const diff = new Date(expiry).getTime() - Date.now();
+        if (diff <= 0) return 'Expired';
+        const h = Math.floor(diff / (1000 * 60 * 60));
+        const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        return `${h}h ${m}m remaining`;
+    };
 
     return (
         <div className="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
@@ -448,12 +573,14 @@ const AdminDashboard: React.FC = () => {
                     <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl uppercase tracking-widest leading-none">Admin Console</h1>
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.3em] mt-2">Central Authorization & Intelligence Node</p>
                 </div>
-                <div className="bg-slate-100 px-4 py-2 rounded-xl flex items-center gap-4 border border-slate-200 shadow-sm">
-                    <div className="flex items-center gap-2">
-                        <span className={`w-2.5 h-2.5 rounded-full ${activeNodesCount > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`}></span>
-                        <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">
-                            {activeNodesCount} Active Nodes
-                        </span>
+                <div className="flex gap-4">
+                    <div className="bg-slate-100 px-4 py-2 rounded-xl flex items-center gap-4 border border-slate-200 shadow-sm">
+                        <div className="flex items-center gap-2">
+                            <span className={`w-2.5 h-2.5 rounded-full ${activeNodesCount > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`}></span>
+                            <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">
+                                {activeNodesCount} Active Nodes
+                            </span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -466,7 +593,7 @@ const AdminDashboard: React.FC = () => {
                 <button onClick={() => setActiveTab('announcements')} className={`flex-1 py-2.5 px-6 text-sm font-bold rounded-lg transition-all ${activeTab === 'announcements' ? 'bg-white text-indigo-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Broadcasts</button>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden min-h-[600px] relative">
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 min-h-[600px] relative">
                 {isLoading && <LoadingOverlay message="Synchronizing..." color="slate" />}
                 
                 {activeTab === 'users' && (
@@ -508,8 +635,7 @@ const AdminDashboard: React.FC = () => {
                 )}
 
                 {activeTab === 'intelligence' && (
-                    <div className="p-8 lg:p-12 space-y-12 animate-fade-in">
-                        {/* Intelligence Range Selector */}
+                    <div className="p-8 lg:p-12 space-y-12 animate-fade-in flex flex-col pb-32">
                         <div className="flex flex-col sm:flex-row items-center justify-between gap-6 bg-slate-50 p-8 rounded-[2.5rem] border border-slate-200 shadow-inner">
                             <div className="flex items-center gap-5">
                                 <div className="w-14 h-14 bg-purple-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-purple-500/30">
@@ -521,48 +647,123 @@ const AdminDashboard: React.FC = () => {
                                 </div>
                             </div>
                             
-                            <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm">
-                                {(['24h', '7d', '30d', 'all'] as const).map(range => (
-                                    <button 
-                                        key={range}
-                                        onClick={() => setIntelRange(range)}
-                                        className={`px-8 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all ${intelRange === range ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/20' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
-                                    >
-                                        {range === '24h' ? 'Daily' : range === '7d' ? 'Weekly' : range === '30d' ? 'Monthly' : 'Yearly/All'}
-                                    </button>
-                                ))}
+                            <div className="flex items-center gap-4">
+                                <button onClick={fetchIntelligence} className="p-2.5 bg-white border border-slate-200 rounded-xl text-slate-400 hover:text-indigo-600 transition-all shadow-sm" title="Refresh Live Data">
+                                    <svg className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                                </button>
+                                <button onClick={exportRawTelemetry} className="px-6 py-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-black text-slate-500 uppercase tracking-widest hover:bg-slate-50 shadow-sm transition-all flex items-center gap-2">
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                                    Export Logs
+                                </button>
+                                <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm">
+                                    {(['24h', '7d', '30d', 'all'] as const).map(range => (
+                                        <button 
+                                            key={range}
+                                            onClick={() => setIntelRange(range)}
+                                            className={`px-8 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all ${intelRange === range ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/20' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+                                        >
+                                            {range === '24h' ? 'Daily' : range === '7d' ? 'Weekly' : range === '30d' ? 'Monthly' : 'All'}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
                         </div>
 
-                        {/* SEGMENT PULSE SECTION */}
-                        <section className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <section className="grid grid-cols-1 md:grid-cols-4 gap-8">
                             <div className="p-8 bg-indigo-50 border border-indigo-100 rounded-[2.5rem] shadow-sm flex flex-col justify-center text-center">
-                                <div className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.4em] mb-3">Premium Node Pulse</div>
+                                <div className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.4em] mb-3">Premium Pulse</div>
                                 <div className="text-5xl font-black text-indigo-900 leading-none mb-4">{intelligenceMetrics.segments.premium}</div>
-                                <div className="text-[9px] font-bold text-indigo-300 uppercase tracking-widest">Successful Authorized Queries</div>
+                                <div className="text-[9px] font-bold text-indigo-300 uppercase tracking-widest">Authorized Operations</div>
                             </div>
                             <div className="p-8 bg-emerald-50 border border-emerald-100 rounded-[2.5rem] shadow-sm flex flex-col justify-center text-center">
-                                <div className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.4em] mb-3">Standard Node Pulse</div>
+                                <div className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.4em] mb-3">Standard Pulse</div>
                                 <div className="text-5xl font-black text-emerald-900 leading-none mb-4">{intelligenceMetrics.segments.standard}</div>
-                                <div className="text-[9px] font-bold text-emerald-300 uppercase tracking-widest">Public / Trial Level Traffic</div>
+                                <div className="text-[9px] font-bold text-emerald-300 uppercase tracking-widest">Public Traffic</div>
+                            </div>
+                            <div className="p-8 bg-purple-50 border border-purple-100 rounded-[2.5rem] shadow-sm flex flex-col justify-center text-center">
+                                <div className="text-[10px] font-black text-purple-400 uppercase tracking-[0.4em] mb-3">Velocity Growth</div>
+                                <div className={`text-5xl font-black leading-none mb-4 ${intelligenceMetrics.growth >= 0 ? 'text-purple-900' : 'text-rose-600'}`}>
+                                    {intelligenceMetrics.growth >= 0 ? '+' : ''}{intelligenceMetrics.growth}%
+                                </div>
+                                <div className="text-[9px] font-bold text-purple-300 uppercase tracking-widest">Vs Previous Window</div>
+                            </div>
+                            <div className="p-8 bg-slate-900 rounded-[2.5rem] shadow-xl flex flex-col justify-center text-center relative overflow-hidden">
+                                <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 to-transparent"></div>
+                                <div className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.4em] mb-3 relative z-10">Persistence</div>
+                                <div className="text-5xl font-black text-white leading-none mb-4 relative z-10">
+                                    {users.length > 0 ? Math.round((intelligenceMetrics.userAffinities.length / users.length) * 100) : 0}%
+                                </div>
+                                <div className="text-[9px] font-bold text-slate-500 uppercase tracking-widest relative z-10">Operator Retention</div>
                             </div>
                         </section>
 
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
-                            {/* POPULARITY LEADERBOARD */}
+                            <section className="bg-white border border-slate-200 p-10 rounded-[3rem] shadow-sm">
+                                <div className="flex items-center gap-4 mb-8">
+                                    <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600 shadow-sm border border-amber-100">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                    </div>
+                                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Temporal Heatmap</h3>
+                                </div>
+                                <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-12 gap-2">
+                                    {intelligenceMetrics.hourlyIntensity.map((val, hour) => {
+                                        const maxIntensity = Math.max(...intelligenceMetrics.hourlyIntensity, 1);
+                                        const opacity = (val / maxIntensity) * 0.9 + 0.1;
+                                        return (
+                                            <div key={hour} className="group relative">
+                                                <div 
+                                                    className="h-10 rounded-lg transition-all duration-500"
+                                                    style={{ backgroundColor: `rgba(99, 102, 241, ${opacity})`, boxShadow: val > (maxIntensity * 0.8) ? '0 0 10px rgba(99, 102, 241, 0.3)' : 'none' }}
+                                                ></div>
+                                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-slate-900 text-white text-[9px] font-black p-2 rounded shadow-xl whitespace-nowrap z-20">
+                                                    {hour}:00 - {val} Hits
+                                                </div>
+                                                <span className="text-[8px] font-bold text-slate-400 mt-1 block text-center uppercase">{hour}h</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-6 italic text-center">Normalized usage density across a 24-hour protocol cycle</p>
+                            </section>
+
+                            <section className="bg-slate-900 p-10 rounded-[3rem] shadow-2xl relative overflow-hidden">
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-bl-full"></div>
+                                <div className="flex items-center gap-4 mb-8">
+                                    <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center text-indigo-400 shadow-sm border border-white/5">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                    </div>
+                                    <h3 className="text-xl font-black text-white uppercase tracking-tight">Live Protocol Feed</h3>
+                                </div>
+                                <div className="space-y-4">
+                                    {intelligenceMetrics.recentActivity.length > 0 ? intelligenceMetrics.recentActivity.map((act) => (
+                                        <div key={act.id} className="flex items-center gap-4 p-4 bg-white/5 rounded-2xl border border-white/5 hover:bg-white/10 transition-colors">
+                                            <div className="w-2 h-2 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.8)]"></div>
+                                            <div className="flex-grow min-w-0">
+                                                <p className="text-xs font-bold text-indigo-300 uppercase tracking-tighter truncate">{act.toolName}</p>
+                                                <p className="text-[9px] text-slate-500 font-mono truncate">{act.user}</p>
+                                            </div>
+                                            <span className="text-[9px] font-black text-slate-600 uppercase whitespace-nowrap">{new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                        </div>
+                                    )) : (
+                                        <div className="py-20 text-center opacity-20"><p className="text-xs font-black uppercase text-white">System Signal Silent</p></div>
+                                    )}
+                                </div>
+                            </section>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
                             <section>
                                 <div className="flex items-center gap-4 mb-8">
                                     <div className="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center text-purple-600 shadow-sm border border-purple-100">
                                         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
                                     </div>
-                                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Global Node Usage</h3>
+                                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Module Saturation Leaderboard</h3>
                                 </div>
                                 <div className="space-y-8">
-                                    {intelligenceMetrics.globalRanking.slice(0, 8).map((tool, idx) => {
+                                    {intelligenceMetrics.globalRanking.length > 0 ? intelligenceMetrics.globalRanking.slice(0, 8).map((tool) => {
                                         const premCount = intelligenceMetrics.segments.segmentCounts.premium[tool.id] || 0;
                                         const stdCount = intelligenceMetrics.segments.segmentCounts.standard[tool.id] || 0;
                                         const premPercent = tool.count > 0 ? (premCount / tool.count) * 100 : 0;
-                                        
                                         return (
                                             <div key={tool.id} className="relative">
                                                 <div className="flex justify-between items-end mb-2.5">
@@ -577,39 +778,31 @@ const AdminDashboard: React.FC = () => {
                                                     <span className="text-[10px] font-black text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">{tool.count}</span>
                                                 </div>
                                                 <div className="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden shadow-inner border border-slate-200/50 flex">
-                                                    <div 
-                                                        className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 transition-all duration-1000 ease-out" 
-                                                        style={{ width: `${premPercent}%` }}
-                                                    ></div>
-                                                    <div 
-                                                        className="h-full bg-emerald-400 transition-all duration-1000 ease-out" 
-                                                        style={{ width: `${100 - premPercent}%` }}
-                                                    ></div>
+                                                    <div className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 transition-all duration-1000 ease-out" style={{ width: `${premPercent}%` }}></div>
+                                                    <div className="h-full bg-emerald-400 transition-all duration-1000 ease-out" style={{ width: `${100 - premPercent}%` }}></div>
                                                 </div>
                                             </div>
                                         );
-                                    })}
-                                    {intelligenceMetrics.globalRanking.length === 0 && (
+                                    }) : (
                                         <div className="py-20 text-center opacity-30 bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200">
-                                            <p className="text-xs font-bold uppercase tracking-widest text-slate-400">No protocol traffic recorded for this window</p>
+                                            <p className="text-xs font-bold uppercase tracking-widest text-slate-400">System Silence Detected</p>
                                         </div>
                                     )}
                                 </div>
                             </section>
 
-                            {/* RARELY USED */}
                             <section>
                                 <div className="flex items-center gap-4 mb-8">
                                     <div className="w-10 h-10 bg-rose-50 rounded-xl flex items-center justify-center text-rose-600 shadow-sm border border-rose-100">
                                         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
                                     </div>
-                                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Cold Nodes</h3>
+                                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Cold Node Analysis</h3>
                                 </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                                     {intelligenceMetrics.rareTools.length > 0 ? (
                                         intelligenceMetrics.rareTools.slice(0, 4).map(tool => (
                                             <div key={tool.id} className="p-6 bg-white border border-slate-200 rounded-[2.5rem] flex flex-col items-center text-center shadow-sm hover:shadow-md transition-all hover:border-rose-200">
-                                                <span className="text-[10px] font-black text-rose-500 uppercase tracking-[0.2em] mb-2">Underutilized</span>
+                                                <span className="text-[10px] font-black text-rose-500 uppercase tracking-[0.2em] mb-2">Low Velocity</span>
                                                 <h4 className="text-xs font-bold text-slate-800 uppercase mb-4 leading-snug">{tool.name}</h4>
                                                 <span className="text-[9px] font-mono font-black bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 text-slate-400">{tool.count} hits</span>
                                             </div>
@@ -624,9 +817,7 @@ const AdminDashboard: React.FC = () => {
                             </section>
                         </div>
 
-                        {/* STAFF ENGAGEMENT & USER BREAKDOWN */}
-                        <div className="grid grid-cols-1 xl:grid-cols-3 gap-10">
-                            {/* TABLE */}
+                        <div className="grid grid-cols-1 xl:grid-cols-3 gap-10 pb-20">
                             <section className="xl:col-span-2">
                                 <div className="flex items-center gap-4 mb-8">
                                     <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 shadow-sm border border-indigo-100">
@@ -644,39 +835,23 @@ const AdminDashboard: React.FC = () => {
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
-                                            {intelligenceMetrics.userAffinities.map((ua) => (
-                                                <tr 
-                                                    key={ua.id} 
-                                                    onClick={() => setFocusedUserId(ua.id)}
-                                                    className={`cursor-pointer transition-all ${focusedUserId === ua.id ? 'bg-indigo-600 ring-4 ring-indigo-100' : 'hover:bg-white'}`}
-                                                >
+                                            {intelligenceMetrics.userAffinities.length > 0 ? intelligenceMetrics.userAffinities.map((ua) => (
+                                                <tr key={ua.id} onClick={() => setFocusedUserId(ua.id)} className={`cursor-pointer transition-all ${focusedUserId === ua.id ? 'bg-indigo-600 ring-4 ring-indigo-100' : 'hover:bg-white'}`}>
                                                     <td className={`px-8 py-5 text-sm font-bold ${focusedUserId === ua.id ? 'text-white' : 'text-slate-900'}`}>{ua.email}</td>
-                                                    <td className="px-8 py-5">
-                                                        <span className={`px-4 py-1.5 text-[10px] font-black rounded-xl shadow-sm uppercase tracking-tighter border ${focusedUserId === ua.id ? 'bg-white/10 border-white/20 text-white' : 'bg-white border-indigo-100 text-indigo-600'}`}>
-                                                            {ua.topTool}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-8 py-5 text-center">
-                                                        <span className={`text-[11px] font-mono font-bold ${focusedUserId === ua.id ? 'text-indigo-200' : 'text-slate-500'}`}>{ua.totalActions} logged</span>
-                                                    </td>
+                                                    <td className="px-8 py-5"><span className={`px-4 py-1.5 text-[10px] font-black rounded-xl shadow-sm uppercase tracking-tighter border ${focusedUserId === ua.id ? 'bg-white/10 border-white/20 text-white' : 'bg-white border-indigo-100 text-indigo-600'}`}>{ua.topTool}</span></td>
+                                                    <td className="px-8 py-5 text-center"><span className={`text-[11px] font-mono font-bold ${focusedUserId === ua.id ? 'text-indigo-200' : 'text-slate-500'}`}>{ua.totalActions} logged</span></td>
                                                 </tr>
-                                            ))}
-                                            {intelligenceMetrics.userAffinities.length === 0 && (
-                                                <tr>
-                                                    <td colSpan={3} className="px-8 py-20 text-center opacity-30">
-                                                        <p className="text-xs font-black uppercase tracking-widest text-slate-400">No personnel logs for this window</p>
-                                                    </td>
-                                                </tr>
+                                            )) : (
+                                                <tr><td colSpan={3} className="px-8 py-20 text-center opacity-30 text-[10px] font-black uppercase tracking-widest text-slate-400">No active sessions in current window</td></tr>
                                             )}
                                         </tbody>
                                     </table>
                                 </div>
                             </section>
 
-                            {/* FOCUS CARD */}
                             <section className="xl:col-span-1">
                                 {focusedUser ? (
-                                    <div className="bg-slate-900 rounded-[2.5rem] p-10 text-white shadow-2xl shadow-slate-900/40 sticky top-12 animate-slide-up ring-4 ring-slate-800">
+                                    <div className="bg-slate-900 rounded-[2.5rem] p-10 text-white shadow-2xl shadow-slate-900/40 sticky top-24 animate-slide-up ring-4 ring-slate-800">
                                         <div className="flex justify-between items-start mb-12">
                                             <div className="flex flex-col">
                                                 <span className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.4em] mb-3">Operator DNA</span>
@@ -687,7 +862,6 @@ const AdminDashboard: React.FC = () => {
                                                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" /></svg>
                                             </button>
                                         </div>
-
                                         <div className="space-y-10">
                                             <div>
                                                 <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-6 border-b border-white/5 pb-2">Module Utilization Profile</p>
@@ -699,16 +873,12 @@ const AdminDashboard: React.FC = () => {
                                                                 <span className="text-indigo-400 font-mono">{item.count}</span>
                                                             </div>
                                                             <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden shadow-inner">
-                                                                <div 
-                                                                    className="h-full bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.6)] transition-all duration-1000 ease-out" 
-                                                                    style={{ width: `${(item.count / focusedUser.totalActions) * 100}%` }}
-                                                                ></div>
+                                                                <div className="h-full bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.6)] transition-all duration-1000 ease-out" style={{ width: `${(item.count / focusedUser.totalActions) * 100}%` }}></div>
                                                             </div>
                                                         </div>
                                                     ))}
                                                 </div>
                                             </div>
-
                                             {focusedUser.lastAction && (
                                                 <div className="pt-10 border-t border-white/10">
                                                     <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-4">Last Protocol Access</p>
@@ -726,10 +896,30 @@ const AdminDashboard: React.FC = () => {
                                             <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                                         </div>
                                         <p className="text-sm font-black uppercase tracking-[0.2em] text-slate-400">Telemetry Disengaged</p>
-                                        <p className="text-[10px] text-slate-400 mt-3 font-medium px-8 leading-relaxed italic text-center">Select an operator from the table to inspect their specific module usage DNA.</p>
+                                        <p className="text-[10px] text-slate-400 mt-3 font-medium px-8 leading-relaxed italic text-center">Select an operator to inspect their module usage DNA.</p>
                                     </div>
                                 )}
                             </section>
+                        </div>
+                        
+                        <div className="pt-20 pb-32 border-t border-slate-100">
+                            <div className="bg-rose-50/30 rounded-[2.5rem] border-2 border-dashed border-rose-100 p-8 flex flex-col md:flex-row items-center justify-between gap-6">
+                                <div className="flex items-center gap-5">
+                                    <div className="w-12 h-12 bg-rose-100 rounded-2xl flex items-center justify-center text-rose-600 shadow-sm">
+                                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                    </div>
+                                    <div>
+                                        <h4 className="text-sm font-black text-rose-900 uppercase tracking-tight">Intelligence Danger Zone</h4>
+                                        <p className="text-[10px] font-bold text-rose-400 uppercase tracking-widest mt-1">Purge all production telemetry from the database</p>
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={purgeTelemetry}
+                                    className="px-8 py-3 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-2xl shadow-xl shadow-rose-200 transition-all active:scale-95"
+                                >
+                                    Reset Intelligence Database
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}
@@ -783,43 +973,79 @@ const AdminDashboard: React.FC = () => {
                 )}
 
                 {activeTab === 'config' && (
-                    <div className="p-10 space-y-10">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-slate-100 pb-8">
+                    <div className="p-10 space-y-12">
+                        <div className="flex flex-col md:flex-row md:items-start justify-between gap-10">
                             <div className="flex flex-col">
-                                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">System Protocols</h3>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Automatic Node Provisioning (Free Zone)</p>
+                                <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Node Rack Control</h3>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Free Tier & Emergency Overrides</p>
                             </div>
                             
-                            <div className="flex flex-col gap-2">
-                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] ml-1">Provisioning Term</label>
-                                <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-inner">
-                                    {PROMO_DURATIONS.map(d => (
-                                        <button 
-                                            key={d.value}
-                                            onClick={() => setPromoDuration(d.value)}
-                                            className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${promoDuration === d.value ? 'bg-white text-emerald-600 shadow-sm border border-emerald-100' : 'text-slate-400 hover:text-slate-600'}`}
-                                        >
-                                            {d.label}
-                                        </button>
-                                    ))}
+                            <div className="flex flex-col sm:flex-row gap-6 bg-slate-900 p-8 rounded-[2.5rem] shadow-2xl ring-4 ring-slate-800 relative overflow-hidden">
+                                <div className="absolute top-0 right-0 w-24 h-24 bg-white/5 rounded-bl-full"></div>
+                                <div className="flex flex-col gap-4 relative z-10">
+                                    <span className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.3em]">Master Overrides</span>
+                                    <div className="flex gap-3">
+                                        <button onClick={masterUnlock} className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-lg active:scale-95">Emergency Unlock All</button>
+                                        <button onClick={masterRevoke} className="px-6 py-3 bg-rose-600 hover:bg-rose-50 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-lg active:scale-95">Global Protocol Wipe</button>
+                                    </div>
+                                </div>
+                                <div className="w-px bg-white/10 hidden sm:block"></div>
+                                <div className="flex flex-col gap-4 relative z-10">
+                                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Term Config</span>
+                                    <div className="flex bg-white/5 p-1 rounded-xl border border-white/10">
+                                        {PROMO_DURATIONS.map(d => (
+                                            <button 
+                                                key={d.value}
+                                                onClick={() => setPromoDuration(d.value)}
+                                                className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${promoDuration === d.value ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+                                            >
+                                                {d.label}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
                             {Object.values(ToolId).filter(id => id !== 'dashboard' && id !== 'docs').map(tid => {
-                                const expiry = freeToolsData[tid]; const isFree = !!expiry && new Date(expiry) > new Date();
+                                const expiry = freeToolsData[tid]; 
+                                const isFree = !!expiry && new Date(expiry) > new Date();
+                                const usage24h = intelligenceMetrics.toolUsage24h[tid] || 0;
+                                const isHighUsage = usage24h > 10;
+                                
                                 return (
-                                    <div key={tid} onClick={() => toggleFreeTool(tid)} className={`p-8 rounded-[2rem] border-2 cursor-pointer transition-all flex items-center justify-between group ${isFree ? 'border-emerald-500 bg-emerald-50 shadow-lg' : 'border-slate-100 bg-white hover:border-slate-200'}`}>
-                                        <div className="flex flex-col">
-                                            <span className={`text-xs font-black uppercase ${isFree ? 'text-emerald-700' : 'text-slate-700'}`}>{getToolName(tid)}</span>
-                                            {isFree ? (
-                                                <span className="text-[9px] font-black text-emerald-600 mt-1 uppercase">EXPIRES: {new Date(expiry!).toLocaleDateString()}</span>
-                                            ) : (
-                                                <span className="text-[9px] font-bold text-slate-300 mt-1 uppercase">LOCKED STATUS</span>
-                                            )}
+                                    <div key={tid} onClick={() => toggleFreeTool(tid)} className={`p-8 rounded-[2.5rem] border-2 cursor-pointer transition-all flex flex-col justify-between group h-52 relative overflow-hidden ${isFree ? 'border-emerald-500 bg-emerald-50/30 shadow-lg' : 'border-slate-100 bg-white hover:border-slate-200'}`}>
+                                        <div className="flex justify-between items-start">
+                                            <div className="flex flex-col">
+                                                <span className={`text-xs font-black uppercase tracking-tight ${isFree ? 'text-emerald-700' : 'text-slate-700'}`}>{getToolName(tid)}</span>
+                                                <span className="text-[9px] font-mono text-slate-400 uppercase mt-0.5">{tid}</span>
+                                            </div>
+                                            <div className={`w-3 h-3 rounded-full border-2 ${isFree ? 'bg-emerald-500 border-emerald-600 animate-pulse' : 'bg-slate-200 border-slate-300'}`}></div>
                                         </div>
-                                        <div className={`w-10 h-5 rounded-full relative transition-colors border ${isFree ? 'bg-emerald-500 border-emerald-600' : 'bg-slate-200 border-slate-300'}`}><div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${isFree ? 'left-[22px]' : 'left-1'}`}></div></div>
+
+                                        <div className="flex flex-col gap-2">
+                                            <div className="flex items-center gap-3 h-6">
+                                                <div className={`px-3 py-1.5 rounded-xl border flex items-center gap-2 ${isHighUsage ? 'bg-emerald-100 border-emerald-200 text-emerald-700' : 'bg-slate-100 border-slate-200 text-slate-500'}`}>
+                                                    <span className={`w-1.5 h-1.5 rounded-full ${isHighUsage ? 'bg-emerald-500 animate-ping' : 'bg-slate-300'}`}></span>
+                                                    <span className="text-[10px] font-black">{usage24h} 24h Hits</span>
+                                                </div>
+                                                {isFree && (
+                                                    <div className="text-[9px] font-bold text-emerald-600 uppercase italic whitespace-nowrap">
+                                                        {getCountdown(expiry!)}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            
+                                            <div className="flex items-center justify-between mt-2">
+                                                <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${isFree ? 'text-emerald-500' : 'text-slate-300'}`}>
+                                                    {isFree ? 'Active Protocol' : 'Locked Node'}
+                                                </span>
+                                                <div className={`w-12 h-6 rounded-full relative transition-colors border-2 ${isFree ? 'bg-emerald-500 border-emerald-600' : 'bg-slate-200 border-slate-300'}`}>
+                                                    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all shadow-sm ${isFree ? 'left-[22px]' : 'left-1'}`}></div>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 );
                             })}
@@ -828,32 +1054,168 @@ const AdminDashboard: React.FC = () => {
                 )}
 
                 {activeTab === 'announcements' && (
-                    <div className="grid grid-cols-1 lg:grid-cols-3 divide-x divide-slate-200 h-full min-h-[600px]">
-                        <div className="p-8 bg-white border-r border-slate-100 flex flex-col">
-                            <div className="flex justify-between items-center mb-8">
-                                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{editingId ? 'Modify Stream' : 'Deploy Broadcast'}</h3>
-                                {editingId && (<button onClick={() => { setEditingId(null); setNewTitle(''); setNewContent(''); setNewType('info'); }} className="text-[9px] font-black text-rose-500 uppercase hover:underline tracking-widest">Discard Draft</button>)}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 divide-x divide-slate-200 h-full min-h-[700px] bg-slate-50/50">
+                        {/* SIGNAL TRANSMITTER PANEL */}
+                        <div className="p-10 bg-white border-r border-slate-200 flex flex-col shadow-inner">
+                            <div className="flex justify-between items-center mb-10">
+                                <div className="flex flex-col">
+                                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Signal Transmitter</h3>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mt-1">Deploy Global Broadcast</p>
+                                </div>
+                                {editingId && (
+                                    <button 
+                                        onClick={() => { setEditingId(null); setNewTitle(''); setNewContent(''); setNewType('info'); }} 
+                                        className="w-10 h-10 rounded-xl bg-rose-50 text-rose-500 border border-rose-100 flex items-center justify-center transition-all hover:bg-rose-500 hover:text-white"
+                                        title="Cancel Edit"
+                                    >
+                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
+                                    </button>
+                                )}
                             </div>
-                            <form onSubmit={saveAnnouncement} className="space-y-6 flex-grow">
-                                <div><label className="text-[9px] font-black text-slate-500 uppercase mb-2 block tracking-widest">Subject Line</label><input type="text" required value={newTitle} onChange={e => setNewTitle(e.target.value)} className="w-full rounded-xl border-slate-200 text-sm font-bold p-3 outline-none focus:ring-2 focus:ring-indigo-100" /></div>
-                                <div><label className="text-[9px] font-black text-slate-500 uppercase mb-2 block tracking-widest">Severity Layer</label><select value={newType} onChange={e => setNewType(e.target.value as any)} className="w-full rounded-xl border-slate-200 text-sm font-bold p-3 outline-none"><option value="info">General System Information</option><option value="warning">System Warning Alert</option><option value="success">Resolution Notice</option><option value="error">Maintenance Protocol</option></select></div>
-                                <div className="flex-grow flex flex-col"><label className="text-[9px] font-black text-slate-500 uppercase mb-2 block tracking-widest">Payload Content</label><textarea required value={newContent} onChange={e => setNewContent(e.target.value)} className="w-full flex-grow rounded-xl border-slate-200 text-sm font-medium p-4 outline-none resize-none leading-relaxed" rows={8} /></div>
-                                <button type="submit" className={`w-full text-white font-black py-4 rounded-xl uppercase text-xs tracking-widest shadow-xl active:scale-95 transition-all ${editingId ? 'bg-indigo-600' : 'bg-slate-900'}`}>{editingId ? 'Update & Push' : 'Initialize Broadcast'}</button>
+                            
+                            <form onSubmit={saveAnnouncement} className="space-y-8 flex-grow flex flex-col">
+                                <div className="space-y-2">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Subject Frequency</label>
+                                    <input 
+                                        type="text" 
+                                        required 
+                                        placeholder="SIGNAL_TITLE_KEY"
+                                        value={newTitle} 
+                                        onChange={e => setNewTitle(e.target.value)} 
+                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all placeholder-slate-300 font-mono" 
+                                    />
+                                </div>
+                                
+                                <div className="space-y-2">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Severity Layer</label>
+                                    <select 
+                                        value={newType} 
+                                        onChange={e => setNewType(e.target.value as any)} 
+                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all appearance-none"
+                                    >
+                                        <option value="info">STANDARD_PULSE (INFO)</option>
+                                        <option value="warning">ALERT_THRESHOLD (WARN)</option>
+                                        <option value="success">STABLE_RESOLUTION (OK)</option>
+                                        <option value="error">CRITICAL_EXCEPTION (ERROR)</option>
+                                    </select>
+                                </div>
+                                
+                                <div className="space-y-2 flex-grow flex flex-col">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Payload Content</label>
+                                    <textarea 
+                                        required 
+                                        placeholder="ENTER_TRANSMISSION_DATA..."
+                                        value={newContent} 
+                                        onChange={e => setNewContent(e.target.value)} 
+                                        className="w-full flex-grow bg-slate-50 border-2 border-slate-100 rounded-[2rem] px-6 py-5 text-sm font-medium text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all resize-none leading-relaxed placeholder-slate-300" 
+                                    />
+                                </div>
+                                
+                                <button 
+                                    type="submit" 
+                                    className={`w-full py-5 rounded-[2rem] font-black uppercase text-xs tracking-[0.3em] shadow-2xl transition-all active:scale-95 flex items-center justify-center gap-4 ${
+                                        editingId ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200' : 'bg-slate-900 hover:bg-slate-800 text-white shadow-slate-200'
+                                    }`}
+                                >
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                    {editingId ? 'Push Update' : 'Initialize Signal'}
+                                </button>
                             </form>
                         </div>
-                        <div className="lg:col-span-2 p-10 bg-slate-50/40 overflow-y-auto custom-scrollbar">
-                            <div className="mb-10"><h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.3em]">Transmission History</h3></div>
+
+                        {/* SIGNAL HISTORY FEED */}
+                        <div className="lg:col-span-2 p-12 overflow-y-auto custom-scrollbar">
+                            <div className="flex items-center justify-between mb-10">
+                                <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.4em]">Signal Logs</h3>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Master Frequency Stable</span>
+                                </div>
+                            </div>
+
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                {announcements.map(a => (
-                                    <div key={a.id} className={`group flex flex-col p-8 border-2 rounded-[2.5rem] bg-white transition-all shadow-sm relative ${a.is_active ? 'border-emerald-500 ring-4 ring-emerald-50' : 'border-slate-100 opacity-90'}`}>
-                                        {a.is_active && <div className="absolute -top-3 right-8 px-4 py-1 bg-emerald-500 text-white text-[9px] font-black uppercase tracking-widest rounded-full shadow-lg border-2 border-white">LIVE STREAMING</div>}
-                                        <div className="flex justify-between items-start mb-6"><div className={`px-2 py-0.5 rounded-lg text-[8px] font-black uppercase border ${a.type === 'warning' ? 'bg-amber-50 text-amber-600 border-amber-200' : (a.type === 'error' ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-indigo-50 text-indigo-600 border-indigo-200')}`}>{a.type}</div><div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => editAnnouncement(a)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg></button><button onClick={() => deleteAnnouncement(a.id)} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button></div></div>
-                                        <h4 className="font-black text-sm uppercase text-slate-900 mb-2 leading-tight">{a.title}</h4>
-                                        <p className="text-[11px] text-slate-500 mb-8 line-clamp-4 leading-relaxed font-medium flex-grow">{a.content}</p>
-                                        <button onClick={() => activateAnnouncement(a.id)} className={`w-full py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border-2 active:scale-[0.98] ${a.is_active ? 'bg-rose-50 border-rose-200 text-rose-600 hover:bg-rose-600 hover:text-white' : 'bg-emerald-50 border-emerald-200 text-emerald-600 hover:bg-emerald-600 hover:text-white shadow-md'}`}>{a.is_active ? 'TERMINATE STREAM' : 'ACTIVATE BROADCAST'}</button>
+                                {announcements.map(a => {
+                                    const typeColors = {
+                                        info: 'border-indigo-100 text-indigo-600 bg-indigo-50',
+                                        warning: 'border-amber-100 text-amber-600 bg-amber-50',
+                                        success: 'border-emerald-100 text-emerald-600 bg-emerald-50',
+                                        error: 'border-rose-100 text-rose-600 bg-rose-50'
+                                    };
+                                    const ledColors = {
+                                        info: 'bg-indigo-500',
+                                        warning: 'bg-amber-500',
+                                        success: 'bg-emerald-500',
+                                        error: 'bg-rose-500'
+                                    };
+                                    
+                                    return (
+                                        <div key={a.id} className={`group relative flex flex-col p-8 bg-white border-2 rounded-[2.5rem] transition-all duration-500 ${
+                                            a.is_active ? 'border-indigo-500 ring-8 ring-indigo-50 shadow-2xl' : 'border-slate-100 hover:border-slate-200 shadow-sm opacity-80 hover:opacity-100'
+                                        }`}>
+                                            {/* CARD HEADER */}
+                                            <div className="flex justify-between items-start mb-6">
+                                                <div className="flex flex-col gap-2">
+                                                    <div className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border w-max ${typeColors[a.type]}`}>
+                                                        {a.type}_TRANS
+                                                    </div>
+                                                    <div className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-tight">
+                                                        PKT_{a.id.slice(0, 8)}
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-2 group-hover:translate-x-0">
+                                                    <button onClick={() => editAnnouncement(a)} className="p-2.5 bg-slate-50 text-slate-400 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 border border-transparent hover:border-indigo-100 transition-all">
+                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                                    </button>
+                                                    <button onClick={() => deleteAnnouncement(a.id)} className="p-2.5 bg-slate-50 text-slate-400 rounded-xl hover:bg-rose-50 hover:text-rose-600 border border-transparent hover:border-rose-100 transition-all">
+                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* CARD BODY */}
+                                            <h4 className="text-lg font-black text-slate-900 mb-3 uppercase tracking-tight leading-none truncate pr-4">{a.title}</h4>
+                                            <div className="text-[12px] text-slate-500 font-medium leading-relaxed mb-10 flex-grow h-20 overflow-hidden line-clamp-4 italic">
+                                                {a.content}
+                                            </div>
+
+                                            {/* CARD FOOTER */}
+                                            <div className="mt-auto flex items-center justify-between border-t border-slate-50 pt-6">
+                                                <div className="flex flex-col">
+                                                    <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest leading-none mb-1">Time Marker</span>
+                                                    <span className="text-[10px] font-mono font-bold text-slate-500">{new Date(a.created_at).toLocaleString([], { hour12: false })}</span>
+                                                </div>
+
+                                                <button 
+                                                    onClick={() => activateAnnouncement(a.id)}
+                                                    className={`px-6 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] transition-all border-2 flex items-center gap-3 active:scale-95 ${
+                                                        a.is_active 
+                                                            ? 'bg-rose-50 border-rose-100 text-rose-600 hover:bg-rose-600 hover:text-white' 
+                                                            : 'bg-emerald-50 border-emerald-100 text-emerald-600 hover:bg-emerald-600 hover:text-white shadow-lg shadow-emerald-500/10'
+                                                    }`}
+                                                >
+                                                    <span className={`w-2 h-2 rounded-full ${a.is_active ? 'bg-rose-600 animate-pulse' : 'bg-emerald-600'}`}></span>
+                                                    {a.is_active ? 'Terminate' : 'Deploy'}
+                                                </button>
+                                            </div>
+
+                                            {/* LIVE BACKGROUND EFFECT */}
+                                            {a.is_active && (
+                                                <div className="absolute inset-0 rounded-[2.5rem] pointer-events-none overflow-hidden">
+                                                    <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-bl-full animate-pulse"></div>
+                                                    <div className="absolute top-2 left-10 text-[6px] font-black text-emerald-500/20 uppercase tracking-[1em] whitespace-nowrap">LIVE_DATA_STREAMING_SIGNAL_ACTIVE</div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                                
+                                {announcements.length === 0 && (
+                                    <div className="col-span-full py-40 text-center opacity-30 grayscale flex flex-col items-center justify-center">
+                                        <svg className="w-20 h-20 mb-6 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+                                        <p className="text-sm font-black uppercase tracking-[0.4em] text-slate-400">Signal Archive Empty</p>
                                     </div>
-                                ))}
-                                {announcements.length === 0 && <div className="col-span-full py-20 text-center opacity-40"><p className="text-xs font-bold uppercase tracking-widest text-slate-400">No archived transmissions</p></div>}
+                                )}
                             </div>
                         </div>
                     </div>
