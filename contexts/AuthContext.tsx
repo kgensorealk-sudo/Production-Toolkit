@@ -23,18 +23,26 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const SUPER_ADMIN_EMAIL = 'generalkevin53@gmail.com';
-const HEARTBEAT_INTERVAL = 60 * 1000; // Reduced to 60s for higher resolution node tracking
+const HEARTBEAT_INTERVAL = 60 * 1000; 
 
 /**
  * Resiliency Protocol: withRetry
- * Tuned for Vercel/Edge network conditions and Supabase cold starts.
+ * Explicitly handles 'signal is aborted' and 'aborted' messages to ensure 
+ * transient network issues don't crash the session.
  */
 async function withRetry<T>(fn: () => Promise<T>, retries = 5, delay = 1500): Promise<T> {
     try {
         return await fn();
     } catch (err: any) {
-        const shouldRetry = !err.status || err.status >= 500 || err.message === 'Failed to fetch' || err.message?.includes('network');
+        const errorMsg = err.message?.toLowerCase() || '';
+        const isAborted = errorMsg.includes('abort') || errorMsg.includes('signal');
+        const isNetwork = errorMsg === 'failed to fetch' || errorMsg.includes('network');
+        const isServerErr = !err.status || err.status >= 500;
+
+        const shouldRetry = isAborted || isNetwork || isServerErr;
+        
         if (retries > 0 && shouldRetry) {
+            console.warn(`RETRIEVING NODE SIGNAL... (${retries} left)`);
             await new Promise(r => setTimeout(r, delay));
             return withRetry(fn, retries - 1, delay * 1.5);
         }
@@ -54,6 +62,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const refreshingPromise = useRef<Promise<void> | null>(null);
     const initTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const wakeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const isAdmin = (
         user?.email === SUPER_ADMIN_EMAIL ||
@@ -170,23 +179,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     }, []);
 
-    // Wake-on-interaction Protocol:
-    // Ensures that if the app was suspended or throttled by the OS/Browser,
-    // it immediately re-synchronizes when the user returns.
     useEffect(() => {
-        const handleWake = async () => {
+        const handleWake = () => {
             if (document.visibilityState === 'visible' && user?.id) {
-                console.log("RE-ESTABLISHING NODE SYNC...");
-                // Verify session is still valid
-                const { data } = await (supabase.auth as any).getSession();
-                if (data?.session) {
-                    setSession(data.session);
-                    setUser(data.session.user);
-                    await Promise.allSettled([fetchProfile(user.id), fetchFreeTools()]);
-                } else {
-                    // Session lost or expired during sleep
-                    signOut(true);
-                }
+                if (wakeDebounceRef.current) clearTimeout(wakeDebounceRef.current);
+                
+                wakeDebounceRef.current = setTimeout(async () => {
+                    console.log("RE-ESTABLISHING NODE SYNC...");
+                    try {
+                        const { data } = await (supabase.auth as any).getSession();
+                        if (data?.session) {
+                            setSession(data.session);
+                            setUser(data.session.user);
+                            await Promise.allSettled([fetchProfile(user.id), fetchFreeTools()]);
+                        } else {
+                            signOut(true);
+                        }
+                    } catch (err) {
+                        console.warn("Wake sync failed - node disconnected.");
+                    }
+                }, 1000); // 1s debounce to prevent hammer on tab switch
             }
         };
 
@@ -195,14 +207,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return () => {
             window.removeEventListener('visibilitychange', handleWake);
             window.removeEventListener('focus', handleWake);
+            if (wakeDebounceRef.current) clearTimeout(wakeDebounceRef.current);
         };
     }, [user?.id, fetchProfile, fetchFreeTools, signOut]);
 
-    // REAL-TIME PROTOCOL SUBSCRIPTION
     useEffect(() => {
         if (!session) return;
 
-        // Listen for Global System Settings Changes
         const systemChannel = supabase
             .channel('system-logic-sync')
             .on(
@@ -215,7 +226,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             )
             .subscribe();
 
-        // Listen for User Profile Changes (forced expirations, admin overrides)
         const profileChannel = supabase
             .channel(`user-sync-${user.id}`)
             .on(

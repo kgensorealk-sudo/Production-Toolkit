@@ -118,6 +118,7 @@ const AdminDashboard: React.FC = () => {
     const [focusedUserId, setFocusedUserId] = useState<string | null>(null);
     
     const [promoDuration, setPromoDuration] = useState<number>(7);
+    const lastSyncTimeRef = useRef<number>(Date.now());
 
     const [confirmConfig, setConfirmConfig] = useState<{
         isOpen: boolean; title: string; message: string; confirmLabel?: string; type: 'primary' | 'danger'; onConfirm: () => void;
@@ -171,19 +172,19 @@ const AdminDashboard: React.FC = () => {
         } finally { setIsLoading(false); }
     }, []);
 
-    const fetchAccessKeys = useCallback(async () => {
-        setIsLoading(true);
+    const fetchAccessKeys = useCallback(async (isSilent = false) => {
+        if (!isSilent) setIsLoading(true);
         try {
             const { data, error } = await supabase.from('access_keys').select('*').order('created_at', { ascending: false });
             if (error) throw error;
             setAccessKeys(data || []);
         } catch (error: any) {
-            setToast({ msg: `Key database fetch failed: ${error.message}`, type: 'error' });
+            if (!isSilent) setToast({ msg: `Key database fetch failed: ${error.message}`, type: 'error' });
         } finally { setIsLoading(false); }
     }, []);
 
-    const fetchIntelligence = useCallback(async () => {
-        setIsLoading(true);
+    const fetchIntelligence = useCallback(async (isSilent = false) => {
+        if (!isSilent) setIsLoading(true);
         try {
             const { data, error } = await supabase.from('usage_logs').select('*').order('timestamp', { ascending: false });
             if (error) throw error;
@@ -193,15 +194,61 @@ const AdminDashboard: React.FC = () => {
         } finally { setIsLoading(false); }
     }, []);
 
+    const fetchAnnouncements = useCallback(async (isSilent = false) => {
+        if (!isSilent) setIsLoading(true);
+        try {
+            const { data, error } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
+            if (error) throw error;
+            setAnnouncements(data || []);
+        } catch (error: any) { 
+            if (!isSilent) setToast({ msg: 'Broadcast fetch failed', type: 'error' }); 
+        } finally { setIsLoading(false); }
+    }, []);
+
+    /**
+     * WAKE-ON-FOCUS SYNC PROTOCOL
+     * Automatically reconciles the active tab's data whenever the admin returns to the app.
+     */
+    const refreshActiveTab = useCallback(async (isSilent = true) => {
+        // Prevent excessive hammering (min 3s gap)
+        if (Date.now() - lastSyncTimeRef.current < 3000) return;
+        lastSyncTimeRef.current = Date.now();
+
+        if (activeTab === 'users') await fetchUsers(isSilent);
+        else if (activeTab === 'announcements') await fetchAnnouncements(isSilent);
+        else if (activeTab === 'keys') { await Promise.all([fetchUsers(true), fetchAccessKeys(isSilent)]); }
+        else if (activeTab === 'config') { await Promise.all([fetchIntelligence(true), refreshFreeTools()]); }
+        else if (activeTab === 'intelligence') await fetchIntelligence(isSilent);
+    }, [activeTab, fetchUsers, fetchAnnouncements, fetchAccessKeys, refreshFreeTools, fetchIntelligence]);
+
+    useEffect(() => {
+        const handleWake = () => {
+            if (document.visibilityState === 'visible') {
+                refreshActiveTab(true);
+            }
+        };
+        window.addEventListener('visibilitychange', handleWake);
+        window.addEventListener('focus', handleWake);
+        return () => {
+            window.removeEventListener('visibilitychange', handleWake);
+            window.removeEventListener('focus', handleWake);
+        };
+    }, [refreshActiveTab]);
+
+    useEffect(() => {
+        refreshActiveTab(false);
+    }, [activeTab]); // Trigger full reload when tab changes
+
     const systemHardReset = async () => {
         setIsLoading(true);
         try {
             await Promise.all([
                 refreshProfile(),
                 refreshFreeTools(),
-                fetchUsers(),
-                fetchAccessKeys(),
-                fetchIntelligence()
+                fetchUsers(true),
+                fetchAccessKeys(true),
+                fetchIntelligence(true),
+                fetchAnnouncements(true)
             ]);
             setToast({ msg: "System Integrity Synchronized.", type: "success" });
         } catch (e: any) {
@@ -285,23 +332,6 @@ const AdminDashboard: React.FC = () => {
             }
         });
     };
-
-    const fetchAnnouncements = useCallback(async () => {
-        setIsLoading(true);
-        try {
-            const { data, error } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
-            if (error) throw error;
-            setAnnouncements(data || []);
-        } catch (error: any) { setToast({ msg: 'Broadcast fetch failed', type: 'error' }); } finally { setIsLoading(false); }
-    }, []);
-
-    useEffect(() => {
-        if (activeTab === 'users') fetchUsers();
-        else if (activeTab === 'announcements') fetchAnnouncements();
-        else if (activeTab === 'keys') { fetchUsers(true); fetchAccessKeys(); }
-        else if (activeTab === 'config') { fetchIntelligence(); refreshFreeTools(); }
-        else if (activeTab === 'intelligence') fetchIntelligence();
-    }, [activeTab, fetchUsers, fetchAnnouncements, fetchAccessKeys, refreshFreeTools, fetchIntelligence]);
 
     const toggleSubscription = async (user: UserProfile) => {
         const newVal = !user.is_subscribed;
@@ -426,21 +456,6 @@ const AdminDashboard: React.FC = () => {
         } catch (err: any) { setToast({ msg: 'Broadcast failed to save', type: 'error' }); } finally { setIsLoading(false); }
     };
 
-    const deleteAnnouncement = (id: string) => {
-        setConfirmConfig({
-            isOpen: true, title: 'Delete Broadcast', message: 'Are you sure?', confirmLabel: 'Delete', type: 'danger',
-            onConfirm: async () => {
-                setIsLoading(true);
-                try {
-                    const { error } = await supabase.from('announcements').delete().eq('id', id);
-                    if (error) throw error;
-                    setAnnouncements(prev => prev.filter(a => a.id !== id));
-                    setToast({ msg: 'Broadcast purged', type: 'success' });
-                } catch (err: any) { setToast({ msg: 'Deletion failed', type: 'error' }); } finally { setIsLoading(false); }
-            }
-        });
-    };
-
     const editAnnouncement = (a: Announcement) => { setEditingId(a.id); setNewTitle(a.title); setNewContent(a.content); setNewType(a.type); };
 
     const activateAnnouncement = async (id: string) => {
@@ -455,6 +470,30 @@ const AdminDashboard: React.FC = () => {
             setAnnouncements(prev => prev.map(a => (a.id === id ? { ...a, is_active: nextStatus } : (nextStatus ? { ...a, is_active: false } : a))));
             setToast({ msg: nextStatus ? 'Broadcast Live' : 'Broadcast Halted', type: 'success' });
         } catch (err: any) { setToast({ msg: 'State update failed', type: 'error' }); } finally { setIsLoading(false); }
+    };
+
+    // Added missing deleteAnnouncement function to fix reference error
+    const deleteAnnouncement = async (id: string) => {
+        setConfirmConfig({
+            isOpen: true,
+            title: 'Delete Broadcast',
+            message: 'Permanently remove this announcement from the system?',
+            confirmLabel: 'Delete',
+            type: 'danger',
+            onConfirm: async () => {
+                setIsLoading(true);
+                try {
+                    const { error } = await supabase.from('announcements').delete().eq('id', id);
+                    if (error) throw error;
+                    setAnnouncements(prev => prev.filter(a => a.id !== id));
+                    setToast({ msg: 'Broadcast purged', type: 'success' });
+                } catch (err: any) { 
+                    setToast({ msg: 'Deletion failed', type: 'error' }); 
+                } finally { 
+                    setIsLoading(false); 
+                }
+            }
+        });
     };
 
     const activeNodesCount = users.filter(u => {
@@ -835,7 +874,7 @@ const AdminDashboard: React.FC = () => {
                             </div>
                             
                             <div className="flex items-center gap-4">
-                                <button onClick={fetchIntelligence} className="p-2.5 bg-white border border-slate-200 rounded-xl text-slate-400 hover:text-indigo-600 transition-all shadow-sm" title="Refresh Live Data">
+                                <button onClick={() => refreshActiveTab(false)} className="p-2.5 bg-white border border-slate-200 rounded-xl text-slate-400 hover:text-indigo-600 transition-all shadow-sm" title="Refresh Live Data">
                                     <svg className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                                 </button>
                                 <button onClick={exportRawTelemetry} className="px-6 py-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-black text-slate-500 uppercase tracking-widest hover:bg-slate-50 shadow-sm transition-all flex items-center gap-2">

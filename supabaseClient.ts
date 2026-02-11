@@ -1,4 +1,3 @@
-
 import { createClient } from '@supabase/supabase-js';
 
 // Project ID: jtrvpqxhjqpifglrhbzu
@@ -8,6 +7,7 @@ const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 /**
  * PRODUCTION READY: Cloud-Optimized Supabase Client.
  * Re-enabled detectSessionInUrl for Vercel/Web auth compatibility.
+ * Removed keepalive:true to prevent 'signal aborted' errors on large XML payloads.
  */
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
@@ -23,12 +23,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     }
   },
   global: {
-    headers: { 'x-application-name': 'production-toolkit-pro-web' },
-    fetch: (url, options) => {
-      return fetch(url, {
-        ...options,
-        keepalive: true, // Ensures requests complete during tab transitions
-      });
-    }
+    headers: { 'x-application-name': 'production-toolkit-pro-web' }
   }
 });
