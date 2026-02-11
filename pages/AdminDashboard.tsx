@@ -169,7 +169,9 @@ const AdminDashboard: React.FC = () => {
             }
         } catch (error: any) {
             if (!isSilent) setToast({ msg: `Personnel fetch failed: ${error.message}`, type: 'error' });
-        } finally { setIsLoading(false); }
+        } finally { 
+            if (!isSilent) setIsLoading(false); 
+        }
     }, []);
 
     const fetchAccessKeys = useCallback(async (isSilent = false) => {
@@ -180,7 +182,9 @@ const AdminDashboard: React.FC = () => {
             setAccessKeys(data || []);
         } catch (error: any) {
             if (!isSilent) setToast({ msg: `Key database fetch failed: ${error.message}`, type: 'error' });
-        } finally { setIsLoading(false); }
+        } finally { 
+            if (!isSilent) setIsLoading(false); 
+        }
     }, []);
 
     const fetchIntelligence = useCallback(async (isSilent = false) => {
@@ -191,7 +195,9 @@ const AdminDashboard: React.FC = () => {
             setUsageLogs(data || []);
         } catch (error: any) {
             console.warn("Usage logs sync pending.");
-        } finally { setIsLoading(false); }
+        } finally { 
+            if (!isSilent) setIsLoading(false); 
+        }
     }, []);
 
     const fetchAnnouncements = useCallback(async (isSilent = false) => {
@@ -202,23 +208,24 @@ const AdminDashboard: React.FC = () => {
             setAnnouncements(data || []);
         } catch (error: any) { 
             if (!isSilent) setToast({ msg: 'Broadcast fetch failed', type: 'error' }); 
-        } finally { setIsLoading(false); }
+        } finally { 
+            if (!isSilent) setIsLoading(false); 
+        }
     }, []);
 
-    /**
-     * WAKE-ON-FOCUS SYNC PROTOCOL
-     * Automatically reconciles the active tab's data whenever the admin returns to the app.
-     */
     const refreshActiveTab = useCallback(async (isSilent = true) => {
-        // Prevent excessive hammering (min 3s gap)
         if (Date.now() - lastSyncTimeRef.current < 3000) return;
         lastSyncTimeRef.current = Date.now();
 
-        if (activeTab === 'users') await fetchUsers(isSilent);
-        else if (activeTab === 'announcements') await fetchAnnouncements(isSilent);
-        else if (activeTab === 'keys') { await Promise.all([fetchUsers(true), fetchAccessKeys(isSilent)]); }
-        else if (activeTab === 'config') { await Promise.all([fetchIntelligence(true), refreshFreeTools()]); }
-        else if (activeTab === 'intelligence') await fetchIntelligence(isSilent);
+        try {
+            if (activeTab === 'users') await fetchUsers(isSilent);
+            else if (activeTab === 'announcements') await fetchAnnouncements(isSilent);
+            else if (activeTab === 'keys') { await Promise.all([fetchUsers(true), fetchAccessKeys(isSilent)]); }
+            else if (activeTab === 'config') { await Promise.all([fetchIntelligence(true), refreshFreeTools()]); }
+            else if (activeTab === 'intelligence') await fetchIntelligence(isSilent);
+        } catch (e) {
+            console.error("Silent sync failed:", e);
+        }
     }, [activeTab, fetchUsers, fetchAnnouncements, fetchAccessKeys, refreshFreeTools, fetchIntelligence]);
 
     useEffect(() => {
@@ -237,7 +244,7 @@ const AdminDashboard: React.FC = () => {
 
     useEffect(() => {
         refreshActiveTab(false);
-    }, [activeTab]); // Trigger full reload when tab changes
+    }, [activeTab]); 
 
     const systemHardReset = async () => {
         setIsLoading(true);
@@ -472,7 +479,6 @@ const AdminDashboard: React.FC = () => {
         } catch (err: any) { setToast({ msg: 'State update failed', type: 'error' }); } finally { setIsLoading(false); }
     };
 
-    // Added missing deleteAnnouncement function to fix reference error
     const deleteAnnouncement = async (id: string) => {
         setConfirmConfig({
             isOpen: true,

@@ -27,22 +27,38 @@ const HEARTBEAT_INTERVAL = 60 * 1000;
 
 /**
  * Resiliency Protocol: withRetry
- * Explicitly handles 'signal is aborted' and 'aborted' messages to ensure 
- * transient network issues don't crash the session.
+ * Updated to handle Auth Failures gracefully. If a 401/403 or JWT error occurs,
+ * we immediately throw to prevent the UI from sticking in a loading state.
  */
 async function withRetry<T>(fn: () => Promise<T>, retries = 5, delay = 1500): Promise<T> {
     try {
         return await fn();
     } catch (err: any) {
+        const status = err.status || err.code;
         const errorMsg = err.message?.toLowerCase() || '';
+
+        // HARD EXIT: Unauthorized, Forbidden, or JWT errors should NEVER retry.
+        const isAuthFailure = 
+            status === 401 || 
+            status === 403 || 
+            errorMsg.includes('jwt') || 
+            errorMsg.includes('expired') || 
+            errorMsg.includes('unauthorized') ||
+            errorMsg.includes('token');
+
+        if (isAuthFailure) {
+            console.error("CRITICAL_AUTH_FAILURE: Terminating retry loop.", err);
+            throw err;
+        }
+
         const isAborted = errorMsg.includes('abort') || errorMsg.includes('signal');
         const isNetwork = errorMsg === 'failed to fetch' || errorMsg.includes('network');
-        const isServerErr = !err.status || err.status >= 500;
+        const isServerErr = !status || status >= 500;
 
         const shouldRetry = isAborted || isNetwork || isServerErr;
         
         if (retries > 0 && shouldRetry) {
-            console.warn(`RETRIEVING NODE SIGNAL... (${retries} left)`);
+            console.warn(`RETRIEVING NODE SIGNAL... (${retries} left). Reason: ${errorMsg}`);
             await new Promise(r => setTimeout(r, delay));
             return withRetry(fn, retries - 1, delay * 1.5);
         }
@@ -156,6 +172,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 updateLastSeen(userId);
             } catch (e) {
                 console.error("CRITICAL_SYNC_FAILURE:", e);
+                // If it's an auth sync failure, we don't want to lock the UI
+                throw e;
             } finally {
                 setIsWakingUp(false);
                 refreshingPromise.current = null;
@@ -198,7 +216,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     } catch (err) {
                         console.warn("Wake sync failed - node disconnected.");
                     }
-                }, 1000); // 1s debounce to prevent hammer on tab switch
+                }, 1000); 
             }
         };
 
@@ -233,7 +251,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` },
                 () => {
                     console.log('REALTIME_IDENTITY_SYNC: Triggering profile refresh...');
-                    fetchProfile(user.id);
+                    fetchProfile(user.id).catch(() => {});
                 }
             )
             .subscribe();
@@ -284,8 +302,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setLoading(false);
             } else if (event === 'SIGNED_IN' && newSession?.user) {
                 setSession(newSession); setUser(newSession.user);
-                await fetchProfile(newSession.user.id);
-                await fetchFreeTools();
+                fetchProfile(newSession.user.id).catch(() => {});
+                fetchFreeTools().catch(() => {});
                 setLoading(false);
             }
         });
