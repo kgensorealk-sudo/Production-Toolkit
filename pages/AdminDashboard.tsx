@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
-import { UserProfile, ToolId } from '../types';
+import { UserProfile, ToolId, ToolAccessMode } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
@@ -97,7 +97,7 @@ const AdminDashboard: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'users' | 'keys' | 'announcements' | 'config' | 'intelligence'>('users');
     const [isLoading, setIsLoading] = useState(false);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
-    const { freeToolsData, refreshFreeTools } = useAuth();
+    const { freeToolsData, toolAccessConfigs, refreshFreeTools } = useAuth();
 
     const [users, setUsers] = useState<UserProfile[]>([]);
     const [search, setSearch] = useState('');
@@ -281,6 +281,49 @@ const AdminDashboard: React.FC = () => {
             await refreshFreeTools();
             setToast({ msg: `System protocol synchronized (${promoDuration}d Promo)`, type: 'success' });
         } catch (err) { setToast({ msg: 'Protocol update rejected', type: 'error' }); } finally { setIsLoading(false); }
+    };
+
+    const updateToolAccessMode = async (tid: string, mode: ToolAccessMode) => {
+        setIsLoading(true);
+        try {
+            // 1. Fetch latest config with explicit check for the global row
+            const { data: latest, error: fetchError } = await supabase
+                .from('system_settings')
+                .select('tool_access_configs')
+                .eq('id', 'global')
+                .maybeSingle();
+            
+            if (fetchError) throw fetchError;
+
+            // 2. Prepare next state (merge with existing or use empty object)
+            const nextConfigs = { ...(latest?.tool_access_configs || {}) };
+            nextConfigs[tid] = mode;
+            
+            // 3. Upsert into database
+            const { error: upsertError } = await supabase
+                .from('system_settings')
+                .upsert({ 
+                    id: 'global', 
+                    tool_access_configs: nextConfigs, 
+                    updated_at: new Date().toISOString() 
+                }, { onConflict: 'id' });
+
+            if (upsertError) throw upsertError;
+
+            // 4. Update UI context
+            await refreshFreeTools();
+            setToast({ msg: `${getToolName(tid)} set to ${mode.replace(/_/g, ' ')} mode.`, type: 'success' });
+        } catch (err: any) { 
+            console.error("Matrix Update Failure Details:", err);
+            // Specific check for "column does not exist" error 42703
+            if (err.code === '42703') {
+                setToast({ msg: 'Structural mismatch: Please run the SQL migration script in Supabase dashboard.', type: 'error' });
+            } else {
+                setToast({ msg: `Update rejected: ${err.message || 'Check database permissions'}`, type: 'error' }); 
+            }
+        } finally { 
+            setIsLoading(false); 
+        }
     };
 
     const generateKeys = async () => {
@@ -503,7 +546,6 @@ const AdminDashboard: React.FC = () => {
 
                 {activeTab === 'intelligence' && (
                     <div className="p-8 lg:p-12 space-y-12 animate-fade-in">
-                        {/* Intelligence Range Selector */}
                         <div className="flex flex-col sm:flex-row items-center justify-between gap-6 bg-slate-50 p-8 rounded-[2.5rem] border border-slate-200 shadow-inner">
                             <div className="flex items-center gap-5">
                                 <div className="w-14 h-14 bg-purple-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-purple-500/30">
@@ -543,7 +585,6 @@ const AdminDashboard: React.FC = () => {
                         </section>
 
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
-                            {/* POPULARITY LEADERBOARD */}
                             <section>
                                 <div className="flex items-center gap-4 mb-8">
                                     <div className="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center text-purple-600 shadow-sm border border-purple-100">
@@ -581,6 +622,7 @@ const AdminDashboard: React.FC = () => {
                                                     ></div>
                                                 </div>
                                             </div>
+<<<<<<< HEAD
                                         );
                                     })}
                                     {intelligenceMetrics.globalRanking.length === 0 && (
@@ -588,10 +630,19 @@ const AdminDashboard: React.FC = () => {
                                             <p className="text-xs font-bold uppercase tracking-widest text-slate-400">No protocol traffic recorded for this window</p>
                                         </div>
                                     )}
+=======
+                                            <div className="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden shadow-inner border border-slate-200/50">
+                                                <div 
+                                                    className="h-full bg-gradient-to-r from-indigo-500 to-purple-600 transition-all duration-1000 ease-out" 
+                                                    style={{ width: `${Math.min(100, (tool.count / Math.max(1, intelligenceMetrics.filteredTotal)) * 500)}%` }}
+                                                ></div>
+                                            </div>
+                                        </div>
+                                    ))}
+>>>>>>> 70e2fdb357f2296786bf1d729e0cb7ee40abc4a7
                                 </div>
                             </section>
 
-                            {/* RARELY USED */}
                             <section>
                                 <div className="flex items-center gap-4 mb-8">
                                     <div className="w-10 h-10 bg-rose-50 rounded-xl flex items-center justify-center text-rose-600 shadow-sm border border-rose-100">
@@ -615,114 +666,6 @@ const AdminDashboard: React.FC = () => {
                                         </div>
                                     )}
                                 </div>
-                            </section>
-                        </div>
-
-                        {/* STAFF ENGAGEMENT & USER BREAKDOWN */}
-                        <div className="grid grid-cols-1 xl:grid-cols-3 gap-10">
-                            {/* TABLE */}
-                            <section className="xl:col-span-2">
-                                <div className="flex items-center gap-4 mb-8">
-                                    <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 shadow-sm border border-indigo-100">
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-                                    </div>
-                                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Personnel Engagement Audit</h3>
-                                </div>
-                                <div className="overflow-x-auto shadow-sm rounded-3xl border border-slate-200">
-                                    <table className="min-w-full divide-y divide-slate-100 bg-slate-50/30">
-                                        <thead className="bg-white/80 backdrop-blur-sm">
-                                            <tr>
-                                                <th className="px-8 py-5 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Operator</th>
-                                                <th className="px-8 py-5 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Primary Protocol</th>
-                                                <th className="px-8 py-5 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">Action Index</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-100">
-                                            {intelligenceMetrics.userAffinities.map((ua) => (
-                                                <tr 
-                                                    key={ua.id} 
-                                                    onClick={() => setFocusedUserId(ua.id)}
-                                                    className={`cursor-pointer transition-all ${focusedUserId === ua.id ? 'bg-indigo-600 ring-4 ring-indigo-100' : 'hover:bg-white'}`}
-                                                >
-                                                    <td className={`px-8 py-5 text-sm font-bold ${focusedUserId === ua.id ? 'text-white' : 'text-slate-900'}`}>{ua.email}</td>
-                                                    <td className="px-8 py-5">
-                                                        <span className={`px-4 py-1.5 text-[10px] font-black rounded-xl shadow-sm uppercase tracking-tighter border ${focusedUserId === ua.id ? 'bg-white/10 border-white/20 text-white' : 'bg-white border-indigo-100 text-indigo-600'}`}>
-                                                            {ua.topTool}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-8 py-5 text-center">
-                                                        <span className={`text-[11px] font-mono font-bold ${focusedUserId === ua.id ? 'text-indigo-200' : 'text-slate-500'}`}>{ua.totalActions} logged</span>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                            {intelligenceMetrics.userAffinities.length === 0 && (
-                                                <tr>
-                                                    <td colSpan={3} className="px-8 py-20 text-center opacity-30">
-                                                        <p className="text-xs font-black uppercase tracking-widest text-slate-400">No personnel logs for this window</p>
-                                                    </td>
-                                                </tr>
-                                            )}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </section>
-
-                            {/* FOCUS CARD */}
-                            <section className="xl:col-span-1">
-                                {focusedUser ? (
-                                    <div className="bg-slate-900 rounded-[2.5rem] p-10 text-white shadow-2xl shadow-slate-900/40 sticky top-12 animate-slide-up ring-4 ring-slate-800">
-                                        <div className="flex justify-between items-start mb-12">
-                                            <div className="flex flex-col">
-                                                <span className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.4em] mb-3">Operator DNA</span>
-                                                <h4 className="text-2xl font-black truncate max-w-[200px] uppercase tracking-tighter leading-none">{focusedUser.email.split('@')[0]}</h4>
-                                                <p className="text-[10px] text-slate-500 truncate lowercase mt-2 font-mono">{focusedUser.email}</p>
-                                            </div>
-                                            <button onClick={() => setFocusedUserId(null)} className="p-3 hover:bg-white/10 rounded-2xl transition-colors text-slate-500 hover:text-white border border-white/10">
-                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" /></svg>
-                                            </button>
-                                        </div>
-
-                                        <div className="space-y-10">
-                                            <div>
-                                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-6 border-b border-white/5 pb-2">Module Utilization Profile</p>
-                                                <div className="space-y-6">
-                                                    {focusedUser.breakdown.map((item, i) => (
-                                                        <div key={i} className="group">
-                                                            <div className="flex justify-between text-[11px] font-bold mb-2.5">
-                                                                <span className="text-slate-300 group-hover:text-white transition-colors uppercase tracking-wider">{item.name}</span>
-                                                                <span className="text-indigo-400 font-mono">{item.count}</span>
-                                                            </div>
-                                                            <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden shadow-inner">
-                                                                <div 
-                                                                    className="h-full bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.6)] transition-all duration-1000 ease-out" 
-                                                                    style={{ width: `${(item.count / focusedUser.totalActions) * 100}%` }}
-                                                                ></div>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-
-                                            {focusedUser.lastAction && (
-                                                <div className="pt-10 border-t border-white/10">
-                                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-4">Last Protocol Access</p>
-                                                    <div className="p-5 bg-white/5 rounded-3xl border border-white/5 shadow-inner">
-                                                        <span className="text-[11px] font-black text-indigo-300 block mb-2 uppercase tracking-widest">{getToolName(focusedUser.lastAction.tool)}</span>
-                                                        <span className="text-[10px] text-slate-500 font-mono italic">{new Date(focusedUser.lastAction.time).toLocaleString()}</span>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="h-full flex flex-col items-center justify-center p-12 text-center bg-slate-50 rounded-[2.5rem] border-2 border-dashed border-slate-200 opacity-60">
-                                        <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center text-slate-300 mb-6 shadow-sm border border-slate-100">
-                                            <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                                        </div>
-                                        <p className="text-sm font-black uppercase tracking-[0.2em] text-slate-400">Telemetry Disengaged</p>
-                                        <p className="text-[10px] text-slate-400 mt-3 font-medium px-8 leading-relaxed italic text-center">Select an operator from the table to inspect their specific module usage DNA.</p>
-                                    </div>
-                                )}
                             </section>
                         </div>
                     </div>
@@ -773,46 +716,113 @@ const AdminDashboard: React.FC = () => {
                 )}
 
                 {activeTab === 'config' && (
-                    <div className="p-10 space-y-10">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-slate-100 pb-8">
-                            <div className="flex flex-col">
-                                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">System Protocols</h3>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Automatic Node Provisioning (Free Zone)</p>
-                            </div>
-                            
-                            <div className="flex flex-col gap-2">
-                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] ml-1">Provisioning Term</label>
-                                <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-inner">
-                                    {PROMO_DURATIONS.map(d => (
-                                        <button 
-                                            key={d.value}
-                                            onClick={() => setPromoDuration(d.value)}
-                                            className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${promoDuration === d.value ? 'bg-white text-emerald-600 shadow-sm border border-emerald-100' : 'text-slate-400 hover:text-slate-600'}`}
-                                        >
-                                            {d.label}
-                                        </button>
-                                    ))}
+                    <div className="p-10 space-y-12">
+                        <div className="space-y-6">
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-slate-100 pb-8">
+                                <div className="flex flex-col">
+                                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">System Protocols</h3>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Automatic Node Provisioning (Free Zone)</p>
                                 </div>
+                                
+                                <div className="flex flex-col gap-2">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] ml-1">Provisioning Term</label>
+                                    <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-inner">
+                                        {PROMO_DURATIONS.map(d => (
+                                            <button 
+                                                key={d.value}
+                                                onClick={() => setPromoDuration(d.value)}
+                                                className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${promoDuration === d.value ? 'bg-white text-emerald-600 shadow-sm border border-emerald-100' : 'text-slate-400 hover:text-slate-600'}`}
+                                            >
+                                                {d.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {Object.values(ToolId).filter(id => id !== 'dashboard' && id !== 'docs').map(tid => {
+                                    const expiry = freeToolsData[tid]; const isFree = !!expiry && new Date(expiry) > new Date();
+                                    return (
+                                        <div key={tid} onClick={() => toggleFreeTool(tid)} className={`p-6 rounded-[1.5rem] border-2 cursor-pointer transition-all flex items-center justify-between group ${isFree ? 'border-emerald-500 bg-emerald-50 shadow-lg' : 'border-slate-100 bg-white hover:border-slate-200'}`}>
+                                            <div className="flex flex-col">
+                                                <span className={`text-xs font-black uppercase ${isFree ? 'text-emerald-700' : 'text-slate-700'}`}>{getToolName(tid)}</span>
+                                                {isFree ? (
+                                                    <span className="text-[9px] font-black text-emerald-600 mt-1 uppercase">EXPIRES: {new Date(expiry!).toLocaleDateString()}</span>
+                                                ) : (
+                                                    <span className="text-[9px] font-bold text-slate-300 mt-1 uppercase">LOCKED STATUS</span>
+                                                )}
+                                            </div>
+                                            <div className={`w-10 h-5 rounded-full relative transition-colors border ${isFree ? 'bg-emerald-500 border-emerald-600' : 'bg-slate-200 border-slate-300'}`}><div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${isFree ? 'left-[22px]' : 'left-1'}`}></div></div>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {Object.values(ToolId).filter(id => id !== 'dashboard' && id !== 'docs').map(tid => {
-                                const expiry = freeToolsData[tid]; const isFree = !!expiry && new Date(expiry) > new Date();
-                                return (
-                                    <div key={tid} onClick={() => toggleFreeTool(tid)} className={`p-8 rounded-[2rem] border-2 cursor-pointer transition-all flex items-center justify-between group ${isFree ? 'border-emerald-500 bg-emerald-50 shadow-lg' : 'border-slate-100 bg-white hover:border-slate-200'}`}>
-                                        <div className="flex flex-col">
-                                            <span className={`text-xs font-black uppercase ${isFree ? 'text-emerald-700' : 'text-slate-700'}`}>{getToolName(tid)}</span>
-                                            {isFree ? (
-                                                <span className="text-[9px] font-black text-emerald-600 mt-1 uppercase">EXPIRES: {new Date(expiry!).toLocaleDateString()}</span>
-                                            ) : (
-                                                <span className="text-[9px] font-bold text-slate-300 mt-1 uppercase">LOCKED STATUS</span>
-                                            )}
-                                        </div>
-                                        <div className={`w-10 h-5 rounded-full relative transition-colors border ${isFree ? 'bg-emerald-500 border-emerald-600' : 'bg-slate-200 border-slate-300'}`}><div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${isFree ? 'left-[22px]' : 'left-1'}`}></div></div>
-                                    </div>
-                                );
-                            })}
+                        <div className="space-y-6 pt-10 border-t border-slate-100">
+                            <div className="flex flex-col">
+                                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Access Control Matrix</h3>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Configure Mandatory Authorization Logic per Protocol</p>
+                            </div>
+
+                            <div className="bg-white border border-slate-200 rounded-[2rem] overflow-hidden shadow-sm">
+                                <table className="min-w-full divide-y divide-slate-100">
+                                    <thead className="bg-slate-50 font-black text-slate-400 uppercase tracking-widest text-[9px]">
+                                        <tr>
+                                            <th className="px-8 py-5 text-left">Module Identification</th>
+                                            <th className="px-8 py-5 text-center">Subscription Only</th>
+                                            <th className="px-8 py-5 text-center">Subscription OR Key</th>
+                                            <th className="px-8 py-5 text-center">Strictly Key Only</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                        {Object.values(ToolId).filter(id => id !== 'dashboard' && id !== 'docs').map(tid => {
+                                            const currentMode = toolAccessConfigs[tid] || ToolAccessMode.SUBSCRIPTION;
+                                            return (
+                                                <tr key={tid} className="hover:bg-slate-50/50 transition-colors">
+                                                    <td className="px-8 py-5">
+                                                        <span className="text-xs font-black text-slate-800 uppercase tracking-tighter">{getToolName(tid)}</span>
+                                                    </td>
+                                                    <td className="px-8 py-5 text-center">
+                                                        <div className="flex justify-center">
+                                                            <input 
+                                                                type="radio" 
+                                                                name={`mode-${tid}`}
+                                                                checked={currentMode === ToolAccessMode.SUBSCRIPTION}
+                                                                onChange={() => updateToolAccessMode(tid, ToolAccessMode.SUBSCRIPTION)}
+                                                                className="w-5 h-5 text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
+                                                            />
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-8 py-5 text-center">
+                                                        <div className="flex justify-center">
+                                                            <input 
+                                                                type="radio" 
+                                                                name={`mode-${tid}`}
+                                                                checked={currentMode === ToolAccessMode.KEY_OR_SUBSCRIPTION}
+                                                                onChange={() => updateToolAccessMode(tid, ToolAccessMode.KEY_OR_SUBSCRIPTION)}
+                                                                className="w-5 h-5 text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
+                                                            />
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-8 py-5 text-center">
+                                                        <div className="flex justify-center">
+                                                            <input 
+                                                                type="radio" 
+                                                                name={`mode-${tid}`}
+                                                                checked={currentMode === ToolAccessMode.KEY_ONLY}
+                                                                onChange={() => updateToolAccessMode(tid, ToolAccessMode.KEY_ONLY)}
+                                                                className="w-5 h-5 text-rose-600 focus:ring-rose-500 border-slate-300 cursor-pointer"
+                                                            />
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 )}
