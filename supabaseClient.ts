@@ -10,6 +10,15 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: false, // Essential for Electron and HashRouter stability
-    storage: window.localStorage
+    storage: window.localStorage,
+    flowType: 'pkce'
+  },
+  realtime: {
+    params: {
+      eventsPerSecond: 10
+    }
+  },
+  global: {
+    headers: { 'x-application-name': 'production-toolkit-pro' }
   }
 });

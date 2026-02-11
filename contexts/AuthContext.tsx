@@ -23,7 +23,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const SUPER_ADMIN_EMAIL = 'generalkevin53@gmail.com';
-const HEARTBEAT_INTERVAL = 120 * 1000; // 2 Minutes
+const HEARTBEAT_INTERVAL = 120 * 1000; 
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [session, setSession] = useState<Session | null>(null);
@@ -33,6 +33,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [freeToolsData, setFreeToolsData] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(true);
     
+    const refreshingPromise = useRef<Promise<void> | null>(null);
     const initTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -53,9 +54,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             });
             localStorage.removeItem('prod_toolkit_device_fingerprint'); 
             localStorage.setItem('toolkit_logout_event', Date.now().toString());
-        } catch (e) {
-            console.error("Local storage purge failed", e);
-        }
+        } catch (e) {}
     };
 
     const updateLastSeen = async (uid: string) => {
@@ -69,7 +68,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const fetchFreeTools = useCallback(async () => {
         try {
-            const { data, error } = await supabase
+            const { data } = await supabase
                 .from('system_settings')
                 .select('free_tools_data')
                 .eq('id', 'global')
@@ -85,54 +84,61 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         activeIds.push(tid);
                     }
                 });
-                setFreeTools(prev => JSON.stringify(prev) === JSON.stringify(activeIds) ? prev : activeIds);
-                setFreeToolsData(prev => JSON.stringify(prev) === JSON.stringify(activeMap) ? prev : activeMap);
+                setFreeTools(activeIds);
+                setFreeToolsData(activeMap);
             }
         } catch (err) {}
     }, []);
 
     const fetchProfile = useCallback(async (userId: string) => {
         if (!userId) return;
-        try {
-            updateLastSeen(userId);
+        
+        // Prevent concurrent identical fetches
+        if (refreshingPromise.current) return refreshingPromise.current;
 
-            let { data: profileData, error: profileError } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', userId)
-                .maybeSingle();
-
-            // FALLBACK: Lazy Profile Creation
-            // If the database trigger failed, we create the profile now
-            if (!profileData && !profileError) {
-                const { data: newData, error: createError } = await supabase
+        refreshingPromise.current = (async () => {
+            try {
+                updateLastSeen(userId);
+                let { data: profileData, error: profileError } = await supabase
                     .from('profiles')
-                    .insert([{ id: userId, email: user?.email, role: 'user' }])
-                    .select()
+                    .select('*')
+                    .eq('id', userId)
                     .maybeSingle();
-                if (!createError) profileData = newData;
+
+                if (!profileData && !profileError) {
+                    const { data: newData, error: createError } = await supabase
+                        .from('profiles')
+                        .insert([{ id: userId, email: user?.email, role: 'user' }])
+                        .select()
+                        .maybeSingle();
+                    if (!createError) profileData = newData;
+                }
+
+                if (profileError || !profileData) return;
+
+                const { data: keysData } = await supabase
+                    .from('access_keys')
+                    .select('tool')
+                    .eq('user_id', userId)
+                    .eq('is_used', true);
+
+                const unlockedTools = keysData ? keysData.map(k => k.tool) : [];
+                let isActive = profileData.is_subscribed;
+                
+                if (user?.email === SUPER_ADMIN_EMAIL) isActive = true;
+                else if (profileData.subscription_end && new Date(profileData.subscription_end) < new Date()) {
+                    isActive = false;
+                }
+
+                setProfile({ ...profileData, is_subscribed: isActive, unlocked_tools: unlockedTools });
+            } catch (e) {
+                console.error("Critical Auth Sync Error:", e);
+            } finally {
+                refreshingPromise.current = null;
             }
+        })();
 
-            if (profileError || !profileData) return;
-
-            const { data: keysData } = await supabase
-                .from('access_keys')
-                .select('tool')
-                .eq('user_id', userId)
-                .eq('is_used', true);
-
-            const unlockedTools = keysData ? keysData.map(k => k.tool) : [];
-            let isActive = profileData.is_subscribed;
-            
-            if (user?.email === SUPER_ADMIN_EMAIL) isActive = true;
-            else if (profileData.subscription_end && new Date(profileData.subscription_end) < new Date()) {
-                isActive = false;
-            }
-
-            setProfile({ ...profileData, is_subscribed: isActive, unlocked_tools: unlockedTools });
-        } catch (e) {
-            console.error("Profile sync failure", e);
-        }
+        return refreshingPromise.current;
     }, [user?.email]);
 
     const signOut = useCallback(async (isAuto: boolean = false) => {
@@ -145,7 +151,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             supabase.removeAllChannels();
             await (supabase.auth as any).signOut();
         } catch (e) {
-            console.warn("Signout sequence intercepted/failed, wiping local storage.");
         } finally {
             clearLocalSession();
             setProfile(null); setSession(null); setUser(null);
@@ -191,10 +196,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         let mounted = true;
         const init = async () => {
             try {
-                // Safety Valve: Never block the UI for more than 5 seconds
                 initTimeoutRef.current = setTimeout(() => {
                     if (mounted && loading) setLoading(false);
-                }, 5000);
+                }, 8000); // Extended safety valve for slower connections
 
                 const { data, error } = await (supabase.auth as any).getSession();
                 
@@ -225,7 +229,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         .subscribe();
                 }
             } catch (err) {
-                console.error("Auth: Initialization failure", err);
+                console.error("Auth Init Sequence Failed:", err);
             } finally {
                 if (mounted) {
                     if (initTimeoutRef.current) clearTimeout(initTimeoutRef.current);

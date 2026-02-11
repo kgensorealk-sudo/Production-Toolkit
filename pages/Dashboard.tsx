@@ -67,7 +67,7 @@ const ToolCard: React.FC<ToolCardProps> = ({ id, title, desc, iconBg, iconText, 
             style={{ animationDelay: `${delay}ms`, animationFillMode: 'backwards' }}
         >
             <div className={`h-full bg-white rounded-[2.2rem] p-8 flex flex-col border border-slate-100 relative overflow-hidden ${isLocked ? 'grayscale-[0.9]' : ''}`}>
-                <div className={`absolute top-0 left-0 w-full h-1.5 ${isLocked ? 'bg-slate-200' : (isFree ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : borderColor)}`}></div>
+                <div className={`absolute top-0 left-0 w-full h-1.5 ${isLocked ? 'bg-slate-200' : (isFree ? 'bg-emerald-50 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : borderColor)}`}></div>
                 
                 <div className="absolute top-4 left-4 right-4 z-30 flex justify-between items-center">
                     <button 
@@ -174,17 +174,22 @@ const Dashboard: React.FC = () => {
     };
 
     const handleSync = async () => {
+        if (isSyncing) return;
         setIsSyncing(true);
+        
+        // 15-second timeout for slow corporate proxies/cold starts
         const timer = setTimeout(() => {
             setIsSyncing(false);
-            setToast({ msg: "Database timed out. Check network connection.", type: "warn" });
-        }, 6000);
+            setToast({ msg: "Database timed out. Check network connection or firewall.", type: "warn" });
+        }, 15000);
+
         try {
             await refreshProfile();
             clearTimeout(timer);
             setToast({ msg: "Node integrity synchronized with database.", type: "success" });
-        } catch (e) {
-            setToast({ msg: "Synchronization failed.", type: "error" });
+        } catch (e: any) {
+            clearTimeout(timer);
+            setToast({ msg: `Synchronization failed: ${e.message || 'Connection Error'}`, type: "error" });
         } finally {
             setIsSyncing(false);
         }
@@ -304,13 +309,13 @@ const Dashboard: React.FC = () => {
                         <button 
                             onClick={handleSync}
                             disabled={isSyncing}
-                            className="inline-flex items-center gap-2 px-6 py-3 bg-white hover:bg-slate-50 rounded-full border border-slate-200 text-slate-500 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-sm"
+                            className={`inline-flex items-center gap-2 px-6 py-3 rounded-full border transition-all active:scale-95 shadow-sm text-[10px] font-black uppercase tracking-widest ${isSyncing ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-500'}`}
                             title="Force refresh account permissions"
                         >
-                            <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 ${isSyncing ? 'animate-spin text-indigo-500' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                             </svg>
-                            {isSyncing ? 'Syncing...' : 'Node Integrity Sync'}
+                            {isSyncing ? 'Syncing Environment...' : 'Node Integrity Sync'}
                         </button>
                     </div>
                 </div>
