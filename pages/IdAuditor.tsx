@@ -23,7 +23,8 @@ const ID_CONFIG = [
     { tag: 'ce:source-text', prefix: 'se' },
     { tag: 'ce:inter-ref', prefix: 'ir' },
     { tag: 'ce:caption', prefix: 'ca' },
-    { tag: 'ce:cross-ref', prefix: 'cf' }
+    { tag: 'ce:cross-ref', prefix: 'cf' },
+    { tag: 'ce:cross-refs', prefix: 'cf' }
 ];
 
 const IdAuditor: React.FC = () => {
@@ -224,7 +225,6 @@ const IdAuditor: React.FC = () => {
                     setAuditResults(results);
                     setStep('audit');
                     const invalidCount = results.filter(r => r.status === 'invalid').length;
-                    const nameViolationCount = results.filter(r => r.hasNameSpacingViolation).length;
                     
                     if (invalidCount > 0) {
                         setToast({ msg: `Found ${invalidCount} structural violations.`, type: "warn" });
@@ -313,7 +313,7 @@ const IdAuditor: React.FC = () => {
             <div className="mb-10 text-center animate-fade-in">
                 <h1 className="text-3xl font-black text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase tracking-tighter">ID Prefix Auditor</h1>
                 <p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic tracking-tight leading-relaxed">
-                    Protocol validation for bb, rf, se, ir, ca, and cf. Enforcing strict 4-digit numeric suffixes and collapsed initials.
+                    Protocol validation for bb, rf, se, ir, ca, cf, and plural cross-refs. Enforcing strict 4-digit numeric suffixes and collapsed initials.
                 </p>
             </div>
 
@@ -326,9 +326,14 @@ const IdAuditor: React.FC = () => {
                             <div className="flex items-center gap-6">
                                 <label className="font-black text-slate-800 text-[10px] uppercase tracking-[0.2em]">Protocols</label>
                                 <div className="flex gap-2">
-                                    {ID_CONFIG.map(c => (
-                                        <span key={c.tag} className="px-2 py-1 bg-white border border-slate-200 rounded text-[9px] font-bold text-slate-50 shadow-sm uppercase">
-                                            <span className="text-slate-500">{c.tag}:</span> <span className="text-indigo-600 font-black">{c.prefix}####</span>
+                                    {ID_CONFIG.reduce((acc, c) => {
+                                        if (!acc.find(item => item.prefix === c.prefix)) {
+                                            acc.push(c);
+                                        }
+                                        return acc;
+                                    }, [] as typeof ID_CONFIG).map(c => (
+                                        <span key={c.prefix} className="px-2 py-1 bg-white border border-slate-200 rounded text-[9px] font-bold text-slate-50 shadow-sm uppercase">
+                                            <span className="text-slate-500">{c.tag.split(':')[1]}:</span> <span className="text-indigo-600 font-black">{c.prefix}####</span>
                                         </span>
                                     ))}
                                 </div>
@@ -339,7 +344,7 @@ const IdAuditor: React.FC = () => {
                             value={input} 
                             onChange={e => setInput(e.target.value)} 
                             className="flex-grow p-10 font-mono text-[13px] border-0 focus:ring-0 resize-none bg-transparent leading-relaxed placeholder-slate-300" 
-                            placeholder="Paste the full XML article source here. Violations in ID prefixes, length, and spaced initials will be reported..."
+                            placeholder="Paste the full XML article source here. Violations in ID prefixes, length, and spaced initials will be reported. Plural cross-refs are now audited..."
                             spellCheck={false}
                         />
                         <div className="p-8 border-t border-slate-100 flex justify-center bg-slate-50/50">
