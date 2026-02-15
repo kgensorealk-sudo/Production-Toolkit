@@ -195,7 +195,7 @@ const Dashboard: React.FC = () => {
 
     const sections = useMemo(() => {
         const filtered = filteredTools;
-        const featured = filtered.filter(t => !pinnedTools.includes(t.id) && freeTools.includes(t.id) && t.id === ToolId.TABLE_BEAUTIFIER);
+        const featured = filtered.filter(t => !pinnedTools.includes(t.id) && freeTools.includes(t.id) && (t.id === ToolId.TABLE_BEAUTIFIER || t.id === ToolId.CITATION_LINKER));
         const pinned = filtered.filter(t => pinnedTools.includes(t.id));
         const active = filtered.filter(t => !pinnedTools.includes(t.id) && !featured.some(f => f.id === t.id) && (freeTools.includes(t.id) || getLockType(t.id) === 'none'));
         const locked = filtered.filter(t => !pinnedTools.includes(t.id) && !featured.some(f => f.id === t.id) && !freeTools.includes(t.id) && getLockType(t.id) !== 'none');
