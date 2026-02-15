@@ -143,6 +143,7 @@ const AdminDashboard: React.FC = () => {
             case ToolId.GRANT_TAGGER: return "Grant XML Tagger";
             case ToolId.ID_AUDITOR: return "ID Prefix Auditor";
             case ToolId.COMMENT_REPLACER: return "Comment Replacer";
+            case ToolId.CITATION_LINKER: return "Citation Linker Pro";
             case 'universal': return "Universal Access";
             default: return tid;
         }
@@ -714,7 +715,8 @@ const AdminDashboard: React.FC = () => {
                                             .filter(tid => 
                                                 tid === ToolId.XML_RENUMBER || 
                                                 tid === ToolId.CREDIT_GENERATOR || 
-                                                tid === ToolId.TABLE_BEAUTIFIER
+                                                tid === ToolId.TABLE_BEAUTIFIER ||
+                                                tid === ToolId.CITATION_LINKER
                                             )
                                             .map(tid => (
                                                 <option key={tid} value={tid}>{getToolName(tid).toUpperCase()}</option>
@@ -858,7 +860,7 @@ const AdminDashboard: React.FC = () => {
                                     <button onClick={masterRevoke} className="flex flex-col items-start p-8 bg-white/5 border border-white/10 rounded-[2rem] hover:bg-rose-600/20 hover:border-rose-500/50 transition-all text-left group">
                                         <span className="text-rose-400 font-black text-[11px] uppercase tracking-[0.3em] mb-3 group-hover:text-rose-300 transition-colors">Restrictive Protocol</span>
                                         <h5 className="text-lg font-black text-white uppercase mb-4 leading-none">Global Master Revoke</h5>
-                                        <p className="text-xs text-slate-500 leading-relaxed font-medium group-hover:text-slate-400">Instantly terminates all active node promotions. Strictly enforces subscription and license check gates.</p>
+                                        <p className="text-xs text-slate-500 leading-relaxed font-medium group-hover:text-slate-400">Instantly terminates all active node promotions. Persistent keys will still function. Proceed?</p>
                                     </button>
                                 </div>
                             </div>

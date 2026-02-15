@@ -26,7 +26,7 @@ interface ToolCardProps {
 }
 
 const ToolCard: React.FC<ToolCardProps> = ({ id, title, desc, iconBg, iconText, borderColor, Icon, onClick, onTipClick, onPinClick, isPinned, delay, lockType, isFree, expiry }) => {
-    const isKeyExclusive = id === ToolId.TABLE_BEAUTIFIER;
+    const isKeyExclusive = id === ToolId.TABLE_BEAUTIFIER || id === ToolId.CITATION_LINKER;
     const isLocked = lockType !== 'none' && !isFree;
     
     const [timeLeft, setTimeLeft] = useState<string>('');
@@ -135,7 +135,7 @@ const Dashboard: React.FC = () => {
 
     const getLockType = (toolId: ToolId): 'key' | 'subscription' | 'none' => {
         if (isAdmin) return 'none';
-        const isKeyExclusive = toolId === ToolId.TABLE_BEAUTIFIER;
+        const isKeyExclusive = toolId === ToolId.TABLE_BEAUTIFIER || toolId === ToolId.CITATION_LINKER;
         if (profile?.is_subscribed && !isKeyExclusive) return 'none';
         const hasSpecificKey = profile?.unlocked_tools?.includes(toolId) || profile?.unlocked_tools?.includes('universal');
         if (hasSpecificKey) return 'none';

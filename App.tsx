@@ -140,7 +140,7 @@ const App: React.FC = () => {
                         <Route path="/grantTagger" element={<ProtectedRoute><Layout currentTool={ToolId.GRANT_TAGGER}><NodeAccessController toolId={ToolId.GRANT_TAGGER} displayName="Grant Tagger" mode="subscription-only"><GrantTagger /></NodeAccessController></Layout></ProtectedRoute>} />
                         <Route path="/idAuditor" element={<ProtectedRoute><Layout currentTool={ToolId.ID_AUDITOR}><NodeAccessController toolId={ToolId.ID_AUDITOR} displayName="ID Prefix Auditor" mode="subscription-only"><IdAuditor /></NodeAccessController></Layout></ProtectedRoute>} />
                         <Route path="/commentReplacer" element={<ProtectedRoute><Layout currentTool={ToolId.COMMENT_REPLACER}><NodeAccessController toolId={ToolId.COMMENT_REPLACER} displayName="Comment Replacer" mode="subscription-only"><CommentReplacer /></NodeAccessController></Layout></ProtectedRoute>} />
-                        <Route path="/citationLinker" element={<ProtectedRoute><Layout currentTool={ToolId.CITATION_LINKER}><NodeAccessController toolId={ToolId.CITATION_LINKER} displayName="Citation Linker Pro" mode="subscription-only"><CitationLinker /></NodeAccessController></Layout></ProtectedRoute>} />
+                        <Route path="/citationLinker" element={<ProtectedRoute><Layout currentTool={ToolId.CITATION_LINKER}><NodeAccessController toolId={ToolId.CITATION_LINKER} displayName="Citation Linker Pro" mode="key-exclusive"><CitationLinker /></NodeAccessController></Layout></ProtectedRoute>} />
                     </Routes>
                 </HashRouter>
             </AuthProvider>
