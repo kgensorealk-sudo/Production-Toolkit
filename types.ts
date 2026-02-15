@@ -54,6 +54,7 @@ export enum ToolId {
     GRANT_TAGGER = 'grantTagger',
     ID_AUDITOR = 'idAuditor',
     COMMENT_REPLACER = 'commentReplacer',
+    CITATION_LINKER = 'citationLinker',
     DOCS = 'docs',
     DASHBOARD = 'dashboard'
 }

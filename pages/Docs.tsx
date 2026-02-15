@@ -24,6 +24,7 @@ const Docs: React.FC = () => {
                     <NavBtn id="refgen" label="Reference Updater" />
                     <NavBtn id="dupe" label="Duplicate Ref Remover" />
                     <NavBtn id="idaudit" label="ID Prefix Auditor" />
+                    <NavBtn id="linker" label="Citation Linker Pro" />
                     <NavBtn id="credit" label="CRediT Generator" />
                     <NavBtn id="highlights" label="Highlights Gen" />
                     <NavBtn id="fixer" label="Table Fixer" />
@@ -61,6 +62,22 @@ const Docs: React.FC = () => {
                         </section>
                     )}
 
+                    {section === 'linker' && (
+                        <section className="animate-fade-in">
+                            <h2 className="text-3xl font-extrabold text-slate-900 mb-6 uppercase tracking-tight">Citation Linker Pro</h2>
+                            <div className="prose prose-slate max-w-none">
+                                <p className="text-slate-600 mb-4">
+                                    Surgically attaches <code>refid</code> and <code>id</code> attributes to orphaned <code>ce:cross-ref</code> and <code>ce:cross-refs</code> tags. 
+                                </p>
+                                <div className="bg-indigo-50 border-l-4 border-indigo-400 p-4 mb-6">
+                                    <p className="text-sm text-indigo-800 font-medium">
+                                        <strong>Intelligent Parsing:</strong> The tool handles complex ranges within plural tags (e.g., [1–5, 8]) by automatically expanding them into a space-separated ID list.
+                                    </p>
+                                </div>
+                            </div>
+                        </section>
+                    )}
+
                     {section === 'beautifier' && (
                         <section className="animate-fade-in">
                             <h2 className="text-3xl font-extrabold text-slate-900 mb-6 uppercase tracking-tight">Table XML Beautifier</h2>
@@ -79,11 +96,6 @@ const Docs: React.FC = () => {
                                 <p className="text-slate-600 mb-4">
                                     Audits bibliography references to ensure <code>id</code> attributes match the required organizational prefix (e.g., <code>bib</code> or <code>bb</code>).
                                 </p>
-                                <div className="bg-indigo-50 border-l-4 border-indigo-400 p-4 mb-6">
-                                    <p className="text-sm text-indigo-800 font-medium">
-                                        <strong>Structural Safety:</strong> When fixing IDs, the tool automatically remaps all internal <code>refid</code> links in the body to prevent breaking document navigation.
-                                    </p>
-                                </div>
                             </div>
                         </section>
                     )}
@@ -93,13 +105,8 @@ const Docs: React.FC = () => {
                             <h2 className="text-3xl font-extrabold text-slate-900 mb-6 uppercase tracking-tight">Other-Ref Scanner</h2>
                             <div className="prose prose-slate max-w-none">
                                 <p className="text-slate-600 mb-4">
-                                    Identifies and isolates all references within the bibliography that use the <code>&lt;ce:other-ref&gt;</code> structure. These are typically unstructured citations requiring manual cleanup or conversion.
+                                    Identifies and isolates all references within the bibliography that use the <code>&lt;ce:other-ref&gt;</code> structure.
                                 </p>
-                                <div className="bg-amber-50 border-l-4 border-amber-400 p-4 mb-6">
-                                    <p className="text-sm text-amber-800 font-medium">
-                                        <strong>Word Integration:</strong> Use the "Copy for MS Word" feature to transfer items with formatting intact. This preserves italics and bold tags for external retagging workflows.
-                                    </p>
-                                </div>
                             </div>
                         </section>
                     )}
@@ -111,11 +118,6 @@ const Docs: React.FC = () => {
                                 <p className="text-slate-600 mb-4">
                                     Audits the bibliography by checking every <code>bib-reference id</code> against all <code>cross-ref refid</code> attributes in the document.
                                 </p>
-                                <div className="bg-rose-50 border-l-4 border-rose-400 p-4 mb-6">
-                                    <p className="text-sm text-rose-800 font-medium">
-                                        <strong>Cleaning Logic:</strong> Items checked in the list will be permanently removed from the XML source. Use this tool after merging duplicates to clean up residual orphaned references.
-                                    </p>
-                                </div>
                             </div>
                         </section>
                     )}
@@ -125,7 +127,7 @@ const Docs: React.FC = () => {
                             <h2 className="text-3xl font-extrabold text-slate-900 mb-6 uppercase tracking-tight">XML Reference Normalizer</h2>
                             <div className="prose prose-slate max-w-none">
                                 <p className="text-slate-600 mb-4">
-                                    Used when a bibliography has been manually edited or scrambled. It restores sequential numbering and updates the body of the article to match. Supports custom prefix/suffix configuration.
+                                    Used when a bibliography has been manually edited or scrambled. It restores sequential numbering and updates the body of the article to match.
                                 </p>
                             </div>
                         </section>
@@ -136,7 +138,7 @@ const Docs: React.FC = () => {
                             <h2 className="text-3xl font-extrabold text-slate-900 mb-6 uppercase tracking-tight">Reference Updater</h2>
                              <div className="prose prose-slate max-w-none">
                                 <p className="text-slate-600 mb-4">
-                                    Surgically merges corrected references into an existing bibliography while <strong>preserving original IDs</strong>. Ideal for applying proofreading corrections without breaking internal document links.
+                                    Surgically merges corrected references into an existing bibliography while <strong>preserving original IDs</strong>.
                                 </p>
                              </div>
                         </section>
@@ -147,7 +149,7 @@ const Docs: React.FC = () => {
                             <h2 className="text-3xl font-extrabold text-slate-900 mb-6 uppercase tracking-tight">Duplicate Reference Remover</h2>
                             <div className="prose prose-slate max-w-none">
                                 <p className="text-slate-600 mb-4">
-                                    Detects highly similar references using fuzzy matching. When duplicates are merged, the tool automatically re-links all body citations to the selected "keeper" reference.
+                                    Detects highly similar references using fuzzy matching. 
                                 </p>
                             </div>
                         </section>
@@ -157,7 +159,7 @@ const Docs: React.FC = () => {
                             <h2 className="text-3xl font-extrabold text-slate-900 mb-6 uppercase tracking-tight">CRediT Generator</h2>
                             <div className="prose prose-slate max-w-none">
                                 <p className="text-slate-600 mb-4">
-                                    Standardizes author contribution statements into NISO CRediT XML. Smart-parsing detects roles from raw text and corrects common typos and variations.
+                                    Standardizes author contribution statements into NISO CRediT XML.
                                 </p>
                             </div>
                         </section>
@@ -167,7 +169,7 @@ const Docs: React.FC = () => {
                             <h2 className="text-3xl font-extrabold text-slate-900 mb-6 uppercase tracking-tight">Highlights Generator</h2>
                             <div className="prose prose-slate max-w-none">
                                 <p className="text-slate-600 mb-4">
-                                    Converts rich text bullet points into <code>author-highlights</code> XML structures. Preserves bold, italic, and superscript formatting during transformation.
+                                    Converts rich text bullet points into <code>author-highlights</code> XML structures.
                                 </p>
                             </div>
                         </section>
@@ -177,7 +179,7 @@ const Docs: React.FC = () => {
                             <h2 className="text-3xl font-extrabold text-slate-900 mb-6 uppercase tracking-tight">XML Table Fixer</h2>
                             <div className="prose prose-slate max-w-none">
                                 <p className="text-slate-600 mb-4">
-                                    Manages the relationship between table cells and footnotes. Detach inline footnotes to legends for layout flexibility or re-attach legend items as structured footnotes.
+                                    Manages the relationship between table cells and footnotes. 
                                 </p>
                             </div>
                         </section>
@@ -187,7 +189,7 @@ const Docs: React.FC = () => {
                             <h2 className="text-3xl font-extrabold text-slate-900 mb-6 uppercase tracking-tight">View Synchronizer</h2>
                             <div className="prose prose-slate max-w-none">
                                 <p className="text-slate-600 mb-4">
-                                    Synchronizes content between multiple paragraph views (compact vs extended) to ensure consistency while maintaining unique ID sequences for internal nodes.
+                                    Synchronizes content between multiple paragraph views (compact vs extended).
                                 </p>
                             </div>
                         </section>
@@ -197,7 +199,7 @@ const Docs: React.FC = () => {
                             <h2 className="text-3xl font-extrabold text-slate-900 mb-6 uppercase tracking-tight">Quick Text Diff</h2>
                             <div className="prose prose-slate max-w-none">
                                 <p className="text-slate-600 mb-4">
-                                    Side-by-side comparison engine specifically optimized for technical XML text. Features character-level highlighting and structural change detection.
+                                    Side-by-side comparison engine specifically optimized for technical XML text.
                                 </p>
                             </div>
                         </section>
@@ -207,7 +209,7 @@ const Docs: React.FC = () => {
                             <h2 className="text-3xl font-extrabold text-slate-900 mb-6 uppercase tracking-tight">XML Tag Cleaner</h2>
                             <div className="prose prose-slate max-w-none">
                                 <p className="text-slate-600 mb-4">
-                                    Bulk processing of editorial markup tags. Safely accepts or rejects proprietary insertions and deletions while preserving the underlying XML schema integrity.
+                                    Bulk processing of editorial markup tags. 
                                 </p>
                             </div>
                         </section>

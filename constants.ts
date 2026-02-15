@@ -2,8 +2,9 @@ import { CreditRole } from './types';
 
 export const APP_ID = 'prod-toolkit-v1';
 
-// 30 Minutes in milliseconds (Increased from 15 to prevent race conditions during long-poll syncs)
-export const INACTIVITY_LIMIT = 30 * 60 * 1000;
+// Inactivity Security Protocol (Milliseconds)
+export const INACTIVITY_WARNING = 15 * 60 * 1000; // 15 Minutes
+export const INACTIVITY_LIMIT = 20 * 60 * 1000;   // 20 Minutes
 
 export const CREDIT_DB: CreditRole[] = [
     { name: "Conceptualization", url: "http://credit.niso.org/contributor-roles/conceptualization", aliases: ["conceptualization", "concept", "idea", "conception"] },

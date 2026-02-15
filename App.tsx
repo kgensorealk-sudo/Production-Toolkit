@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { HashRouter } from 'react-router-dom';
 import { Routes, Route, Navigate, useNavigate } from 'react-router';
@@ -22,6 +21,7 @@ import RefListPurger from './pages/RefListPurger';
 import GrantTagger from './pages/GrantTagger';
 import IdAuditor from './pages/IdAuditor';
 import CommentReplacer from './pages/CommentReplacer';
+import CitationLinker from './pages/CitationLinker';
 import Docs from './pages/Docs';
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
@@ -35,10 +35,6 @@ import ErrorBoundary from './components/ErrorBoundary';
 /**
  * NODE ACCESS CONTROLLER
  * Hardened to prevent unauthorized DOM access.
- * Modes:
- * - key-allowed: Available via Sub OR Key.
- * - subscription-only: Available ONLY via Sub.
- * - key-exclusive: Available ONLY via Key (Sub ignored).
  */
 const NodeAccessController: React.FC<{ 
     children: React.ReactElement, 
@@ -49,12 +45,8 @@ const NodeAccessController: React.FC<{
     const { profile, freeTools, isAdmin } = useAuth();
     const navigate = useNavigate();
 
-    // 1. Check for valid authorization state
     const isFree = freeTools.includes(toolId);
-    
-    // In key-exclusive mode, we ignore the global subscription status
     const isSubscribed = mode !== 'key-exclusive' && profile?.is_subscribed;
-    
     const isUnlockedViaKey = (mode === 'key-allowed' || mode === 'key-exclusive') && 
         (profile?.unlocked_tools?.includes(toolId) || profile?.unlocked_tools?.includes('universal'));
 
@@ -62,7 +54,6 @@ const NodeAccessController: React.FC<{
 
     if (hasAccess) return children;
 
-    // 2. Handle specific lock screens
     if (mode === 'key-allowed' || mode === 'key-exclusive') {
         return (
             <div className="relative h-full w-full overflow-hidden flex items-center justify-center bg-slate-50">
@@ -131,14 +122,10 @@ const App: React.FC = () => {
                         <Route path="/dashboard" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />
                         <Route path="/docs" element={<ProtectedRoute><Layout><Docs /></Layout></ProtectedRoute>} />
                         
-                        {/* KEY-EXCLUSIVE TOOLS (Subscription Ignored) */}
                         <Route path="/tableBeautifier" element={<ProtectedRoute><Layout currentTool={ToolId.TABLE_BEAUTIFIER}><NodeAccessController toolId={ToolId.TABLE_BEAUTIFIER} displayName="Table XML Beautifier" mode="key-exclusive"><TableBeautifier /></NodeAccessController></Layout></ProtectedRoute>} />
-
-                        {/* KEY-ALLOWED TOOLS (Sub OR Key) */}
                         <Route path="/xmlRenumber" element={<ProtectedRoute><Layout currentTool={ToolId.XML_RENUMBER}><NodeAccessController toolId={ToolId.XML_RENUMBER} displayName="XML Normalizer" mode="key-allowed"><XmlRenumber /></NodeAccessController></Layout></ProtectedRoute>} />
                         <Route path="/creditGenerator" element={<ProtectedRoute><Layout currentTool={ToolId.CREDIT_GENERATOR}><NodeAccessController toolId={ToolId.CREDIT_GENERATOR} displayName="CRediT Tagging" mode="key-allowed"><CreditGenerator /></NodeAccessController></Layout></ProtectedRoute>} />
                         
-                        {/* SUBSCRIPTION-ONLY TOOLS */}
                         <Route path="/uncitedCleaner" element={<ProtectedRoute><Layout currentTool={ToolId.UNCITED_CLEANER}><NodeAccessController toolId={ToolId.UNCITED_CLEANER} displayName="Uncited Ref Cleaner" mode="subscription-only"><UncitedRefCleaner /></NodeAccessController></Layout></ProtectedRoute>} />
                         <Route path="/otherRefScanner" element={<ProtectedRoute><Layout currentTool={ToolId.OTHER_REF_SCANNER}><NodeAccessController toolId={ToolId.OTHER_REF_SCANNER} displayName="Other-Ref Scanner" mode="subscription-only"><OtherRefScanner /></NodeAccessController></Layout></ProtectedRoute>} />
                         <Route path="/quickDiff" element={<ProtectedRoute><Layout currentTool={ToolId.QUICK_DIFF}><NodeAccessController toolId={ToolId.QUICK_DIFF} displayName="Quick Text Diff" mode="subscription-only"><QuickDiff /></NodeAccessController></Layout></ProtectedRoute>} />
@@ -153,6 +140,7 @@ const App: React.FC = () => {
                         <Route path="/grantTagger" element={<ProtectedRoute><Layout currentTool={ToolId.GRANT_TAGGER}><NodeAccessController toolId={ToolId.GRANT_TAGGER} displayName="Grant Tagger" mode="subscription-only"><GrantTagger /></NodeAccessController></Layout></ProtectedRoute>} />
                         <Route path="/idAuditor" element={<ProtectedRoute><Layout currentTool={ToolId.ID_AUDITOR}><NodeAccessController toolId={ToolId.ID_AUDITOR} displayName="ID Prefix Auditor" mode="subscription-only"><IdAuditor /></NodeAccessController></Layout></ProtectedRoute>} />
                         <Route path="/commentReplacer" element={<ProtectedRoute><Layout currentTool={ToolId.COMMENT_REPLACER}><NodeAccessController toolId={ToolId.COMMENT_REPLACER} displayName="Comment Replacer" mode="subscription-only"><CommentReplacer /></NodeAccessController></Layout></ProtectedRoute>} />
+                        <Route path="/citationLinker" element={<ProtectedRoute><Layout currentTool={ToolId.CITATION_LINKER}><NodeAccessController toolId={ToolId.CITATION_LINKER} displayName="Citation Linker Pro" mode="subscription-only"><CitationLinker /></NodeAccessController></Layout></ProtectedRoute>} />
                     </Routes>
                 </HashRouter>
             </AuthProvider>
