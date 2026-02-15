@@ -13,7 +13,8 @@ interface ResolutionItem {
     existingId: string;
     existingRefid: string;
     mappedIds: string[];
-    isPlural: boolean;
+    originalIsPlural: boolean;
+    targetIsPlural: boolean;
     missingRefid: boolean;
     missingId: boolean;
 }
@@ -24,7 +25,6 @@ const CitationLinker: React.FC = () => {
     const [resolutions, setResolutions] = useState<ResolutionItem[]>([]);
     const [step, setStep] = useState<'input' | 'matrix' | 'result'>('input');
     const [isLoading, setIsLoading] = useState(false);
-    const [progress, setProgress] = useState(0);
     const [processLabel, setProcessLabel] = useState('');
     const [toast, setToast] = useState<{ msg: string, type: 'success' | 'warn' | 'error' | 'info' } | null>(null);
     const [activeTab, setActiveTab] = useState<'xml' | 'diff'>('xml');
@@ -137,7 +137,6 @@ const CitationLinker: React.FC = () => {
         if (!input.trim()) { setToast({ msg: "Please paste XML source.", type: "warn" }); return; }
         setIsLoading(true);
         setProcessLabel('Mapping Bibliography Nodes...');
-        setProgress(0);
 
         setTimeout(() => {
             try {
@@ -163,7 +162,7 @@ const CitationLinker: React.FC = () => {
                     const fullTag = tagMatch[0];
                     const attrs = tagMatch[1];
                     const text = tagMatch[2].trim();
-                    const isPlural = fullTag.includes('cross-refs');
+                    const originalIsPlural = fullTag.includes('cross-refs');
 
                     const idMatch = attrs.match(/\bid="([^"]+)"/);
                     const refidMatch = attrs.match(/\brefid="([^"]+)"/);
@@ -181,33 +180,36 @@ const CitationLinker: React.FC = () => {
                     let mappedIds: string[] = existingRefid ? existingRefid.split(/\s+/).filter(Boolean) : [];
                     let status: 'resolved' | 'failed' | 'ignored' = 'failed';
 
+                    // Always parse text for potential multiple IDs to support singular-to-plural conversion
                     if (missingRefid) {
-                        // Handle Ranges (1-5) and Lists (1, 3, 5)
                         const parts = text.split(/[,;]|\band\b/i);
+                        const detectedIds: string[] = [];
                         parts.forEach(part => {
                             const trimmed = part.replace(/[\[\]]/g, '').trim();
                             if (/[\-–—]/.test(trimmed)) {
                                 const rangeParts = trimmed.split(/[\-–—]/);
                                 if (rangeParts.length === 2) {
-                                    const start = parseInt(rangeParts[0].replace(/\D/g, ''));
-                                    const end = parseInt(rangeParts[1].replace(/\D/g, ''));
+                                    const startStr = rangeParts[0].replace(/\D/g, '');
+                                    const endStr = rangeParts[1].replace(/\D/g, '');
+                                    const start = parseInt(startStr);
+                                    const end = parseInt(endStr);
                                     if (!isNaN(start) && !isNaN(end)) {
                                         for (let n = start; n <= end; n++) {
                                             const id = labelMap.get(n.toString());
-                                            if (id) mappedIds.push(id);
+                                            if (id) detectedIds.push(id);
                                         }
                                     }
                                 }
                             } else {
                                 const id = labelMap.get(trimmed);
-                                if (id) mappedIds.push(id);
+                                if (id) detectedIds.push(id);
                             }
                         });
+                        mappedIds = detectedIds;
                     }
 
-                    // Resolution logic:
-                    // If we need RefID and found it: resolved.
-                    // If we only need ID: resolved (mappedIds will be existing if they existed).
+                    const targetIsPlural = mappedIds.length > 1;
+
                     if ((missingRefid && mappedIds.length > 0) || !missingRefid) {
                         status = 'resolved';
                     }
@@ -220,7 +222,8 @@ const CitationLinker: React.FC = () => {
                         existingId,
                         existingRefid,
                         mappedIds,
-                        isPlural,
+                        originalIsPlural,
+                        targetIsPlural,
                         missingId,
                         missingRefid
                     });
@@ -246,7 +249,6 @@ const CitationLinker: React.FC = () => {
     const executeLink = async () => {
         setIsLoading(true);
         setProcessLabel('Surgically Injecting Attributes...');
-        setProgress(0);
 
         setTimeout(() => {
             try {
@@ -268,10 +270,10 @@ const CitationLinker: React.FC = () => {
                     }
 
                     const refidValue = res.mappedIds.join(' ');
-                    const tagName = res.isPlural ? 'ce:cross-refs' : 'ce:cross-ref';
+                    const tagName = res.targetIsPlural ? 'ce:cross-refs' : 'ce:cross-ref';
                     const newTag = `<${tagName} id="${targetId}" refid="${refidValue}">${res.textContent}</${tagName}>`;
                     
-                    // Use split/join for literal safety to avoid regex special char issues in tag content
+                    // Use split/join for literal safety
                     result = result.split(res.originalTag).join(newTag);
                 });
 
@@ -366,9 +368,16 @@ const CitationLinker: React.FC = () => {
                                     <div className={`w-3 h-3 rounded-full shrink-0 ${res.status === 'resolved' ? 'bg-emerald-500' : 'bg-rose-500 animate-pulse'}`}></div>
                                     <div className="min-w-0 flex-grow">
                                         <div className="flex items-center gap-3 mb-2">
-                                            <span className={`text-[10px] font-black px-2 py-1 rounded-lg border uppercase tracking-widest ${res.isPlural ? 'bg-indigo-50 text-indigo-600 border-indigo-100' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
-                                                {res.isPlural ? 'Plural' : 'Single'}
-                                            </span>
+                                            <div className="flex gap-1">
+                                                <span className={`text-[10px] font-black px-2 py-1 rounded-lg border uppercase tracking-widest ${res.originalIsPlural ? 'bg-indigo-50 text-indigo-600 border-indigo-100' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                                                    {res.originalIsPlural ? 'Plural' : 'Singular'}
+                                                </span>
+                                                {res.status === 'resolved' && !res.originalIsPlural && res.targetIsPlural && (
+                                                    <span className="text-[10px] font-black px-2 py-1 rounded-lg border uppercase tracking-widest bg-amber-50 text-amber-600 border-amber-100 animate-pulse">
+                                                        &rarr; Convert to Plural
+                                                    </span>
+                                                )}
+                                            </div>
                                             <div className="flex gap-2">
                                                 {res.missingId && <span className="text-[8px] font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 uppercase">New ID Needed</span>}
                                                 {res.missingRefid && <span className="text-[8px] font-black text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 uppercase">New Link Needed</span>}
