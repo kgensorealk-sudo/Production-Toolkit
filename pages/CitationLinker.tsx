@@ -364,14 +364,16 @@ const CitationLinker: React.FC = () => {
                     const tagName = res.targetIsPlural ? 'ce:cross-refs' : 'ce:cross-ref';
                     const newTag = `<${tagName} id="${targetId}" refid="${refidValue}">${res.textContent}</${tagName}>`;
                     
-                    // Use split/join for literal safety
-                    result = result.split(res.originalTag).join(newTag);
+                    // CRITICAL FIX: Use replace() instead of split/join to ensure sequential uniqueness.
+                    // split/join replaces ALL occurrences of identical tags with the SAME generated ID.
+                    // replace() only replaces the first match found, which aligns with our sequential loop.
+                    result = result.replace(res.originalTag, newTag);
                 });
 
                 setOutput(result);
                 generateDiff(input, result);
                 setStep('result');
-                setToast({ msg: `Successfully processed ${activeResolutions.length} nodes.`, type: "success" });
+                setToast({ msg: `Successfully processed ${activeResolutions.length} nodes with unique IDs.`, type: "success" });
             } catch (e) {
                 setToast({ msg: "Injection failed.", type: "error" });
             } finally {
