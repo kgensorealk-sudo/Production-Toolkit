@@ -44,19 +44,15 @@ const CitationLinker: React.FC = () => {
 
     const escapeHtml = (unsafe: string) => unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-    /**
-     * PRECISION NORMALIZATION PROTOCOL
-     * Standardizes citation text for Name-Date matching.
-     */
     const normalizeCitation = (text: string) => {
         return text
-            .replace(/<[^>]+>/g, '') // CRITICAL: Strip internal XML tags (e.g. ce:italic)
+            .replace(/<[^>]+>/g, '') 
             .toLowerCase()
             .replace(/&amp;/g, 'and')
             .replace(/&/g, 'and')
-            .replace(/'s\b/gi, '') // Remove possessives
-            .replace(/et\s+al\.?/gi, '') // Strip et al for first-author matching
-            .replace(/[\(\)\[\]\.,;]/g, ' ') // Remove punctuation
+            .replace(/'s\b/gi, '') 
+            .replace(/et\s+al\.?/gi, '') 
+            .replace(/[\(\)\[\]\.,;]/g, ' ') 
             .replace(/\s+/g, ' ')
             .trim();
     };
@@ -175,9 +171,8 @@ const CitationLinker: React.FC = () => {
 
         setTimeout(() => {
             try {
-                // 1. Build Multi-Index Label Map
-                const labelMap = new Map<string, string>(); // Numeric mapping
-                const nameDateIndex: BibIndex[] = []; // Name-Date mapping index
+                const labelMap = new Map<string, string>(); 
+                const nameDateIndex: BibIndex[] = []; 
 
                 const bibRegex = /<ce:bib-reference\b[^>]*?id="([^"]+)"[^>]*>([\s\S]*?)<\/ce:bib-reference>/gi;
                 let bibMatch;
@@ -187,14 +182,10 @@ const CitationLinker: React.FC = () => {
                     const labelMatch = content.match(/<ce:label>(.*?)<\/ce:label>/i);
                     
                     if (labelMatch) {
-                        // Strip internal formatting tags from label to get pure comparison text
                         const labelText = labelMatch[1].replace(/<[^>]+>/g, '').replace(/[\[\]]/g, '').trim();
-                        
-                        // Check if numeric
                         if (/^\d+$/.test(labelText)) {
                             labelMap.set(labelText, id);
                         } else {
-                            // Add to Name-Date index
                             nameDateIndex.push({
                                 id,
                                 normalized: normalizeCitation(labelText),
@@ -205,7 +196,6 @@ const CitationLinker: React.FC = () => {
                     }
                 }
 
-                // 2. Locate Orphan Tags
                 const orphans: ResolutionItem[] = [];
                 const tagRegex = /<ce:cross-refs?\b([^>]*)>([\s\S]*?)<\/ce:cross-refs?>/gi;
                 let tagMatch;
@@ -224,7 +214,6 @@ const CitationLinker: React.FC = () => {
                     const missingId = !existingId;
                     const missingRefid = !existingRefid;
 
-                    // Filter based on configuration
                     const shouldProcess = (targetMissingRefid && missingRefid) || (targetMissingId && missingId);
                     if (!shouldProcess) continue;
 
@@ -233,16 +222,12 @@ const CitationLinker: React.FC = () => {
 
                     if (missingRefid) {
                         const detectedIds: string[] = [];
-                        
-                        // HEURISTIC: Try to match the whole tag content first (important for multi-author Name-Date like 'Jin & Zhang, 2021')
                         const normWhole = normalizeCitation(text);
                         let wholeMatch = nameDateIndex.find(b => b.normalized === normWhole);
                         
                         if (wholeMatch) {
                             detectedIds.push(wholeMatch.id);
                         } else {
-                            // Fallback: Split by common delimiters
-                            // Note: We avoid splitting by comma for Name-Date citations unless specifically semicolon-separated
                             const isNumeric = /^\s*\[?\s*\d+/.test(text);
                             const parts = isNumeric ? text.split(/[,;]|\band\b/i) : text.split(/[;]|\band\b/i);
 
@@ -250,7 +235,6 @@ const CitationLinker: React.FC = () => {
                                 const trimmed = part.replace(/[\[\]]/g, '').trim();
                                 if (!trimmed) return;
 
-                                // A. Check for Numeric Ranges (e.g., 1-5)
                                 if (/[\-–—]/.test(trimmed) && /^\d+[\-–—]\d+$/.test(trimmed)) {
                                     const rangeParts = trimmed.split(/[\-–—]/);
                                     const start = parseInt(rangeParts[0].replace(/\D/g, ''));
@@ -262,29 +246,22 @@ const CitationLinker: React.FC = () => {
                                         }
                                     }
                                 } 
-                                // B. Check for Numeric Single
                                 else if (/^\d+$/.test(trimmed)) {
                                     const id = labelMap.get(trimmed);
                                     if (id) detectedIds.push(id);
                                 }
-                                // C. Check for Name-Date
                                 else {
                                     const normOrphan = normalizeCitation(trimmed);
                                     const orphanFirstName = extractFirstName(trimmed);
                                     const orphanYear = extractYear(trimmed);
 
-                                    // Match Logic:
-                                    // 1. Try direct normalized match
                                     let bibMatch = nameDateIndex.find(b => b.normalized === normOrphan);
-                                    
-                                    // 2. Try Et Al / Heuristic match (First Author + Year)
                                     if (!bibMatch && orphanFirstName && orphanYear) {
                                         bibMatch = nameDateIndex.find(b => 
                                             b.firstName === orphanFirstName && 
                                             b.year === orphanYear
                                         );
                                     }
-
                                     if (bibMatch) detectedIds.push(bibMatch.id);
                                 }
                             });
@@ -314,16 +291,16 @@ const CitationLinker: React.FC = () => {
                 }
 
                 if (orphans.length === 0) {
-                    setToast({ msg: "No matching citation tags detected based on current configuration.", type: "info" });
+                    setToast({ msg: "No items matching the selected protocol toggles.", type: "info" });
                     setIsLoading(false);
                     return;
                 }
 
                 setResolutions(orphans);
                 setStep('matrix');
-                setToast({ msg: `System detected ${orphans.length} candidates for protocol injection.`, type: "info" });
+                setToast({ msg: `Detected ${orphans.length} candidates for protocol injection.`, type: "info" });
             } catch (e) {
-                setToast({ msg: "Resolution failure.", type: "error" });
+                setToast({ msg: "Analysis failure.", type: "error" });
             } finally {
                 setIsLoading(false);
             }
@@ -336,44 +313,43 @@ const CitationLinker: React.FC = () => {
 
         setTimeout(() => {
             try {
-                // Initialize counter from user input
                 let cfCounter = cfStart;
-                
-                // Scan input for existing IDs to ensure uniqueness
                 const existingCf = input.match(/id="cf(\d+)"/g);
                 if (existingCf) {
                     const maxExisting = existingCf.reduce((m, c) => {
                         const num = parseInt(c.match(/\d+/)![0]);
                         return Math.max(m, num);
                     }, 0);
-                    // Ensure our counter is higher than the max found in doc
                     cfCounter = Math.max(cfCounter, Math.ceil((maxExisting + 5) / 5) * 5);
                 }
 
                 let result = input;
-                const activeResolutions = resolutions.filter(r => r.status === 'resolved');
+                const activeResolutions = resolutions; 
 
                 activeResolutions.forEach(res => {
                     let targetId = res.existingId;
-                    if (res.missingId) {
+                    if (targetMissingId && res.missingId) {
                         targetId = `cf${cfCounter.toString().padStart(4, '0')}`;
                         cfCounter += 5;
                     }
 
-                    const refidValue = res.mappedIds.join(' ');
-                    const tagName = res.targetIsPlural ? 'ce:cross-refs' : 'ce:cross-ref';
-                    const newTag = `<${tagName} id="${targetId}" refid="${refidValue}">${res.textContent}</${tagName}>`;
+                    let targetRefid = res.existingRefid;
+                    if (targetMissingRefid && res.missingRefid && res.status === 'resolved') {
+                        targetRefid = res.mappedIds.join(' ');
+                    }
+
+                    const idAttr = targetId ? ` id="${targetId}"` : '';
+                    const refidAttr = targetRefid ? ` refid="${targetRefid}"` : '';
+                    const tagName = (targetMissingRefid && res.missingRefid) ? (res.targetIsPlural ? 'ce:cross-refs' : 'ce:cross-ref') : (res.originalIsPlural ? 'ce:cross-refs' : 'ce:cross-ref');
                     
-                    // CRITICAL FIX: Use replace() instead of split/join to ensure sequential uniqueness.
-                    // split/join replaces ALL occurrences of identical tags with the SAME generated ID.
-                    // replace() only replaces the first match found, which aligns with our sequential loop.
+                    const newTag = `<${tagName}${idAttr}${refidAttr}>${res.textContent}</${tagName}>`;
                     result = result.replace(res.originalTag, newTag);
                 });
 
                 setOutput(result);
                 generateDiff(input, result);
                 setStep('result');
-                setToast({ msg: `Successfully processed ${activeResolutions.length} nodes with unique IDs.`, type: "success" });
+                setToast({ msg: "Protocol successfully applied.", type: "success" });
             } catch (e) {
                 setToast({ msg: "Injection failed.", type: "error" });
             } finally {
@@ -392,11 +368,10 @@ const CitationLinker: React.FC = () => {
             <div className="mb-10 text-center animate-fade-in">
                 <h1 className="text-3xl font-black text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase tracking-tighter">Citation Linker Pro</h1>
                 <p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic leading-relaxed">
-                    Automated resolution and ID enforcement for <code>ce:cross-ref</code> tags. Supports numeric ranges and intelligent Name-Date text matching.
+                    Automated resolution and ID enforcement for <code>ce:cross-ref</code> tags.
                 </p>
             </div>
 
-            {/* Protocol Configuration Bar */}
             <div className="flex justify-center mb-8">
                 <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-200 flex flex-wrap items-center justify-center gap-12">
                     <Switch id="toggle-refid" label="Resolve Links" subLabel="Missing refid" checked={targetMissingRefid} onChange={setTargetMissingRefid} color="indigo" />
@@ -458,7 +433,7 @@ const CitationLinker: React.FC = () => {
                         <div className="px-10 py-6 border-b border-slate-200 bg-white flex justify-between items-center shadow-sm z-10">
                             <div className="flex flex-col">
                                 <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Resolution Matrix</h3>
-                                <p className="text-xs text-slate-500 font-bold mt-1 uppercase tracking-wider">{resolutions.filter(r => r.status === 'resolved').length} nodes ready for processing</p>
+                                <p className="text-xs text-slate-500 font-bold mt-1 uppercase tracking-wider">{resolutions.length} nodes ready for processing</p>
                             </div>
                             <div className="flex gap-4">
                                 <button onClick={() => setStep('input')} className="px-6 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-slate-600 uppercase transition-all tracking-widest">Abort</button>
@@ -480,15 +455,10 @@ const CitationLinker: React.FC = () => {
                                                 <span className={`text-[10px] font-black px-2 py-1 rounded-lg border uppercase tracking-widest ${res.originalIsPlural ? 'bg-indigo-50 text-indigo-600 border-indigo-100' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
                                                     {res.originalIsPlural ? 'Plural' : 'Singular'}
                                                 </span>
-                                                {res.status === 'resolved' && !res.originalIsPlural && res.targetIsPlural && (
-                                                    <span className="text-[10px] font-black px-2 py-1 rounded-lg border uppercase tracking-widest bg-amber-50 text-amber-600 border-amber-100 animate-pulse">
-                                                        &rarr; Convert to Plural
-                                                    </span>
-                                                )}
                                             </div>
                                             <div className="flex gap-2">
-                                                {res.missingId && <span className="text-[8px] font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 uppercase">New ID Needed</span>}
-                                                {res.missingRefid && <span className="text-[8px] font-black text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 uppercase">New Link Needed</span>}
+                                                {targetMissingId && res.missingId && <span className="text-[8px] font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 uppercase">Will Inject ID</span>}
+                                                {targetMissingRefid && res.missingRefid && res.status === 'resolved' && <span className="text-[8px] font-black text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 uppercase">Will Resolve Link</span>}
                                             </div>
                                             <span className="text-[10px] font-mono text-slate-400 font-bold ml-auto">TXT: "{res.textContent}"</span>
                                         </div>
@@ -500,7 +470,7 @@ const CitationLinker: React.FC = () => {
                                         <div className={`text-[9px] font-black uppercase tracking-widest mb-1 ${res.status === 'resolved' ? 'text-emerald-600' : 'text-rose-600'}`}>
                                             {res.status === 'resolved' ? 'Protocol Ready' : 'Protocol failed: missing from list'}
                                         </div>
-                                        {res.status === 'resolved' && (
+                                        {res.status === 'resolved' && res.mappedIds.length > 0 && (
                                             <div className="flex gap-1">
                                                 {res.mappedIds.slice(0, 2).map(id => (
                                                     <span key={id} className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 uppercase">{id}</span>
