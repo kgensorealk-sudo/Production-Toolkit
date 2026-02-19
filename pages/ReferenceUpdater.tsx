@@ -234,14 +234,14 @@ const ReferenceUpdater: React.FC = () => {
                     let matchType: 'ID' | 'Label' | 'Content' | 'Fuzzy' | undefined;
                     let matchScore = 0;
 
-                    // 1. CONTENT HASH MATCH (Highest Priority)
+                    // 1. CONTENT HASH MATCH
                     matchIdx = updatedRefs.findIndex((u, idx) => !usedUpdateIdx.has(idx) && u.contentHash === origRef.contentHash);
                     if (matchIdx !== -1) { 
                         matchType = 'Content'; 
                         matchScore = 100; 
                     }
 
-                    // 2. FUZZY FINGERPRINT MATCH (Metadata search)
+                    // 2. FUZZY FINGERPRINT MATCH
                     if (matchIdx === -1) {
                         let bestFuzzyIdx = -1;
                         let bestFuzzyScore = 0;
@@ -251,7 +251,6 @@ const ReferenceUpdater: React.FC = () => {
                                 if (score > bestFuzzyScore) { bestFuzzyScore = score; bestFuzzyIdx = idx; }
                             }
                         });
-                        // Stricter threshold (0.85) to avoid cross-matching different refs
                         if (bestFuzzyScore > 0.85) { 
                             matchIdx = bestFuzzyIdx; 
                             matchType = 'Fuzzy'; 
@@ -269,7 +268,6 @@ const ReferenceUpdater: React.FC = () => {
                     if (matchIdx === -1 && origRef.id) {
                         const idIdx = updatedRefs.findIndex((u, idx) => !usedUpdateIdx.has(idx) && u.id === origRef.id && u.id !== '');
                         if (idIdx !== -1) {
-                            // Verify that content isn't totally different before accepting ID match
                             const safetyScore = getSimilarity(updatedRefs[idIdx].fingerprint, origRef.fingerprint);
                             if (safetyScore > 0.6) {
                                 matchIdx = idIdx;
@@ -378,6 +376,7 @@ const ReferenceUpdater: React.FC = () => {
                             blockMarkup = updatedRefs[item.updatedIndex].fullTag;
                             targetId = origRef.id;
                         } else {
+                            // UNCHANGED: Take original tag as-is
                             blockMarkup = origRef.fullTag;
                             targetId = origRef.id;
                         }
@@ -393,7 +392,9 @@ const ReferenceUpdater: React.FC = () => {
                             blockMarkup = blockMarkup.replace(/id="[^"]*"\s*/, '').replace('<ce:bib-reference', `<ce:bib-reference id="${targetId}"`);
                         }
 
-                        if (renumberInternal) {
+                        // CRITICAL: Only renumber internal IDs if reference is NEW or UPDATED.
+                        // For UNCHANGED references, we retain original internal IDs (rfXXXX, seXXXX).
+                        if (renumberInternal && item.status !== 'unchanged') {
                             blockMarkup = blockMarkup.replace(/(<(?:sb:reference|ce:source-text|ce:inter-ref|sb:inter-ref|ce:other-ref|ce:textref)\b[^>]*?)(\bid="[^"]+")([^>]*?>)/g, (m, p1, idAttr, p2) => {
                                 let prefix = p1.includes('ce:source-text') ? 'se' : p1.includes('inter-ref') ? 'ir' : p1.includes('ce:other-ref') ? 'or' : p1.includes('ce:textref') ? 'tr' : 'rf';
                                 let currentVal = idCounters[prefix];
@@ -417,7 +418,7 @@ const ReferenceUpdater: React.FC = () => {
             setOutput(joinedResult);
             setActiveTab('result');
             await generateDiffAsync(originalXml, joinedResult);
-            setToast({ msg: "Protocol executed. Sequences synchronized.", type: "success" });
+            setToast({ msg: "Protocol executed. Sequence synchronized.", type: "success" });
         } catch (e) { 
             setToast({ msg: "Merge Protocol Failure.", type: "error" }); 
         } finally { 
