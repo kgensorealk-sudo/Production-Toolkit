@@ -1,13 +1,14 @@
-
 {
   "name": "production-toolkit",
   "version": "1.6.0",
+  "type": "module",
   "description": "Professional Editorial Workflow Suite with Security Hardening",
   "main": "electron/main.js",
   "author": "Editorial Systems Pro",
   "license": "MIT",
   "scripts": {
     "dev": "vite",
+    "lint": "tsc --noEmit",
     "build": "vite build",
     "preview": "vite preview",
     "electron:dev": "concurrently \"npm run dev\" \"wait-on tcp:5173 && electron .\"",
@@ -15,11 +16,17 @@
     "electron:dist": "npm run build && electron-builder build --windows"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "@tailwindcss/vite": "^4.0.0",
+    "autoprefixer": "^10.4.20",
     "diff": "^5.2.0",
+    "lucide-react": "^0.574.0",
+    "motion": "^12.34.2",
+    "postcss": "^8.4.49",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-router-dom": "^7.12.0",
-    "@supabase/supabase-js": "^2.39.0"
+    "tailwindcss": "^3.4.17"
   },
   "devDependencies": {
     "@types/diff": "^5.0.9",

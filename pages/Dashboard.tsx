@@ -1,5 +1,31 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
+import { motion, AnimatePresence } from 'motion/react';
+import { 
+    Search, 
+    RefreshCw, 
+    Pin, 
+    PinOff, 
+    HelpCircle, 
+    ArrowRight, 
+    Lock, 
+    Key, 
+    Sparkles,
+    FileText,
+    Database,
+    Table,
+    GitCompare,
+    Eraser,
+    Tags,
+    Link,
+    SearchCode,
+    RefreshCcw,
+    FileSearch,
+    UserCheck,
+    Highlighter,
+    Trash2,
+    ShieldAlert
+} from 'lucide-react';
 import { ToolId } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import AnnouncementModal from '../components/AnnouncementModal';
@@ -59,65 +85,73 @@ const ToolCard: React.FC<ToolCardProps> = ({ id, title, desc, iconBg, iconText, 
     };
     
     return (
-        <div 
+        <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: delay / 1000, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+            whileHover={{ y: -4 }}
             onClick={onClick}
-            className={`glass-panel rounded-[2.5rem] p-1 shadow-sm hover:shadow-2xl transition-all duration-500 cursor-pointer group animate-slide-up bg-white/80 ${isLocked ? 'opacity-60' : ''} ${isFree && isKeyExclusive ? 'ring-4 ring-emerald-400/20 shadow-emerald-500/10' : 'hover:shadow-indigo-500/10'}`}
-            style={{ animationDelay: `${delay}ms`, animationFillMode: 'backwards' }}
+            className={`group relative glass-panel rounded-3xl p-1 transition-all duration-500 cursor-pointer ${isLocked ? 'opacity-60' : ''} ${isFree && isKeyExclusive ? 'ring-4 ring-emerald-400/20' : ''}`}
         >
-            <div className={`h-full bg-white rounded-[2.2rem] p-8 flex flex-col border border-slate-100 relative overflow-hidden ${isLocked ? 'grayscale-[0.9]' : ''}`}>
-                <div className={`absolute top-0 left-0 w-full h-1.5 ${isLocked ? 'bg-slate-200' : (isFree ? 'bg-emerald-50 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : borderColor)}`}></div>
+            <div className={`h-full bg-white rounded-[1.4rem] p-6 flex flex-col border border-slate-100 relative overflow-hidden ${isLocked ? 'grayscale-[0.9]' : ''}`}>
+                <div className={`absolute top-0 left-0 w-full h-1 ${isLocked ? 'bg-slate-200' : (isFree ? 'bg-emerald-500' : borderColor)}`}></div>
                 
-                <div className="absolute top-4 left-4 right-4 z-30 flex justify-between items-center">
-                    <button 
-                        onClick={handleTipInternal}
-                        className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-500 shadow-sm hover:scale-110 hover:bg-amber-500 hover:text-white transition-all duration-300 relative group/tip"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
-                        {!hasSeenTips && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-400 rounded-full animate-ping opacity-75"></span>}
-                    </button>
-
-                    <button 
-                        onClick={(e) => { e.stopPropagation(); onPinClick(e); }}
-                        className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-all duration-300 shadow-sm hover:scale-110 ${isPinned ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-slate-100 text-slate-300 hover:text-indigo-600 hover:border-indigo-100'}`}
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill={isPinned ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" /></svg>
-                    </button>
-                </div>
-
-                {isFree && (
-                    <div className="absolute top-16 right-4 z-20">
-                        <span className={`text-[9px] font-black px-3 py-1.5 rounded-full border uppercase tracking-widest flex items-center gap-1.5 shadow-lg shadow-emerald-500/30 animate-pulse ${isKeyExclusive ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-emerald-500 text-white border-emerald-400'}`}>
-                            {isKeyExclusive ? 'Limited Promo' : 'Free Access'} • {timeLeft || 'Active'}
-                        </span>
+                <div className="flex justify-between items-start mb-6">
+                    <div className={`w-12 h-12 ${isLocked ? 'bg-slate-50' : (isFree ? 'bg-emerald-50' : iconBg)} rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-500 shadow-sm border border-slate-100`}>
+                        <Icon className={`h-6 w-6 ${isLocked ? 'text-slate-300' : (isFree ? 'text-emerald-600' : iconText)}`} />
                     </div>
-                )}
 
-                <div className="flex items-start justify-between mt-12 mb-8">
-                    <div className={`w-16 h-16 ${isLocked ? 'bg-slate-50' : (isFree ? 'bg-emerald-50 shadow-inner' : iconBg)} rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform duration-500 shadow-sm border border-slate-100`}>
-                        <Icon className={`h-8 w-8 ${isLocked ? 'text-slate-300' : (isFree ? 'text-emerald-600' : iconText)}`} />
-                    </div>
-                    <div className={`transition-all transform translate-x-2 -translate-y-2 opacity-0 group-hover:opacity-100 group-hover:translate-x-0 group-hover:translate-y-0 duration-500 ${isLocked ? 'text-slate-200' : 'text-indigo-500'}`}>
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
+                    <div className="flex gap-2">
+                        <button 
+                            onClick={handleTipInternal}
+                            className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 hover:bg-amber-50 hover:text-amber-500 hover:border-amber-100 transition-all duration-300 relative"
+                        >
+                            <HelpCircle size={16} />
+                            {!hasSeenTips && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-amber-400 rounded-full animate-ping"></span>}
+                        </button>
+
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); onPinClick(e); }}
+                            className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-all duration-300 ${isPinned ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-300 hover:text-indigo-600 hover:border-indigo-100'}`}
+                        >
+                            {isPinned ? <PinOff size={14} /> : <Pin size={14} />}
+                        </button>
                     </div>
                 </div>
 
-                <h3 className={`text-xl font-black mb-3 transition-colors uppercase tracking-tight ${isLocked ? 'text-slate-400' : 'text-slate-800 group-hover:text-indigo-700'}`}>{title}</h3>
-                <p className="text-slate-500 text-sm leading-relaxed flex-grow font-medium">{desc}</p>
-                
-                {isLocked && (
-                    <div className="mt-6 pt-4 border-t border-slate-50">
-                        <span className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">{lockType === 'key' ? 'Persistent Key Required' : 'Enterprise Subscription Only'}</span>
+                <div className="flex flex-col flex-grow">
+                    <div className="flex items-center gap-2 mb-2">
+                        <h3 className={`text-lg font-black transition-colors uppercase tracking-tight ${isLocked ? 'text-slate-400' : 'text-slate-800 group-hover:text-indigo-700'}`}>{title}</h3>
+                        {isFree && (
+                            <span className="text-[8px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 uppercase tracking-widest">
+                                {timeLeft || 'Free'}
+                            </span>
+                        )}
                     </div>
-                )}
+                    <p className="text-slate-500 text-xs leading-relaxed font-medium line-clamp-2">{desc}</p>
+                </div>
+                
+                <div className="mt-6 pt-4 border-t border-slate-50 flex items-center justify-between">
+                    {isLocked ? (
+                        <div className="flex items-center gap-1.5 text-[9px] font-black text-slate-300 uppercase tracking-widest">
+                            {lockType === 'key' ? <Key size={10} /> : <Lock size={10} />}
+                            {lockType === 'key' ? 'Key Required' : 'Enterprise Only'}
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-1.5 text-[9px] font-black text-indigo-600 uppercase tracking-widest group-hover:translate-x-1 transition-transform">
+                            Open Module <ArrowRight size={10} />
+                        </div>
+                    )}
+                </div>
             </div>
-        </div>
+        </motion.div>
     );
 };
 
 const Dashboard: React.FC = () => {
     const navigate = useNavigate();
     const { profile, freeTools, freeToolsData, refreshProfile, isAdmin, isWakingUp } = useAuth();
-    const [isSyncing, setIsSyncing] = useState(false);
+    const [isSyncing, setIsLoading] = useState(false);
     const [syncMessage, setSyncMessage] = useState('Syncing Node...');
     const [searchTerm, setSearchTerm] = useState('');
     const [pinnedTools, setPinnedTools] = useState<ToolId[]>(() => {
@@ -145,11 +179,11 @@ const Dashboard: React.FC = () => {
 
     const handleSync = async () => {
         if (isSyncing) return;
-        setIsSyncing(true);
+        setIsLoading(true);
         setSyncMessage('Establishing Connection...');
         
         const failTimer = setTimeout(() => {
-            setIsSyncing(false);
+            setIsLoading(false);
             setToast({ msg: "System timed out after 45s. Check network environment.", type: "warn" });
         }, 45000);
 
@@ -161,30 +195,30 @@ const Dashboard: React.FC = () => {
             clearTimeout(failTimer);
             setToast({ msg: `Sync failure: ${e.message || 'Network Timeout'}`, type: "error" });
         } finally {
-            setIsSyncing(false);
+            setIsLoading(false);
             setSyncMessage('Syncing Node...');
         }
     };
 
     const ALL_TOOLS_RAW = [
-        { id: ToolId.XML_RENUMBER, title: "XML Normalizer", desc: "Automatically renumbers bibliography citations and updates all cross-references.", iconBg: "bg-blue-50", iconText: "text-blue-600", borderColor: "bg-blue-500", Icon: (props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg> },
-        { id: ToolId.REF_EXTRACTOR, title: "Bibliography Extractor", desc: "Pure-text bibliography isolation with automated punctuation and spacing normalization for Word.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: (props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> },
-        { id: ToolId.GRANT_TAGGER, title: "Grant Tagger", desc: "Identify and tag grant sponsors and numbers within funding statements with XML cross-linking.", iconBg: "bg-emerald-50", iconText: "text-emerald-600", borderColor: "bg-emerald-500", Icon: (props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.407 2.67 1M12 8V7m0 1v8m0 0v1m-2.67-1c.59.593 1.56 1 2.67 1m0-1c-1.11 0-2.08-.407-2.67-1M12 16V17" /></svg> },
-        { id: ToolId.COMMENT_REPLACER, title: "Comment Replacer", desc: "Extract and clean reference replacements buried in XML editorial comment tags.", iconBg: "bg-amber-50", iconText: "text-amber-600", borderColor: "bg-amber-500", Icon: (props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" /></svg> },
-        { id: ToolId.REF_PURGER, title: "Ref List Purger", desc: "Surgically remove reported uncited items from your XML source with high-precision matching.", iconBg: "bg-rose-50", iconText: "text-rose-600", borderColor: "bg-rose-500", Icon: (props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg> },
-        { id: ToolId.UNCITED_CLEANER, title: "Uncited Ref Cleaner", desc: "Detect references with no body citations. Perform bulk purging while preserving document integrity.", iconBg: "bg-rose-50", iconText: "text-rose-600", borderColor: "bg-rose-600", Icon: (props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg> },
-        { id: ToolId.ID_AUDITOR, title: "ID Prefix Auditor", desc: "Audit and normalize ID sequences in references. Fixes non-standard prefixes while maintaining internal document links.", iconBg: "bg-violet-50", iconText: "text-violet-600", borderColor: "bg-violet-500", Icon: (props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg> },
-        { id: ToolId.CITATION_LINKER, title: "Citation Linker Pro", desc: "Auto-scans orphan citation tags and links them to bibliography IDs based on text content.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: (props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg> },
-        { id: ToolId.OTHER_REF_SCANNER, title: "Other-Ref Scanner", desc: "Isolate unstructured references for external transfer. Supports formatted HTML copy.", iconBg: "bg-amber-50", iconText: "text-amber-600", borderColor: "bg-amber-500", Icon: (props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg> },
-        { id: ToolId.REFERENCE_GEN, title: "Reference Updater", desc: "Merge updated/corrected references into existing XML lists while optionally preserving ID integrity.", iconBg: "bg-cyan-50", iconText: "text-cyan-600", borderColor: "bg-cyan-500", Icon: (props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg> },
-        { id: ToolId.REF_DUPE_CHECK, title: "Ref Dupe Checker", desc: "Find and merge citations with similar titles. Auto-relinks references to the kept item.", iconBg: "bg-rose-50", iconText: "text-rose-600", borderColor: "bg-rose-500", Icon: (props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg> },
-        { id: ToolId.CREDIT_GENERATOR, title: "CRediT Tagging", desc: "Smart-detects roles from raw text, auto-corrects typos, and generates standardized NISO CRediT XML.", iconBg: "bg-purple-50", iconText: "text-purple-600", borderColor: "bg-purple-500", Icon: (props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg> },
-        { id: ToolId.HIGHLIGHTS_GEN, title: "Highlights Gen", desc: "Convert rich text input into standardized author-highlights XML structures.", iconBg: "bg-amber-50", iconText: "text-amber-600", borderColor: "bg-amber-500", Icon: (props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg> },
-        { id: ToolId.QUICK_DIFF, title: "Quick Text Diff", desc: "Instant side-by-side text comparison with line numbers and character-level highlights.", iconBg: "bg-orange-50", iconText: "text-orange-600", borderColor: "bg-orange-500", Icon: (props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> },
-        { id: ToolId.TAG_CLEANER, title: "XML Tag Cleaner", desc: "Safstrip specific editing option tags while maintaining document structure.", iconBg: "bg-teal-50", iconText: "text-teal-600", borderColor: "bg-teal-500", Icon: (props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg> },
-        { id: ToolId.TABLE_FIXER, title: "XML Table Fixer", desc: "Manage table footnotes by detaching them to legends or attaching legends back to cells.", iconBg: "bg-pink-50", iconText: "text-pink-600", borderColor: "bg-pink-500", Icon: (props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg> },
-        { id: ToolId.TABLE_BEAUTIFIER, title: "Table XML Beautifier", desc: "Transform single-line table rows into structured multi-line formatted entry blocks.", iconBg: "bg-pink-50", iconText: "text-pink-600", borderColor: "bg-pink-400", Icon: (props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7" /></svg> },
-        { id: ToolId.VIEW_SYNC, title: "View Synchronizer", desc: "Mirror content between paragraph views while maintaining ID integrity and references.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: (props: any) => <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg> }
+        { id: ToolId.XML_RENUMBER, title: "XML Normalizer", desc: "Automatically renumbers bibliography citations and updates all cross-references.", iconBg: "bg-blue-50", iconText: "text-blue-600", borderColor: "bg-blue-500", Icon: Database },
+        { id: ToolId.REF_EXTRACTOR, title: "Bibliography Extractor", desc: "Pure-text bibliography isolation with automated punctuation and spacing normalization for Word.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: FileSearch },
+        { id: ToolId.GRANT_TAGGER, title: "Grant Tagger", desc: "Identify and tag grant sponsors and numbers within funding statements with XML cross-linking.", iconBg: "bg-emerald-50", iconText: "text-emerald-600", borderColor: "bg-emerald-500", Icon: Tags },
+        { id: ToolId.COMMENT_REPLACER, title: "Comment Replacer", desc: "Extract and clean reference replacements buried in XML editorial comment tags.", iconBg: "bg-amber-50", iconText: "text-amber-600", borderColor: "bg-amber-500", Icon: SearchCode },
+        { id: ToolId.REF_PURGER, title: "Ref List Purger", desc: "Surgically remove reported uncited items from your XML source with high-precision matching.", iconBg: "bg-rose-50", iconText: "text-rose-600", borderColor: "bg-rose-500", Icon: Trash2 },
+        { id: ToolId.UNCITED_CLEANER, title: "Uncited Ref Cleaner", desc: "Detect references with no body citations. Perform bulk purging while preserving document integrity.", iconBg: "bg-rose-50", iconText: "text-rose-600", borderColor: "bg-rose-600", Icon: Eraser },
+        { id: ToolId.ID_AUDITOR, title: "ID Prefix Auditor", desc: "Audit and normalize ID sequences in references. Fixes non-standard prefixes while maintaining internal document links.", iconBg: "bg-violet-50", iconText: "text-violet-600", borderColor: "bg-violet-500", Icon: ShieldAlert },
+        { id: ToolId.CITATION_LINKER, title: "Citation Linker Pro", desc: "Auto-scans orphan citation tags and links them to bibliography IDs based on text content.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: Link },
+        { id: ToolId.OTHER_REF_SCANNER, title: "Other-Ref Scanner", desc: "Isolate unstructured references for external transfer. Supports formatted HTML copy.", iconBg: "bg-amber-50", iconText: "text-amber-600", borderColor: "bg-amber-500", Icon: Search },
+        { id: ToolId.REFERENCE_GEN, title: "Reference Updater", desc: "Merge updated/corrected references into existing XML lists while optionally preserving ID integrity.", iconBg: "bg-cyan-50", iconText: "text-cyan-600", borderColor: "bg-cyan-500", Icon: RefreshCcw },
+        { id: ToolId.REF_DUPE_CHECK, title: "Ref Dupe Checker", desc: "Find and merge citations with similar titles. Auto-relinks references to the kept item.", iconBg: "bg-rose-50", iconText: "text-rose-600", borderColor: "bg-rose-500", Icon: GitCompare },
+        { id: ToolId.CREDIT_GENERATOR, title: "CRediT Tagging", desc: "Smart-detects roles from raw text, auto-corrects typos, and generates standardized NISO CRediT XML.", iconBg: "bg-purple-50", iconText: "text-purple-600", borderColor: "bg-purple-500", Icon: UserCheck },
+        { id: ToolId.HIGHLIGHTS_GEN, title: "Highlights Gen", desc: "Convert rich text input into standardized author-highlights XML structures.", iconBg: "bg-amber-50", iconText: "text-amber-600", borderColor: "bg-amber-500", Icon: Highlighter },
+        { id: ToolId.QUICK_DIFF, title: "Quick Text Diff", desc: "Instant side-by-side text comparison with line numbers and character-level highlights.", iconBg: "bg-orange-50", iconText: "text-orange-600", borderColor: "bg-orange-500", Icon: FileText },
+        { id: ToolId.TAG_CLEANER, title: "XML Tag Cleaner", desc: "Safstrip specific editing option tags while maintaining document structure.", iconBg: "bg-teal-50", iconText: "text-teal-600", borderColor: "bg-teal-500", Icon: Eraser },
+        { id: ToolId.TABLE_FIXER, title: "XML Table Fixer", desc: "Manage table footnotes by detaching them to legends or attaching legends back to cells.", iconBg: "bg-pink-50", iconText: "text-pink-600", borderColor: "bg-pink-500", Icon: Table },
+        { id: ToolId.TABLE_BEAUTIFIER, title: "Table XML Beautifier", desc: "Transform single-line table rows into structured multi-line formatted entry blocks.", iconBg: "bg-pink-50", iconText: "text-pink-600", borderColor: "bg-pink-400", Icon: Sparkles },
+        { id: ToolId.VIEW_SYNC, title: "View Synchronizer", desc: "Mirror content between paragraph views while maintaining ID integrity and references.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: RefreshCw }
     ];
 
     const filteredTools = useMemo(() => {
@@ -212,71 +246,129 @@ const Dashboard: React.FC = () => {
     };
 
     return (
-        <div className="max-w-7xl mx-auto px-4 py-20 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
             <AnnouncementModal />
             {activeTipTool && <ToolTipsModal toolId={activeTipTool.id} toolName={activeTipTool.name} isOpen={!!activeTipTool} onClose={() => setActiveTipTool(null)} />}
 
-            {/* SYNC OVERLAY */}
-            {(isSyncing || isWakingUp) && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-md">
-                    <LoadingOverlay message={isWakingUp ? 'Waking Database Nodes...' : syncMessage} color="indigo" />
-                </div>
-            )}
+            <AnimatePresence>
+                {(isSyncing || isWakingUp) && (
+                    <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-md"
+                    >
+                        <LoadingOverlay message={isWakingUp ? 'Waking Database Nodes...' : syncMessage} color="indigo" />
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
-            <div className="text-center mb-16 animate-fade-in">
-                <h2 className="text-5xl md:text-6xl font-black text-slate-900 tracking-tighter mb-6 uppercase">Workspace <span className="text-indigo-600">Console</span></h2>
-                <p className="text-lg md:text-xl text-slate-500 max-w-2xl mx-auto leading-relaxed font-medium">Integrated environment for technical XML production and citation integrity management.</p>
-                <div className="mt-12 flex flex-col items-center gap-6">
-                    <div className="relative w-full max-w-xl group">
-                        <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none">
-                            <svg className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-                        </div>
-                        <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-14 pr-14 py-5 bg-white border border-slate-200 rounded-[2rem] shadow-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none font-bold text-slate-700 uppercase tracking-widest text-xs placeholder:text-slate-300" placeholder="Search Node Library..." />
+            <div className="mb-12">
+                <motion.div 
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex flex-col md:flex-row md:items-end justify-between gap-8"
+                >
+                    <div className="max-w-2xl">
+                        <h2 className="text-4xl font-black text-slate-900 tracking-tight mb-4 uppercase">
+                            Workspace <span className="text-indigo-600">Console</span>
+                        </h2>
+                        <p className="text-slate-500 font-medium leading-relaxed">
+                            Integrated environment for technical XML production and citation integrity management. 
+                            Select a module below to begin processing.
+                        </p>
                     </div>
-                    <div className="flex flex-wrap justify-center gap-4">
-                        <button onClick={handleSync} disabled={isSyncing} className={`inline-flex items-center gap-2 px-6 py-3 rounded-full border transition-all active:scale-95 shadow-sm text-[10px] font-black uppercase tracking-widest ${isSyncing ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-500'}`} title="Force refresh account permissions">
-                            <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                            {isSyncing ? 'Synchronizing Node...' : 'Node Integrity Sync'}
+                    
+                    <div className="flex flex-col sm:flex-row items-center gap-4">
+                        <div className="relative w-full sm:w-80 group">
+                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-indigo-500 transition-colors">
+                                <Search size={16} strokeWidth={3} />
+                            </div>
+                            <input 
+                                type="text" 
+                                value={searchTerm} 
+                                onChange={(e) => setSearchTerm(e.target.value)} 
+                                className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-2xl shadow-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none font-bold text-slate-700 uppercase tracking-widest text-[10px] placeholder:text-slate-300" 
+                                placeholder="Search Node Library..." 
+                            />
+                        </div>
+                        <button 
+                            onClick={handleSync} 
+                            disabled={isSyncing} 
+                            className={`flex items-center gap-2 px-5 py-3 rounded-2xl border transition-all active:scale-95 shadow-sm text-[10px] font-black uppercase tracking-widest ${isSyncing ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-500'}`}
+                        >
+                            <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
+                            {isSyncing ? 'Syncing...' : 'Sync Node'}
                         </button>
                     </div>
-                </div>
+                </motion.div>
             </div>
 
-            {sections.featured.length > 0 && (
-                <div className="mb-20 animate-fade-in">
-                    <div className="flex items-center gap-4 mb-10 px-2">
-                        <div className="flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-indigo-600 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-7.714 2.143L11 21l-2.286-6.857L1 12l7.714-2.143L11 3z" /></svg><h3 className="text-xs font-black text-slate-900 uppercase tracking-[0.4em] whitespace-nowrap">Priority Protocol Access</h3></div>
-                        <div className="h-px bg-slate-200 w-full shadow-inner"></div>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{sections.featured.map((tool) => (<ToolCard key={tool.id} {...tool} delay={50} isPinned={pinnedTools.includes(tool.id)} onPinClick={() => handlePinClick(tool.id)} lockType={getLockType(tool.id)} isFree={freeTools.includes(tool.id)} expiry={freeToolsData[tool.id]} onClick={() => navigate(`/${tool.id}`)} onTipClick={(e) => handleTipClick(tool.id, tool.title, e)} />))}</div>
-                </div>
-            )}
+            <div className="space-y-16">
+                {sections.featured.length > 0 && (
+                    <section>
+                        <div className="flex items-center gap-4 mb-8 px-2">
+                            <div className="flex items-center gap-2">
+                                <Sparkles size={16} className="text-indigo-600" />
+                                <h3 className="text-[10px] font-black text-slate-900 uppercase tracking-[0.3em] whitespace-nowrap">Priority Protocol Access</h3>
+                            </div>
+                            <div className="h-px bg-slate-200 w-full"></div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                            {sections.featured.map((tool) => (
+                                <ToolCard key={tool.id} {...tool} delay={50} isPinned={pinnedTools.includes(tool.id)} onPinClick={() => handlePinClick(tool.id)} lockType={getLockType(tool.id)} isFree={freeTools.includes(tool.id)} expiry={freeToolsData[tool.id]} onClick={() => navigate(`/${tool.id}`)} onTipClick={(e) => handleTipClick(tool.id, tool.title, e)} />
+                            ))}
+                        </div>
+                    </section>
+                )}
 
-            {sections.pinned.length > 0 && (
-                <div className="mb-20 animate-fade-in">
-                    <div className="flex items-center gap-4 mb-10 px-2">
-                        <div className="flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-indigo-600" fill="currentColor" viewBox="0 0 24 24"><path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" /></svg><h3 className="text-xs font-black text-slate-900 uppercase tracking-[0.4em] whitespace-nowrap">Pinned Operations</h3></div>
-                        <div className="h-px bg-slate-200 w-full shadow-inner"></div>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{sections.pinned.map((tool) => (<ToolCard key={tool.id} {...tool} delay={50} isPinned={true} onPinClick={() => handlePinClick(tool.id)} lockType={getLockType(tool.id)} isFree={freeTools.includes(tool.id)} expiry={freeToolsData[tool.id]} onClick={() => navigate(`/${tool.id}`)} onTipClick={(e) => handleTipClick(tool.id, tool.title, e)} />))}</div>
-                </div>
-            )}
+                {sections.pinned.length > 0 && (
+                    <section>
+                        <div className="flex items-center gap-4 mb-8 px-2">
+                            <div className="flex items-center gap-2">
+                                <Pin size={16} className="text-indigo-600" />
+                                <h3 className="text-[10px] font-black text-slate-900 uppercase tracking-[0.3em] whitespace-nowrap">Pinned Operations</h3>
+                            </div>
+                            <div className="h-px bg-slate-200 w-full"></div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                            {sections.pinned.map((tool) => (
+                                <ToolCard key={tool.id} {...tool} delay={50} isPinned={true} onPinClick={() => handlePinClick(tool.id)} lockType={getLockType(tool.id)} isFree={freeTools.includes(tool.id)} expiry={freeToolsData[tool.id]} onClick={() => navigate(`/${tool.id}`)} onTipClick={(e) => handleTipClick(tool.id, tool.title, e)} />
+                            ))}
+                        </div>
+                    </section>
+                )}
 
-            {sections.active.length > 0 && (
-                <div className="mb-20">
-                    <div className="flex items-center gap-4 mb-10 px-2"><h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.4em] whitespace-nowrap">Active Node Modules</h3><div className="h-px bg-slate-100 w-full"></div></div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{sections.active.map((tool, index) => (<ToolCard key={tool.id} {...tool} delay={100 + (index * 50)} isPinned={false} onPinClick={() => handlePinClick(tool.id)} lockType={getLockType(tool.id)} isFree={freeTools.includes(tool.id)} expiry={freeToolsData[tool.id]} onClick={() => navigate(`/${tool.id}`)} onTipClick={(e) => handleTipClick(tool.id, tool.title, e)} />))}</div>
-                </div>
-            )}
+                {sections.active.length > 0 && (
+                    <section>
+                        <div className="flex items-center gap-4 mb-8 px-2">
+                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] whitespace-nowrap">Active Node Modules</h3>
+                            <div className="h-px bg-slate-100 w-full"></div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                            {sections.active.map((tool, index) => (
+                                <ToolCard key={tool.id} {...tool} delay={100 + (index * 20)} isPinned={false} onPinClick={() => handlePinClick(tool.id)} lockType={getLockType(tool.id)} isFree={freeTools.includes(tool.id)} expiry={freeToolsData[tool.id]} onClick={() => navigate(`/${tool.id}`)} onTipClick={(e) => handleTipClick(tool.id, tool.title, e)} />
+                            ))}
+                        </div>
+                    </section>
+                )}
 
-            {sections.locked.length > 0 && (
-                <div>
-                    <div className="flex items-center gap-4 mb-10 px-2"><h3 className="text-xs font-black text-slate-300 uppercase tracking-[0.4em] whitespace-nowrap">Premium System Library</h3><div className="h-px bg-slate-100 w-full"></div></div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{sections.locked.map((tool, index) => (<ToolCard key={tool.id} {...tool} delay={200 + (index * 50)} isPinned={false} onPinClick={() => handlePinClick(tool.id)} lockType={getLockType(tool.id)} isFree={freeTools.includes(tool.id)} onClick={() => navigate(`/${tool.id}`)} onTipClick={(e) => handleTipClick(tool.id, tool.title, e)} />))}</div>
-                </div>
-            )}
+                {sections.locked.length > 0 && (
+                    <section>
+                        <div className="flex items-center gap-4 mb-8 px-2">
+                            <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em] whitespace-nowrap">Premium System Library</h3>
+                            <div className="h-px bg-slate-100 w-full"></div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                            {sections.locked.map((tool, index) => (
+                                <ToolCard key={tool.id} {...tool} delay={200 + (index * 20)} isPinned={false} onPinClick={() => handlePinClick(tool.id)} lockType={getLockType(tool.id)} isFree={freeTools.includes(tool.id)} onClick={() => navigate(`/${tool.id}`)} onTipClick={(e) => handleTipClick(tool.id, tool.title, e)} />
+                            ))}
+                        </div>
+                    </section>
+                )}
+            </div>
 
-            {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
+            <Toast message={toast?.msg || ''} type={toast?.type || 'success'} onClose={() => setToast(null)} />
         </div>
     );
 };

@@ -1,6 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
-/* Import useNavigate from react-router to resolve potential named export issues in react-router-dom types */
 import { useNavigate } from 'react-router';
+import { motion, AnimatePresence } from 'motion/react';
+import { 
+    Zap, 
+    Shield, 
+    Cpu, 
+    ArrowRight, 
+    CheckCircle2, 
+    Globe, 
+    Lock, 
+    MessageSquare,
+    Database,
+    FileText,
+    UserCheck,
+    Highlighter,
+    GitCompare,
+    Eraser
+} from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import Toast from '../components/Toast';
 
@@ -10,54 +26,42 @@ const TOOLS_INFO = [
         problem: "Manual renumbering breaks links.",
         solution: "Automates citation sequencing and updates cross-references instantly.",
         color: "text-blue-600 bg-blue-50",
-        border: "border-blue-200",
-        shadow: "shadow-blue-500/10",
-        icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+        icon: Database
     },
     {
         title: "Reference Updater",
         problem: "Dirty corrections ruin integrity.",
         solution: "Surgically merges updates while preserving existing body linking IDs.",
         color: "text-sky-600 bg-sky-50",
-        border: "border-sky-200",
-        shadow: "shadow-sky-500/10",
-        icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        icon: FileText
     },
     {
         title: "CRediT Tagging",
         problem: "Author roles are messy & unstructured.",
         solution: "Smart-detects roles, fixes typos, and generates standard XML tags.",
         color: "text-purple-600 bg-purple-50",
-        border: "border-purple-200",
-        shadow: "shadow-purple-500/10",
-        icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+        icon: UserCheck
     },
     {
         title: "Highlights Gen",
         problem: "Rich text doesn't paste into XML.",
         solution: "Converts bullets, bold, and italics into 'author-highlights' XML structures.",
         color: "text-yellow-600 bg-yellow-50",
-        border: "border-yellow-200",
-        shadow: "shadow-yellow-500/10",
-        icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+        icon: Highlighter
     },
     {
         title: "Quick Text Diff",
         problem: "Spotting XML edits is difficult.",
         solution: "Side-by-side comparison with precision character-level highlighting.",
         color: "text-orange-600 bg-orange-50",
-        border: "border-orange-200",
-        shadow: "shadow-orange-500/10",
-        icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        icon: GitCompare
     },
     {
         title: "XML Tag Cleaner",
         problem: "Editing tags clutter the file.",
         solution: "Bulk accept/reject proprietary tags while maintaining document integrity.",
         color: "text-teal-600 bg-teal-50",
-        border: "border-teal-200",
-        shadow: "shadow-teal-500/10",
-        icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+        icon: Eraser
     }
 ];
 
@@ -110,103 +114,144 @@ const Landing: React.FC = () => {
     };
 
     return (
-        <div className="bg-transparent relative flex flex-col font-sans overflow-x-hidden pt-4 lg:pt-12 pb-24">
-            <main className="flex-grow flex flex-col items-center w-full z-10 gap-20">
-                <div className="max-w-7xl w-full grid grid-cols-1 lg:grid-cols-2 gap-16 items-center px-6">
-                    <div className="text-left space-y-10 animate-slide-up">
-                        <div>
-                             <h1 className="text-5xl lg:text-7xl font-black text-slate-900 tracking-tighter mb-8 leading-[0.9] uppercase">
-                                Precision Editorial <br/>
-                                <span className="text-indigo-600">Automation.</span>
+        <div className="bg-transparent relative flex flex-col font-sans overflow-x-hidden pt-12 lg:pt-24 pb-24">
+            <main className="flex-grow flex flex-col items-center w-full z-10 gap-32">
+                {/* Hero Section */}
+                <div className="max-w-7xl w-full grid grid-cols-1 lg:grid-cols-2 gap-20 items-center px-6">
+                    <motion.div 
+                        initial={{ opacity: 0, x: -30 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+                        className="text-left space-y-12"
+                    >
+                        <div className="space-y-6">
+                             <motion.div 
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.2 }}
+                                className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em]"
+                             >
+                                <Zap size={10} fill="currentColor" />
+                                v1.8.0 Enterprise Release
+                             </motion.div>
+                             <h1 className="text-6xl lg:text-8xl font-black text-slate-900 tracking-tighter leading-[0.85] uppercase">
+                                Precision <br/>
+                                <span className="text-indigo-600">Editorial</span> <br/>
+                                Engineering.
                             </h1>
                             <p className="text-xl text-slate-500 leading-relaxed max-w-lg font-medium">
-                                Enterprise-grade utilities engineered for high-volume XML production teams. 
-                                Secure, offline-safe, and incredibly fast.
+                                High-performance automation utilities engineered for technical XML production teams. 
+                                Secure, local-first, and incredibly fast.
                             </p>
                         </div>
                         
                         <div className="flex flex-wrap gap-4">
-                             <div className="flex items-center gap-3 px-5 py-3 bg-white rounded-2xl shadow-sm border border-slate-100 font-bold text-slate-700 text-sm">
-                                <div className="w-2 h-2 rounded-full bg-indigo-500"></div>
+                             <div className="flex items-center gap-3 px-6 py-4 bg-white rounded-2xl shadow-sm border border-slate-100 font-bold text-slate-700 text-sm hover:shadow-md transition-shadow">
+                                <Shield size={18} className="text-indigo-500" />
                                 XML Integrity
                              </div>
-                             <div className="flex items-center gap-3 px-5 py-3 bg-white rounded-2xl shadow-sm border border-slate-100 font-bold text-slate-700 text-sm">
-                                <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                             <div className="flex items-center gap-3 px-6 py-4 bg-white rounded-2xl shadow-sm border border-slate-100 font-bold text-slate-700 text-sm hover:shadow-md transition-shadow">
+                                <Globe size={18} className="text-emerald-500" />
                                 Local-First
                              </div>
-                             <div className="flex items-center gap-3 px-5 py-3 bg-white rounded-2xl shadow-sm border border-slate-100 font-bold text-slate-700 text-sm">
-                                <div className="w-2 h-2 rounded-full bg-amber-500"></div>
+                             <div className="flex items-center gap-3 px-6 py-4 bg-white rounded-2xl shadow-sm border border-slate-100 font-bold text-slate-700 text-sm hover:shadow-md transition-shadow">
+                                <Cpu size={18} className="text-amber-500" />
                                 Citation Logic
                              </div>
                         </div>
-                    </div>
+                    </motion.div>
 
-                    <div className={`p-10 lg:p-16 rounded-[3rem] border transition-all duration-500 text-center relative overflow-hidden animate-scale-in bg-white border-slate-100 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.08)]`}>
-                        <div className="relative z-10">
-                            <div className="mb-10 flex justify-center">
-                                <div className={`w-32 h-32 rounded-[2rem] flex items-center justify-center mb-2 shadow-inner bg-slate-50 text-slate-900 border border-slate-100`}>
-                                    {isAdmin ? (
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                        </svg>
-                                    ) : isSubscribed ? (
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                    ) : (
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-14 w-14 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+                    <motion.div 
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+                        className="relative"
+                    >
+                        <div className="p-12 lg:p-20 rounded-[4rem] border transition-all duration-500 text-center relative overflow-hidden bg-white border-slate-100 shadow-[0_40px_100px_-20px_rgba(0,0,0,0.1)]">
+                            <div className="relative z-10">
+                                <div className="mb-12 flex justify-center">
+                                    <div className="w-32 h-32 rounded-[2.5rem] flex items-center justify-center mb-2 shadow-inner bg-slate-50 text-slate-900 border border-slate-100 animate-float">
+                                        {isAdmin ? (
+                                            <Shield size={64} className="text-indigo-600" strokeWidth={1.5} />
+                                        ) : isSubscribed ? (
+                                            <CheckCircle2 size={64} className="text-emerald-500" strokeWidth={1.5} />
+                                        ) : (
+                                            <Lock size={64} className="text-slate-300" strokeWidth={1.5} />
+                                        )}
+                                    </div>
+                                </div>
+
+                                <h2 className="text-4xl font-black text-slate-900 mb-2 uppercase tracking-tighter">
+                                    {isAdmin ? 'Administrator' : isSubscribed ? 'Premium Access' : 'Standard Node'}
+                                </h2>
+                                <p className="text-xs font-bold text-slate-400 mb-12 uppercase tracking-[0.3em]">{user?.email}</p>
+                                
+                                <div className="space-y-4">
+                                    <button 
+                                        onClick={() => navigate('/dashboard')} 
+                                        className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-6 px-10 rounded-3xl shadow-2xl shadow-indigo-500/20 transform transition-all hover:-translate-y-1 active:scale-95 flex items-center justify-center gap-4 uppercase tracking-widest text-sm"
+                                    >
+                                        <span>Enter Workspace</span>
+                                        <ArrowRight size={20} />
+                                    </button>
+                                    
+                                    {!isSubscribed && !isAdmin && (
+                                        <button 
+                                            onClick={() => setIsRequestModalOpen(true)} 
+                                            className="w-full py-4 text-[11px] font-black text-indigo-600 hover:text-indigo-700 uppercase tracking-[0.25em] transition-all"
+                                        >
+                                            Upgrade to Enterprise
+                                        </button>
                                     )}
                                 </div>
                             </div>
-
-                            <h2 className="text-4xl font-black text-slate-900 mb-2 uppercase tracking-tighter">
-                                {isAdmin ? 'System Administrator' : isSubscribed ? 'Premium Access' : 'Standard Node'}
-                            </h2>
-                            <p className="text-sm font-bold text-slate-400 mb-10 uppercase tracking-widest">{user?.email}</p>
-                            
-                            <div className="space-y-4">
-                                <button onClick={() => navigate('/dashboard')} className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-5 px-10 rounded-2xl shadow-2xl shadow-slate-200 transform transition-all hover:-translate-y-1 active:scale-95 flex items-center justify-center gap-4 uppercase tracking-widest text-sm">
-                                    <span>Enter Workspace</span>
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
-                                </button>
-                                
-                                {!isSubscribed && !isAdmin && (
-                                    <button 
-                                        onClick={() => setIsRequestModalOpen(true)} 
-                                        className="w-full py-4 text-[10px] font-black text-indigo-600 hover:text-indigo-700 uppercase tracking-[0.2em] transition-all"
-                                    >
-                                        Upgrade to Full Subscription
-                                    </button>
-                                )}
-                            </div>
+                            <div className="absolute top-0 right-0 w-48 h-48 bg-slate-50 rounded-bl-[6rem] -mr-24 -mt-24 opacity-50"></div>
                         </div>
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-slate-50 rounded-bl-[4rem] -mr-16 -mt-16 opacity-50"></div>
-                    </div>
+                    </motion.div>
                 </div>
 
-                <div className="w-full max-w-[1400px] animate-slide-up" style={{animationDelay: '0.2s'}}>
-                    <div className="text-center mb-16 px-4">
-                        <span className="text-slate-400 font-black tracking-[0.3em] text-[10px] uppercase block mb-4">The Standard in Editorial Engineering</span>
-                        <h3 className="text-4xl font-black text-slate-900 tracking-tighter uppercase">Integrated Tool Suite</h3>
+                {/* Tool Carousel */}
+                <div className="w-full max-w-[1600px]">
+                    <div className="text-center mb-20 px-4">
+                        <span className="text-slate-400 font-black tracking-[0.4em] text-[11px] uppercase block mb-6">The Standard in Editorial Engineering</span>
+                        <h3 className="text-5xl font-black text-slate-900 tracking-tighter uppercase">Integrated Tool Suite</h3>
                     </div>
 
                     <div className="relative group" onMouseEnter={() => setIsPaused(true)} onMouseLeave={() => setIsPaused(false)}>
-                        <button onClick={() => scrollToIndex(activeIndex - 1)} className="hidden md:flex absolute left-8 top-1/2 -translate-y-1/2 z-20 w-14 h-14 bg-white border border-slate-200 rounded-2xl items-center justify-center shadow-xl text-slate-500 hover:text-indigo-600 hover:scale-110 transition-all opacity-0 group-hover:opacity-100"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg></button>
-                        <button onClick={() => scrollToIndex(activeIndex + 1)} className="hidden md:flex absolute right-8 top-1/2 -translate-y-1/2 z-20 w-14 h-14 bg-white border border-slate-200 rounded-2xl items-center justify-center shadow-xl text-slate-500 hover:text-indigo-600 hover:scale-110 transition-all opacity-0 group-hover:opacity-100"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg></button>
+                        <button onClick={() => scrollToIndex(activeIndex - 1)} className="hidden lg:flex absolute left-12 top-1/2 -translate-y-1/2 z-20 w-16 h-16 bg-white border border-slate-200 rounded-2xl items-center justify-center shadow-2xl text-slate-500 hover:text-indigo-600 hover:scale-110 transition-all opacity-0 group-hover:opacity-100">
+                            <ArrowRight size={24} className="rotate-180" />
+                        </button>
+                        <button onClick={() => scrollToIndex(activeIndex + 1)} className="hidden lg:flex absolute right-12 top-1/2 -translate-y-1/2 z-20 w-16 h-16 bg-white border border-slate-200 rounded-2xl items-center justify-center shadow-2xl text-slate-500 hover:text-indigo-600 hover:scale-110 transition-all opacity-0 group-hover:opacity-100">
+                            <ArrowRight size={24} />
+                        </button>
 
-                        <div ref={scrollContainerRef} onScroll={handleScroll} className="flex overflow-x-auto pb-20 pt-4 gap-4 md:gap-10 snap-x snap-mandatory custom-scrollbar no-scrollbar scroll-smooth px-[7.5vw] md:px-[calc(50%-250px)]" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                        <div ref={scrollContainerRef} onScroll={handleScroll} className="flex overflow-x-auto pb-24 pt-4 gap-6 md:gap-12 snap-x snap-mandatory no-scrollbar scroll-smooth px-[10vw] md:px-[calc(50%-300px)]">
                             {TOOLS_INFO.map((tool, idx) => {
                                 const isActive = idx === activeIndex;
+                                const Icon = tool.icon;
                                 return (
-                                    <div key={idx} data-tool-card className={`shrink-0 snap-center flex flex-col gap-8 p-10 rounded-[3rem] border transition-all duration-700 ease-out min-w-[85vw] md:min-w-[500px] w-[85vw] md:w-[500px] relative overflow-hidden bg-white ${isActive ? `shadow-[0_40px_80px_-15px_rgba(0,0,0,0.1)] scale-100 opacity-100 z-10 border-slate-100` : 'shadow-none scale-90 opacity-30 blur-[2px] border-transparent' }`}>
+                                    <div 
+                                        key={idx} 
+                                        data-tool-card 
+                                        className={`shrink-0 snap-center flex flex-col gap-10 p-12 rounded-[4rem] border transition-all duration-700 ease-out min-w-[85vw] md:min-w-[600px] w-[85vw] md:w-[600px] relative overflow-hidden bg-white ${isActive ? `shadow-[0_60px_120px_-20px_rgba(0,0,0,0.12)] scale-100 opacity-100 z-10 border-slate-100` : 'shadow-none scale-90 opacity-20 blur-[2px] border-transparent' }`}
+                                    >
                                         <div className="flex items-center justify-between relative z-10">
-                                            <div className={`p-5 rounded-2xl ${tool.color} shadow-sm border border-slate-100/50`}><svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">{tool.icon}</svg></div>
-                                            <span className={`text-8xl font-black text-slate-50 absolute -right-4 -top-8 select-none`}>0{idx + 1}</span>
+                                            <div className={`p-6 rounded-3xl ${tool.color} shadow-sm border border-slate-100/50`}>
+                                                <Icon size={40} strokeWidth={1.5} />
+                                            </div>
+                                            <span className={`text-9xl font-black text-slate-50 absolute -right-6 -top-12 select-none`}>0{idx + 1}</span>
                                         </div>
-                                        <div className="relative z-10">
-                                            <h4 className="text-3xl font-black text-slate-900 mb-6 uppercase tracking-tighter">{tool.title}</h4>
-                                            <div className="space-y-4">
-                                                <div className={`p-5 rounded-2xl bg-slate-50 border border-slate-100 shadow-sm transition-all duration-700 ${isActive ? 'translate-x-0 opacity-100' : 'translate-x-8 opacity-0'}`}><p className="text-[10px] font-black text-rose-500 uppercase tracking-widest mb-1">Bottleneck</p><p className="text-base text-slate-600 font-bold leading-snug">{tool.problem}</p></div>
-                                                <div className={`p-5 rounded-2xl bg-indigo-50 border border-indigo-100 shadow-sm transition-all duration-700 delay-100 ${isActive ? 'translate-x-0 opacity-100' : 'translate-x-8 opacity-0'}`}><p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-1">Outcome</p><p className="text-base text-indigo-900 font-bold leading-snug">{tool.solution}</p></div>
+                                        <div className="relative z-10 space-y-8">
+                                            <h4 className="text-4xl font-black text-slate-900 uppercase tracking-tighter">{tool.title}</h4>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                <div className={`p-6 rounded-3xl bg-slate-50 border border-slate-100 shadow-sm transition-all duration-700 ${isActive ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
+                                                    <p className="text-[11px] font-black text-rose-500 uppercase tracking-widest mb-2">Bottleneck</p>
+                                                    <p className="text-lg text-slate-600 font-bold leading-tight">{tool.problem}</p>
+                                                </div>
+                                                <div className={`p-6 rounded-3xl bg-indigo-50 border border-indigo-100 shadow-sm transition-all duration-700 delay-100 ${isActive ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
+                                                    <p className="text-[11px] font-black text-indigo-600 uppercase tracking-widest mb-2">Outcome</p>
+                                                    <p className="text-lg text-indigo-900 font-bold leading-tight">{tool.solution}</p>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -217,63 +262,75 @@ const Landing: React.FC = () => {
                 </div>
             </main>
 
+            {/* Background Elements */}
             <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
-                 <div className="absolute top-[-10%] left-[-5%] w-[50%] h-[50%] bg-indigo-50/50 rounded-full blur-3xl opacity-50"></div>
-                 <div className="absolute bottom-[-10%] right-[-5%] w-[40%] h-[40%] bg-slate-100/50 rounded-full blur-3xl opacity-50"></div>
+                 <div className="absolute top-[-10%] left-[-5%] w-[60%] h-[60%] bg-indigo-50/50 rounded-full blur-[120px] opacity-50"></div>
+                 <div className="absolute bottom-[-10%] right-[-5%] w-[50%] h-[50%] bg-slate-100/50 rounded-full blur-[120px] opacity-50"></div>
             </div>
 
-            {isRequestModalOpen && (
-                <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
-                    <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden animate-scale-in relative ring-4 ring-slate-900/5">
-                        <div className="bg-gradient-to-br from-indigo-600 to-violet-700 p-8 text-center relative overflow-hidden">
-                            <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-bl-full -mr-8 -mt-8"></div>
-                            <div className="relative z-10">
-                                <div className="w-20 h-20 bg-white/20 backdrop-blur-xl rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl border border-white/30">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                                    </svg>
+            {/* Request Modal */}
+            <AnimatePresence>
+                {isRequestModalOpen && (
+                    <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4"
+                    >
+                        <motion.div 
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            className="bg-white rounded-[3rem] shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden relative ring-4 ring-slate-900/5"
+                        >
+                            <div className="bg-gradient-to-br from-indigo-600 to-violet-700 p-10 text-center relative overflow-hidden">
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-bl-full -mr-12 -mt-12"></div>
+                                <div className="relative z-10">
+                                    <div className="w-24 h-24 bg-white/20 backdrop-blur-xl rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-xl border border-white/30">
+                                        <MessageSquare size={40} className="text-white" />
+                                    </div>
+                                    <h3 className="text-3xl font-black text-white uppercase tracking-tight">Enterprise Access</h3>
+                                    <div className="text-indigo-200 text-[10px] font-bold mt-3 uppercase tracking-[0.3em]">Provisioning Required</div>
                                 </div>
-                                <h3 className="text-2xl font-black text-white uppercase tracking-tight">Request Subscription</h3>
-                                <div className="text-indigo-200 text-xs font-bold mt-2 uppercase tracking-[0.2em]">Provisioning Required</div>
-                            </div>
-                        </div>
-
-                        <div className="p-10 space-y-6">
-                            <p className="text-slate-600 leading-relaxed text-center font-medium">
-                                To unlock all tools without individual keys, please contact the <span className="text-indigo-600 font-bold">Administrator</span> directly through <span className="font-bold">Facebook Messenger</span>.
-                            </p>
-                            
-                            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
-                                <div className="flex items-center gap-3 text-xs text-slate-400 font-black uppercase tracking-widest mb-3">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
-                                    Next Steps
-                                </div>
-                                <ul className="space-y-3">
-                                    <li className="flex items-start gap-3 text-sm text-slate-600">
-                                        <div className="mt-1 w-4 h-4 rounded-full bg-indigo-100 flex-shrink-0 flex items-center justify-center text-[10px] font-bold text-indigo-600">1</div>
-                                        <span>Open Facebook Messenger</span>
-                                    </li>
-                                    <li className="flex items-start gap-3 text-sm text-slate-600">
-                                        <div className="mt-1 w-4 h-4 rounded-full bg-indigo-100 flex-shrink-0 flex items-center justify-center text-[10px] font-bold text-indigo-600">2</div>
-                                        <span>Message the Administrator</span>
-                                    </li>
-                                    <li className="flex items-start gap-3 text-sm text-slate-600">
-                                        <div className="mt-1 w-4 h-4 rounded-full bg-indigo-100 flex-shrink-0 flex items-center justify-center text-[10px] font-bold text-indigo-600">3</div>
-                                        <span>Provide your registration email</span>
-                                    </li>
-                                </ul>
                             </div>
 
-                            <button 
-                                onClick={() => setIsRequestModalOpen(false)}
-                                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-4 px-8 rounded-2xl transition-all active:scale-95 shadow-xl shadow-slate-200 uppercase tracking-widest text-xs"
-                            >
-                                I Understand
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+                            <div className="p-12 space-y-8">
+                                <p className="text-slate-600 leading-relaxed text-center font-medium text-lg">
+                                    To unlock the full suite without individual keys, please contact the <span className="text-indigo-600 font-bold">Administrator</span> directly.
+                                </p>
+                                
+                                <div className="bg-slate-50 rounded-3xl p-6 border border-slate-100">
+                                    <div className="flex items-center gap-3 text-[10px] text-slate-400 font-black uppercase tracking-widest mb-4">
+                                        <span className="w-2 h-2 rounded-full bg-indigo-400"></span>
+                                        Onboarding Protocol
+                                    </div>
+                                    <ul className="space-y-4">
+                                        <li className="flex items-start gap-4 text-sm text-slate-600">
+                                            <div className="mt-1 w-5 h-5 rounded-full bg-indigo-100 flex-shrink-0 flex items-center justify-center text-[11px] font-bold text-indigo-600">1</div>
+                                            <span>Open Facebook Messenger</span>
+                                        </li>
+                                        <li className="flex items-start gap-4 text-sm text-slate-600">
+                                            <div className="mt-1 w-5 h-5 rounded-full bg-indigo-100 flex-shrink-0 flex items-center justify-center text-[11px] font-bold text-indigo-600">2</div>
+                                            <span>Message the Administrator</span>
+                                        </li>
+                                        <li className="flex items-start gap-4 text-sm text-slate-600">
+                                            <div className="mt-1 w-5 h-5 rounded-full bg-indigo-100 flex-shrink-0 flex items-center justify-center text-[11px] font-bold text-indigo-600">3</div>
+                                            <span>Provide your registration email</span>
+                                        </li>
+                                    </ul>
+                                </div>
+
+                                <button 
+                                    onClick={() => setIsRequestModalOpen(false)}
+                                    className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-5 px-8 rounded-2xl transition-all active:scale-95 shadow-xl shadow-slate-200 uppercase tracking-widest text-xs"
+                                >
+                                    Acknowledge Protocol
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
         </div>

@@ -24,11 +24,11 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const SUPER_ADMIN_EMAIL = 'generalkevin53@gmail.com';
 const HEARTBEAT_INTERVAL = 60 * 1000; 
+const MAX_SESSION_AGE = 24 * 60 * 60 * 1000; // 24 Hours Hard Cutoff
 
 /**
  * Resiliency Protocol: withRetry
- * Updated to handle Auth Failures gracefully. If a 401/403 or JWT error occurs,
- * we immediately throw to prevent the UI from sticking in a loading state.
+ * Updated to handle Auth Failures gracefully.
  */
 async function withRetry<T>(fn: () => Promise<T>, retries = 5, delay = 1500): Promise<T> {
     try {
@@ -37,7 +37,6 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 5, delay = 1500): Pr
         const status = err.status || err.code;
         const errorMsg = err.message?.toLowerCase() || '';
 
-        // HARD EXIT: Unauthorized, Forbidden, or JWT errors should NEVER retry.
         const isAuthFailure = 
             status === 401 || 
             status === 403 || 
@@ -88,9 +87,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const updateLastSeen = async (uid: string) => {
         try {
-            await withRetry(() => supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', uid), 2);
+            await withRetry(async () => await supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', uid), 2);
         } catch (err) {}
     };
+
+    const signOut = useCallback(async (isAuto: boolean = false) => {
+        setLoading(true);
+        if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
+        try {
+            await (supabase.auth as any).signOut();
+        } catch (e) {
+        } finally {
+            Object.keys(localStorage).forEach(key => { if (key.includes('sb-') || key === 'auth_login_at') localStorage.removeItem(key); });
+            setProfile(null); setSession(null); setUser(null);
+            if (isAuto) sessionStorage.setItem('session_expired', 'true');
+            window.location.replace('/');
+        }
+    }, []);
+
+    const checkHardExpiry = useCallback(() => {
+        const loginAt = localStorage.getItem('auth_login_at');
+        if (loginAt) {
+            const age = Date.now() - parseInt(loginAt, 10);
+            if (age > MAX_SESSION_AGE) {
+                console.warn("Hard session age limit reached. Terminating session...");
+                signOut(true);
+                return true;
+            }
+        }
+        return false;
+    }, [signOut]);
 
     const warmUpDatabase = async () => {
         try {
@@ -172,7 +198,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 updateLastSeen(userId);
             } catch (e) {
                 console.error("CRITICAL_SYNC_FAILURE:", e);
-                // If it's an auth sync failure, we don't want to lock the UI
                 throw e;
             } finally {
                 setIsWakingUp(false);
@@ -183,27 +208,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return refreshingPromise.current;
     }, [user?.email]);
 
-    const signOut = useCallback(async (isAuto: boolean = false) => {
-        setLoading(true);
-        if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
-        try {
-            await (supabase.auth as any).signOut();
-        } catch (e) {
-        } finally {
-            Object.keys(localStorage).forEach(key => { if (key.includes('sb-')) localStorage.removeItem(key); });
-            setProfile(null); setSession(null); setUser(null);
-            if (isAuto) sessionStorage.setItem('session_expired', 'true');
-            window.location.replace('/');
-        }
-    }, []);
-
     useEffect(() => {
         const handleWake = () => {
             if (document.visibilityState === 'visible' && user?.id) {
-                if (wakeDebounceRef.current) clearTimeout(wakeDebounceRef.current);
+                if (checkHardExpiry()) return;
                 
+                if (wakeDebounceRef.current) clearTimeout(wakeDebounceRef.current);
                 wakeDebounceRef.current = setTimeout(async () => {
-                    console.log("RE-ESTABLISHING NODE SYNC...");
                     try {
                         const { data } = await (supabase.auth as any).getSession();
                         if (data?.session) {
@@ -214,7 +225,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                             signOut(true);
                         }
                     } catch (err) {
-                        console.warn("Wake sync failed - node disconnected.");
+                        console.warn("Wake sync failed.");
                     }
                 }, 1000); 
             }
@@ -227,45 +238,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             window.removeEventListener('focus', handleWake);
             if (wakeDebounceRef.current) clearTimeout(wakeDebounceRef.current);
         };
-    }, [user?.id, fetchProfile, fetchFreeTools, signOut]);
-
-    useEffect(() => {
-        if (!session) return;
-
-        const systemChannel = supabase
-            .channel('system-logic-sync')
-            .on(
-                'postgres_changes',
-                { event: 'UPDATE', schema: 'public', table: 'system_settings', filter: 'id=eq.global' },
-                (payload) => {
-                    console.log('REALTIME_PROTOCOL_SYNC:', payload.new);
-                    processFreeToolsPayload(payload.new);
-                }
-            )
-            .subscribe();
-
-        const profileChannel = supabase
-            .channel(`user-sync-${user.id}`)
-            .on(
-                'postgres_changes',
-                { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` },
-                () => {
-                    console.log('REALTIME_IDENTITY_SYNC: Triggering profile refresh...');
-                    fetchProfile(user.id).catch(() => {});
-                }
-            )
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(systemChannel);
-            supabase.removeChannel(profileChannel);
-        };
-    }, [session, user?.id, fetchProfile]);
+    }, [user?.id, fetchProfile, fetchFreeTools, signOut, checkHardExpiry]);
 
     useEffect(() => {
         let mounted = true;
         const init = async () => {
             try {
+                if (checkHardExpiry()) return;
+
                 initTimeoutRef.current = setTimeout(() => { if (mounted && loading) setLoading(false); }, 20000); 
 
                 const { data, error } = await withRetry(async () => {
@@ -299,8 +279,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (event === 'SIGNED_OUT') {
                 if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
                 setProfile(null); setUser(null); setSession(null);
+                localStorage.removeItem('auth_login_at');
                 setLoading(false);
             } else if (event === 'SIGNED_IN' && newSession?.user) {
+                if (!localStorage.getItem('auth_login_at')) {
+                    localStorage.setItem('auth_login_at', Date.now().toString());
+                }
                 setSession(newSession); setUser(newSession.user);
                 fetchProfile(newSession.user.id).catch(() => {});
                 fetchFreeTools().catch(() => {});
@@ -314,7 +298,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
             if (authListener?.subscription) authListener.subscription.unsubscribe(); 
         };
-    }, [fetchFreeTools, fetchProfile]);
+    }, [fetchFreeTools, fetchProfile, checkHardExpiry]);
 
     return (
         <AuthContext.Provider value={{ 

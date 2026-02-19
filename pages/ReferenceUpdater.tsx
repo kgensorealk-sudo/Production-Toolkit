@@ -83,6 +83,11 @@ const ReferenceUpdater: React.FC = () => {
         return lines;
     };
 
+    /**
+     * Optimized Async Diff Generator
+     * Diffing large XML strings (160+ references) is very heavy.
+     * We wrap it in a microtask delay so the UI can update first.
+     */
     const generateDiffAsync = async (original: string, modified: string) => {
         return new Promise<void>((resolve) => {
             setTimeout(() => {
@@ -216,10 +221,7 @@ const ReferenceUpdater: React.FC = () => {
     };
 
     const runAnalysis = () => {
-        if (!originalXml.trim() || !updatedXml.trim()) { 
-            setToast({ msg: "Paste both Original and Updated XML.", type: "warn" }); 
-            return; 
-        }
+        if (!originalXml.trim() || !updatedXml.trim()) { setToast({ msg: "Paste both Original and Updated XML.", type: "warn" }); return; }
         setIsLoading(true);
         
         setTimeout(() => {
@@ -234,8 +236,20 @@ const ReferenceUpdater: React.FC = () => {
                     let matchType: 'ID' | 'Label' | 'Content' | 'Fuzzy' | undefined;
                     let matchScore = 0;
 
-                    matchIdx = updatedRefs.findIndex((u, idx) => !usedUpdateIdx.has(idx) && u.contentHash === origRef.contentHash);
-                    if (matchIdx !== -1) { matchType = 'Content'; matchScore = 100; }
+                    if (origRef.id) {
+                        matchIdx = updatedRefs.findIndex((u, idx) => !usedUpdateIdx.has(idx) && u.id === origRef.id && u.id !== '');
+                        if (matchIdx !== -1) { matchType = 'ID'; matchScore = 100; }
+                    }
+
+                    if (matchIdx === -1) {
+                        matchIdx = updatedRefs.findIndex((u, idx) => !usedUpdateIdx.has(idx) && u.contentHash === origRef.contentHash);
+                        if (matchIdx !== -1) { matchType = 'Content'; matchScore = 100; }
+                    }
+
+                    if (matchIdx === -1 && origRef.label) {
+                        matchIdx = updatedRefs.findIndex((u, idx) => !usedUpdateIdx.has(idx) && u.label === origRef.label && u.label !== '');
+                        if (matchIdx !== -1) { matchType = 'Label'; matchScore = 100; }
+                    }
 
                     if (matchIdx === -1) {
                         let bestFuzzyIdx = -1;
@@ -246,21 +260,10 @@ const ReferenceUpdater: React.FC = () => {
                                 if (score > bestFuzzyScore) { bestFuzzyScore = score; bestFuzzyIdx = idx; }
                             }
                         });
-                        if (bestFuzzyScore > 0.85) { 
-                            matchIdx = bestFuzzyIdx; matchType = 'Fuzzy'; matchScore = Math.round(bestFuzzyScore * 100); 
-                        }
-                    }
-
-                    if (matchIdx === -1 && origRef.label) {
-                        matchIdx = updatedRefs.findIndex((u, idx) => !usedUpdateIdx.has(idx) && u.label === origRef.label && u.label !== '');
-                        if (matchIdx !== -1) { matchType = 'Label'; matchScore = 100; }
-                    }
-
-                    if (matchIdx === -1 && origRef.id) {
-                        const idIdx = updatedRefs.findIndex((u, idx) => !usedUpdateIdx.has(idx) && u.id === origRef.id && u.id !== '');
-                        if (idIdx !== -1) {
-                            const safetyScore = getSimilarity(updatedRefs[idIdx].fingerprint, origRef.fingerprint);
-                            if (safetyScore > 0.6) { matchIdx = idIdx; matchType = 'ID'; matchScore = 100; }
+                        if (bestFuzzyScore > 0.82) { 
+                            matchIdx = bestFuzzyIdx; 
+                            matchType = 'Fuzzy'; 
+                            matchScore = Math.round(bestFuzzyScore * 100); 
                         }
                     }
 
@@ -268,15 +271,28 @@ const ReferenceUpdater: React.FC = () => {
                         usedUpdateIdx.add(matchIdx);
                         analysis.push({ 
                             label: formatLabel(origRef.label || updatedRefs[matchIdx].label), 
-                            id: origRef.id, status: matchType === 'Fuzzy' ? 'smart_match' : 'update', 
-                            matchType, matchScore, preview: updatedRefs[matchIdx].content.substring(0, 100).replace(/<[^>]+>/g, '').trim() + '...', 
-                            isSynthetic: origRef.isSynthetic, selected: true, sortKey: updatedRefs[matchIdx].sortKey, originalIndex: oIdx, updatedIndex: matchIdx 
+                            id: origRef.id, 
+                            status: matchType === 'Fuzzy' ? 'smart_match' : 'update', 
+                            matchType, 
+                            matchScore, 
+                            preview: updatedRefs[matchIdx].content.substring(0, 100).replace(/<[^>]+>/g, '').trim() + '...', 
+                            isSynthetic: origRef.isSynthetic, 
+                            selected: true, 
+                            sortKey: updatedRefs[matchIdx].sortKey, 
+                            originalIndex: oIdx, 
+                            updatedIndex: matchIdx 
                         });
                     } else {
                         analysis.push({ 
                             label: formatLabel(origRef.label), 
-                            id: origRef.id, status: 'unchanged', preview: origRef.content.substring(0, 100).replace(/<[^>]+>/g, '').trim() + '...', 
-                            isSynthetic: origRef.isSynthetic, selected: true, sortKey: origRef.sortKey, originalIndex: oIdx, updatedIndex: null 
+                            id: origRef.id, 
+                            status: 'unchanged', 
+                            preview: origRef.content.substring(0, 100).replace(/<[^>]+>/g, '').trim() + '...', 
+                            isSynthetic: origRef.isSynthetic, 
+                            selected: true, 
+                            sortKey: origRef.sortKey, 
+                            originalIndex: oIdx, 
+                            updatedIndex: null 
                         });
                     }
                 });
@@ -285,17 +301,26 @@ const ReferenceUpdater: React.FC = () => {
                     if (!usedUpdateIdx.has(idx)) {
                         analysis.push({ 
                             label: formatLabel(val.label || 'Unlabeled'), 
-                            id: val.id || 'N/A', status: addOrphans ? 'add' : 'orphan', 
+                            id: val.id || 'N/A', 
+                            status: addOrphans ? 'add' : 'orphan', 
                             preview: val.content.substring(0, 100).replace(/<[^>]+>/g, '').trim() + '...', 
-                            isSynthetic: val.isSynthetic, selected: addOrphans, sortKey: val.sortKey, originalIndex: null, updatedIndex: idx 
+                            isSynthetic: val.isSynthetic, 
+                            selected: addOrphans, 
+                            sortKey: val.sortKey, 
+                            originalIndex: null, 
+                            updatedIndex: idx 
                         });
                     }
                 });
 
                 setScanResults(analysis); 
                 setActiveTab('scan'); 
-                setToast({ msg: "Analysis complete.", type: "success" });
-            } catch (e) { setToast({ msg: "Analysis failed.", type: "error" }); } finally { setIsLoading(false); }
+                setToast({ msg: `Found ${analysis.filter(a => a.updatedIndex !== null).length} matches across set.`, type: "success" });
+            } catch (e) { 
+                setToast({ msg: "Analysis failed.", type: "error" }); 
+            } finally { 
+                setIsLoading(false); 
+            }
         }, 300);
     };
 
@@ -303,14 +328,21 @@ const ReferenceUpdater: React.FC = () => {
         if (!originalXml.trim() || !updatedXml.trim()) { setToast({ msg: "Paste XML.", type: "warn" }); return; }
         if (scanResults.length === 0) { runAnalysis(); return; }
         setIsLoading(true);
+        // Start async merge process
         await executeMergeAsync(parseReferences(originalXml), parseReferences(updatedXml));
     };
 
+    /**
+     * ASYNCHRONOUS CHUNKED MERGE
+     * Processes references in batches to keep UI responsive.
+     */
     const executeMergeAsync = async (origRefs: RefBlock[], updatedRefs: RefBlock[]) => {
         try {
+            // 1. Efficient ID Pre-scanning
             const getNextIdMap = (xml: string) => {
                 const prefixes = ['bb', 'rf', 'se', 'ir', 'or', 'tr'];
                 const map: Record<string, number> = { bb: 3000, rf: 3000, se: 3000, ir: 3000, or: 3000, tr: 3000 };
+                
                 prefixes.forEach(prefix => {
                     const regex = new RegExp(`id="${prefix}(\\d+)"`, 'g');
                     let m;
@@ -326,20 +358,34 @@ const ReferenceUpdater: React.FC = () => {
             const finalBlocks: string[] = [];
             const sequence = projectedSequence;
             
-            for (let i = 0; i < sequence.length; i++) {
-                const item = sequence[i];
-                let blockMarkup = '';
-                let targetId = '';
+            // 2. Batch Processing (Chunked)
+            const CHUNK_SIZE = 20;
+            for (let i = 0; i < sequence.length; i += CHUNK_SIZE) {
+                const chunk = sequence.slice(i, i + CHUNK_SIZE);
+                
+                chunk.forEach(item => {
+                    let blockMarkup = '';
+                    let targetId = '';
 
-                if (item.originalIndex !== null) {
-                    const origRef = origRefs[item.originalIndex];
-                    if (item.selected && item.updatedIndex !== null && (item.status === 'update' || item.status === 'smart_match')) {
-                        blockMarkup = updatedRefs[item.updatedIndex].fullTag;
-                        targetId = origRef.id;
-                        
-                        // FIX: Explicitly reconstruct the opening tag to avoid stray spaces like id="bb0005" >
+                    if (item.originalIndex !== null) {
+                        const origRef = origRefs[item.originalIndex];
+                        if (item.selected && item.updatedIndex !== null && (item.status === 'update' || item.status === 'smart_match')) {
+                            blockMarkup = updatedRefs[item.updatedIndex].fullTag;
+                            targetId = origRef.id;
+                        } else {
+                            blockMarkup = origRef.fullTag;
+                            targetId = origRef.id;
+                        }
+                    } else if (item.updatedIndex !== null && item.selected) {
+                        const orphan = updatedRefs[item.updatedIndex];
+                        blockMarkup = orphan.fullTag;
+                        targetId = `bb${idCounters.bb}`;
+                        idCounters.bb += 5;
+                    }
+
+                    if (blockMarkup) {
                         if (preserveIds) {
-                            blockMarkup = blockMarkup.replace(/^<ce:bib-reference[^>]*>/, `<ce:bib-reference id="${targetId}">`);
+                            blockMarkup = blockMarkup.replace(/id="[^"]*"\s*/, '').replace('<ce:bib-reference', `<ce:bib-reference id="${targetId}"`);
                         }
 
                         if (renumberInternal) {
@@ -350,45 +396,34 @@ const ReferenceUpdater: React.FC = () => {
                                 return `${p1}id="${prefix}${currentVal.toString().padStart(4, '0')}"${p2}`;
                             });
                         }
-                    } else {
-                        // UNCHANGED: Take original tag as-is to preserve all attributes and formatting
-                        blockMarkup = origRef.fullTag;
-                    }
-                } else if (item.updatedIndex !== null && item.selected) {
-                    const orphan = updatedRefs[item.updatedIndex];
-                    blockMarkup = orphan.fullTag;
-                    targetId = `bb${idCounters.bb.toString().padStart(4, '0')}`;
-                    idCounters.bb += 5;
 
-                    // FIX: Reconstruct opening tag for orphans to prevent formatting errors
-                    blockMarkup = blockMarkup.replace(/^<ce:bib-reference[^>]*>/, `<ce:bib-reference id="${targetId}">`);
+                        const labelMatch = blockMarkup.match(/<ce:label>(.*?)<\/ce:label>/);
+                        if (labelMatch) {
+                            blockMarkup = blockMarkup.replace(/<ce:label>.*?<\/ce:label>/, `<ce:label>${formatLabel(labelMatch[1])}</ce:label>`);
+                        }
 
-                    if (renumberInternal) {
-                        blockMarkup = blockMarkup.replace(/(<(?:sb:reference|ce:source-text|ce:inter-ref|sb:inter-ref|ce:other-ref|ce:textref)\b[^>]*?)(\bid="[^"]+")([^>]*?>)/g, (m, p1, idAttr, p2) => {
-                            let prefix = p1.includes('ce:source-text') ? 'se' : p1.includes('inter-ref') ? 'ir' : p1.includes('ce:other-ref') ? 'or' : p1.includes('ce:textref') ? 'tr' : 'rf';
-                            let currentVal = idCounters[prefix];
-                            idCounters[prefix] += 5;
-                            return `${p1}id="${prefix}${currentVal.toString().padStart(4, '0')}"${p2}`;
-                        });
+                        finalBlocks.push(blockMarkup);
                     }
-                }
+                });
 
-                if (blockMarkup) {
-                    const labelMatch = blockMarkup.match(/<ce:label>(.*?)<\/ce:label>/);
-                    if (labelMatch) {
-                        blockMarkup = blockMarkup.replace(/<ce:label>.*?<\/ce:label>/, `<ce:label>${formatLabel(labelMatch[1])}</ce:label>`);
-                    }
-                    finalBlocks.push(blockMarkup);
-                }
-                if (i % 20 === 0) await new Promise(r => setTimeout(r, 0));
+                // Yield control to main thread every chunk
+                await new Promise(r => setTimeout(r, 0));
             }
 
             const joinedResult = finalBlocks.join('\n');
             setOutput(joinedResult);
             setActiveTab('result');
+            setToast({ msg: `Merged ${finalBlocks.length} items. Calculating diff in background...`, type: "info" });
+            
+            // 3. Deferred heavy diff calculation
             await generateDiffAsync(originalXml, joinedResult);
-            setToast({ msg: "Merge Protocol Finished.", type: "success" });
-        } catch (e) { setToast({ msg: "Merge failed.", type: "error" }); } finally { setIsLoading(false); }
+            
+            setToast({ msg: "Protocol executed. Sequence and Diff synchronized.", type: "success" });
+        } catch (e) { 
+            setToast({ msg: "Merge Protocol Failure.", type: "error" }); 
+        } finally { 
+            setIsLoading(false); 
+        }
     };
 
     const bulkSelect = (selected: boolean) => setScanResults(prev => prev.map(item => ({ ...item, selected })));
@@ -399,15 +434,28 @@ const ReferenceUpdater: React.FC = () => {
         const cleanForSort = (str: string) => str.replace(/[^a-zA-Z0-9]/g, '').trim().toLowerCase();
 
         if (sortAlphabetically) {
-            return [...selectedList].sort((a, b) => cleanForSort(a.sortKey).localeCompare(cleanForSort(b.sortKey), undefined, { sensitivity: 'base', numeric: true }));
+            return [...selectedList].sort((a, b) => 
+                cleanForSort(a.sortKey).localeCompare(cleanForSort(b.sortKey), undefined, { sensitivity: 'base', numeric: true })
+            );
         } else {
-            const existingItems = selectedList.filter(r => r.originalIndex !== null).sort((a, b) => (a.originalIndex ?? 0) - (b.originalIndex ?? 0));
-            const orphans = selectedList.filter(r => r.originalIndex === null).sort((a, b) => cleanForSort(a.sortKey).localeCompare(cleanForSort(b.sortKey), undefined, { sensitivity: 'base', numeric: true }));
+            const existingItems = selectedList
+                .filter(r => r.originalIndex !== null)
+                .sort((a, b) => (a.originalIndex ?? 0) - (b.originalIndex ?? 0));
+            
+            const orphans = selectedList
+                .filter(r => r.originalIndex === null)
+                .sort((a, b) => 
+                    cleanForSort(a.sortKey).localeCompare(cleanForSort(b.sortKey), undefined, { sensitivity: 'base', numeric: true })
+                );
+            
             const result = [...existingItems];
             orphans.forEach(orphan => {
                 const orphanKey = cleanForSort(orphan.sortKey);
-                const insertIdx = result.findIndex(existing => cleanForSort(existing.sortKey).localeCompare(orphanKey, undefined, { sensitivity: 'base', numeric: true }) > 0);
-                if (insertIdx === -1) result.push(orphan); else result.splice(insertIdx, 0, orphan);
+                const insertIdx = result.findIndex(existing => 
+                    cleanForSort(existing.sortKey).localeCompare(orphanKey, undefined, { sensitivity: 'base', numeric: true }) > 0
+                );
+                if (insertIdx === -1) result.push(orphan);
+                else result.splice(insertIdx, 0, orphan);
             });
             return result;
         }
@@ -417,14 +465,15 @@ const ReferenceUpdater: React.FC = () => {
         if (draggedItemIndex === null || draggedItemIndex === dropIndex) return;
         const visibleItems = projectedSequence;
         const itemToMove = visibleItems[draggedItemIndex];
-        const newList = [...scanResults];
         const absoluteIdxMove = scanResults.findIndex(r => r === itemToMove);
         const absoluteIdxTarget = scanResults.findIndex(r => r === visibleItems[dropIndex]);
+        const newList = [...scanResults];
         newList.splice(absoluteIdxMove, 1);
         newList.splice(absoluteIdxTarget, 0, itemToMove);
         setScanResults(newList.map((item, idx) => ({ ...item, originalIndex: idx })));
         setDraggedItemIndex(null);
         setSortAlphabetically(false);
+        setToast({ msg: "Manual Sequence Overwrite Recorded.", type: "info" });
     };
 
     useKeyboardShortcuts({
@@ -435,10 +484,7 @@ const ReferenceUpdater: React.FC = () => {
 
     return (
         <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-            <div className="mb-8 text-center animate-fade-in">
-                <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase">Reference Updater</h1>
-                <p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic leading-relaxed">Precision-focused bulk reconciliation for bibliography streams.</p>
-            </div>
+            <div className="mb-8 text-center animate-fade-in"><h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase">Reference Updater</h1><p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic leading-relaxed">High-performance bulk merging. Yields thread control to handle massive sets without browser lock-up.</p></div>
             
             <div className="flex justify-center mb-8">
                 <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-200 flex flex-wrap items-center justify-center gap-12">
@@ -455,53 +501,23 @@ const ReferenceUpdater: React.FC = () => {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[700px]">
                 <div className="flex flex-col gap-6 h-full overflow-hidden">
-                    <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col group focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
-                        <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center"><label className="font-bold text-slate-700 text-[10px] uppercase tracking-widest">Original XML Source</label></div>
-                        <textarea value={originalXml} onChange={e => setOriginalXml(e.target.value)} className="w-full h-full p-6 text-[13px] font-mono text-slate-700 border-0 focus:ring-0 resize-none bg-transparent" placeholder="Paste bibliography list..." spellCheck={false} />
-                    </div>
-                    <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col group focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
-                        <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center"><label className="font-bold text-slate-700 text-[10px] uppercase tracking-widest">Updated Corrections Set</label></div>
-                        <textarea value={updatedXml} onChange={e => setUpdatedXml(e.target.value)} className="w-full h-full p-6 text-[13px] font-mono text-slate-700 border-0 focus:ring-0 resize-none bg-transparent" placeholder="Paste corrections or additions..." spellCheck={false} />
-                    </div>
+                    <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col group focus-within:ring-2 focus-within:ring-indigo-100 transition-all"><div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center"><label className="font-bold text-slate-700 text-[10px] uppercase tracking-widest">Original XML Source</label></div><textarea value={originalXml} onChange={e => setOriginalXml(e.target.value)} className="w-full h-full p-6 text-[13px] font-mono text-slate-700 border-0 focus:ring-0 resize-none bg-transparent" placeholder="Paste full article reference list..." spellCheck={false} /></div>
+                    <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col group focus-within:ring-2 focus-within:ring-indigo-100 transition-all"><div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center"><label className="font-bold text-slate-700 text-[10px] uppercase tracking-widest">Updated Corrections Set</label></div><textarea value={updatedXml} onChange={e => setUpdatedXml(e.target.value)} className="w-full h-full p-6 text-[13px] font-mono text-slate-700 border-0 focus:ring-0 resize-none bg-transparent" placeholder="Paste corrections or new items..." spellCheck={false} /></div>
                 </div>
 
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col relative h-full">
-                    <div className="bg-white px-2 pt-2 border-b border-slate-100 flex space-x-1">
-                        {[{ id: 'scan', label: 'Match Matrix' }, { id: 'sequence', label: 'Output Queue' }, { id: 'result', label: 'Merged Stream' }, { id: 'diff', label: 'Audit Log' }].map(tab => (
-                            <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex-1 py-2 text-xs font-bold rounded-t-lg transition-all border-t border-x ${activeTab === tab.id ? 'bg-slate-50 text-indigo-600 border-slate-200 translate-y-[1px]' : 'bg-white text-slate-400 border-transparent hover:bg-slate-50'}`}>{tab.label}</button>
-                        ))}
-                    </div>
+                    <div className="bg-white px-2 pt-2 border-b border-slate-100 flex space-x-1">{[{ id: 'scan', label: 'Match Matrix' }, { id: 'sequence', label: 'Output Queue' }, { id: 'result', label: 'Merged Stream' }, { id: 'diff', label: 'Audit Log' }].map(tab => (<button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex-1 py-2 text-xs font-bold rounded-t-lg transition-all border-t border-x ${activeTab === tab.id ? 'bg-slate-50 text-indigo-600 border-slate-200 translate-y-[1px]' : 'bg-white text-slate-400 border-transparent hover:bg-slate-50'}`}>{tab.label}</button>))}</div>
                     <div className="flex-grow relative bg-slate-50 overflow-hidden flex flex-col min-h-0">
-                        {isLoading && <LoadingOverlay message="Synchronizing Streams..." color="indigo" />}
+                        {isLoading && <LoadingOverlay message="Executing Protocol Batch..." color="indigo" />}
                         
                         {activeTab === 'scan' && (
                             <div className="h-full overflow-hidden flex flex-col bg-white">
-                                <div className="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
-                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">System Reconciler</span>
-                                    <div className="flex gap-2">
-                                        <button onClick={() => bulkSelect(true)} className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Select All</button>
-                                        <span className="text-slate-300">|</span>
-                                        <button onClick={() => bulkSelect(false)} className="text-[10px] font-black text-slate-400 uppercase tracking-widest">None</button>
-                                    </div>
-                                </div>
+                                <div className="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">System Reconciler</span><div className="flex gap-2"><button onClick={() => bulkSelect(true)} className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Select All</button><span className="text-slate-300">|</span><button onClick={() => bulkSelect(false)} className="text-[10px] font-black text-slate-400 uppercase tracking-widest">None</button></div></div>
                                 <div className="flex-grow overflow-auto custom-scrollbar">
                                     <table className="w-full text-left text-[11px] border-collapse">
-                                        <thead className="bg-slate-50 sticky top-0 border-b border-slate-200 z-10">
-                                            <tr><th className="p-4 font-bold text-slate-400 uppercase w-8"></th><th className="p-4 font-bold text-slate-500 uppercase w-32 tracking-wider">Node ID</th><th className="p-4 font-bold text-slate-500 uppercase w-24 tracking-wider">Status</th><th className="p-4 font-bold text-slate-500 uppercase tracking-wider">Logic Preview</th></tr>
-                                        </thead>
+                                        <thead className="bg-slate-50 sticky top-0 border-b border-slate-200 z-10"><tr><th className="p-4 font-bold text-slate-400 uppercase w-8"></th><th className="p-4 font-bold text-slate-500 uppercase w-32 tracking-wider">Node ID</th><th className="p-4 font-bold text-slate-500 uppercase w-24 tracking-wider">Status</th><th className="p-4 font-bold text-slate-500 uppercase tracking-wider">Logic Preview</th></tr></thead>
                                         <tbody className="divide-y divide-slate-100">
-                                            {scanResults.length === 0 ? (
-                                                <tr><td colSpan={4} className="p-20 text-center text-slate-300 uppercase tracking-[0.2em] font-black italic">Awaiting Set Scan...</td></tr>
-                                            ) : (
-                                                scanResults.map((item, idx) => (
-                                                    <tr key={idx} className={`transition-colors hover:bg-slate-50/50 ${!item.selected ? 'opacity-30 grayscale' : ''}`}>
-                                                        <td className="p-4 text-center"><input type="checkbox" checked={item.selected} onChange={() => setScanResults(prev => prev.map((it, i) => i === idx ? { ...it, selected: !it.selected } : it))} className="rounded border-slate-300 text-indigo-600 h-4 w-4" /></td>
-                                                        <td className="p-4 font-mono"><div className="font-bold text-slate-800 truncate max-w-[140px]">{item.label}</div><div className="text-[9px] text-slate-400 uppercase tracking-tighter">ID: {item.id}</div></td>
-                                                        <td className="p-4"><div className="flex flex-col gap-1"><span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase border block text-center ${item.status === 'update' || item.status === 'smart_match' ? 'bg-amber-50 text-amber-600 border-amber-200' : item.status === 'add' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : item.status === 'orphan' ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>{item.status.replace('_', ' ')}</span>{item.matchType && <span className="text-[8px] text-slate-300 text-center font-bold uppercase tracking-widest">{item.matchType} ({item.matchScore}%)</span>}</div></td>
-                                                        <td className="p-4"><div className="text-slate-500 leading-relaxed font-serif italic line-clamp-1">{item.preview}</div></td>
-                                                    </tr>
-                                                ))
-                                            )}
+                                            {scanResults.length === 0 ? (<tr><td colSpan={4} className="p-20 text-center text-slate-300 uppercase tracking-[0.2em] font-black italic">Awaiting Set Scan...</td></tr>) : (scanResults.map((item, idx) => (<tr key={idx} className={`transition-colors hover:bg-slate-50/50 ${!item.selected ? 'opacity-30 grayscale' : ''}`}><td className="p-4 text-center"><input type="checkbox" checked={item.selected} onChange={() => setScanResults(prev => prev.map((it, i) => i === idx ? { ...it, selected: !it.selected } : it))} className="rounded border-slate-300 text-indigo-600 h-4 w-4" /></td><td className="p-4 font-mono"><div className="font-bold text-slate-800 truncate max-w-[140px]">{item.label}</div><div className="text-[9px] text-slate-400 uppercase tracking-tighter">ID: {item.id}</div></td><td className="p-4"><div className="flex flex-col gap-1"><span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase border block text-center ${item.status === 'update' || item.status === 'smart_match' ? 'bg-amber-50 text-amber-600 border-amber-200' : item.status === 'add' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : item.status === 'orphan' ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>{item.status.replace('_', ' ')}</span>{item.matchType && <span className="text-[8px] text-slate-300 text-center font-bold uppercase tracking-widest">{item.matchType} ({item.matchScore}%)</span>}</div></td><td className="p-4"><div className="text-slate-500 leading-relaxed font-serif italic line-clamp-1">{item.preview}</div></td></tr>)))}
                                         </tbody>
                                     </table>
                                 </div>
@@ -510,32 +526,25 @@ const ReferenceUpdater: React.FC = () => {
 
                         {activeTab === 'sequence' && (
                             <div className="h-full overflow-hidden flex flex-col bg-white animate-fade-in">
-                                <div className="p-5 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
-                                    <div className="flex flex-col"><div className="text-xs font-black text-slate-800 uppercase tracking-widest leading-none">Output Queue Preview</div><div className="text-[9px] font-bold text-slate-400 mt-1.5 uppercase tracking-wider">Drag nodes to override sorting</div></div>
-                                    <span className="text-[10px] font-black bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl border border-indigo-100 shadow-sm">{projectedSequence.length} Nodes</span>
-                                </div>
+                                <div className="p-5 bg-slate-50 border-b border-slate-200 flex justify-between items-center"><div className="flex flex-col"><div className="text-xs font-black text-slate-800 uppercase tracking-widest leading-none">Output Queue Preview</div><div className="text-[9px] font-bold text-slate-400 mt-1.5 uppercase tracking-wider">Drag nodes to override system sorting logic</div></div><span className="text-[10px] font-black bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl border border-indigo-100 shadow-sm">{projectedSequence.length} Nodes Queued</span></div>
                                 <div className="flex-grow overflow-auto custom-scrollbar p-8 space-y-3 bg-slate-50/30">
-                                    {projectedSequence.length === 0 ? (
-                                        <div className="h-full flex flex-col items-center justify-center opacity-30 grayscale"><p className="text-sm font-black uppercase tracking-[0.2em] text-slate-400">Queue Ready</p></div>
-                                    ) : (
-                                        projectedSequence.map((ref, idx) => (
-                                            <div key={`${ref.id}-${idx}`} draggable onDragStart={() => setDraggedItemIndex(idx)} onDragOver={(e) => e.preventDefault()} onDrop={() => handleDrop(idx)} className={`flex items-center gap-6 p-5 bg-white border border-slate-200 rounded-[1.5rem] shadow-sm hover:border-indigo-400 transition-all group cursor-grab active:cursor-grabbing ${draggedItemIndex === idx ? 'opacity-40 scale-95' : ''}`}>
-                                                <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-[10px] font-black text-slate-400 group-hover:bg-indigo-50 transition-colors border border-slate-100 shadow-inner">{idx + 1}</div>
-                                                <div className="flex-grow min-w-0"><div className="text-sm font-bold text-slate-800 truncate tracking-tight">{ref.label}</div><div className="text-[10px] font-mono text-slate-400 uppercase tracking-widest mt-0.5">ID: {ref.id}</div></div>
-                                                <span className={`text-[8px] font-black px-3 py-1.5 rounded-lg border uppercase tracking-[0.15em] ${(ref.status === 'add' || ref.status === 'orphan') ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : (ref.status === 'update' || ref.status === 'smart_match') ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>{ref.status === 'add' ? 'NEW' : ref.status === 'smart_match' ? 'SMART' : 'PINNED'}</span>
-                                            </div>
-                                        ))
-                                    )}
+                                    {projectedSequence.length === 0 ? (<div className="h-full flex flex-col items-center justify-center opacity-30 grayscale"><p className="text-sm font-black uppercase tracking-[0.2em] text-slate-400">Queue Ready for Input</p></div>) : (projectedSequence.map((ref, idx) => (
+                                        <div key={`${ref.id}-${idx}`} draggable onDragStart={() => setDraggedItemIndex(idx)} onDragOver={(e) => e.preventDefault()} onDrop={() => handleDrop(idx)} className={`flex items-center gap-6 p-5 bg-white border border-slate-200 rounded-[1.5rem] shadow-sm hover:border-indigo-400 transition-all group cursor-grab active:cursor-grabbing ${draggedItemIndex === idx ? 'opacity-40 scale-95' : ''}`}>
+                                            <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-[10px] font-black text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors border border-slate-100 shadow-inner">{idx + 1}</div>
+                                            <div className="flex-grow min-w-0"><div className="text-sm font-bold text-slate-800 truncate tracking-tight">{ref.label}</div><div className="text-[10px] font-mono text-slate-400 uppercase tracking-widest mt-0.5">TARGET_ID: {ref.id}</div></div>
+                                            <span className={`text-[8px] font-black px-3 py-1.5 rounded-lg border uppercase tracking-[0.15em] ${(ref.status === 'add' || ref.status === 'orphan') ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : (ref.status === 'update' || ref.status === 'smart_match') ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>{ref.status === 'add' ? 'NEW' : ref.status === 'smart_match' ? 'SMART' : 'PINNED'}</span>
+                                        </div>
+                                    )))}
                                 </div>
                             </div>
                         )}
 
                         {activeTab === 'result' && (
-                             <div className="h-full relative flex flex-col"><textarea value={output} readOnly className="w-full h-full p-8 text-[11px] font-mono text-slate-700 bg-white border-0 focus:ring-0 resize-none leading-loose custom-scrollbar" placeholder="Resulting stream..." /></div>
+                             <div className="h-full relative flex flex-col"><textarea value={output} readOnly className="w-full h-full p-8 text-[11px] font-mono text-slate-700 bg-white border-0 focus:ring-0 resize-none leading-loose custom-scrollbar" placeholder="Merged XML stream will be emitted here..." /></div>
                         )}
 
                         {activeTab === 'diff' && (
-                             <div className="absolute inset-0 overflow-auto bg-white custom-scrollbar">{diffElements || <div className="h-full flex items-center justify-center text-slate-400 uppercase tracking-widest text-[10px] font-black">Audit Pending...</div>}</div>
+                             <div className="absolute inset-0 overflow-auto bg-white custom-scrollbar">{diffElements || <div className="h-full flex items-center justify-center text-slate-400 uppercase tracking-widest text-[10px] font-black">Differential Audit Pending...</div>}</div>
                         )}
                     </div>
                 </div>
