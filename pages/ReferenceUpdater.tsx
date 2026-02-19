@@ -234,14 +234,9 @@ const ReferenceUpdater: React.FC = () => {
                     let matchType: 'ID' | 'Label' | 'Content' | 'Fuzzy' | undefined;
                     let matchScore = 0;
 
-                    // 1. CONTENT HASH MATCH
                     matchIdx = updatedRefs.findIndex((u, idx) => !usedUpdateIdx.has(idx) && u.contentHash === origRef.contentHash);
-                    if (matchIdx !== -1) { 
-                        matchType = 'Content'; 
-                        matchScore = 100; 
-                    }
+                    if (matchIdx !== -1) { matchType = 'Content'; matchScore = 100; }
 
-                    // 2. FUZZY FINGERPRINT MATCH
                     if (matchIdx === -1) {
                         let bestFuzzyIdx = -1;
                         let bestFuzzyScore = 0;
@@ -252,28 +247,20 @@ const ReferenceUpdater: React.FC = () => {
                             }
                         });
                         if (bestFuzzyScore > 0.85) { 
-                            matchIdx = bestFuzzyIdx; 
-                            matchType = 'Fuzzy'; 
-                            matchScore = Math.round(bestFuzzyScore * 100); 
+                            matchIdx = bestFuzzyIdx; matchType = 'Fuzzy'; matchScore = Math.round(bestFuzzyScore * 100); 
                         }
                     }
 
-                    // 3. EXACT LABEL MATCH
                     if (matchIdx === -1 && origRef.label) {
                         matchIdx = updatedRefs.findIndex((u, idx) => !usedUpdateIdx.has(idx) && u.label === origRef.label && u.label !== '');
                         if (matchIdx !== -1) { matchType = 'Label'; matchScore = 100; }
                     }
 
-                    // 4. ID MATCH (Fallback with Safety Check)
                     if (matchIdx === -1 && origRef.id) {
                         const idIdx = updatedRefs.findIndex((u, idx) => !usedUpdateIdx.has(idx) && u.id === origRef.id && u.id !== '');
                         if (idIdx !== -1) {
                             const safetyScore = getSimilarity(updatedRefs[idIdx].fingerprint, origRef.fingerprint);
-                            if (safetyScore > 0.6) {
-                                matchIdx = idIdx;
-                                matchType = 'ID';
-                                matchScore = 100;
-                            }
+                            if (safetyScore > 0.6) { matchIdx = idIdx; matchType = 'ID'; matchScore = 100; }
                         }
                     }
 
@@ -281,28 +268,15 @@ const ReferenceUpdater: React.FC = () => {
                         usedUpdateIdx.add(matchIdx);
                         analysis.push({ 
                             label: formatLabel(origRef.label || updatedRefs[matchIdx].label), 
-                            id: origRef.id, 
-                            status: matchType === 'Fuzzy' ? 'smart_match' : 'update', 
-                            matchType, 
-                            matchScore, 
-                            preview: updatedRefs[matchIdx].content.substring(0, 100).replace(/<[^>]+>/g, '').trim() + '...', 
-                            isSynthetic: origRef.isSynthetic, 
-                            selected: true, 
-                            sortKey: updatedRefs[matchIdx].sortKey, 
-                            originalIndex: oIdx, 
-                            updatedIndex: matchIdx 
+                            id: origRef.id, status: matchType === 'Fuzzy' ? 'smart_match' : 'update', 
+                            matchType, matchScore, preview: updatedRefs[matchIdx].content.substring(0, 100).replace(/<[^>]+>/g, '').trim() + '...', 
+                            isSynthetic: origRef.isSynthetic, selected: true, sortKey: updatedRefs[matchIdx].sortKey, originalIndex: oIdx, updatedIndex: matchIdx 
                         });
                     } else {
                         analysis.push({ 
                             label: formatLabel(origRef.label), 
-                            id: origRef.id, 
-                            status: 'unchanged', 
-                            preview: origRef.content.substring(0, 100).replace(/<[^>]+>/g, '').trim() + '...', 
-                            isSynthetic: origRef.isSynthetic, 
-                            selected: true, 
-                            sortKey: origRef.sortKey, 
-                            originalIndex: oIdx, 
-                            updatedIndex: null 
+                            id: origRef.id, status: 'unchanged', preview: origRef.content.substring(0, 100).replace(/<[^>]+>/g, '').trim() + '...', 
+                            isSynthetic: origRef.isSynthetic, selected: true, sortKey: origRef.sortKey, originalIndex: oIdx, updatedIndex: null 
                         });
                     }
                 });
@@ -311,26 +285,17 @@ const ReferenceUpdater: React.FC = () => {
                     if (!usedUpdateIdx.has(idx)) {
                         analysis.push({ 
                             label: formatLabel(val.label || 'Unlabeled'), 
-                            id: val.id || 'N/A', 
-                            status: addOrphans ? 'add' : 'orphan', 
+                            id: val.id || 'N/A', status: addOrphans ? 'add' : 'orphan', 
                             preview: val.content.substring(0, 100).replace(/<[^>]+>/g, '').trim() + '...', 
-                            isSynthetic: val.isSynthetic, 
-                            selected: addOrphans, 
-                            sortKey: val.sortKey, 
-                            originalIndex: null, 
-                            updatedIndex: idx 
+                            isSynthetic: val.isSynthetic, selected: addOrphans, sortKey: val.sortKey, originalIndex: null, updatedIndex: idx 
                         });
                     }
                 });
 
                 setScanResults(analysis); 
                 setActiveTab('scan'); 
-                setToast({ msg: `Scan finished. Verified content for ${analysis.filter(a => a.updatedIndex !== null).length} items.`, type: "success" });
-            } catch (e) { 
-                setToast({ msg: "Analysis failed.", type: "error" }); 
-            } finally { 
-                setIsLoading(false); 
-            }
+                setToast({ msg: "Analysis complete.", type: "success" });
+            } catch (e) { setToast({ msg: "Analysis failed.", type: "error" }); } finally { setIsLoading(false); }
         }, 300);
     };
 
@@ -346,7 +311,6 @@ const ReferenceUpdater: React.FC = () => {
             const getNextIdMap = (xml: string) => {
                 const prefixes = ['bb', 'rf', 'se', 'ir', 'or', 'tr'];
                 const map: Record<string, number> = { bb: 3000, rf: 3000, se: 3000, ir: 3000, or: 3000, tr: 3000 };
-                
                 prefixes.forEach(prefix => {
                     const regex = new RegExp(`id="${prefix}(\\d+)"`, 'g');
                     let m;
@@ -362,39 +326,23 @@ const ReferenceUpdater: React.FC = () => {
             const finalBlocks: string[] = [];
             const sequence = projectedSequence;
             
-            const CHUNK_SIZE = 20;
-            for (let i = 0; i < sequence.length; i += CHUNK_SIZE) {
-                const chunk = sequence.slice(i, i + CHUNK_SIZE);
-                
-                chunk.forEach(item => {
-                    let blockMarkup = '';
-                    let targetId = '';
+            for (let i = 0; i < sequence.length; i++) {
+                const item = sequence[i];
+                let blockMarkup = '';
+                let targetId = '';
 
-                    if (item.originalIndex !== null) {
-                        const origRef = origRefs[item.originalIndex];
-                        if (item.selected && item.updatedIndex !== null && (item.status === 'update' || item.status === 'smart_match')) {
-                            blockMarkup = updatedRefs[item.updatedIndex].fullTag;
-                            targetId = origRef.id;
-                        } else {
-                            // UNCHANGED: Take original tag as-is
-                            blockMarkup = origRef.fullTag;
-                            targetId = origRef.id;
-                        }
-                    } else if (item.updatedIndex !== null && item.selected) {
-                        const orphan = updatedRefs[item.updatedIndex];
-                        blockMarkup = orphan.fullTag;
-                        targetId = `bb${idCounters.bb}`;
-                        idCounters.bb += 5;
-                    }
-
-                    if (blockMarkup) {
+                if (item.originalIndex !== null) {
+                    const origRef = origRefs[item.originalIndex];
+                    if (item.selected && item.updatedIndex !== null && (item.status === 'update' || item.status === 'smart_match')) {
+                        blockMarkup = updatedRefs[item.updatedIndex].fullTag;
+                        targetId = origRef.id;
+                        
+                        // FIX: Explicitly reconstruct the opening tag to avoid stray spaces like id="bb0005" >
                         if (preserveIds) {
-                            blockMarkup = blockMarkup.replace(/id="[^"]*"\s*/, '').replace('<ce:bib-reference', `<ce:bib-reference id="${targetId}"`);
+                            blockMarkup = blockMarkup.replace(/^<ce:bib-reference[^>]*>/, `<ce:bib-reference id="${targetId}">`);
                         }
 
-                        // CRITICAL: Only renumber internal IDs if reference is NEW or UPDATED.
-                        // For UNCHANGED references, we retain original internal IDs (rfXXXX, seXXXX).
-                        if (renumberInternal && item.status !== 'unchanged') {
+                        if (renumberInternal) {
                             blockMarkup = blockMarkup.replace(/(<(?:sb:reference|ce:source-text|ce:inter-ref|sb:inter-ref|ce:other-ref|ce:textref)\b[^>]*?)(\bid="[^"]+")([^>]*?>)/g, (m, p1, idAttr, p2) => {
                                 let prefix = p1.includes('ce:source-text') ? 'se' : p1.includes('inter-ref') ? 'ir' : p1.includes('ce:other-ref') ? 'or' : p1.includes('ce:textref') ? 'tr' : 'rf';
                                 let currentVal = idCounters[prefix];
@@ -402,28 +350,45 @@ const ReferenceUpdater: React.FC = () => {
                                 return `${p1}id="${prefix}${currentVal.toString().padStart(4, '0')}"${p2}`;
                             });
                         }
-
-                        const labelMatch = blockMarkup.match(/<ce:label>(.*?)<\/ce:label>/);
-                        if (labelMatch) {
-                            blockMarkup = blockMarkup.replace(/<ce:label>.*?<\/ce:label>/, `<ce:label>${formatLabel(labelMatch[1])}</ce:label>`);
-                        }
-
-                        finalBlocks.push(blockMarkup);
+                    } else {
+                        // UNCHANGED: Take original tag as-is to preserve all attributes and formatting
+                        blockMarkup = origRef.fullTag;
                     }
-                });
-                await new Promise(r => setTimeout(r, 0));
+                } else if (item.updatedIndex !== null && item.selected) {
+                    const orphan = updatedRefs[item.updatedIndex];
+                    blockMarkup = orphan.fullTag;
+                    targetId = `bb${idCounters.bb.toString().padStart(4, '0')}`;
+                    idCounters.bb += 5;
+
+                    // FIX: Reconstruct opening tag for orphans to prevent formatting errors
+                    blockMarkup = blockMarkup.replace(/^<ce:bib-reference[^>]*>/, `<ce:bib-reference id="${targetId}">`);
+
+                    if (renumberInternal) {
+                        blockMarkup = blockMarkup.replace(/(<(?:sb:reference|ce:source-text|ce:inter-ref|sb:inter-ref|ce:other-ref|ce:textref)\b[^>]*?)(\bid="[^"]+")([^>]*?>)/g, (m, p1, idAttr, p2) => {
+                            let prefix = p1.includes('ce:source-text') ? 'se' : p1.includes('inter-ref') ? 'ir' : p1.includes('ce:other-ref') ? 'or' : p1.includes('ce:textref') ? 'tr' : 'rf';
+                            let currentVal = idCounters[prefix];
+                            idCounters[prefix] += 5;
+                            return `${p1}id="${prefix}${currentVal.toString().padStart(4, '0')}"${p2}`;
+                        });
+                    }
+                }
+
+                if (blockMarkup) {
+                    const labelMatch = blockMarkup.match(/<ce:label>(.*?)<\/ce:label>/);
+                    if (labelMatch) {
+                        blockMarkup = blockMarkup.replace(/<ce:label>.*?<\/ce:label>/, `<ce:label>${formatLabel(labelMatch[1])}</ce:label>`);
+                    }
+                    finalBlocks.push(blockMarkup);
+                }
+                if (i % 20 === 0) await new Promise(r => setTimeout(r, 0));
             }
 
             const joinedResult = finalBlocks.join('\n');
             setOutput(joinedResult);
             setActiveTab('result');
             await generateDiffAsync(originalXml, joinedResult);
-            setToast({ msg: "Protocol executed. Sequence synchronized.", type: "success" });
-        } catch (e) { 
-            setToast({ msg: "Merge Protocol Failure.", type: "error" }); 
-        } finally { 
-            setIsLoading(false); 
-        }
+            setToast({ msg: "Merge Protocol Finished.", type: "success" });
+        } catch (e) { setToast({ msg: "Merge failed.", type: "error" }); } finally { setIsLoading(false); }
     };
 
     const bulkSelect = (selected: boolean) => setScanResults(prev => prev.map(item => ({ ...item, selected })));
@@ -434,28 +399,15 @@ const ReferenceUpdater: React.FC = () => {
         const cleanForSort = (str: string) => str.replace(/[^a-zA-Z0-9]/g, '').trim().toLowerCase();
 
         if (sortAlphabetically) {
-            return [...selectedList].sort((a, b) => 
-                cleanForSort(a.sortKey).localeCompare(cleanForSort(b.sortKey), undefined, { sensitivity: 'base', numeric: true })
-            );
+            return [...selectedList].sort((a, b) => cleanForSort(a.sortKey).localeCompare(cleanForSort(b.sortKey), undefined, { sensitivity: 'base', numeric: true }));
         } else {
-            const existingItems = selectedList
-                .filter(r => r.originalIndex !== null)
-                .sort((a, b) => (a.originalIndex ?? 0) - (b.originalIndex ?? 0));
-            
-            const orphans = selectedList
-                .filter(r => r.originalIndex === null)
-                .sort((a, b) => 
-                    cleanForSort(a.sortKey).localeCompare(cleanForSort(b.sortKey), undefined, { sensitivity: 'base', numeric: true })
-                );
-            
+            const existingItems = selectedList.filter(r => r.originalIndex !== null).sort((a, b) => (a.originalIndex ?? 0) - (b.originalIndex ?? 0));
+            const orphans = selectedList.filter(r => r.originalIndex === null).sort((a, b) => cleanForSort(a.sortKey).localeCompare(cleanForSort(b.sortKey), undefined, { sensitivity: 'base', numeric: true }));
             const result = [...existingItems];
             orphans.forEach(orphan => {
                 const orphanKey = cleanForSort(orphan.sortKey);
-                const insertIdx = result.findIndex(existing => 
-                    cleanForSort(existing.sortKey).localeCompare(orphanKey, undefined, { sensitivity: 'base', numeric: true }) > 0
-                );
-                if (insertIdx === -1) result.push(orphan);
-                else result.splice(insertIdx, 0, orphan);
+                const insertIdx = result.findIndex(existing => cleanForSort(existing.sortKey).localeCompare(orphanKey, undefined, { sensitivity: 'base', numeric: true }) > 0);
+                if (insertIdx === -1) result.push(orphan); else result.splice(insertIdx, 0, orphan);
             });
             return result;
         }
@@ -485,7 +437,7 @@ const ReferenceUpdater: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
             <div className="mb-8 text-center animate-fade-in">
                 <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase">Reference Updater</h1>
-                <p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic leading-relaxed">High-performance bulk merging. Prioritizes content integrity over numeric placeholders.</p>
+                <p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic leading-relaxed">Precision-focused bulk reconciliation for bibliography streams.</p>
             </div>
             
             <div className="flex justify-center mb-8">
@@ -505,11 +457,11 @@ const ReferenceUpdater: React.FC = () => {
                 <div className="flex flex-col gap-6 h-full overflow-hidden">
                     <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col group focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
                         <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center"><label className="font-bold text-slate-700 text-[10px] uppercase tracking-widest">Original XML Source</label></div>
-                        <textarea value={originalXml} onChange={e => setOriginalXml(e.target.value)} className="w-full h-full p-6 text-[13px] font-mono text-slate-700 border-0 focus:ring-0 resize-none bg-transparent" placeholder="Paste full article reference list..." spellCheck={false} />
+                        <textarea value={originalXml} onChange={e => setOriginalXml(e.target.value)} className="w-full h-full p-6 text-[13px] font-mono text-slate-700 border-0 focus:ring-0 resize-none bg-transparent" placeholder="Paste bibliography list..." spellCheck={false} />
                     </div>
                     <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col group focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
                         <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center"><label className="font-bold text-slate-700 text-[10px] uppercase tracking-widest">Updated Corrections Set</label></div>
-                        <textarea value={updatedXml} onChange={e => setUpdatedXml(e.target.value)} className="w-full h-full p-6 text-[13px] font-mono text-slate-700 border-0 focus:ring-0 resize-none bg-transparent" placeholder="Paste corrections or new items..." spellCheck={false} />
+                        <textarea value={updatedXml} onChange={e => setUpdatedXml(e.target.value)} className="w-full h-full p-6 text-[13px] font-mono text-slate-700 border-0 focus:ring-0 resize-none bg-transparent" placeholder="Paste corrections or additions..." spellCheck={false} />
                     </div>
                 </div>
 
@@ -520,7 +472,7 @@ const ReferenceUpdater: React.FC = () => {
                         ))}
                     </div>
                     <div className="flex-grow relative bg-slate-50 overflow-hidden flex flex-col min-h-0">
-                        {isLoading && <LoadingOverlay message="Executing Reconciliation Protocol..." color="indigo" />}
+                        {isLoading && <LoadingOverlay message="Synchronizing Streams..." color="indigo" />}
                         
                         {activeTab === 'scan' && (
                             <div className="h-full overflow-hidden flex flex-col bg-white">
@@ -559,17 +511,17 @@ const ReferenceUpdater: React.FC = () => {
                         {activeTab === 'sequence' && (
                             <div className="h-full overflow-hidden flex flex-col bg-white animate-fade-in">
                                 <div className="p-5 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
-                                    <div className="flex flex-col"><div className="text-xs font-black text-slate-800 uppercase tracking-widest leading-none">Output Queue Preview</div><div className="text-[9px] font-bold text-slate-400 mt-1.5 uppercase tracking-wider">Drag nodes to override system sorting logic</div></div>
-                                    <span className="text-[10px] font-black bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl border border-indigo-100 shadow-sm">{projectedSequence.length} Nodes Queued</span>
+                                    <div className="flex flex-col"><div className="text-xs font-black text-slate-800 uppercase tracking-widest leading-none">Output Queue Preview</div><div className="text-[9px] font-bold text-slate-400 mt-1.5 uppercase tracking-wider">Drag nodes to override sorting</div></div>
+                                    <span className="text-[10px] font-black bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl border border-indigo-100 shadow-sm">{projectedSequence.length} Nodes</span>
                                 </div>
                                 <div className="flex-grow overflow-auto custom-scrollbar p-8 space-y-3 bg-slate-50/30">
                                     {projectedSequence.length === 0 ? (
-                                        <div className="h-full flex flex-col items-center justify-center opacity-30 grayscale"><p className="text-sm font-black uppercase tracking-[0.2em] text-slate-400">Queue Ready for Input</p></div>
+                                        <div className="h-full flex flex-col items-center justify-center opacity-30 grayscale"><p className="text-sm font-black uppercase tracking-[0.2em] text-slate-400">Queue Ready</p></div>
                                     ) : (
                                         projectedSequence.map((ref, idx) => (
                                             <div key={`${ref.id}-${idx}`} draggable onDragStart={() => setDraggedItemIndex(idx)} onDragOver={(e) => e.preventDefault()} onDrop={() => handleDrop(idx)} className={`flex items-center gap-6 p-5 bg-white border border-slate-200 rounded-[1.5rem] shadow-sm hover:border-indigo-400 transition-all group cursor-grab active:cursor-grabbing ${draggedItemIndex === idx ? 'opacity-40 scale-95' : ''}`}>
-                                                <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-[10px] font-black text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors border border-slate-100 shadow-inner">{idx + 1}</div>
-                                                <div className="flex-grow min-w-0"><div className="text-sm font-bold text-slate-800 truncate tracking-tight">{ref.label}</div><div className="text-[10px] font-mono text-slate-400 uppercase tracking-widest mt-0.5">TARGET_ID: {ref.id}</div></div>
+                                                <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-[10px] font-black text-slate-400 group-hover:bg-indigo-50 transition-colors border border-slate-100 shadow-inner">{idx + 1}</div>
+                                                <div className="flex-grow min-w-0"><div className="text-sm font-bold text-slate-800 truncate tracking-tight">{ref.label}</div><div className="text-[10px] font-mono text-slate-400 uppercase tracking-widest mt-0.5">ID: {ref.id}</div></div>
                                                 <span className={`text-[8px] font-black px-3 py-1.5 rounded-lg border uppercase tracking-[0.15em] ${(ref.status === 'add' || ref.status === 'orphan') ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : (ref.status === 'update' || ref.status === 'smart_match') ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>{ref.status === 'add' ? 'NEW' : ref.status === 'smart_match' ? 'SMART' : 'PINNED'}</span>
                                             </div>
                                         ))
@@ -579,11 +531,11 @@ const ReferenceUpdater: React.FC = () => {
                         )}
 
                         {activeTab === 'result' && (
-                             <div className="h-full relative flex flex-col"><textarea value={output} readOnly className="w-full h-full p-8 text-[11px] font-mono text-slate-700 bg-white border-0 focus:ring-0 resize-none leading-loose custom-scrollbar" placeholder="Merged XML stream will be emitted here..." /></div>
+                             <div className="h-full relative flex flex-col"><textarea value={output} readOnly className="w-full h-full p-8 text-[11px] font-mono text-slate-700 bg-white border-0 focus:ring-0 resize-none leading-loose custom-scrollbar" placeholder="Resulting stream..." /></div>
                         )}
 
                         {activeTab === 'diff' && (
-                             <div className="absolute inset-0 overflow-auto bg-white custom-scrollbar">{diffElements || <div className="h-full flex items-center justify-center text-slate-400 uppercase tracking-widest text-[10px] font-black">Differential Audit Pending...</div>}</div>
+                             <div className="absolute inset-0 overflow-auto bg-white custom-scrollbar">{diffElements || <div className="h-full flex items-center justify-center text-slate-400 uppercase tracking-widest text-[10px] font-black">Audit Pending...</div>}</div>
                         )}
                     </div>
                 </div>
