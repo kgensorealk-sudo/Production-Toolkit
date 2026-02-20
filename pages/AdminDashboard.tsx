@@ -5,6 +5,8 @@ import { useAuth } from '../contexts/AuthContext';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import ConfirmationModal from '../components/ConfirmationModal';
+import ReleaseNotesModal from '../components/ReleaseNotesModal';
+import { History } from 'lucide-react';
 
 interface Announcement {
     id: string;
@@ -54,6 +56,8 @@ const PROMO_DURATIONS = [
     { label: '30 Days', value: 30 }
 ];
 
+const ONLINE_THRESHOLD_MS = 240000; // 4 minutes
+
 const getDurationMs = (val: string) => {
     switch (val) {
         case 'trial_1m': return 60 * 1000;
@@ -78,7 +82,7 @@ const formatLastSeen = (timestamp?: string) => {
     const diffHours = Math.floor(diffMins / 60);
     const diffDays = Math.floor(diffHours / 24);
 
-    if (diffMs < 240000) {
+    if (diffMs < ONLINE_THRESHOLD_MS) {
         return (
             <span className="text-emerald-500 font-bold uppercase tracking-widest flex items-center justify-center gap-1.5 text-[9px]">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> 
@@ -96,6 +100,7 @@ const formatLastSeen = (timestamp?: string) => {
 const AdminDashboard: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'users' | 'keys' | 'announcements' | 'config' | 'intelligence'>('users');
     const [isLoading, setIsLoading] = useState(false);
+    const [isReleaseNotesOpen, setIsReleaseNotesOpen] = useState(false);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
     const { freeToolsData, refreshFreeTools, refreshProfile } = useAuth();
 
@@ -505,7 +510,7 @@ const AdminDashboard: React.FC = () => {
 
     const activeNodesCount = users.filter(u => {
         if (!u.last_seen) return false;
-        return (Date.now() - new Date(u.last_seen).getTime()) < 300000;
+        return (Date.now() - new Date(u.last_seen).getTime()) < ONLINE_THRESHOLD_MS;
     }).length;
 
     const intelligenceMetrics = useMemo(() => {
@@ -624,6 +629,7 @@ const AdminDashboard: React.FC = () => {
 
     return (
         <div className="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
+            <ReleaseNotesModal isOpen={isReleaseNotesOpen} onClose={() => setIsReleaseNotesOpen(false)} />
             <ConfirmationModal isOpen={confirmConfig.isOpen} title={confirmConfig.title} message={confirmConfig.message} confirmLabel={confirmConfig.confirmLabel} type={confirmConfig.type} onConfirm={() => { confirmConfig.onConfirm(); setConfirmConfig(prev => ({ ...prev, isOpen: false })); }} onCancel={() => setConfirmConfig(prev => ({ ...prev, isOpen: false }))} />
 
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
@@ -632,6 +638,13 @@ const AdminDashboard: React.FC = () => {
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.3em] mt-2">Central Authorization & Intelligence Node</p>
                 </div>
                 <div className="flex gap-4">
+                    <button 
+                        onClick={() => setIsReleaseNotesOpen(true)}
+                        className="bg-white border border-slate-200 px-6 py-2.5 rounded-xl text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] shadow-sm hover:bg-slate-50 transition-all flex items-center gap-3"
+                    >
+                        <History size={14} />
+                        v1.6.0
+                    </button>
                     <button 
                         onClick={systemHardReset}
                         className="bg-white border border-slate-200 px-6 py-2.5 rounded-xl text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] shadow-sm hover:bg-slate-50 transition-all flex items-center gap-3"

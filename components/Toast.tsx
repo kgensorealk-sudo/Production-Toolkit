@@ -12,9 +12,11 @@ interface ToastProps {
 const Toast: React.FC<ToastProps> = ({ message, type = 'success', onClose }) => {
     useEffect(() => {
         if (!message) return;
+        
         const timer = setTimeout(() => {
             onClose();
         }, 4000);
+        
         return () => clearTimeout(timer);
     }, [message, onClose]);
 
@@ -43,7 +45,7 @@ const Toast: React.FC<ToastProps> = ({ message, type = 'success', onClose }) => 
         <AnimatePresence>
             {message && (
                 <motion.div 
-                    key="toast"
+                    key={message}
                     initial={{ opacity: 0, y: 50, scale: 0.9 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}

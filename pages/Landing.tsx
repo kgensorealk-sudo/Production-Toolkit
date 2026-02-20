@@ -15,10 +15,12 @@ import {
     UserCheck,
     Highlighter,
     GitCompare,
-    Eraser
+    Eraser,
+    History
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import Toast from '../components/Toast';
+import ReleaseNotesModal from '../components/ReleaseNotesModal';
 
 const TOOLS_INFO = [
     {
@@ -73,6 +75,7 @@ const Landing: React.FC = () => {
     const [isPaused, setIsPaused] = useState(false);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'|'info'} | null>(null);
     const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
+    const [isReleaseNotesOpen, setIsReleaseNotesOpen] = useState(false);
 
     const isSubscribed = profile?.is_subscribed;
 
@@ -125,15 +128,16 @@ const Landing: React.FC = () => {
                         className="text-left space-y-12"
                     >
                         <div className="space-y-6">
-                             <motion.div 
+                             <motion.button 
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: 0.2 }}
-                                className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em]"
+                                onClick={() => setIsReleaseNotesOpen(true)}
+                                className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] hover:bg-indigo-100 transition-colors"
                              >
-                                <Zap size={10} fill="currentColor" />
-                                v1.8.0 Enterprise Release
-                             </motion.div>
+                                <History size={10} />
+                                v1.6.0 Stable Release
+                             </motion.button>
                              <h1 className="text-6xl lg:text-8xl font-black text-slate-900 tracking-tighter leading-[0.85] uppercase">
                                 Precision <br/>
                                 <span className="text-indigo-600">Editorial</span> <br/>
@@ -332,6 +336,7 @@ const Landing: React.FC = () => {
                 )}
             </AnimatePresence>
 
+            <ReleaseNotesModal isOpen={isReleaseNotesOpen} onClose={() => setIsReleaseNotesOpen(false)} />
             {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
         </div>
     );

@@ -24,12 +24,14 @@ import {
     UserCheck,
     Highlighter,
     Trash2,
-    ShieldAlert
+    ShieldAlert,
+    History
 } from 'lucide-react';
 import { ToolId } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import AnnouncementModal from '../components/AnnouncementModal';
 import ToolTipsModal from '../components/ToolTipsModal';
+import ReleaseNotesModal from '../components/ReleaseNotesModal';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 
@@ -162,6 +164,7 @@ const Dashboard: React.FC = () => {
     });
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
     const [activeTipTool, setActiveTipTool] = useState<{id: string, name: string} | null>(null);
+    const [isReleaseNotesOpen, setIsReleaseNotesOpen] = useState(false);
 
     useEffect(() => {
         localStorage.setItem('pinned_tools', JSON.stringify(pinnedTools));
@@ -248,6 +251,7 @@ const Dashboard: React.FC = () => {
     return (
         <div className="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
             <AnnouncementModal />
+            <ReleaseNotesModal isOpen={isReleaseNotesOpen} onClose={() => setIsReleaseNotesOpen(false)} />
             {activeTipTool && <ToolTipsModal toolId={activeTipTool.id} toolName={activeTipTool.name} isOpen={!!activeTipTool} onClose={() => setActiveTipTool(null)} />}
 
             <AnimatePresence>
@@ -292,6 +296,13 @@ const Dashboard: React.FC = () => {
                                 placeholder="Search Node Library..." 
                             />
                         </div>
+                        <button 
+                            onClick={() => setIsReleaseNotesOpen(true)}
+                            className="flex items-center gap-2 px-5 py-3 rounded-2xl border bg-white hover:bg-slate-50 border-slate-200 text-slate-500 transition-all active:scale-95 shadow-sm text-[10px] font-black uppercase tracking-widest"
+                        >
+                            <History size={14} />
+                            v1.6.0
+                        </button>
                         <button 
                             onClick={handleSync} 
                             disabled={isSyncing} 
@@ -368,7 +379,7 @@ const Dashboard: React.FC = () => {
                 )}
             </div>
 
-            <Toast message={toast?.msg || ''} type={toast?.type || 'success'} onClose={() => setToast(null)} />
+            {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
         </div>
     );
 };
