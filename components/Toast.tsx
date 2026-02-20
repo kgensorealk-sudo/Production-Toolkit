@@ -1,5 +1,7 @@
 
 import React, { useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { CheckCircle2, AlertCircle, AlertTriangle, Info, X } from 'lucide-react';
 
 interface ToastProps {
     message: string;
@@ -9,36 +11,57 @@ interface ToastProps {
 
 const Toast: React.FC<ToastProps> = ({ message, type = 'success', onClose }) => {
     useEffect(() => {
+        if (!message) return;
         const timer = setTimeout(() => {
             onClose();
-        }, 3000);
+        }, 4000);
         return () => clearTimeout(timer);
-    }, [onClose]);
+    }, [message, onClose]);
 
     const styles = {
-        success: 'bg-emerald-50 text-emerald-800 border-emerald-200',
-        error: 'bg-red-50 text-red-800 border-red-200',
-        warn: 'bg-amber-50 text-amber-800 border-amber-200',
-        info: 'bg-blue-50 text-blue-800 border-blue-200'
+        success: 'bg-emerald-50/90 text-emerald-800 border-emerald-200/50',
+        error: 'bg-rose-50/90 text-rose-800 border-rose-200/50',
+        warn: 'bg-amber-50/90 text-amber-800 border-amber-200/50',
+        info: 'bg-blue-50/90 text-blue-800 border-blue-200/50'
+    };
+
+    const iconStyles = {
+        success: 'bg-emerald-100 text-emerald-600',
+        error: 'bg-rose-100 text-rose-600',
+        warn: 'bg-amber-100 text-amber-600',
+        info: 'bg-blue-100 text-blue-600'
     };
 
     const icons = {
-        success: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>,
-        error: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>,
-        warn: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>,
-        info: <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+        success: <CheckCircle2 size={18} strokeWidth={2.5} />,
+        error: <AlertCircle size={18} strokeWidth={2.5} />,
+        warn: <AlertTriangle size={18} strokeWidth={2.5} />,
+        info: <Info size={18} strokeWidth={2.5} />
     };
 
     return (
-        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-4 rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border ${styles[type]} font-medium transition-all duration-500 animate-slide-up backdrop-blur-md`}>
-            <div className={`p-1 rounded-full ${type === 'success' ? 'bg-emerald-100' : type === 'error' ? 'bg-red-100' : type === 'warn' ? 'bg-amber-100' : 'bg-blue-100'}`}>
-                {icons[type]}
-            </div>
-            <span className="text-sm">{message}</span>
-            <button onClick={onClose} className="ml-2 text-current opacity-50 hover:opacity-100 transition-opacity">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
-        </div>
+        <AnimatePresence>
+            {message && (
+                <motion.div 
+                    key="toast"
+                    initial={{ opacity: 0, y: 50, scale: 0.9 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
+                    className={`fixed bottom-6 right-6 z-[200] flex items-center gap-3 px-4 py-3 rounded-2xl shadow-2xl shadow-slate-200/50 border ${styles[type]} font-medium backdrop-blur-xl`}
+                >
+                    <div className={`p-1.5 rounded-xl ${iconStyles[type]} shadow-sm`}>
+                        {icons[type]}
+                    </div>
+                    <span className="text-sm font-bold tracking-tight pr-2">{message}</span>
+                    <button 
+                        onClick={onClose} 
+                        className="ml-auto p-1 text-current opacity-40 hover:opacity-100 hover:bg-black/5 rounded-lg transition-all"
+                    >
+                        <X size={16} strokeWidth={3} />
+                    </button>
+                </motion.div>
+            )}
+        </AnimatePresence>
     );
 };
 
