@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo } from 'react';
 import { diffLines, diffWordsWithSpace, Change } from 'diff';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
@@ -83,11 +83,6 @@ const ReferenceUpdater: React.FC = () => {
         return lines;
     };
 
-    /**
-     * Optimized Async Diff Generator
-     * Diffing large XML strings (160+ references) is very heavy.
-     * We wrap it in a microtask delay so the UI can update first.
-     */
     const generateDiffAsync = async (original: string, modified: string) => {
         return new Promise<void>((resolve) => {
             setTimeout(() => {
@@ -236,21 +231,11 @@ const ReferenceUpdater: React.FC = () => {
                     let matchType: 'ID' | 'Label' | 'Content' | 'Fuzzy' | undefined;
                     let matchScore = 0;
 
-                    if (origRef.id) {
-                        matchIdx = updatedRefs.findIndex((u, idx) => !usedUpdateIdx.has(idx) && u.id === origRef.id && u.id !== '');
-                        if (matchIdx !== -1) { matchType = 'ID'; matchScore = 100; }
-                    }
+                    // 1. CONTENT HASH MATCH (Highest Reliability)
+                    matchIdx = updatedRefs.findIndex((u, idx) => !usedUpdateIdx.has(idx) && u.contentHash === origRef.contentHash);
+                    if (matchIdx !== -1) { matchType = 'Content'; matchScore = 100; }
 
-                    if (matchIdx === -1) {
-                        matchIdx = updatedRefs.findIndex((u, idx) => !usedUpdateIdx.has(idx) && u.contentHash === origRef.contentHash);
-                        if (matchIdx !== -1) { matchType = 'Content'; matchScore = 100; }
-                    }
-
-                    if (matchIdx === -1 && origRef.label) {
-                        matchIdx = updatedRefs.findIndex((u, idx) => !usedUpdateIdx.has(idx) && u.label === origRef.label && u.label !== '');
-                        if (matchIdx !== -1) { matchType = 'Label'; matchScore = 100; }
-                    }
-
+                    // 2. FUZZY METADATA MATCH (Author/Year/Title)
                     if (matchIdx === -1) {
                         let bestFuzzyIdx = -1;
                         let bestFuzzyScore = 0;
@@ -260,10 +245,26 @@ const ReferenceUpdater: React.FC = () => {
                                 if (score > bestFuzzyScore) { bestFuzzyScore = score; bestFuzzyIdx = idx; }
                             }
                         });
-                        if (bestFuzzyScore > 0.82) { 
+                        // Threshold set to 0.85 for safety
+                        if (bestFuzzyScore > 0.85) { 
                             matchIdx = bestFuzzyIdx; 
                             matchType = 'Fuzzy'; 
                             matchScore = Math.round(bestFuzzyScore * 100); 
+                        }
+                    }
+
+                    // 3. ID MATCHING (Fallback with Sanity Check)
+                    // If Strict Mode (isNumberedMode) is OFF, check IDs but verify content isn't 100% different
+                    if (matchIdx === -1 && !isNumberedMode && origRef.id) {
+                        matchIdx = updatedRefs.findIndex((u, idx) => !usedUpdateIdx.has(idx) && u.id === origRef.id && u.id !== '');
+                        if (matchIdx !== -1) {
+                            // Check if fingerprints have any similarity (at least 20%)
+                            const sanityScore = getSimilarity(updatedRefs[matchIdx].fingerprint, origRef.fingerprint);
+                            if (sanityScore > 0.2) {
+                                matchType = 'ID'; matchScore = 100;
+                            } else {
+                                matchIdx = -1; // Reject match: Identical ID but completely different content
+                            }
                         }
                     }
 
@@ -328,17 +329,11 @@ const ReferenceUpdater: React.FC = () => {
         if (!originalXml.trim() || !updatedXml.trim()) { setToast({ msg: "Paste XML.", type: "warn" }); return; }
         if (scanResults.length === 0) { runAnalysis(); return; }
         setIsLoading(true);
-        // Start async merge process
         await executeMergeAsync(parseReferences(originalXml), parseReferences(updatedXml));
     };
 
-    /**
-     * ASYNCHRONOUS CHUNKED MERGE
-     * Processes references in batches to keep UI responsive.
-     */
     const executeMergeAsync = async (origRefs: RefBlock[], updatedRefs: RefBlock[]) => {
         try {
-            // 1. Efficient ID Pre-scanning
             const getNextIdMap = (xml: string) => {
                 const prefixes = ['bb', 'rf', 'se', 'ir', 'or', 'tr'];
                 const map: Record<string, number> = { bb: 3000, rf: 3000, se: 3000, ir: 3000, or: 3000, tr: 3000 };
@@ -358,7 +353,6 @@ const ReferenceUpdater: React.FC = () => {
             const finalBlocks: string[] = [];
             const sequence = projectedSequence;
             
-            // 2. Batch Processing (Chunked)
             const CHUNK_SIZE = 20;
             for (let i = 0; i < sequence.length; i += CHUNK_SIZE) {
                 const chunk = sequence.slice(i, i + CHUNK_SIZE);
@@ -406,19 +400,15 @@ const ReferenceUpdater: React.FC = () => {
                     }
                 });
 
-                // Yield control to main thread every chunk
                 await new Promise(r => setTimeout(r, 0));
             }
 
             const joinedResult = finalBlocks.join('\n');
             setOutput(joinedResult);
             setActiveTab('result');
-            setToast({ msg: `Merged ${finalBlocks.length} items. Calculating diff in background...`, type: "info" });
-            
-            // 3. Deferred heavy diff calculation
+            setToast({ msg: `Merged ${finalBlocks.length} items. Calculating diff...`, type: "info" });
             await generateDiffAsync(originalXml, joinedResult);
-            
-            setToast({ msg: "Protocol executed. Sequence and Diff synchronized.", type: "success" });
+            setToast({ msg: "Protocol executed successfully.", type: "success" });
         } catch (e) { 
             setToast({ msg: "Merge Protocol Failure.", type: "error" }); 
         } finally { 
@@ -473,7 +463,6 @@ const ReferenceUpdater: React.FC = () => {
         setScanResults(newList.map((item, idx) => ({ ...item, originalIndex: idx })));
         setDraggedItemIndex(null);
         setSortAlphabetically(false);
-        setToast({ msg: "Manual Sequence Overwrite Recorded.", type: "info" });
     };
 
     useKeyboardShortcuts({
@@ -484,11 +473,11 @@ const ReferenceUpdater: React.FC = () => {
 
     return (
         <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-            <div className="mb-8 text-center animate-fade-in"><h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase">Reference Updater</h1><p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic leading-relaxed">High-performance bulk merging. Yields thread control to handle massive sets without browser lock-up.</p></div>
+            <div className="mb-8 text-center animate-fade-in"><h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase">Reference Updater</h1><p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic leading-relaxed">High-performance bulk merging with content-first reconciliation.</p></div>
             
             <div className="flex justify-center mb-8">
                 <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-200 flex flex-wrap items-center justify-center gap-12">
-                    <Switch id="toggle-strict" label="Strict Mode" subLabel={isNumberedMode ? "Exact Matching" : "Fuzzy Matching"} checked={isNumberedMode} onChange={setIsNumberedMode} color="blue" />
+                    <Switch id="toggle-strict" label="Strict Mode" subLabel={isNumberedMode ? "Ignore Shared IDs" : "Enable Shared IDs"} checked={isNumberedMode} onChange={setIsNumberedMode} color="blue" />
                     <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
                     <Switch id="toggle-orphans" label="Auto-Add" subLabel="New Items" checked={addOrphans} onChange={setAddOrphans} color="emerald" />
                     <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
