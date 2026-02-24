@@ -83,11 +83,6 @@ const ReferenceUpdater: React.FC = () => {
         return lines;
     };
 
-    /**
-     * Optimized Async Diff Generator
-     * Diffing large XML strings (160+ references) is very heavy.
-     * We wrap it in a microtask delay so the UI can update first.
-     */
     const generateDiffAsync = async (original: string, modified: string) => {
         return new Promise<void>((resolve) => {
             setTimeout(() => {
@@ -220,6 +215,10 @@ const ReferenceUpdater: React.FC = () => {
         return refs;
     };
 
+    /**
+     * UPDATED ANALYSIS LOGIC
+     * Prioritizes Label/Content over technical IDs to prevent hijacking.
+     */
     const runAnalysis = () => {
         if (!originalXml.trim() || !updatedXml.trim()) { setToast({ msg: "Paste both Original and Updated XML.", type: "warn" }); return; }
         setIsLoading(true);
@@ -236,21 +235,28 @@ const ReferenceUpdater: React.FC = () => {
                     let matchType: 'ID' | 'Label' | 'Content' | 'Fuzzy' | undefined;
                     let matchScore = 0;
 
-                    if (origRef.id) {
-                        matchIdx = updatedRefs.findIndex((u, idx) => !usedUpdateIdx.has(idx) && u.id === origRef.id && u.id !== '');
-                        if (matchIdx !== -1) { matchType = 'ID'; matchScore = 100; }
-                    }
+                    // 1. Content Match (Highest Certainty)
+                    matchIdx = updatedRefs.findIndex((u, idx) => !usedUpdateIdx.has(idx) && u.contentHash === origRef.contentHash);
+                    if (matchIdx !== -1) { matchType = 'Content'; matchScore = 100; }
 
-                    if (matchIdx === -1) {
-                        matchIdx = updatedRefs.findIndex((u, idx) => !usedUpdateIdx.has(idx) && u.contentHash === origRef.contentHash);
-                        if (matchIdx !== -1) { matchType = 'Content'; matchScore = 100; }
-                    }
-
+                    // 2. Label Match (Sequence Certainty)
                     if (matchIdx === -1 && origRef.label) {
                         matchIdx = updatedRefs.findIndex((u, idx) => !usedUpdateIdx.has(idx) && u.label === origRef.label && u.label !== '');
                         if (matchIdx !== -1) { matchType = 'Label'; matchScore = 100; }
                     }
 
+                    // 3. ID Fallback (ONLY if labels aren't conflicting)
+                    if (matchIdx === -1 && origRef.id) {
+                        matchIdx = updatedRefs.findIndex((u, idx) => {
+                            if (usedUpdateIdx.has(idx) || u.id !== origRef.id) return false;
+                            // Verification: If IDs match but labels are totally different (e.g. [1] vs [8]), ignore this match.
+                            const labelConflict = origRef.label && u.label && origRef.label !== u.label;
+                            return !labelConflict;
+                        });
+                        if (matchIdx !== -1) { matchType = 'ID'; matchScore = 100; }
+                    }
+
+                    // 4. Fuzzy Match
                     if (matchIdx === -1) {
                         let bestFuzzyIdx = -1;
                         let bestFuzzyScore = 0;
@@ -315,7 +321,7 @@ const ReferenceUpdater: React.FC = () => {
 
                 setScanResults(analysis); 
                 setActiveTab('scan'); 
-                setToast({ msg: `Found ${analysis.filter(a => a.updatedIndex !== null).length} matches across set.`, type: "success" });
+                setToast({ msg: `Found ${analysis.filter(a => a.updatedIndex !== null).length} matches. Sequence stabilized.`, type: "success" });
             } catch (e) { 
                 setToast({ msg: "Analysis failed.", type: "error" }); 
             } finally { 
@@ -328,21 +334,14 @@ const ReferenceUpdater: React.FC = () => {
         if (!originalXml.trim() || !updatedXml.trim()) { setToast({ msg: "Paste XML.", type: "warn" }); return; }
         if (scanResults.length === 0) { runAnalysis(); return; }
         setIsLoading(true);
-        // Start async merge process
         await executeMergeAsync(parseReferences(originalXml), parseReferences(updatedXml));
     };
 
-    /**
-     * ASYNCHRONOUS CHUNKED MERGE
-     * Processes references in batches to keep UI responsive.
-     */
     const executeMergeAsync = async (origRefs: RefBlock[], updatedRefs: RefBlock[]) => {
         try {
-            // 1. Efficient ID Pre-scanning
             const getNextIdMap = (xml: string) => {
                 const prefixes = ['bb', 'rf', 'se', 'ir', 'or', 'tr'];
                 const map: Record<string, number> = { bb: 3000, rf: 3000, se: 3000, ir: 3000, or: 3000, tr: 3000 };
-                
                 prefixes.forEach(prefix => {
                     const regex = new RegExp(`id="${prefix}(\\d+)"`, 'g');
                     let m;
@@ -357,12 +356,10 @@ const ReferenceUpdater: React.FC = () => {
             const idCounters = getNextIdMap(originalXml);
             const finalBlocks: string[] = [];
             const sequence = projectedSequence;
-            
-            // 2. Batch Processing (Chunked)
             const CHUNK_SIZE = 20;
+
             for (let i = 0; i < sequence.length; i += CHUNK_SIZE) {
                 const chunk = sequence.slice(i, i + CHUNK_SIZE);
-                
                 chunk.forEach(item => {
                     let blockMarkup = '';
                     let targetId = '';
@@ -379,7 +376,8 @@ const ReferenceUpdater: React.FC = () => {
                     } else if (item.updatedIndex !== null && item.selected) {
                         const orphan = updatedRefs[item.updatedIndex];
                         blockMarkup = orphan.fullTag;
-                        targetId = `bb${idCounters.bb}`;
+                        // For genuine new additions, generate unique ID to avoid collision
+                        targetId = `bb${idCounters.bb.toString().padStart(4, '0')}`;
                         idCounters.bb += 5;
                     }
 
@@ -387,7 +385,6 @@ const ReferenceUpdater: React.FC = () => {
                         if (preserveIds) {
                             blockMarkup = blockMarkup.replace(/id="[^"]*"\s*/, '').replace('<ce:bib-reference', `<ce:bib-reference id="${targetId}"`);
                         }
-
                         if (renumberInternal) {
                             blockMarkup = blockMarkup.replace(/(<(?:sb:reference|ce:source-text|ce:inter-ref|sb:inter-ref|ce:other-ref|ce:textref)\b[^>]*?)(\bid="[^"]+")([^>]*?>)/g, (m, p1, idAttr, p2) => {
                                 let prefix = p1.includes('ce:source-text') ? 'se' : p1.includes('inter-ref') ? 'ir' : p1.includes('ce:other-ref') ? 'or' : p1.includes('ce:textref') ? 'tr' : 'rf';
@@ -396,29 +393,21 @@ const ReferenceUpdater: React.FC = () => {
                                 return `${p1}id="${prefix}${currentVal.toString().padStart(4, '0')}"${p2}`;
                             });
                         }
-
                         const labelMatch = blockMarkup.match(/<ce:label>(.*?)<\/ce:label>/);
                         if (labelMatch) {
                             blockMarkup = blockMarkup.replace(/<ce:label>.*?<\/ce:label>/, `<ce:label>${formatLabel(labelMatch[1])}</ce:label>`);
                         }
-
                         finalBlocks.push(blockMarkup);
                     }
                 });
-
-                // Yield control to main thread every chunk
                 await new Promise(r => setTimeout(r, 0));
             }
 
             const joinedResult = finalBlocks.join('\n');
             setOutput(joinedResult);
             setActiveTab('result');
-            setToast({ msg: `Merged ${finalBlocks.length} items. Calculating diff in background...`, type: "info" });
-            
-            // 3. Deferred heavy diff calculation
             await generateDiffAsync(originalXml, joinedResult);
-            
-            setToast({ msg: "Protocol executed. Sequence and Diff synchronized.", type: "success" });
+            setToast({ msg: "Protocol executed. Collision-free sequence generated.", type: "success" });
         } catch (e) { 
             setToast({ msg: "Merge Protocol Failure.", type: "error" }); 
         } finally { 
@@ -428,6 +417,10 @@ const ReferenceUpdater: React.FC = () => {
 
     const bulkSelect = (selected: boolean) => setScanResults(prev => prev.map(item => ({ ...item, selected })));
 
+    /**
+     * UPDATED SEQUENCE LOGIC
+     * Ensures orphans/adds are inserted relative to their neighbors, not just at the end.
+     */
     const projectedSequence = useMemo(() => {
         if (scanResults.length === 0) return [];
         let selectedList = scanResults.filter(r => r.selected);
@@ -438,22 +431,23 @@ const ReferenceUpdater: React.FC = () => {
                 cleanForSort(a.sortKey).localeCompare(cleanForSort(b.sortKey), undefined, { sensitivity: 'base', numeric: true })
             );
         } else {
-            const existingItems = selectedList
+            // Start with Original Items in their Original Order
+            const result = selectedList
                 .filter(r => r.originalIndex !== null)
                 .sort((a, b) => (a.originalIndex ?? 0) - (b.originalIndex ?? 0));
             
+            // Handle Orphans (New Items like [6])
             const orphans = selectedList
                 .filter(r => r.originalIndex === null)
-                .sort((a, b) => 
-                    cleanForSort(a.sortKey).localeCompare(cleanForSort(b.sortKey), undefined, { sensitivity: 'base', numeric: true })
-                );
+                .sort((a, b) => cleanForSort(a.sortKey).localeCompare(cleanForSort(b.sortKey), undefined, { sensitivity: 'base', numeric: true }));
             
-            const result = [...existingItems];
             orphans.forEach(orphan => {
-                const orphanKey = cleanForSort(orphan.sortKey);
-                const insertIdx = result.findIndex(existing => 
-                    cleanForSort(existing.sortKey).localeCompare(orphanKey, undefined, { sensitivity: 'base', numeric: true }) > 0
+                const orphanLabel = cleanForSort(orphan.label);
+                // Attempt to find the best place to insert based on label sequencing
+                let insertIdx = result.findIndex(existing => 
+                    cleanForSort(existing.label).localeCompare(orphanLabel, undefined, { sensitivity: 'base', numeric: true }) > 0
                 );
+                
                 if (insertIdx === -1) result.push(orphan);
                 else result.splice(insertIdx, 0, orphan);
             });
@@ -465,15 +459,14 @@ const ReferenceUpdater: React.FC = () => {
         if (draggedItemIndex === null || draggedItemIndex === dropIndex) return;
         const visibleItems = projectedSequence;
         const itemToMove = visibleItems[draggedItemIndex];
-        const absoluteIdxMove = scanResults.findIndex(r => r === itemToMove);
-        const absoluteIdxTarget = scanResults.findIndex(r => r === visibleItems[dropIndex]);
         const newList = [...scanResults];
+        const absoluteIdxMove = newList.findIndex(r => r === itemToMove);
         newList.splice(absoluteIdxMove, 1);
+        const absoluteIdxTarget = newList.findIndex(r => r === visibleItems[dropIndex]);
         newList.splice(absoluteIdxTarget, 0, itemToMove);
         setScanResults(newList.map((item, idx) => ({ ...item, originalIndex: idx })));
         setDraggedItemIndex(null);
         setSortAlphabetically(false);
-        setToast({ msg: "Manual Sequence Overwrite Recorded.", type: "info" });
     };
 
     useKeyboardShortcuts({
@@ -484,7 +477,7 @@ const ReferenceUpdater: React.FC = () => {
 
     return (
         <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-            <div className="mb-8 text-center animate-fade-in"><h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase">Reference Updater</h1><p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic leading-relaxed">High-performance bulk merging. Yields thread control to handle massive sets without browser lock-up.</p></div>
+            <div className="mb-8 text-center animate-fade-in"><h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase">Reference Updater</h1><p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic leading-relaxed">High-performance bulk merging. Optimized to prevent ID hijacking and maintain logical labeling.</p></div>
             
             <div className="flex justify-center mb-8">
                 <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-200 flex flex-wrap items-center justify-center gap-12">
