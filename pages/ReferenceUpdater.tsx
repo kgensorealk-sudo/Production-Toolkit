@@ -215,10 +215,6 @@ const ReferenceUpdater: React.FC = () => {
         return refs;
     };
 
-    /**
-     * UPDATED ANALYSIS LOGIC
-     * Prioritizes Label/Content over technical IDs to prevent hijacking.
-     */
     const runAnalysis = () => {
         if (!originalXml.trim() || !updatedXml.trim()) { setToast({ msg: "Paste both Original and Updated XML.", type: "warn" }); return; }
         setIsLoading(true);
@@ -235,28 +231,23 @@ const ReferenceUpdater: React.FC = () => {
                     let matchType: 'ID' | 'Label' | 'Content' | 'Fuzzy' | undefined;
                     let matchScore = 0;
 
-                    // 1. Content Match (Highest Certainty)
                     matchIdx = updatedRefs.findIndex((u, idx) => !usedUpdateIdx.has(idx) && u.contentHash === origRef.contentHash);
                     if (matchIdx !== -1) { matchType = 'Content'; matchScore = 100; }
 
-                    // 2. Label Match (Sequence Certainty)
                     if (matchIdx === -1 && origRef.label) {
                         matchIdx = updatedRefs.findIndex((u, idx) => !usedUpdateIdx.has(idx) && u.label === origRef.label && u.label !== '');
                         if (matchIdx !== -1) { matchType = 'Label'; matchScore = 100; }
                     }
 
-                    // 3. ID Fallback (ONLY if labels aren't conflicting)
                     if (matchIdx === -1 && origRef.id) {
                         matchIdx = updatedRefs.findIndex((u, idx) => {
                             if (usedUpdateIdx.has(idx) || u.id !== origRef.id) return false;
-                            // Verification: If IDs match but labels are totally different (e.g. [1] vs [8]), ignore this match.
                             const labelConflict = origRef.label && u.label && origRef.label !== u.label;
                             return !labelConflict;
                         });
                         if (matchIdx !== -1) { matchType = 'ID'; matchScore = 100; }
                     }
 
-                    // 4. Fuzzy Match
                     if (matchIdx === -1) {
                         let bestFuzzyIdx = -1;
                         let bestFuzzyScore = 0;
@@ -266,11 +257,7 @@ const ReferenceUpdater: React.FC = () => {
                                 if (score > bestFuzzyScore) { bestFuzzyScore = score; bestFuzzyIdx = idx; }
                             }
                         });
-                        if (bestFuzzyScore > 0.82) { 
-                            matchIdx = bestFuzzyIdx; 
-                            matchType = 'Fuzzy'; 
-                            matchScore = Math.round(bestFuzzyScore * 100); 
-                        }
+                        if (bestFuzzyScore > 0.82) { matchIdx = bestFuzzyIdx; matchType = 'Fuzzy'; matchScore = Math.round(bestFuzzyScore * 100); }
                     }
 
                     if (matchIdx !== -1) {
@@ -321,12 +308,8 @@ const ReferenceUpdater: React.FC = () => {
 
                 setScanResults(analysis); 
                 setActiveTab('scan'); 
-                setToast({ msg: `Found ${analysis.filter(a => a.updatedIndex !== null).length} matches. Sequence stabilized.`, type: "success" });
-            } catch (e) { 
-                setToast({ msg: "Analysis failed.", type: "error" }); 
-            } finally { 
-                setIsLoading(false); 
-            }
+                setToast({ msg: `Analysis complete. Found ${analysis.filter(a => a.updatedIndex !== null).length} potential updates.`, type: "success" });
+            } catch (e) { setToast({ msg: "Analysis failed.", type: "error" }); } finally { setIsLoading(false); }
         }, 300);
     };
 
@@ -363,39 +346,46 @@ const ReferenceUpdater: React.FC = () => {
                 chunk.forEach(item => {
                     let blockMarkup = '';
                     let targetId = '';
+                    let isTrulyUnchanged = item.status === 'unchanged';
 
                     if (item.originalIndex !== null) {
                         const origRef = origRefs[item.originalIndex];
                         if (item.selected && item.updatedIndex !== null && (item.status === 'update' || item.status === 'smart_match')) {
                             blockMarkup = updatedRefs[item.updatedIndex].fullTag;
                             targetId = origRef.id;
+                            isTrulyUnchanged = false;
                         } else {
+                            // IF UNCHANGED: Use original markup exactly to preserve all IDs
                             blockMarkup = origRef.fullTag;
                             targetId = origRef.id;
+                            isTrulyUnchanged = true;
                         }
                     } else if (item.updatedIndex !== null && item.selected) {
                         const orphan = updatedRefs[item.updatedIndex];
                         blockMarkup = orphan.fullTag;
-                        // For genuine new additions, generate unique ID to avoid collision
                         targetId = `bb${idCounters.bb.toString().padStart(4, '0')}`;
                         idCounters.bb += 5;
+                        isTrulyUnchanged = false;
                     }
 
                     if (blockMarkup) {
-                        if (preserveIds) {
-                            blockMarkup = blockMarkup.replace(/id="[^"]*"\s*/, '').replace('<ce:bib-reference', `<ce:bib-reference id="${targetId}"`);
-                        }
-                        if (renumberInternal) {
-                            blockMarkup = blockMarkup.replace(/(<(?:sb:reference|ce:source-text|ce:inter-ref|sb:inter-ref|ce:other-ref|ce:textref)\b[^>]*?)(\bid="[^"]+")([^>]*?>)/g, (m, p1, idAttr, p2) => {
-                                let prefix = p1.includes('ce:source-text') ? 'se' : p1.includes('inter-ref') ? 'ir' : p1.includes('ce:other-ref') ? 'or' : p1.includes('ce:textref') ? 'tr' : 'rf';
-                                let currentVal = idCounters[prefix];
-                                idCounters[prefix] += 5;
-                                return `${p1}id="${prefix}${currentVal.toString().padStart(4, '0')}"${p2}`;
-                            });
-                        }
-                        const labelMatch = blockMarkup.match(/<ce:label>(.*?)<\/ce:label>/);
-                        if (labelMatch) {
-                            blockMarkup = blockMarkup.replace(/<ce:label>.*?<\/ce:label>/, `<ce:label>${formatLabel(labelMatch[1])}</ce:label>`);
+                        // ONLY re-process IDs if the reference has actually changed
+                        if (!isTrulyUnchanged) {
+                            if (preserveIds) {
+                                blockMarkup = blockMarkup.replace(/id="[^"]*"\s*/, '').replace('<ce:bib-reference', `<ce:bib-reference id="${targetId}"`);
+                            }
+                            if (renumberInternal) {
+                                blockMarkup = blockMarkup.replace(/(<(?:sb:reference|ce:source-text|ce:inter-ref|sb:inter-ref|ce:other-ref|ce:textref)\b[^>]*?)(\bid="[^"]+")([^>]*?>)/g, (m, p1, idAttr, p2) => {
+                                    let prefix = p1.includes('ce:source-text') ? 'se' : p1.includes('inter-ref') ? 'ir' : p1.includes('ce:other-ref') ? 'or' : p1.includes('ce:textref') ? 'tr' : 'rf';
+                                    let currentVal = idCounters[prefix];
+                                    idCounters[prefix] += 5;
+                                    return `${p1}id="${prefix}${currentVal.toString().padStart(4, '0')}"${p2}`;
+                                });
+                            }
+                            const labelMatch = blockMarkup.match(/<ce:label>(.*?)<\/ce:label>/);
+                            if (labelMatch) {
+                                blockMarkup = blockMarkup.replace(/<ce:label>.*?<\/ce:label>/, `<ce:label>${formatLabel(labelMatch[1])}</ce:label>`);
+                            }
                         }
                         finalBlocks.push(blockMarkup);
                     }
@@ -407,47 +397,25 @@ const ReferenceUpdater: React.FC = () => {
             setOutput(joinedResult);
             setActiveTab('result');
             await generateDiffAsync(originalXml, joinedResult);
-            setToast({ msg: "Protocol executed. Collision-free sequence generated.", type: "success" });
-        } catch (e) { 
-            setToast({ msg: "Merge Protocol Failure.", type: "error" }); 
-        } finally { 
-            setIsLoading(false); 
-        }
+            setToast({ msg: "Merge Protocol Executed. Unchanged references preserved.", type: "success" });
+        } catch (e) { setToast({ msg: "Merge Protocol Failure.", type: "error" }); } finally { setIsLoading(false); }
     };
 
     const bulkSelect = (selected: boolean) => setScanResults(prev => prev.map(item => ({ ...item, selected })));
 
-    /**
-     * UPDATED SEQUENCE LOGIC
-     * Ensures orphans/adds are inserted relative to their neighbors, not just at the end.
-     */
     const projectedSequence = useMemo(() => {
         if (scanResults.length === 0) return [];
         let selectedList = scanResults.filter(r => r.selected);
         const cleanForSort = (str: string) => str.replace(/[^a-zA-Z0-9]/g, '').trim().toLowerCase();
 
         if (sortAlphabetically) {
-            return [...selectedList].sort((a, b) => 
-                cleanForSort(a.sortKey).localeCompare(cleanForSort(b.sortKey), undefined, { sensitivity: 'base', numeric: true })
-            );
+            return [...selectedList].sort((a, b) => cleanForSort(a.sortKey).localeCompare(cleanForSort(b.sortKey), undefined, { sensitivity: 'base', numeric: true }));
         } else {
-            // Start with Original Items in their Original Order
-            const result = selectedList
-                .filter(r => r.originalIndex !== null)
-                .sort((a, b) => (a.originalIndex ?? 0) - (b.originalIndex ?? 0));
-            
-            // Handle Orphans (New Items like [6])
-            const orphans = selectedList
-                .filter(r => r.originalIndex === null)
-                .sort((a, b) => cleanForSort(a.sortKey).localeCompare(cleanForSort(b.sortKey), undefined, { sensitivity: 'base', numeric: true }));
-            
+            const result = selectedList.filter(r => r.originalIndex !== null).sort((a, b) => (a.originalIndex ?? 0) - (b.originalIndex ?? 0));
+            const orphans = selectedList.filter(r => r.originalIndex === null).sort((a, b) => cleanForSort(a.sortKey).localeCompare(cleanForSort(b.sortKey), undefined, { sensitivity: 'base', numeric: true }));
             orphans.forEach(orphan => {
                 const orphanLabel = cleanForSort(orphan.label);
-                // Attempt to find the best place to insert based on label sequencing
-                let insertIdx = result.findIndex(existing => 
-                    cleanForSort(existing.label).localeCompare(orphanLabel, undefined, { sensitivity: 'base', numeric: true }) > 0
-                );
-                
+                let insertIdx = result.findIndex(existing => cleanForSort(existing.label).localeCompare(orphanLabel, undefined, { sensitivity: 'base', numeric: true }) > 0);
                 if (insertIdx === -1) result.push(orphan);
                 else result.splice(insertIdx, 0, orphan);
             });
@@ -477,7 +445,7 @@ const ReferenceUpdater: React.FC = () => {
 
     return (
         <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-            <div className="mb-8 text-center animate-fade-in"><h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase">Reference Updater</h1><p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic leading-relaxed">High-performance bulk merging. Optimized to prevent ID hijacking and maintain logical labeling.</p></div>
+            <div className="mb-8 text-center animate-fade-in"><h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase">Reference Updater</h1><p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic leading-relaxed">High-performance bulk merging. Optimized to preserve unchanged IDs and prevent sequence collisions.</p></div>
             
             <div className="flex justify-center mb-8">
                 <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-200 flex flex-wrap items-center justify-center gap-12">
@@ -525,7 +493,7 @@ const ReferenceUpdater: React.FC = () => {
                                         <div key={`${ref.id}-${idx}`} draggable onDragStart={() => setDraggedItemIndex(idx)} onDragOver={(e) => e.preventDefault()} onDrop={() => handleDrop(idx)} className={`flex items-center gap-6 p-5 bg-white border border-slate-200 rounded-[1.5rem] shadow-sm hover:border-indigo-400 transition-all group cursor-grab active:cursor-grabbing ${draggedItemIndex === idx ? 'opacity-40 scale-95' : ''}`}>
                                             <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-[10px] font-black text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors border border-slate-100 shadow-inner">{idx + 1}</div>
                                             <div className="flex-grow min-w-0"><div className="text-sm font-bold text-slate-800 truncate tracking-tight">{ref.label}</div><div className="text-[10px] font-mono text-slate-400 uppercase tracking-widest mt-0.5">TARGET_ID: {ref.id}</div></div>
-                                            <span className={`text-[8px] font-black px-3 py-1.5 rounded-lg border uppercase tracking-[0.15em] ${(ref.status === 'add' || ref.status === 'orphan') ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : (ref.status === 'update' || ref.status === 'smart_match') ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>{ref.status === 'add' ? 'NEW' : ref.status === 'smart_match' ? 'SMART' : 'PINNED'}</span>
+                                            <span className={`text-[8px] font-black px-3 py-1.5 rounded-lg border uppercase tracking-[0.15em] ${(ref.status === 'add' || ref.status === 'orphan') ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : (ref.status === 'update' || ref.status === 'smart_match') ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>{ref.status === 'add' ? 'NEW' : ref.status === 'smart_match' ? 'SMART' : (ref.status === 'unchanged' ? 'UNTOUCHED' : 'PINNED')}</span>
                                         </div>
                                     )))}
                                 </div>
