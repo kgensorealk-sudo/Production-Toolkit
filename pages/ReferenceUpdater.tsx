@@ -1,6 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { diffLines, diffWordsWithSpace, Change } from 'diff';
-import { FixedSizeList as List, ListChildComponentProps } from 'react-window';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import Switch from '../components/Switch';
@@ -14,8 +13,8 @@ interface RefBlock {
     content: string;
     isSynthetic?: boolean;
     cleanContent?: string;
-    fingerprint: string; 
-    contentHash: string; 
+    fingerprint: string;
+    contentHash: string;
     sortKey: string;
 }
 
@@ -24,12 +23,12 @@ interface ScanItem {
     id: string;
     status: 'update' | 'unchanged' | 'orphan' | 'smart_match' | 'add';
     preview: string;
-    matchType?: 'Label' | 'Content' | 'Fuzzy';
+    matchType?: 'ID' | 'Label' | 'Content' | 'Fuzzy';
     matchScore?: number;
     isSynthetic?: boolean;
     selected: boolean;
     sortKey: string;
-    originalIndex: number | null; 
+    originalIndex: number | null;
     updatedIndex: number | null;
 }
 
@@ -37,64 +36,154 @@ const ReferenceUpdater: React.FC = () => {
     const [originalXml, setOriginalXml] = useState('');
     const [updatedXml, setUpdatedXml] = useState('');
     const [output, setOutput] = useState('');
-    const [preserveIds] = useState(true);
-    const [renumberInternal] = useState(true);
+    const [preserveIds, setPreserveIds] = useState(true);
+    const [renumberInternal, setRenumberInternal] = useState(true);
     const [addOrphans, setAddOrphans] = useState(false);
+    const [trustIds, setTrustIds] = useState(false);
     const [isNumberedMode, setIsNumberedMode] = useState(false);
     const [sortAlphabetically, setSortAlphabetically] = useState(false);
-    const [convertAndToAmp] = useState(false);
+    const [convertAndToAmp, setConvertAndToAmp] = useState(false);
     const [activeTab, setActiveTab] = useState<'scan' | 'sequence' | 'result' | 'diff'>('scan');
     const [isLoading, setIsLoading] = useState(false);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'|'info'} | null>(null);
     const [scanResults, setScanResults] = useState<ScanItem[]>([]);
     const [diffElements, setDiffElements] = useState<React.ReactNode>(null);
+    const [draggedItemIndex, setDraggedItemIndex] = useState<number | null>(null);
 
-    const escapeHtml = (unsafe: string) => unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    // ── Pure helpers – stable references ────────────────────────────────────
+    const escapeHtml = useCallback((unsafe: string) =>
+        unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"), []);
 
-    const buildLines = (diffParts: Change[], isLeft: boolean) => {
-        const lines: string[] = [];
-        let currentLine = "";
-        let activeClass: string | null = null;
-        const append = (text: string, cls: string | null) => {
-            if (!text) return;
-            for (let i = 0; i < text.length; i++) {
-                const char = text[i];
-                if (char === '\n') {
-                    if (activeClass) currentLine += '</span>';
-                    lines.push(currentLine);
-                    currentLine = "";
-                    if (activeClass) currentLine += `<span class="${activeClass}">`;
-                } else {
-                    if (cls !== activeClass) {
-                        if (activeClass) currentLine += '</span>';
-                        activeClass = cls;
-                        if (activeClass) currentLine += `<span class="${activeClass}">`;
-                    }
-                    currentLine += escapeHtml(char);
+    const cleanForSort = useCallback((str: string) =>
+        str.replace(/[^a-zA-Z0-9]/g, '').trim().toLowerCase(), []);
+
+    const formatLabel = useCallback((label: string) =>
+        convertAndToAmp ? label.replace(/\b(and)\b/gi, '&amp;') : label,
+    [convertAndToAmp]);
+
+    const getSimilarity = useCallback((s1: string, s2: string): number => {
+        if (!s1 || !s2) return 0;
+        if (s1 === s2) return 1.0;
+        const longer = s1.length > s2.length ? s1 : s2;
+        const shorter = s1.length > s2.length ? s2 : s1;
+        if (longer.length === 0) return 1.0;
+        const costs: number[] = [];
+        for (let i = 0; i <= longer.length; i++) {
+            let lastValue = i;
+            for (let j = 0; j <= shorter.length; j++) {
+                if (i === 0) { costs[j] = j; continue; }
+                if (j > 0) {
+                    let newValue = costs[j - 1];
+                    if (longer[i - 1] !== shorter[j - 1])
+                        newValue = Math.min(newValue, lastValue, costs[j]) + 1;
+                    costs[j - 1] = lastValue;
+                    lastValue = newValue;
                 }
             }
+            if (i > 0) costs[shorter.length] = lastValue;
+        }
+        return (longer.length - costs[shorter.length]) / longer.length;
+    }, []);
+
+    // ── buildLines: split on newlines instead of char-by-char ───────────────
+    const buildLines = useCallback((diffParts: Change[], isLeft: boolean): string[] => {
+        const lines: string[] = [];
+        let currentLine = '';
+        let activeClass: string | null = null;
+
+        const flushNewline = () => {
+            if (activeClass) currentLine += '</span>';
+            lines.push(currentLine);
+            currentLine = '';
+            if (activeClass) currentLine += `<span class="${activeClass}">`;
         };
+
+        const append = (text: string, cls: string | null) => {
+            if (!text) return;
+            if (cls !== activeClass) {
+                if (activeClass) currentLine += '</span>';
+                activeClass = cls;
+                if (activeClass) currentLine += `<span class="${activeClass}">`;
+            }
+            // Split on newlines upfront – far fewer iterations than char-by-char
+            const segments = text.split('\n');
+            for (let i = 0; i < segments.length; i++) {
+                if (i > 0) flushNewline();
+                currentLine += escapeHtml(segments[i]);
+            }
+        };
+
         diffParts.forEach(part => {
-            if (part.removed && isLeft) append(part.value, 'bg-rose-100 text-rose-900 line-through decoration-rose-900/30 font-medium');
-            else if (part.added && !isLeft) append(part.value, 'bg-emerald-100 text-emerald-900 font-bold');
-            else if (!part.added && !part.removed) append(part.value, null);
+            if (part.removed && isLeft)
+                append(part.value, 'bg-rose-100 text-rose-900 line-through decoration-rose-900/30 font-medium');
+            else if (part.added && !isLeft)
+                append(part.value, 'bg-emerald-100 text-emerald-900 font-bold');
+            else if (!part.added && !part.removed)
+                append(part.value, null);
         });
+
         if (activeClass) currentLine += '</span>';
         lines.push(currentLine);
         return lines;
-    };
+    }, [escapeHtml]);
 
-    const generateDiffAsync = async (original: string, modified: string) => {
+    // ── Parse – memoized on XML text so repeated calls are free ─────────────
+    const parsedOrigRefs = useMemo(() => parseXmlRefs(originalXml), [originalXml]);
+    const parsedUpdatedRefs = useMemo(() => parseXmlRefs(updatedXml), [updatedXml]);
+
+    // Extracted as a plain function (no closure deps) so useMemo can call it
+    function parseXmlRefs(xml: string): RefBlock[] {
+        const refs: RefBlock[] = [];
+        const regex = /<ce:bib-reference\b([^>]*)>([\s\S]*?)<\/ce:bib-reference>/g;
+        let match;
+        while ((match = regex.exec(xml)) !== null) {
+            const content = match[2];
+            const idMatch = match[1].match(/id="([^"]+)"/);
+            const id = idMatch ? idMatch[1] : '';
+            const labelMatch = content.match(/<ce:label>(.*?)<\/ce:label>/);
+            let label = labelMatch ? labelMatch[1].trim() : '';
+            let isSynthetic = false;
+            const cleanLabel = label.replace(/[^\d]/g, '');
+
+            const surnameMatch = content.match(/<(?:ce|sb):surname>(.*?)<\/(?:ce|sb):surname>/i);
+            const author = surnameMatch ? surnameMatch[1].toLowerCase().replace(/[^a-z]/g, '') : '';
+
+            const dateMatch = content.match(/<(?:ce|sb):year>(.*?)<\/(?:ce|sb):year>/i)
+                || content.match(/<(?:ce|sb):date>(.*?)<\/(?:ce|sb):date>/i);
+            const year = dateMatch ? dateMatch[1].replace(/\D/g, '') : '';
+
+            const titleMatch = content.match(/<(?:ce|sb):title>(.*?)<\/(?:ce|sb):title>/i);
+            const title = titleMatch ? titleMatch[1].toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+
+            const cleanContent = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+            const contentHash = cleanContent.replace(/[^a-z0-9]/g, '');
+
+            const fingerprint = author || year || title
+                ? `meta|${author}|${year}|${title.substring(0, 100)}`
+                : `text|${contentHash.substring(0, 150)}`;
+
+            if (!label && author && year) { label = `${author}, ${year}`; isSynthetic = true; }
+            const sortKey = label || content.replace(/<[^>]+>/g, '').trim().substring(0, 60);
+
+            if (label || author || cleanContent.length > 5) {
+                refs.push({ fullTag: match[0], id, label, cleanLabel, content, isSynthetic, cleanContent, fingerprint, contentHash, sortKey });
+            }
+        }
+        return refs;
+    }
+
+    const generateDiffAsync = useCallback(async (original: string, modified: string) => {
         return new Promise<void>((resolve) => {
             setTimeout(() => {
                 const diff = diffLines(original, modified);
                 const rows: React.ReactNode[] = [];
                 let leftLineNum = 1, rightLineNum = 1, i = 0;
-                while(i < diff.length) {
+
+                while (i < diff.length) {
                     const current = diff[i];
                     let type = 'equal', leftVal = '', rightVal = '';
-                    if (current.removed && diff[i+1]?.added) {
-                        type = 'replace'; leftVal = current.value; rightVal = diff[i+1].value; i += 2;
+                    if (current.removed && diff[i + 1]?.added) {
+                        type = 'replace'; leftVal = current.value; rightVal = diff[i + 1].value; i += 2;
                     } else if (current.removed) {
                         type = 'delete'; leftVal = current.value; i++;
                     } else if (current.added) {
@@ -102,38 +191,41 @@ const ReferenceUpdater: React.FC = () => {
                     } else {
                         leftVal = rightVal = current.value; i++;
                     }
+
                     let leftLines: string[] = [], rightLines: string[] = [];
                     if (type === 'replace') {
                         const wordDiff = diffWordsWithSpace(leftVal, rightVal);
                         leftLines = buildLines(wordDiff, true);
                         rightLines = buildLines(wordDiff, false);
                     } else if (type === 'delete') {
-                        leftLines = buildLines([{removed: true, value: leftVal} as Change], true);
+                        leftLines = buildLines([{ removed: true, value: leftVal } as Change], true);
                     } else if (type === 'insert') {
-                        rightLines = buildLines([{added: true, value: rightVal} as Change], false);
+                        rightLines = buildLines([{ added: true, value: rightVal } as Change], false);
                     } else {
-                         const lines = leftVal.split('\n');
-                         if (lines.length > 0 && lines[lines.length-1] === '') lines.pop(); 
-                         leftLines = lines.map(escapeHtml);
-                         rightLines = [...leftLines];
+                        const lines = leftVal.split('\n');
+                        if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
+                        leftLines = lines.map(escapeHtml);
+                        rightLines = [...leftLines];
                     }
+
                     const maxRows = Math.max(leftLines.length, rightLines.length);
                     for (let r = 0; r < maxRows; r++) {
-                         const lContent = leftLines[r], rContent = rightLines[r];
-                         const lNum = lContent !== undefined ? leftLineNum++ : '';
-                         const rNum = rContent !== undefined ? rightLineNum++ : '';
-                         const lClass = lContent !== undefined && type === 'delete' ? 'bg-rose-50/70' : (type === 'replace' ? 'bg-rose-50/30' : '');
-                         const rClass = rContent !== undefined && type === 'insert' ? 'bg-emerald-50/70' : (type === 'replace' ? 'bg-emerald-50/30' : '');
-                         rows.push(
+                        const lContent = leftLines[r], rContent = rightLines[r];
+                        const lNum = lContent !== undefined ? leftLineNum++ : '';
+                        const rNum = rContent !== undefined ? rightLineNum++ : '';
+                        const lClass = lContent !== undefined && type === 'delete' ? 'bg-rose-50/70' : (type === 'replace' ? 'bg-rose-50/30' : '');
+                        const rClass = rContent !== undefined && type === 'insert' ? 'bg-emerald-50/70' : (type === 'replace' ? 'bg-emerald-50/30' : '');
+                        rows.push(
                             <tr key={`${i}-${r}`} className="hover:bg-slate-50 transition-colors duration-75 group border-b border-slate-100/30 last:border-0">
                                 <td className={`w-14 text-right text-[10px] text-slate-400 p-1.5 pr-3 border-r border-slate-200 select-none bg-slate-50/80 font-mono ${lClass}`}>{lNum}</td>
-                                <td className={`p-1.5 pl-4 font-mono text-[11px] text-slate-700 whitespace-pre-wrap break-all leading-relaxed ${lClass}`} dangerouslySetInnerHTML={{__html: lContent || ''}}></td>
+                                <td className={`p-1.5 pl-4 font-mono text-[11px] text-slate-700 whitespace-pre-wrap break-all leading-relaxed ${lClass}`} dangerouslySetInnerHTML={{ __html: lContent || '' }} />
                                 <td className={`w-14 text-right text-[10px] text-slate-400 p-1.5 pr-3 border-r border-slate-200 border-l select-none bg-slate-50/80 font-mono ${rClass}`}>{rNum}</td>
-                                <td className={`p-1.5 pl-4 font-mono text-[11px] text-slate-700 whitespace-pre-wrap break-all leading-relaxed ${rClass}`} dangerouslySetInnerHTML={{__html: rContent || ''}}></td>
+                                <td className={`p-1.5 pl-4 font-mono text-[11px] text-slate-700 whitespace-pre-wrap break-all leading-relaxed ${rClass}`} dangerouslySetInnerHTML={{ __html: rContent || '' }} />
                             </tr>
-                         );
+                        );
                     }
                 }
+
                 setDiffElements(
                     <div className="bg-white">
                         <table className="w-full text-sm font-mono border-collapse table-fixed">
@@ -151,98 +243,58 @@ const ReferenceUpdater: React.FC = () => {
                 resolve();
             }, 50);
         });
-    };
+    }, [buildLines, escapeHtml]);
 
-    const formatLabel = (label: string) => {
-        if (!label) return label;
-        return convertAndToAmp ? label.replace(/\b(and)\b/gi, '&amp;') : label;
-    };
-
-    const getSimilarity = (s1: string, s2: string): number => {
-        if (!s1 || !s2) return 0;
-        if (s1 === s2) return 1.0;
-        const getBigrams = (str: string) => {
-            const bigrams = new Set<string>();
-            for (let i = 0; i < str.length - 1; i++) { bigrams.add(str.substring(i, i + 2)); }
-            return bigrams;
-        };
-        const b1 = getBigrams(s1), b2 = getBigrams(s2);
-        let intersect = 0;
-        for (const b of b1) { if (b2.has(b)) intersect++; }
-        return (2.0 * intersect) / (b1.size + b2.size);
-    };
-
-    const parseReferences = (xml: string): RefBlock[] => {
-        const refs: RefBlock[] = [];
-        const regex = /<ce:bib-reference\b([^>]*)>([\s\S]*?)<\/ce:bib-reference>/g;
-        let match;
-        while ((match = regex.exec(xml)) !== null) {
-            const content = match[2], idMatch = match[1].match(/id="([^"]+)"/), id = idMatch ? idMatch[1] : '';
-            const labelMatch = content.match(/<ce:label>(.*?)<\/ce:label>/);
-            let label = labelMatch ? labelMatch[1].trim() : '', isSynthetic = false;
-            const cleanLabel = label.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-
-            const surnameMatch = content.match(/<(?:ce|sb):surname>(.*?)<\/(?:ce|sb):surname>/i);
-            const author = surnameMatch ? surnameMatch[1].toLowerCase().replace(/[^a-z]/g, '') : '';
-            const dateMatch = content.match(/<(?:ce|sb):year>(.*?)<\/(?:ce|sb):year>/i) || content.match(/<(?:ce|sb):date>(.*?)<\/(?:ce|sb):date>/i);
-            const year = dateMatch ? dateMatch[1].replace(/\D/g, '') : '';
-            const titleMatch = content.match(/<(?:ce|sb):title>(.*?)<\/(?:ce|sb):title>/i);
-            const title = titleMatch ? titleMatch[1].toLowerCase().replace(/[^a-z0-9]/g, '') : '';
-            const cleanContent = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
-            const contentHash = cleanContent.replace(/[^a-z0-9]/g, '');
-            
-            const fingerprint = author || year || title 
-                ? `meta|${author}|${year}|${title.substring(0, 100)}` 
-                : `text|${contentHash.substring(0, 150)}`;
-            
-            if (!label && author && year) { label = `${author}, ${year}`; isSynthetic = true; }
-            const sortKey = label || content.replace(/<[^>]+>/g, '').trim().substring(0, 60);
-            
-            if (label || author || cleanContent.length > 5) {
-                refs.push({ fullTag: match[0], id, label, cleanLabel, content, isSynthetic, cleanContent, fingerprint, contentHash, sortKey });
-            }
+    // ── runAnalysis: O(n) map-based matching instead of O(n²) findIndex ──────
+    const runAnalysis = useCallback(() => {
+        if (!originalXml.trim() || !updatedXml.trim()) {
+            setToast({ msg: "Paste both Original and Updated XML.", type: "warn" });
+            return;
         }
-        return refs;
-    };
-
-    const runAnalysis = () => {
-        if (!originalXml.trim() || !updatedXml.trim()) { setToast({ msg: "Paste both Original and Updated XML.", type: "warn" }); return; }
         setIsLoading(true);
+
         setTimeout(() => {
             try {
-                const origRefs = parseReferences(originalXml);
-                const updatedRefs = parseReferences(updatedXml);
+                const origRefs = parsedOrigRefs;
+                const updatedRefs = parsedUpdatedRefs;
+
+                // Build O(1) lookup maps once
+                const labelMap = new Map<string, number>();
+                const hashMap = new Map<string, number>();
+                const idMap = new Map<string, number>();
+                updatedRefs.forEach((u, idx) => {
+                    if (u.cleanLabel && !labelMap.has(u.cleanLabel)) labelMap.set(u.cleanLabel, idx);
+                    if (u.contentHash && !hashMap.has(u.contentHash)) hashMap.set(u.contentHash, idx);
+                    if (u.id && !idMap.has(u.id)) idMap.set(u.id, idx);
+                });
+
                 const analysis: ScanItem[] = [];
                 const usedUpdateIdx = new Set<number>();
-                
-                const hashMap = new Map<string, number>();
-                const labelMap = new Map<string, number>();
-                const cleanLabelMap = new Map<string, number>();
-                
-                updatedRefs.forEach((u, idx) => {
-                    if (u.contentHash) hashMap.set(u.contentHash, idx);
-                    if (u.label) labelMap.set(u.label, idx);
-                    if (u.cleanLabel) cleanLabelMap.set(u.cleanLabel, idx);
-                });
 
                 origRefs.forEach((origRef, oIdx) => {
                     let matchIdx = -1;
-                    let matchType: 'Label' | 'Content' | 'Fuzzy' | undefined;
+                    let matchType: 'ID' | 'Label' | 'Content' | 'Fuzzy' | undefined;
                     let matchScore = 0;
 
-                    // Strictly ignoring ID Matching per user request
-                    if (origRef.label && labelMap.has(origRef.label)) {
-                        const idx = labelMap.get(origRef.label)!;
-                        if (!usedUpdateIdx.has(idx)) { matchIdx = idx; matchType = 'Label'; matchScore = 100; }
+                    // 1. Label match – O(1)
+                    if (origRef.cleanLabel) {
+                        const idx = labelMap.get(origRef.cleanLabel) ?? -1;
+                        if (idx !== -1 && !usedUpdateIdx.has(idx)) { matchIdx = idx; matchType = 'Label'; matchScore = 100; }
                     }
-                    if (matchIdx === -1 && origRef.cleanLabel && cleanLabelMap.has(origRef.cleanLabel)) {
-                        const idx = cleanLabelMap.get(origRef.cleanLabel)!;
-                        if (!usedUpdateIdx.has(idx)) { matchIdx = idx; matchType = 'Label'; matchScore = 98; }
+
+                    // 2. Content hash match – O(1)
+                    if (matchIdx === -1) {
+                        const idx = hashMap.get(origRef.contentHash) ?? -1;
+                        if (idx !== -1 && !usedUpdateIdx.has(idx)) { matchIdx = idx; matchType = 'Content'; matchScore = 100; }
                     }
-                    if (matchIdx === -1 && origRef.contentHash && hashMap.has(origRef.contentHash)) {
-                        const idx = hashMap.get(origRef.contentHash)!;
-                        if (!usedUpdateIdx.has(idx)) { matchIdx = idx; matchType = 'Content'; matchScore = 100; }
+
+                    // 3. ID match (optional) – O(1)
+                    if (matchIdx === -1 && trustIds && origRef.id) {
+                        const idx = idMap.get(origRef.id) ?? -1;
+                        if (idx !== -1 && !usedUpdateIdx.has(idx)) { matchIdx = idx; matchType = 'ID'; matchScore = 100; }
                     }
+
+                    // 4. Fuzzy match – O(n), only reached when all exact matches fail
                     if (matchIdx === -1) {
                         let bestIdx = -1, bestScore = 0;
                         updatedRefs.forEach((u, idx) => {
@@ -256,43 +308,68 @@ const ReferenceUpdater: React.FC = () => {
 
                     if (matchIdx !== -1) {
                         usedUpdateIdx.add(matchIdx);
-                        analysis.push({ 
-                            label: formatLabel(origRef.label || updatedRefs[matchIdx].label), 
-                            id: origRef.id, 
-                            status: matchType === 'Fuzzy' ? 'smart_match' : 'update', 
-                            matchType, matchScore, 
-                            preview: updatedRefs[matchIdx].content.substring(0, 100).replace(/<[^>]+>/g, '').trim() + '...', 
-                            isSynthetic: origRef.isSynthetic, selected: true, sortKey: updatedRefs[matchIdx].sortKey, originalIndex: oIdx, updatedIndex: matchIdx 
+                        analysis.push({
+                            label: formatLabel(origRef.label || updatedRefs[matchIdx].label),
+                            id: origRef.id,
+                            status: matchType === 'Fuzzy' ? 'smart_match' : 'update',
+                            matchType, matchScore,
+                            preview: updatedRefs[matchIdx].content.substring(0, 100).replace(/<[^>]+>/g, '').trim() + '...',
+                            isSynthetic: origRef.isSynthetic,
+                            selected: true,
+                            sortKey: updatedRefs[matchIdx].sortKey,
+                            originalIndex: oIdx,
+                            updatedIndex: matchIdx
                         });
                     } else {
-                        analysis.push({ label: formatLabel(origRef.label), id: origRef.id, status: 'unchanged', preview: origRef.content.substring(0, 100).replace(/<[^>]+>/g, '').trim() + '...', isSynthetic: origRef.isSynthetic, selected: true, sortKey: origRef.sortKey, originalIndex: oIdx, updatedIndex: null });
+                        analysis.push({
+                            label: formatLabel(origRef.label),
+                            id: origRef.id,
+                            status: 'unchanged',
+                            preview: origRef.content.substring(0, 100).replace(/<[^>]+>/g, '').trim() + '...',
+                            isSynthetic: origRef.isSynthetic,
+                            selected: true,
+                            sortKey: origRef.sortKey,
+                            originalIndex: oIdx,
+                            updatedIndex: null
+                        });
                     }
                 });
 
                 updatedRefs.forEach((val, idx) => {
                     if (!usedUpdateIdx.has(idx)) {
-                        analysis.push({ label: formatLabel(val.label || 'Unlabeled'), id: val.id || 'N/A', status: addOrphans ? 'add' : 'orphan', preview: val.content.substring(0, 100).replace(/<[^>]+>/g, '').trim() + '...', isSynthetic: val.isSynthetic, selected: addOrphans, sortKey: val.sortKey, originalIndex: null, updatedIndex: idx });
+                        analysis.push({
+                            label: formatLabel(val.label || 'Unlabeled'),
+                            id: val.id || 'N/A',
+                            status: addOrphans ? 'add' : 'orphan',
+                            preview: val.content.substring(0, 100).replace(/<[^>]+>/g, '').trim() + '...',
+                            isSynthetic: val.isSynthetic,
+                            selected: addOrphans,
+                            sortKey: val.sortKey,
+                            originalIndex: null,
+                            updatedIndex: idx
+                        });
                     }
                 });
-                setScanResults(analysis); setActiveTab('scan'); setToast({ msg: `Matched ${analysis.filter(a => a.updatedIndex !== null).length} items.`, type: "success" });
-            } catch (e) { setToast({ msg: "Analysis failed.", type: "error" }); } finally { setIsLoading(false); }
+
+                setScanResults(analysis);
+                setActiveTab('scan');
+                setToast({ msg: `Found ${analysis.filter(a => a.updatedIndex !== null).length} matches across set.`, type: "success" });
+            } catch (e) {
+                setToast({ msg: "Analysis failed.", type: "error" });
+            } finally {
+                setIsLoading(false);
+            }
         }, 300);
-    };
+    }, [originalXml, updatedXml, parsedOrigRefs, parsedUpdatedRefs, trustIds, addOrphans, formatLabel, getSimilarity]);
 
-    const projectedSequence = useMemo(() => {
-        if (scanResults.length === 0) return [];
-        const selectedList = scanResults.filter(r => r.selected);
-        const cleanForSort = (str: string) => str.replace(/[^a-zA-Z0-9]/g, '').trim().toLowerCase();
-        if (sortAlphabetically) {
-            return [...selectedList].sort((a, b) => cleanForSort(a.sortKey).localeCompare(cleanForSort(b.sortKey), undefined, { sensitivity: 'base', numeric: true }));
-        }
-        return [...selectedList].sort((a, b) => {
-            if (a.originalIndex !== null && b.originalIndex !== null) return a.originalIndex - b.originalIndex;
-            return cleanForSort(a.sortKey).localeCompare(cleanForSort(b.sortKey), undefined, { sensitivity: 'base', numeric: true });
-        });
-    }, [scanResults, sortAlphabetically]);
+    const initiateUpdate = useCallback(async () => {
+        if (!originalXml.trim() || !updatedXml.trim()) { setToast({ msg: "Paste XML.", type: "warn" }); return; }
+        if (scanResults.length === 0) { runAnalysis(); return; }
+        setIsLoading(true);
+        await executeMergeAsync(parsedOrigRefs, parsedUpdatedRefs);
+    }, [originalXml, updatedXml, scanResults, parsedOrigRefs, parsedUpdatedRefs, runAnalysis]);
 
-    const executeMergeAsync = async (origRefs: RefBlock[], updatedRefs: RefBlock[]) => {
+    const executeMergeAsync = useCallback(async (origRefs: RefBlock[], updatedRefs: RefBlock[]) => {
         try {
             const getNextIdMap = (xml: string) => {
                 const prefixes = ['bb', 'rf', 'se', 'ir', 'or', 'tr'];
@@ -307,6 +384,7 @@ const ReferenceUpdater: React.FC = () => {
                 });
                 return map;
             };
+
             const idCounters = getNextIdMap(originalXml);
             const finalBlocks: string[] = [];
             const sequence = projectedSequence;
@@ -317,45 +395,113 @@ const ReferenceUpdater: React.FC = () => {
                 chunk.forEach(item => {
                     let blockMarkup = '';
                     let targetId = '';
+
                     if (item.originalIndex !== null) {
                         const origRef = origRefs[item.originalIndex];
-                        blockMarkup = (item.selected && item.updatedIndex !== null) ? updatedRefs[item.updatedIndex].fullTag : origRef.fullTag;
-                        targetId = origRef.id;
+                        if (item.selected && item.updatedIndex !== null && (item.status === 'update' || item.status === 'smart_match')) {
+                            blockMarkup = updatedRefs[item.updatedIndex].fullTag;
+                            targetId = origRef.id;
+                        } else {
+                            blockMarkup = origRef.fullTag;
+                            targetId = origRef.id;
+                        }
                     } else if (item.updatedIndex !== null && item.selected) {
-                        blockMarkup = updatedRefs[item.updatedIndex].fullTag;
-                        targetId = `bb${idCounters.bb}`; idCounters.bb += 5;
+                        const orphan = updatedRefs[item.updatedIndex];
+                        blockMarkup = orphan.fullTag;
+                        targetId = `bb${idCounters.bb.toString().padStart(4, '0')}`;
+                        idCounters.bb += 5;
                     }
+
                     if (blockMarkup) {
-                        if (preserveIds) blockMarkup = blockMarkup.replace(/id="[^"]*"\s*/, '').replace('<ce:bib-reference', `<ce:bib-reference id="${targetId}"`);
+                        if (preserveIds) {
+                            blockMarkup = blockMarkup.replace(/<ce:bib-reference id="[^"]+"/, `<ce:bib-reference id="${targetId}"`);
+                        }
                         if (renumberInternal) {
-                            blockMarkup = blockMarkup.replace(/(<(?:sb:reference|ce:source-text|ce:inter-ref|sb:inter-ref|ce:other-ref|ce:textref)\b[^>]*?)(\bid="[^"]+")([^>]*?>)/g, (m, p1, idAttr, p2) => {
-                                const prefix = p1.includes('ce:source-text') ? 'se' : p1.includes('inter-ref') ? 'ir' : p1.includes('ce:other-ref') ? 'or' : p1.includes('ce:textref') ? 'tr' : 'rf';
-                                const currentVal = idCounters[prefix]; idCounters[prefix] += 5;
-                                return `${p1}id="${prefix}${currentVal.toString().padStart(4, '0')}"${p2}`;
-                            });
+                            blockMarkup = blockMarkup.replace(
+                                /(<(?:sb:reference|ce:source-text|ce:inter-ref|sb:inter-ref|ce:other-ref|ce:textref)\b[^>]*?)(\bid="[^"]+")([^>]*?>)/g,
+                                (m, p1, _idAttr, p2) => {
+                                    const prefix = p1.includes('ce:source-text') ? 'se'
+                                        : p1.includes('inter-ref') ? 'ir'
+                                        : p1.includes('ce:other-ref') ? 'or'
+                                        : p1.includes('ce:textref') ? 'tr' : 'rf';
+                                    const currentVal = idCounters[prefix];
+                                    idCounters[prefix] += 5;
+                                    return `${p1}id="${prefix}${currentVal.toString().padStart(4, '0')}"${p2}`;
+                                }
+                            );
                         }
                         const labelMatch = blockMarkup.match(/<ce:label>(.*?)<\/ce:label>/);
-                        if (labelMatch) blockMarkup = blockMarkup.replace(/<ce:label>.*?<\/ce:label>/, `<ce:label>${formatLabel(labelMatch[1])}</ce:label>`);
+                        if (labelMatch) {
+                            blockMarkup = blockMarkup.replace(/<ce:label>.*?<\/ce:label>/, `<ce:label>${formatLabel(labelMatch[1])}</ce:label>`);
+                        }
                         finalBlocks.push(blockMarkup);
                     }
                 });
                 await new Promise(r => setTimeout(r, 0));
             }
+
             const joinedResult = finalBlocks.join('\n');
-            setOutput(joinedResult); setActiveTab('result');
+            setOutput(joinedResult);
+            setActiveTab('result');
+            setToast({ msg: `Merged ${finalBlocks.length} items. Calculating diff...`, type: "info" });
             await generateDiffAsync(originalXml, joinedResult);
-            setToast({ msg: "Merge complete.", type: "success" });
-        } catch (e) { setToast({ msg: "Merge failed.", type: "error" }); } finally { setIsLoading(false); }
-    };
+            setToast({ msg: "Protocol executed. Diff synchronized.", type: "success" });
+        } catch (e) {
+            setToast({ msg: "Merge Protocol Failure.", type: "error" });
+        } finally {
+            setIsLoading(false);
+        }
+    }, [originalXml, preserveIds, renumberInternal, projectedSequence, formatLabel, generateDiffAsync]);
 
-    const initiateUpdate = async () => {
-        if (!originalXml.trim() || !updatedXml.trim()) { setToast({ msg: "Paste XML.", type: "warn" }); return; }
-        if (scanResults.length === 0) { runAnalysis(); return; }
-        setIsLoading(true);
-        await executeMergeAsync(parseReferences(originalXml), parseReferences(updatedXml));
-    };
+    const bulkSelect = useCallback((selected: boolean) =>
+        setScanResults(prev => prev.map(item => ({ ...item, selected }))), []);
 
-    const bulkSelect = (selected: boolean) => setScanResults(prev => prev.map(item => ({ ...item, selected })));
+    const projectedSequence = useMemo(() => {
+        if (scanResults.length === 0) return [];
+        const selectedList = scanResults.filter(r => r.selected);
+
+        if (sortAlphabetically) {
+            return [...selectedList].sort((a, b) =>
+                cleanForSort(a.sortKey).localeCompare(cleanForSort(b.sortKey), undefined, { sensitivity: 'base', numeric: true })
+            );
+        }
+
+        const existingItems = selectedList
+            .filter(r => r.originalIndex !== null)
+            .sort((a, b) => (a.originalIndex ?? 0) - (b.originalIndex ?? 0));
+
+        const orphans = selectedList
+            .filter(r => r.originalIndex === null)
+            .sort((a, b) =>
+                cleanForSort(a.sortKey).localeCompare(cleanForSort(b.sortKey), undefined, { sensitivity: 'base', numeric: true })
+            );
+
+        const result = [...existingItems];
+        orphans.forEach(orphan => {
+            const orphanKey = cleanForSort(orphan.sortKey);
+            const insertIdx = result.findIndex(existing =>
+                cleanForSort(existing.sortKey).localeCompare(orphanKey, undefined, { sensitivity: 'base', numeric: true }) > 0
+            );
+            if (insertIdx === -1) result.push(orphan);
+            else result.splice(insertIdx, 0, orphan);
+        });
+        return result;
+    }, [scanResults, sortAlphabetically, cleanForSort]);
+
+    const handleDrop = useCallback((dropIndex: number) => {
+        if (draggedItemIndex === null || draggedItemIndex === dropIndex) return;
+        const visibleItems = projectedSequence;
+        const itemToMove = visibleItems[draggedItemIndex];
+        const absoluteIdxMove = scanResults.findIndex(r => r === itemToMove);
+        const absoluteIdxTarget = scanResults.findIndex(r => r === visibleItems[dropIndex]);
+        const newList = [...scanResults];
+        newList.splice(absoluteIdxMove, 1);
+        newList.splice(absoluteIdxTarget, 0, itemToMove);
+        setScanResults(newList.map((item, idx) => ({ ...item, originalIndex: idx })));
+        setDraggedItemIndex(null);
+        setSortAlphabetically(false);
+        setToast({ msg: "Manual Sequence Overwrite Recorded.", type: "info" });
+    }, [draggedItemIndex, projectedSequence, scanResults]);
 
     useKeyboardShortcuts({
         onPrimary: initiateUpdate,
@@ -363,34 +509,48 @@ const ReferenceUpdater: React.FC = () => {
         onClear: () => { setOriginalXml(''); setUpdatedXml(''); setOutput(''); setScanResults([]); }
     }, [originalXml, updatedXml, output, scanResults]);
 
+    // ── Render ───────────────────────────────────────────────────────────────
     return (
         <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-            <div className="mb-8 text-center"><h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase">Reference Updater</h1><p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic leading-relaxed">High-performance bulk merging. Strictly Label & Content matching.</p></div>
+            <div className="mb-8 text-center animate-fade-in">
+                <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase">Reference Updater</h1>
+                <p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic leading-relaxed">High-performance bulk merging. Yields thread control to handle massive sets without browser lock-up.</p>
+            </div>
+
             <div className="flex justify-center mb-8">
                 <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-200 flex flex-wrap items-center justify-center gap-12">
-                    <Switch id="toggle-strict" label="Strict Mode" subLabel={isNumberedMode ? "Exact Matching" : "Fuzzy Matching"} checked={isNumberedMode} onChange={setIsNumberedMode} color="blue" />
+                    <Switch id="toggle-trust" label="Trust XML IDs" subLabel={trustIds ? "ID Priority" : "Label Priority"} checked={trustIds} onChange={setTrustIds} color="amber" />
+                    <div className="h-8 w-px bg-slate-100 hidden sm:block" />
                     <Switch id="toggle-orphans" label="Auto-Add" subLabel="New Items" checked={addOrphans} onChange={setAddOrphans} color="emerald" />
+                    <div className="h-8 w-px bg-slate-100 hidden sm:block" />
                     <div className="flex gap-3">
                         <button onClick={runAnalysis} className="bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold py-2.5 px-6 rounded-xl border border-slate-200 transition-all active:scale-95 shadow-sm">Analyze Set</button>
                         <button onClick={initiateUpdate} className="bg-indigo-600 hover:bg-indigo-700 text-white font-black py-2.5 px-8 rounded-xl shadow-lg shadow-indigo-500/20 active:scale-95 transition-all uppercase text-xs tracking-widest">Execute Merge</button>
                     </div>
                 </div>
             </div>
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[700px]">
                 <div className="flex flex-col gap-6 h-full overflow-hidden">
-                    <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col transition-all">
-                        <div className="bg-slate-50 px-5 py-3 border-b border-slate-100"><label className="font-bold text-slate-700 text-[10px] uppercase tracking-widest">Original XML Source</label></div>
+                    <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col group focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
+                        <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center"><label className="font-bold text-slate-700 text-[10px] uppercase tracking-widest">Original XML Source</label></div>
                         <textarea value={originalXml} onChange={e => setOriginalXml(e.target.value)} className="w-full h-full p-6 text-[13px] font-mono text-slate-700 border-0 focus:ring-0 resize-none bg-transparent" placeholder="Paste full article reference list..." spellCheck={false} />
                     </div>
-                    <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col transition-all">
-                        <div className="bg-slate-50 px-5 py-3 border-b border-slate-100"><label className="font-bold text-slate-700 text-[10px] uppercase tracking-widest">Updated Corrections Set</label></div>
+                    <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col group focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
+                        <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center"><label className="font-bold text-slate-700 text-[10px] uppercase tracking-widest">Updated Corrections Set</label></div>
                         <textarea value={updatedXml} onChange={e => setUpdatedXml(e.target.value)} className="w-full h-full p-6 text-[13px] font-mono text-slate-700 border-0 focus:ring-0 resize-none bg-transparent" placeholder="Paste corrections or new items..." spellCheck={false} />
                     </div>
                 </div>
+
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col relative h-full">
-                    <div className="bg-white px-2 pt-2 border-b border-slate-100 flex space-x-1">{[{ id: 'scan', label: 'Match Matrix' }, { id: 'sequence', label: 'Output Queue' }, { id: 'result', label: 'Merged Stream' }, { id: 'diff', label: 'Audit Log' }].map(tab => (<button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex-1 py-2 text-xs font-bold rounded-t-lg transition-all border-t border-x ${activeTab === tab.id ? 'bg-slate-50 text-indigo-600 border-slate-200 translate-y-[1px]' : 'bg-white text-slate-400 border-transparent hover:bg-slate-50'}`}>{tab.label}</button>))}</div>
+                    <div className="bg-white px-2 pt-2 border-b border-slate-100 flex space-x-1">
+                        {([{ id: 'scan', label: 'Match Matrix' }, { id: 'sequence', label: 'Output Queue' }, { id: 'result', label: 'Merged Stream' }, { id: 'diff', label: 'Audit Log' }] as const).map(tab => (
+                            <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex-1 py-2 text-xs font-bold rounded-t-lg transition-all border-t border-x ${activeTab === tab.id ? 'bg-slate-50 text-indigo-600 border-slate-200 translate-y-[1px]' : 'bg-white text-slate-400 border-transparent hover:bg-slate-50'}`}>{tab.label}</button>
+                        ))}
+                    </div>
                     <div className="flex-grow relative bg-slate-50 overflow-hidden flex flex-col min-h-0">
                         {isLoading && <LoadingOverlay message="Executing Protocol Batch..." color="indigo" />}
+
                         {activeTab === 'scan' && (
                             <div className="h-full overflow-hidden flex flex-col bg-white">
                                 <div className="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
@@ -401,68 +561,82 @@ const ReferenceUpdater: React.FC = () => {
                                         <button onClick={() => bulkSelect(false)} className="text-[10px] font-black text-slate-400 uppercase tracking-widest">None</button>
                                     </div>
                                 </div>
-                                <div className="flex-grow bg-white">
-                                    {scanResults.length === 0 ? (
-                                        <div className="h-full flex items-center justify-center text-slate-300 uppercase tracking-[0.2em] font-black italic">Awaiting Set Scan...</div>
-                                    ) : (
-                                        <List height={600} itemCount={scanResults.length} itemSize={64} width="100%" className="custom-scrollbar">
-                                            {({ index, style }: ListChildComponentProps) => {
-                                                const item = scanResults[index];
-                                                return (
-                                                    <div style={style} className={`flex items-center border-b border-slate-100 transition-colors hover:bg-slate-50/50 ${!item.selected ? 'opacity-30 grayscale' : ''}`}>
-                                                        <div className="w-12 flex justify-center shrink-0">
-                                                            <input type="checkbox" checked={item.selected} onChange={() => setScanResults(prev => prev.map((it, i) => i === index ? { ...it, selected: !it.selected } : it))} className="rounded border-slate-300 text-indigo-600 h-4 w-4" />
-                                                        </div>
-                                                        <div className="w-32 px-4 shrink-0 font-mono">
-                                                            <div className="font-bold text-slate-800 truncate">{item.label}</div>
-                                                            <div className="text-[9px] text-slate-400 uppercase tracking-tighter truncate">ID: {item.id}</div>
-                                                        </div>
-                                                        <div className="w-24 px-4 shrink-0">
+                                <div className="flex-grow overflow-auto custom-scrollbar">
+                                    <table className="w-full text-left text-[11px] border-collapse">
+                                        <thead className="bg-slate-50 sticky top-0 border-b border-slate-200 z-10">
+                                            <tr>
+                                                <th className="p-4 font-bold text-slate-400 uppercase w-8" />
+                                                <th className="p-4 font-bold text-slate-500 uppercase w-32 tracking-wider">Node ID</th>
+                                                <th className="p-4 font-bold text-slate-500 uppercase w-24 tracking-wider">Status</th>
+                                                <th className="p-4 font-bold text-slate-500 uppercase tracking-wider">Logic Preview</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {scanResults.length === 0
+                                                ? <tr><td colSpan={4} className="p-20 text-center text-slate-300 uppercase tracking-[0.2em] font-black italic">Awaiting Set Scan...</td></tr>
+                                                : scanResults.map((item, idx) => (
+                                                    <tr key={idx} className={`transition-colors hover:bg-slate-50/50 ${!item.selected ? 'opacity-30 grayscale' : ''}`}>
+                                                        <td className="p-4 text-center">
+                                                            <input type="checkbox" checked={item.selected} onChange={() => setScanResults(prev => prev.map((it, i) => i === idx ? { ...it, selected: !it.selected } : it))} className="rounded border-slate-300 text-indigo-600 h-4 w-4" />
+                                                        </td>
+                                                        <td className="p-4 font-mono">
+                                                            <div className="font-bold text-slate-800 truncate max-w-[140px]">{item.label}</div>
+                                                            <div className="text-[9px] text-slate-400 uppercase tracking-tighter">ID: {item.id}</div>
+                                                        </td>
+                                                        <td className="p-4">
                                                             <div className="flex flex-col gap-1">
                                                                 <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase border block text-center ${item.status === 'update' || item.status === 'smart_match' ? 'bg-amber-50 text-amber-600 border-amber-200' : item.status === 'add' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : item.status === 'orphan' ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>{item.status.replace('_', ' ')}</span>
                                                                 {item.matchType && <span className="text-[8px] text-slate-300 text-center font-bold uppercase tracking-widest">{item.matchType} ({item.matchScore}%)</span>}
                                                             </div>
-                                                        </div>
-                                                        <div className="flex-grow px-4 min-w-0">
-                                                            <div className="text-slate-500 leading-relaxed font-serif italic line-clamp-1">{item.preview}</div>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            }}
-                                        </List>
-                                    )}
+                                                        </td>
+                                                        <td className="p-4"><div className="text-slate-500 leading-relaxed font-serif italic line-clamp-1">{item.preview}</div></td>
+                                                    </tr>
+                                                ))
+                                            }
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
                         )}
+
                         {activeTab === 'sequence' && (
-                            <div className="h-full overflow-hidden flex flex-col bg-white">
+                            <div className="h-full overflow-hidden flex flex-col bg-white animate-fade-in">
                                 <div className="p-5 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
-                                    <div className="text-xs font-black text-slate-800 uppercase tracking-widest">Output Queue Preview</div>
+                                    <div className="flex flex-col">
+                                        <div className="text-xs font-black text-slate-800 uppercase tracking-widest leading-none">Output Queue Preview</div>
+                                        <div className="text-[9px] font-bold text-slate-400 mt-1.5 uppercase tracking-wider">Drag nodes to override system sorting logic</div>
+                                    </div>
                                     <span className="text-[10px] font-black bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl border border-indigo-100 shadow-sm">{projectedSequence.length} Nodes Queued</span>
                                 </div>
-                                <div className="flex-grow bg-slate-50/30">
-                                    <List height={600} itemCount={projectedSequence.length} itemSize={84} width="100%" className="custom-scrollbar">
-                                        {({ index, style }: ListChildComponentProps) => {
-                                            const ref = projectedSequence[index];
-                                            return (
-                                                <div style={style} className="px-8 py-2">
-                                                    <div className="flex items-center gap-6 p-4 bg-white border border-slate-200 rounded-[1.5rem] shadow-sm hover:border-indigo-400 transition-all group">
-                                                        <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-[10px] font-black text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors border border-slate-100 shadow-inner">{index + 1}</div>
-                                                        <div className="flex-grow min-w-0">
-                                                            <div className="text-sm font-bold text-slate-800 truncate tracking-tight">{ref.label}</div>
-                                                            <div className="text-[10px] font-mono text-slate-400 uppercase tracking-widest mt-0.5">TARGET_ID: {ref.id}</div>
-                                                        </div>
-                                                        <span className={`text-[8px] font-black px-3 py-1.5 rounded-lg border uppercase tracking-[0.15em] ${(ref.status === 'add' || ref.status === 'orphan') ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : (ref.status === 'update' || ref.status === 'smart_match') ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>{ref.status === 'add' ? 'NEW' : ref.status === 'orphan' ? 'ORPHAN' : ref.status === 'update' ? 'UPDATED' : ref.status === 'smart_match' ? 'SMART' : 'ORIGINAL'}</span>
-                                                    </div>
+                                <div className="flex-grow overflow-auto custom-scrollbar p-8 space-y-3 bg-slate-50/30">
+                                    {projectedSequence.length === 0
+                                        ? <div className="h-full flex flex-col items-center justify-center opacity-30 grayscale"><p className="text-sm font-black uppercase tracking-[0.2em] text-slate-400">Queue Ready for Input</p></div>
+                                        : projectedSequence.map((ref, idx) => (
+                                            <div key={`${ref.id}-${idx}`} draggable onDragStart={() => setDraggedItemIndex(idx)} onDragOver={e => e.preventDefault()} onDrop={() => handleDrop(idx)} className={`flex items-center gap-6 p-5 bg-white border border-slate-200 rounded-[1.5rem] shadow-sm hover:border-indigo-400 transition-all group cursor-grab active:cursor-grabbing ${draggedItemIndex === idx ? 'opacity-40 scale-95' : ''}`}>
+                                                <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-[10px] font-black text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors border border-slate-100 shadow-inner">{idx + 1}</div>
+                                                <div className="flex-grow min-w-0">
+                                                    <div className="text-sm font-bold text-slate-800 truncate tracking-tight">{ref.label}</div>
+                                                    <div className="text-[10px] font-mono text-slate-400 uppercase tracking-widest mt-0.5">TARGET_ID: {ref.id}</div>
                                                 </div>
-                                            );
-                                        }}
-                                    </List>
+                                                <span className={`text-[8px] font-black px-3 py-1.5 rounded-lg border uppercase tracking-[0.15em] ${(ref.status === 'add' || ref.status === 'orphan') ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : (ref.status === 'update' || ref.status === 'smart_match') ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>{ref.status === 'add' ? 'NEW' : ref.status === 'smart_match' ? 'SMART' : 'PINNED'}</span>
+                                            </div>
+                                        ))
+                                    }
                                 </div>
                             </div>
                         )}
-                        {activeTab === 'result' && (<div className="h-full relative flex flex-col"><textarea value={output} readOnly className="w-full h-full p-8 text-[11px] font-mono text-slate-700 bg-white border-0 focus:ring-0 resize-none leading-loose custom-scrollbar" placeholder="Merged XML stream will be emitted here..." /></div>)}
-                        {activeTab === 'diff' && (<div className="absolute inset-0 overflow-auto bg-white custom-scrollbar">{diffElements || <div className="h-full flex items-center justify-center text-slate-400 uppercase tracking-widest text-[10px] font-black">Differential Audit Pending...</div>}</div>)}
+
+                        {activeTab === 'result' && (
+                            <div className="h-full relative flex flex-col">
+                                <textarea value={output} readOnly className="w-full h-full p-8 text-[11px] font-mono text-slate-700 bg-white border-0 focus:ring-0 resize-none leading-loose custom-scrollbar" placeholder="Merged XML stream will be emitted here..." />
+                            </div>
+                        )}
+
+                        {activeTab === 'diff' && (
+                            <div className="absolute inset-0 overflow-auto bg-white custom-scrollbar">
+                                {diffElements || <div className="h-full flex items-center justify-center text-slate-400 uppercase tracking-widest text-[10px] font-black">Differential Audit Pending...</div>}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
