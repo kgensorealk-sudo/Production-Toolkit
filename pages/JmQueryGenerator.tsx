@@ -50,8 +50,9 @@ const JmQueryGenerator: React.FC = () => {
         try {
             const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
             if (!apiKey) {
-                throw new Error("Gemini API Key is not configured. Please ensure GEMINI_API_KEY is set in your environment.");
+                throw new Error("Gemini API Key is missing. Please check your environment settings.");
             }
+            
             const ai = new GoogleGenAI({ apiKey });
             
             let prompt = input;
@@ -60,8 +61,8 @@ const JmQueryGenerator: React.FC = () => {
             }
 
             const response = await ai.models.generateContent({
-                model: "gemini-3-flash-preview",
-                contents: prompt,
+                model: "gemini-flash-latest",
+                contents: [{ role: 'user', parts: [{ text: prompt }] }],
                 config: {
                     systemInstruction: `You are an expert Journal Production Editor.
 Your task is to transform raw production notes, author comments, or artwork/metadata issues into formal, standardized TO THE JM queries.
@@ -112,7 +113,10 @@ OUTPUT REQUIREMENTS:
                 setToast({ msg: "Query refined based on feedback.", type: "success" });
             }
         } catch (error: any) {
-            setToast({ msg: `Generation failed: ${error.message}`, type: "error" });
+            const errorMsg = error.message === "Failed to fetch" 
+                ? "Failed to fetch. This usually means the API is blocked by an ad-blocker, firewall, or regional restriction. Please check your connection."
+                : `Generation failed: ${error.message}`;
+            setToast({ msg: errorMsg, type: "error" });
         } finally {
             setIsLoading(false);
         }
