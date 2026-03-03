@@ -242,10 +242,6 @@ const ReferenceUpdater: React.FC = () => {
                     if (matchIdx === -1 && origRef.id) {
                         matchIdx = updatedRefs.findIndex((u, idx) => {
                             if (usedUpdateIdx.has(idx) || u.id !== origRef.id) return false;
-                            // Safety: If ID matches but content is completely different, it's likely an ID collision
-                            const similarity = getSimilarity(u.fingerprint, origRef.fingerprint);
-                            if (similarity < 0.4) return false; 
-                            
                             const labelConflict = origRef.label && u.label && origRef.label !== u.label;
                             return !labelConflict;
                         });
@@ -328,7 +324,7 @@ const ReferenceUpdater: React.FC = () => {
         try {
             const getNextIdMap = (xml: string) => {
                 const prefixes = ['bb', 'rf', 'se', 'ir', 'or', 'tr'];
-                const map: Record<string, number> = { bb: 3000, rf: 3000, se: 3000, i: 3000, or: 3000, tr: 3000 };
+                const map: Record<string, number> = { bb: 3000, rf: 3000, se: 3000, ir: 3000, or: 3000, tr: 3000 };
                 prefixes.forEach(prefix => {
                     const regex = new RegExp(`id="${prefix}(\\d+)"`, 'g');
                     let m;
@@ -482,7 +478,7 @@ const ReferenceUpdater: React.FC = () => {
                                     <table className="w-full text-left text-[11px] border-collapse">
                                         <thead className="bg-slate-50 sticky top-0 border-b border-slate-200 z-10"><tr><th className="p-4 font-bold text-slate-400 uppercase w-8"></th><th className="p-4 font-bold text-slate-500 uppercase w-32 tracking-wider">Node ID</th><th className="p-4 font-bold text-slate-500 uppercase w-24 tracking-wider">Status</th><th className="p-4 font-bold text-slate-500 uppercase tracking-wider">Logic Preview</th></tr></thead>
                                         <tbody className="divide-y divide-slate-100">
-                                            {scanResults.length === 0 ? (<tr><td colSpan={4} className="p-20 text-center text-slate-300 uppercase tracking-[0.2em] font-black italic">Awaiting Set Scan...</td></tr>) : (scanResults.map((item, idx) => (<tr key={idx} className={`transition-colors hover:bg-slate-50/50 ${!item.selected ? 'opacity-30 grayscale' : ''}`}><td className="p-4 text-center"><input type="checkbox" checked={item.selected} onChange={() => setScanResults(prev => prev.map((it, i) => i === idx ? { ...it, selected: !it.selected } : it))} className="rounded border-slate-300 text-indigo-600 h-4 w-4" /></td><td className="p-4 font-mono"><div className="font-bold text-slate-800 truncate max-w-[140px]">{item.label}</div><div className="text-[9px] text-slate-400 uppercase tracking-tighter">ID: {item.id}</div></td><td className="p-4"><div className="flex flex-col gap-1"><span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase border block text-center ${item.status === 'update' || item.status === 'smart_match' ? 'bg-amber-50 text-amber-600 border-amber-200' : item.status === 'add' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : item.status === 'orphan' ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>{item.status === 'unchanged' ? 'ORIGINAL' : item.status === 'update' ? 'UPDATED' : item.status === 'smart_match' ? 'SMART' : item.status === 'add' ? 'NEW' : 'ORPHAN'}</span>{item.matchType && <span className="text-[8px] text-slate-300 text-center font-bold uppercase tracking-widest">{item.matchType} ({item.matchScore}%)</span>}</div></td><td className="p-4"><div className="text-slate-500 leading-relaxed font-serif italic line-clamp-1">{item.preview}</div></td></tr>)))}
+                                            {scanResults.length === 0 ? (<tr><td colSpan={4} className="p-20 text-center text-slate-300 uppercase tracking-[0.2em] font-black italic">Awaiting Set Scan...</td></tr>) : (scanResults.map((item, idx) => (<tr key={idx} className={`transition-colors hover:bg-slate-50/50 ${!item.selected ? 'opacity-30 grayscale' : ''}`}><td className="p-4 text-center"><input type="checkbox" checked={item.selected} onChange={() => setScanResults(prev => prev.map((it, i) => i === idx ? { ...it, selected: !it.selected } : it))} className="rounded border-slate-300 text-indigo-600 h-4 w-4" /></td><td className="p-4 font-mono"><div className="font-bold text-slate-800 truncate max-w-[140px]">{item.label}</div><div className="text-[9px] text-slate-400 uppercase tracking-tighter">ID: {item.id}</div></td><td className="p-4"><div className="flex flex-col gap-1"><span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase border block text-center ${item.status === 'update' || item.status === 'smart_match' ? 'bg-amber-50 text-amber-600 border-amber-200' : item.status === 'add' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : item.status === 'orphan' ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>{item.status.replace('_', ' ')}</span>{item.matchType && <span className="text-[8px] text-slate-300 text-center font-bold uppercase tracking-widest">{item.matchType} ({item.matchScore}%)</span>}</div></td><td className="p-4"><div className="text-slate-500 leading-relaxed font-serif italic line-clamp-1">{item.preview}</div></td></tr>)))}
                                         </tbody>
                                     </table>
                                 </div>
@@ -492,34 +488,12 @@ const ReferenceUpdater: React.FC = () => {
                         {activeTab === 'sequence' && (
                             <div className="h-full overflow-hidden flex flex-col bg-white animate-fade-in">
                                 <div className="p-5 bg-slate-50 border-b border-slate-200 flex justify-between items-center"><div className="flex flex-col"><div className="text-xs font-black text-slate-800 uppercase tracking-widest leading-none">Output Queue Preview</div><div className="text-[9px] font-bold text-slate-400 mt-1.5 uppercase tracking-wider">Drag nodes to override system sorting logic</div></div><span className="text-[10px] font-black bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl border border-indigo-100 shadow-sm">{projectedSequence.length} Nodes Queued</span></div>
-                                <div className="px-5 py-3 bg-white border-b border-slate-100 grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-2">
-                                    <div className="flex items-start gap-2">
-                                        <span className="mt-1 w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0"></span>
-                                        <div className="flex flex-col"><span className="text-[9px] font-black text-slate-700 uppercase tracking-tighter">Original</span><span className="text-[8px] text-slate-400 leading-tight">Unchanged from source.</span></div>
-                                    </div>
-                                    <div className="flex items-start gap-2">
-                                        <span className="mt-1 w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
-                                        <div className="flex flex-col"><span className="text-[9px] font-black text-slate-700 uppercase tracking-tighter">Updated</span><span className="text-[8px] text-slate-400 leading-tight">Matched and updated.</span></div>
-                                    </div>
-                                    <div className="flex items-start gap-2">
-                                        <span className="mt-1 w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"></span>
-                                        <div className="flex flex-col"><span className="text-[9px] font-black text-slate-700 uppercase tracking-tighter">Smart</span><span className="text-[8px] text-slate-400 leading-tight">Fuzzy logic match.</span></div>
-                                    </div>
-                                    <div className="flex items-start gap-2">
-                                        <span className="mt-1 w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
-                                        <div className="flex flex-col"><span className="text-[9px] font-black text-slate-700 uppercase tracking-tighter">New</span><span className="text-[8px] text-slate-400 leading-tight">Entirely new node.</span></div>
-                                    </div>
-                                    <div className="flex items-start gap-2">
-                                        <span className="mt-1 w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0"></span>
-                                        <div className="flex flex-col"><span className="text-[9px] font-black text-slate-700 uppercase tracking-tighter">Orphan</span><span className="text-[8px] text-slate-400 leading-tight">Source orphan node.</span></div>
-                                    </div>
-                                </div>
                                 <div className="flex-grow overflow-auto custom-scrollbar p-8 space-y-3 bg-slate-50/30">
                                     {projectedSequence.length === 0 ? (<div className="h-full flex flex-col items-center justify-center opacity-30 grayscale"><p className="text-sm font-black uppercase tracking-[0.2em] text-slate-400">Queue Ready for Input</p></div>) : (projectedSequence.map((ref, idx) => (
                                         <div key={`${ref.id}-${idx}`} draggable onDragStart={() => setDraggedItemIndex(idx)} onDragOver={(e) => e.preventDefault()} onDrop={() => handleDrop(idx)} className={`flex items-center gap-6 p-5 bg-white border border-slate-200 rounded-[1.5rem] shadow-sm hover:border-indigo-400 transition-all group cursor-grab active:cursor-grabbing ${draggedItemIndex === idx ? 'opacity-40 scale-95' : ''}`}>
                                             <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-[10px] font-black text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors border border-slate-100 shadow-inner">{idx + 1}</div>
                                             <div className="flex-grow min-w-0"><div className="text-sm font-bold text-slate-800 truncate tracking-tight">{ref.label}</div><div className="text-[10px] font-mono text-slate-400 uppercase tracking-widest mt-0.5">TARGET_ID: {ref.id}</div></div>
-                                            <span className={`text-[8px] font-black px-3 py-1.5 rounded-lg border uppercase tracking-[0.15em] ${(ref.status === 'add' || ref.status === 'orphan') ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : (ref.status === 'update' || ref.status === 'smart_match') ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>{ref.status === 'add' ? 'NEW' : ref.status === 'orphan' ? 'ORPHAN' : ref.status === 'update' ? 'UPDATED' : ref.status === 'smart_match' ? 'SMART' : 'ORIGINAL'}</span>
+                                            <span className={`text-[8px] font-black px-3 py-1.5 rounded-lg border uppercase tracking-[0.15em] ${(ref.status === 'add' || ref.status === 'orphan') ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : (ref.status === 'update' || ref.status === 'smart_match') ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>{ref.status === 'add' ? 'NEW' : ref.status === 'smart_match' ? 'SMART' : (ref.status === 'unchanged' ? 'UNTOUCHED' : 'PINNED')}</span>
                                         </div>
                                     )))}
                                 </div>
