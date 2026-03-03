@@ -12,7 +12,7 @@ export interface ReleaseNote {
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
     version: '1.6.0',
-    date: '2025-02-20',
+    date: '2026-02-20',
     title: 'Editorial Workflow Suite Hardening',
     type: 'minor',
     changes: [
@@ -25,7 +25,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: '1.5.0',
-    date: '2025-02-10',
+    date: '2026-02-10',
     title: 'XML Processing Optimization',
     type: 'minor',
     changes: [
@@ -36,7 +36,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     version: '1.0.0',
-    date: '2025-01-01',
+    date: '2025-12-01',
     title: 'Initial Production Release',
     type: 'major',
     changes: [

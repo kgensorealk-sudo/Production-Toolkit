@@ -55,6 +55,7 @@ export enum ToolId {
     ID_AUDITOR = 'idAuditor',
     COMMENT_REPLACER = 'commentReplacer',
     CITATION_LINKER = 'citationLinker',
+    JM_QUERY_GEN = 'jmQueryGen',
     DOCS = 'docs',
     DASHBOARD = 'dashboard'
 }
