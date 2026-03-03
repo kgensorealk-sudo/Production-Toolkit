@@ -48,11 +48,14 @@ const JmQueryGenerator: React.FC = () => {
 
         setIsLoading(true);
         try {
-            const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+            // Use import.meta.env for Vite-native env access, with fallbacks
+            const apiKey = ((import.meta as any).env?.VITE_GEMINI_API_KEY) || 
+                           (process.env.GEMINI_API_KEY) || 
+                           (process.env.API_KEY);
+                           
             if (!apiKey) {
-                throw new Error("Gemini API Key is missing. Please check your environment settings.");
+                throw new Error("Gemini API Key is not configured. Please ensure GEMINI_API_KEY is set in your Vercel Environment Variables and redeploy.");
             }
-            
             const ai = new GoogleGenAI({ apiKey });
             
             let prompt = input;
@@ -62,7 +65,7 @@ const JmQueryGenerator: React.FC = () => {
 
             const response = await ai.models.generateContent({
                 model: "gemini-flash-latest",
-                contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                contents: prompt,
                 config: {
                     systemInstruction: `You are an expert Journal Production Editor.
 Your task is to transform raw production notes, author comments, or artwork/metadata issues into formal, standardized TO THE JM queries.
@@ -113,10 +116,7 @@ OUTPUT REQUIREMENTS:
                 setToast({ msg: "Query refined based on feedback.", type: "success" });
             }
         } catch (error: any) {
-            const errorMsg = error.message === "Failed to fetch" 
-                ? "Failed to fetch. This usually means the API is blocked by an ad-blocker, firewall, or regional restriction. Please check your connection."
-                : `Generation failed: ${error.message}`;
-            setToast({ msg: errorMsg, type: "error" });
+            setToast({ msg: `Generation failed: ${error.message}`, type: "error" });
         } finally {
             setIsLoading(false);
         }
