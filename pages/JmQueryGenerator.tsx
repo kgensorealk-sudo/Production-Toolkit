@@ -48,7 +48,11 @@ const JmQueryGenerator: React.FC = () => {
 
         setIsLoading(true);
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+            const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+            if (!apiKey) {
+                throw new Error("Gemini API Key is not configured. Please ensure GEMINI_API_KEY is set in your environment.");
+            }
+            const ai = new GoogleGenAI({ apiKey });
             
             let prompt = input;
             if (isRefining) {
