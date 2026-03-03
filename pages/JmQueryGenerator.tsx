@@ -48,13 +48,17 @@ const JmQueryGenerator: React.FC = () => {
 
         setIsLoading(true);
         try {
-            // Use import.meta.env for Vite-native env access, with fallbacks
-            const apiKey = ((import.meta as any).env?.VITE_GEMINI_API_KEY) || 
-                           (process.env.GEMINI_API_KEY) || 
-                           (process.env.API_KEY);
+            // Robust API key retrieval
+            const envKey = (process.env.GEMINI_API_KEY);
+            const viteKey = (process.env.VITE_GEMINI_API_KEY);
+            const metaKey = ((import.meta as any).env?.VITE_GEMINI_API_KEY);
+            const fallbackKey = (process.env.API_KEY);
+            
+            const apiKey = envKey || viteKey || metaKey || fallbackKey;
                            
             if (!apiKey) {
-                throw new Error("Gemini API Key is not configured. Please ensure GEMINI_API_KEY is set in your Vercel Environment Variables and redeploy.");
+                console.error("API Key Detection Failed:", { envKey: !!envKey, viteKey: !!viteKey, metaKey: !!metaKey, fallbackKey: !!fallbackKey });
+                throw new Error("Gemini API Key is missing. Please set GEMINI_API_KEY in your Vercel Environment Variables and redeploy. If testing locally, ensure it is in your .env file.");
             }
             const ai = new GoogleGenAI({ apiKey });
             
@@ -64,7 +68,7 @@ const JmQueryGenerator: React.FC = () => {
             }
 
             const response = await ai.models.generateContent({
-                model: "gemini-flash-latest",
+                model: "gemini-3-flash-preview",
                 contents: prompt,
                 config: {
                     systemInstruction: `You are an expert Journal Production Editor.
@@ -116,7 +120,8 @@ OUTPUT REQUIREMENTS:
                 setToast({ msg: "Query refined based on feedback.", type: "success" });
             }
         } catch (error: any) {
-            setToast({ msg: `Generation failed: ${error.message}`, type: "error" });
+            console.error("Generation Error:", error);
+            setToast({ msg: `Generation failed: ${error.message || "Unknown error"}`, type: "error" });
         } finally {
             setIsLoading(false);
         }
