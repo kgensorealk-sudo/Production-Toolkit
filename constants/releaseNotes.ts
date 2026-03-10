@@ -11,6 +11,30 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.7.0',
+    date: '2026-03-10',
+    title: 'Table Beautifier Evolution & Toolkit Refinement',
+    type: 'minor',
+    changes: [
+      { type: 'feature', description: 'Multiple target colnames support in Table Beautifier (comma-separated).' },
+      { type: 'feature', description: 'Smart colname suggestions extracted directly from input XML.' },
+      { type: 'feature', description: 'New "Strip" alignment protocol and "Show Formatting in Diff" toggle.' },
+      { type: 'improvement', description: 'Streamlined toolkit by removing legacy JM Query Generator.' },
+      { type: 'improvement', description: 'Updated application versioning to v1.7.0.' }
+    ]
+  },
+  {
+    version: '1.6.1',
+    date: '2026-03-10',
+    title: 'Vercel Deployment & Build Optimization',
+    type: 'patch',
+    changes: [
+      { type: 'improvement', description: 'Optimized Vite build with functional manual chunking for better performance.' },
+      { type: 'fix', description: 'Resolved Vercel parsing errors in package-lock.json.' },
+      { type: 'improvement', description: 'Updated application versioning across all modules.' }
+    ]
+  },
+  {
     version: '1.6.0',
     date: '2026-02-20',
     title: 'Editorial Workflow Suite Hardening',

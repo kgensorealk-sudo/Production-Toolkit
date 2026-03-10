@@ -11,6 +11,7 @@ import {
     Lock, 
     Key, 
     Sparkles,
+    Cpu,
     FileText,
     MessageSquare,
     Database,
@@ -28,8 +29,9 @@ import {
     ShieldAlert,
     History
 } from 'lucide-react';
-import { ToolId, SubscriptionTier } from '../types';
+import { ToolId } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { useSettings } from '../contexts/SettingsContext';
 import AnnouncementModal from '../components/AnnouncementModal';
 import ToolTipsModal from '../components/ToolTipsModal';
 import ReleaseNotesModal from '../components/ReleaseNotesModal';
@@ -154,6 +156,7 @@ const ToolCard: React.FC<ToolCardProps> = ({ id, title, desc, iconBg, iconText, 
 const Dashboard: React.FC = () => {
     const navigate = useNavigate();
     const { profile, freeTools, freeToolsData, refreshProfile, isAdmin, isWakingUp } = useAuth();
+    const { isHardwareAccelerated, setHardwareAccelerated } = useSettings();
     const [isSyncing, setIsLoading] = useState(false);
     const [syncMessage, setSyncMessage] = useState('Syncing Node...');
     const [searchTerm, setSearchTerm] = useState('');
@@ -166,16 +169,6 @@ const Dashboard: React.FC = () => {
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
     const [activeTipTool, setActiveTipTool] = useState<{id: string, name: string} | null>(null);
     const [isReleaseNotesOpen, setIsReleaseNotesOpen] = useState(false);
-
-    const getTierDisplayName = () => {
-        if (isAdmin) return 'Administrator';
-        switch (profile?.subscription_tier) {
-            case SubscriptionTier.SCRIBE: return 'Scribe Node';
-            case SubscriptionTier.ARTISAN: return 'Artisan Node';
-            case SubscriptionTier.VISIONARY: return 'Visionary Node';
-            default: return 'Standard Node';
-        }
-    };
 
     useEffect(() => {
         localStorage.setItem('pinned_tools', JSON.stringify(pinnedTools));
@@ -219,8 +212,6 @@ const Dashboard: React.FC = () => {
         { id: ToolId.REF_EXTRACTOR, title: "Bibliography Extractor", desc: "Pure-text bibliography isolation with automated punctuation and spacing normalization for Word.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: FileSearch },
         { id: ToolId.GRANT_TAGGER, title: "Grant Tagger", desc: "Identify and tag grant sponsors and numbers within funding statements with XML cross-linking.", iconBg: "bg-emerald-50", iconText: "text-emerald-600", borderColor: "bg-emerald-500", Icon: Tags },
         { id: ToolId.COMMENT_REPLACER, title: "Comment Replacer", desc: "Extract and clean reference replacements buried in XML editorial comment tags.", iconBg: "bg-amber-50", iconText: "text-amber-600", borderColor: "bg-amber-500", Icon: SearchCode },
-        { id: ToolId.JM_QUERY_GEN, title: "JM Query Generator", desc: "Transform raw production notes into formal, standardized 'TO THE JM' editorial queries.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: MessageSquare },
-        { id: ToolId.REF_PURGER, title: "Ref List Purger", desc: "Surgically remove reported uncited items from your XML source with high-precision matching.", iconBg: "bg-rose-50", iconText: "text-rose-600", borderColor: "bg-rose-500", Icon: Trash2 },
         { id: ToolId.UNCITED_CLEANER, title: "Uncited Ref Cleaner", desc: "Detect references with no body citations. Perform bulk purging while preserving document integrity.", iconBg: "bg-rose-50", iconText: "text-rose-600", borderColor: "bg-rose-600", Icon: Eraser },
         { id: ToolId.ID_AUDITOR, title: "ID Prefix Auditor", desc: "Audit and normalize ID sequences in references. Fixes non-standard prefixes while maintaining internal document links.", iconBg: "bg-violet-50", iconText: "text-violet-600", borderColor: "bg-violet-500", Icon: ShieldAlert },
         { id: ToolId.CITATION_LINKER, title: "Citation Linker Pro", desc: "Auto-scans orphan citation tags and links them to bibliography IDs based on text content.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: Link },
@@ -289,17 +280,6 @@ const Dashboard: React.FC = () => {
                         <h2 className="text-4xl font-black text-slate-900 tracking-tight mb-4 uppercase">
                             Workspace <span className="text-indigo-600">Console</span>
                         </h2>
-                        <div className="flex items-center gap-2 mb-4">
-                             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active Node:</span>
-                             <span className={`text-[10px] font-black px-3 py-1 rounded-lg border uppercase tracking-widest ${isAdmin ? 'bg-indigo-50 text-indigo-600 border-indigo-100' : profile?.is_subscribed ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>
-                                 {getTierDisplayName()}
-                             </span>
-                             {!isAdmin && !profile?.is_subscribed && (
-                                 <span className="text-[9px] font-bold text-indigo-500 uppercase tracking-widest animate-pulse">
-                                     + Monthly Free Tools Enabled
-                                 </span>
-                             )}
-                        </div>
                         <p className="text-slate-500 font-medium leading-relaxed">
                             Integrated environment for technical XML production and citation integrity management. 
                             Select a module below to begin processing.
@@ -324,7 +304,14 @@ const Dashboard: React.FC = () => {
                             className="flex items-center gap-2 px-5 py-3 rounded-2xl border bg-white hover:bg-slate-50 border-slate-200 text-slate-500 transition-all active:scale-95 shadow-sm text-[10px] font-black uppercase tracking-widest"
                         >
                             <History size={14} />
-                            v1.6.0
+                            v1.7.0
+                        </button>
+                        <button 
+                            onClick={() => setHardwareAccelerated(!isHardwareAccelerated)}
+                            className={`flex items-center gap-2 px-5 py-3 rounded-2xl border transition-all active:scale-95 shadow-sm text-[10px] font-black uppercase tracking-widest ${isHardwareAccelerated ? 'bg-amber-50 border-amber-200 text-amber-600' : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-500'}`}
+                        >
+                            <Cpu size={14} className={isHardwareAccelerated ? 'animate-pulse' : ''} />
+                            {isHardwareAccelerated ? 'Accel On' : 'Accel Off'}
                         </button>
                         <button 
                             onClick={handleSync} 

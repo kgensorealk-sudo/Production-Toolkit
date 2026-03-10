@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
-import { UserProfile, ToolId, SubscriptionTier } from '../types';
+import { UserProfile, ToolId } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
@@ -56,12 +56,6 @@ const PROMO_DURATIONS = [
     { label: '30 Days', value: 30 }
 ];
 
-const TIER_OPTIONS = [
-    { label: 'Scribe Node', value: SubscriptionTier.SCRIBE },
-    { label: 'Artisan Node', value: SubscriptionTier.ARTISAN },
-    { label: 'Visionary Node', value: SubscriptionTier.VISIONARY },
-];
-
 const ONLINE_THRESHOLD_MS = 240000; // 4 minutes
 
 const getDurationMs = (val: string) => {
@@ -113,7 +107,6 @@ const AdminDashboard: React.FC = () => {
     const [users, setUsers] = useState<UserProfile[]>([]);
     const [search, setSearch] = useState('');
     const [selectedDurations, setSelectedDurations] = useState<Record<string, string>>({});
-    const [selectedTiers, setSelectedTiers] = useState<Record<string, SubscriptionTier>>({});
 
     const [announcements, setAnnouncements] = useState<Announcement[]>([]);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -151,7 +144,6 @@ const AdminDashboard: React.FC = () => {
             case ToolId.TABLE_BEAUTIFIER: return "Table XML Beautifier";
             case ToolId.VIEW_SYNC: return "View Synchronizer";
             case ToolId.REF_EXTRACTOR: return "Bib Extractor";
-            case ToolId.REF_PURGER: return "Reference List Purger";
             case ToolId.GRANT_TAGGER: return "Grant XML Tagger";
             case ToolId.ID_AUDITOR: return "ID Prefix Auditor";
             case ToolId.COMMENT_REPLACER: return "Comment Replacer";
@@ -174,17 +166,6 @@ const AdminDashboard: React.FC = () => {
                     data.forEach(u => {
                         if (!next[u.id]) {
                             next[u.id] = 'sub_1y';
-                            changed = true;
-                        }
-                    });
-                    return changed ? next : prev;
-                });
-                setSelectedTiers(prev => {
-                    const next = { ...prev };
-                    let changed = false;
-                    data.forEach(u => {
-                        if (!next[u.id]) {
-                            next[u.id] = u.subscription_tier || SubscriptionTier.SCRIBE;
                             changed = true;
                         }
                     });
@@ -323,7 +304,7 @@ const AdminDashboard: React.FC = () => {
                 log.timestamp,
                 user?.email || `DELETED_USER_${log.user_id.substring(0,8)}`,
                 log.tool_id,
-                user?.is_subscribed ? (user.subscription_tier || 'PREMIUM').toUpperCase() : 'STANDARD'
+                user?.is_subscribed ? 'PREMIUM' : 'STANDARD'
             ];
         });
 
@@ -367,14 +348,12 @@ const AdminDashboard: React.FC = () => {
     const toggleSubscription = async (user: UserProfile) => {
         const newVal = !user.is_subscribed;
         const selectedKey = selectedDurations[user.id] || 'sub_1y';
-        const selectedTier = selectedTiers[user.id] || SubscriptionTier.SCRIBE;
         const durationOption = DURATION_OPTIONS.find(o => o.value === selectedKey);
         const updates: any = { is_subscribed: newVal };
         
         if (newVal) {
             const end = new Date(Date.now() + getDurationMs(selectedKey)).toISOString();
             updates.subscription_end = end;
-            updates.subscription_tier = selectedTier;
             if (durationOption?.type === 'trial') {
                 updates.trial_start = new Date().toISOString();
                 updates.trial_end = end;
@@ -383,7 +362,6 @@ const AdminDashboard: React.FC = () => {
             }
         } else {
             updates.subscription_end = null; updates.trial_start = null; updates.trial_end = null;
-            updates.subscription_tier = SubscriptionTier.NONE;
         }
 
         setIsLoading(true);
@@ -664,7 +642,7 @@ const AdminDashboard: React.FC = () => {
                         className="bg-white border border-slate-200 px-6 py-2.5 rounded-xl text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] shadow-sm hover:bg-slate-50 transition-all flex items-center gap-3"
                     >
                         <History size={14} />
-                        v1.6.0
+                        v1.7.0
                     </button>
                     <button 
                         onClick={systemHardReset}
@@ -713,7 +691,7 @@ const AdminDashboard: React.FC = () => {
                                     <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
                                         <td className="px-6 py-4"><div className="flex flex-col"><span className="text-sm font-bold text-slate-900">{u.email}</span><span className="text-[10px] font-mono text-slate-400 uppercase">{u.id.slice(0, 13)}...</span></div></td>
                                         <td className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-tighter">{u.role}</td>
-                                        <td className="px-6 py-4"><span className={`px-3 py-1 text-[10px] font-black rounded-full uppercase tracking-widest border ${u.is_subscribed ? 'bg-emerald-50 text-emerald-600 border-emerald-100 shadow-sm' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>{u.is_subscribed ? (u.subscription_tier || 'Authorized').toUpperCase() : 'Dormant'}</span></td>
+                                        <td className="px-6 py-4"><span className={`px-3 py-1 text-[10px] font-black rounded-full uppercase tracking-widest border ${u.is_subscribed ? 'bg-emerald-50 text-emerald-600 border-emerald-100 shadow-sm' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>{u.is_subscribed ? 'Authorized' : 'Dormant'}</span></td>
                                         <td className="px-6 py-4">
                                             <div className="flex flex-col">
                                                 <span className="text-[11px] font-bold text-slate-600">
@@ -725,7 +703,7 @@ const AdminDashboard: React.FC = () => {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-center"><div className="flex flex-col items-center"><span className="text-[11px] font-bold text-slate-600">{formatLastSeen(u.last_seen)}</span></div></td>
-                                        <td className="px-6 py-4"><div className="flex items-center gap-3">{!u.is_subscribed && (<div className="flex flex-col gap-1"><select value={selectedTiers[u.id] || SubscriptionTier.SCRIBE} onChange={(e) => setSelectedTiers(prev => ({...prev, [u.id]: e.target.value as SubscriptionTier}))} className="text-[10px] font-black uppercase py-1.5 rounded-lg border-slate-200 bg-white"><optgroup label="Tier">{TIER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</optgroup></select><select value={selectedDurations[u.id] || 'sub_1y'} onChange={(e) => setSelectedDurations(prev => ({...prev, [u.id]: e.target.value}))} className="text-[10px] font-black uppercase py-1.5 rounded-lg border-slate-200 bg-white"><optgroup label="Access Term">{DURATION_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</optgroup></select></div>)}<button onClick={() => toggleSubscription(u)} className={`text-[10px] font-black px-4 py-2 rounded-xl border border-slate-200 uppercase transition-all shadow-sm ${u.is_subscribed ? 'text-rose-600 border-rose-100 bg-rose-50 hover:bg-rose-600 hover:text-white' : 'text-indigo-600 hover:bg-indigo-600 hover:text-white'}`}>{u.is_subscribed ? 'Terminate' : 'Authorize'}</button></div></td>
+                                        <td className="px-6 py-4"><div className="flex items-center gap-3">{!u.is_subscribed && (<select value={selectedDurations[u.id] || 'sub_1y'} onChange={(e) => setSelectedDurations(prev => ({...prev, [u.id]: e.target.value}))} className="text-[10px] font-black uppercase py-1.5 rounded-lg border-slate-200 bg-white"><optgroup label="Access Term">{DURATION_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</optgroup></select>)}<button onClick={() => toggleSubscription(u)} className={`text-[10px] font-black px-4 py-2 rounded-xl border border-slate-200 uppercase transition-all shadow-sm ${u.is_subscribed ? 'text-rose-600 border-rose-100 bg-rose-50 hover:bg-rose-600 hover:text-white' : 'text-indigo-600 hover:bg-indigo-600 hover:text-white'}`}>{u.is_subscribed ? 'Terminate' : 'Authorize'}</button></div></td>
                                     </tr>
                                 ))}
                             </tbody>

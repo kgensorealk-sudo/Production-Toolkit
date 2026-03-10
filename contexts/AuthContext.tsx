@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
-import { UserProfile, SubscriptionTier } from '../types';
+import { UserProfile } from '../types';
 import { INACTIVITY_LIMIT } from '../constants';
 
 type Session = any;
@@ -156,7 +156,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch (err) {}
     }, []);
 
-    const fetchProfile = useCallback(async (userId: string) => {
+    const fetchProfile = useCallback(async (userId: string, email?: string) => {
         if (!userId) return;
         if (refreshingPromise.current) return refreshingPromise.current;
 
@@ -174,7 +174,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     }
 
                     if (!profileRow) {
-                        const { data: newData, error: createError } = await supabase.from('profiles').upsert([{ id: userId, email: user?.email, role: 'user' }]).select().maybeSingle();
+                        const { data: newData, error: createError } = await supabase.from('profiles').upsert([{ 
+                            id: userId, 
+                            email: email || '', 
+                            role: 'user' 
+                        }]).select().maybeSingle();
                         if (createError) throw createError;
                         profileRow = newData;
                     }
@@ -191,26 +195,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
                 const unlockedTools = keysData ? keysData.map(k => k.tool) : [];
                 let isActive = profileData.is_subscribed;
-                let tier = profileData.subscription_tier || SubscriptionTier.NONE;
+                if (email === SUPER_ADMIN_EMAIL || profileData.email === SUPER_ADMIN_EMAIL) isActive = true;
+                else if (profileData.subscription_end && new Date(profileData.subscription_end) < new Date()) isActive = false;
 
-                if (user?.email === SUPER_ADMIN_EMAIL) {
-                    isActive = true;
-                    tier = SubscriptionTier.VISIONARY;
-                } else if (profileData.subscription_end && new Date(profileData.subscription_end) < new Date()) {
-                    isActive = false;
-                    tier = SubscriptionTier.NONE;
-                }
-
-                setProfile({ 
-                    ...profileData, 
-                    is_subscribed: isActive, 
-                    subscription_tier: tier,
-                    unlocked_tools: unlockedTools 
-                });
+                setProfile({ ...profileData, is_subscribed: isActive, unlocked_tools: unlockedTools });
                 updateLastSeen(userId);
             } catch (e) {
                 console.error("CRITICAL_SYNC_FAILURE:", e);
-                throw e;
             } finally {
                 setIsWakingUp(false);
                 refreshingPromise.current = null;
@@ -218,7 +209,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })();
 
         return refreshingPromise.current;
-    }, [user?.email]);
+    }, []);
 
     useEffect(() => {
         const handleWake = () => {
@@ -232,7 +223,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         if (data?.session) {
                             setSession(data.session);
                             setUser(data.session.user);
-                            await Promise.allSettled([fetchProfile(user.id), fetchFreeTools()]);
+                            await Promise.allSettled([fetchProfile(data.session.user.id, data.session.user.email), fetchFreeTools()]);
                         } else {
                             signOut(true);
                         }
@@ -254,11 +245,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     useEffect(() => {
         let mounted = true;
+        
         const init = async () => {
             try {
                 if (checkHardExpiry()) return;
 
-                initTimeoutRef.current = setTimeout(() => { if (mounted && loading) setLoading(false); }, 20000); 
+                initTimeoutRef.current = setTimeout(() => { 
+                    if (mounted && loading) {
+                        console.warn("Auth initialization timed out. Forcing loading to false.");
+                        setLoading(false);
+                    }
+                }, 15000); 
 
                 const { data, error } = await withRetry(async () => {
                     const result = await (supabase.auth as any).getSession();
@@ -272,7 +269,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     setUser(currentSession.user);
                     if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
                     heartbeatTimerRef.current = setInterval(() => updateLastSeen(currentSession.user.id), HEARTBEAT_INTERVAL);
-                    await Promise.allSettled([fetchProfile(currentSession.user.id), fetchFreeTools()]);
+                    await Promise.allSettled([fetchProfile(currentSession.user.id, currentSession.user.email), fetchFreeTools()]);
                 }
             } catch (err) {
                 console.error("INIT_FAILED:", err);
@@ -288,18 +285,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         const { data: authListener } = (supabase.auth as any).onAuthStateChange(async (event: any, newSession: any) => {
             if (!mounted) return;
+            
             if (event === 'SIGNED_OUT') {
                 if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
                 setProfile(null); setUser(null); setSession(null);
                 localStorage.removeItem('auth_login_at');
                 setLoading(false);
-            } else if (event === 'SIGNED_IN' && newSession?.user) {
+            } else if (newSession?.user) {
                 if (!localStorage.getItem('auth_login_at')) {
                     localStorage.setItem('auth_login_at', Date.now().toString());
                 }
-                setSession(newSession); setUser(newSession.user);
-                fetchProfile(newSession.user.id).catch(() => {});
+                setSession(newSession); 
+                setUser(newSession.user);
+                
+                // Trigger profile fetch but don't block loading state if we already have a user
+                fetchProfile(newSession.user.id, newSession.user.email).catch(() => {});
                 fetchFreeTools().catch(() => {});
+                setLoading(false);
+            } else {
+                // No user, no session
                 setLoading(false);
             }
         });
@@ -310,12 +314,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
             if (authListener?.subscription) authListener.subscription.unsubscribe(); 
         };
-    }, [fetchFreeTools, fetchProfile, checkHardExpiry]);
+    }, [fetchFreeTools, fetchProfile, signOut, checkHardExpiry]);
 
     return (
         <AuthContext.Provider value={{ 
             session, user, profile, freeTools, freeToolsData, loading, isAdmin, isWakingUp,
-            signOut, refreshProfile: () => user ? fetchProfile(user.id) : Promise.resolve(), 
+            signOut, refreshProfile: () => user ? fetchProfile(user.id, user.email) : Promise.resolve(), 
             refreshFreeTools: fetchFreeTools 
         }}>
             {children}

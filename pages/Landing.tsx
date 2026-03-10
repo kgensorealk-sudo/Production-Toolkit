@@ -19,7 +19,6 @@ import {
     History
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { SubscriptionTier } from '../types';
 import Toast from '../components/Toast';
 import ReleaseNotesModal from '../components/ReleaseNotesModal';
 
@@ -65,37 +64,6 @@ const TOOLS_INFO = [
         solution: "Bulk accept/reject proprietary tags while maintaining document integrity.",
         color: "text-teal-600 bg-teal-50",
         icon: Eraser
-    }
-];
-
-const TIERS_INFO = [
-    {
-        name: "Scribe Node",
-        tier: "Tier 1",
-        status: "Free Access",
-        desc: "Essential utilities and rotating monthly promotional tools.",
-        features: ["Monthly Free Tools Access", "Basic XML Normalization", "Standard CRediT Tagging", "Local-First Processing"],
-        color: "border-slate-200",
-        accent: "bg-slate-50 text-slate-600"
-    },
-    {
-        name: "Artisan Node",
-        tier: "Tier 2",
-        status: "Subscribed",
-        desc: "Advanced toolset for professional production teams.",
-        features: ["Everything in Scribe", "Reference Updater Pro", "Citation Linker Access", "Priority Logic Matching"],
-        color: "border-indigo-200",
-        accent: "bg-indigo-50 text-indigo-600",
-        featured: true
-    },
-    {
-        name: "Visionary Node",
-        tier: "Tier 3",
-        status: "Enterprise",
-        desc: "Unrestricted access for high-volume XML engineering.",
-        features: ["Everything in Artisan", "Zero Processing Limits", "Master Protocol Access", "Direct Admin Support"],
-        color: "border-emerald-200",
-        accent: "bg-emerald-50 text-emerald-600"
     }
 ];
 
@@ -148,16 +116,6 @@ const Landing: React.FC = () => {
         if (closestIndex !== activeIndex) { setActiveIndex(closestIndex); }
     };
 
-    const getTierDisplayName = () => {
-        if (isAdmin) return 'Administrator';
-        switch (profile?.subscription_tier) {
-            case SubscriptionTier.SCRIBE: return 'Scribe Node';
-            case SubscriptionTier.ARTISAN: return 'Artisan Node';
-            case SubscriptionTier.VISIONARY: return 'Visionary Node';
-            default: return 'Standard Node';
-        }
-    };
-
     return (
         <div className="bg-transparent relative flex flex-col font-sans overflow-x-hidden pt-12 lg:pt-24 pb-24">
             <main className="flex-grow flex flex-col items-center w-full z-10 gap-32">
@@ -178,7 +136,7 @@ const Landing: React.FC = () => {
                                 className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] hover:bg-indigo-100 transition-colors"
                              >
                                 <History size={10} />
-                                v1.6.0 Stable Release
+                                v1.7.0 Stable Release
                              </motion.button>
                              <h1 className="text-6xl lg:text-8xl font-black text-slate-900 tracking-tighter leading-[0.85] uppercase">
                                 Precision <br/>
@@ -227,11 +185,8 @@ const Landing: React.FC = () => {
                                     </div>
                                 </div>
 
-                                <div className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em] mb-2">
-                                    {isAdmin ? 'System Administrator' : 'Subscription Tier'}
-                                </div>
                                 <h2 className="text-4xl font-black text-slate-900 mb-2 uppercase tracking-tighter">
-                                    {getTierDisplayName()}
+                                    {isAdmin ? 'Administrator' : isSubscribed ? 'Premium Access' : 'Standard Node'}
                                 </h2>
                                 <p className="text-xs font-bold text-slate-400 mb-12 uppercase tracking-[0.3em]">{user?.email}</p>
                                 
@@ -307,55 +262,6 @@ const Landing: React.FC = () => {
                                 );
                             })}
                         </div>
-                    </div>
-                </div>
-
-                {/* Subscription Matrix */}
-                <div className="w-full max-w-7xl px-6">
-                    <div className="text-center mb-20">
-                        <span className="text-slate-400 font-black tracking-[0.4em] text-[11px] uppercase block mb-6">Provisioning Protocols</span>
-                        <h3 className="text-5xl font-black text-slate-900 tracking-tighter uppercase">Subscription Matrix</h3>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                        {TIERS_INFO.map((tier, idx) => (
-                            <motion.div 
-                                key={idx}
-                                initial={{ opacity: 0, y: 20 }}
-                                whileInView={{ opacity: 1, y: 0 }}
-                                transition={{ delay: idx * 0.1 }}
-                                viewport={{ once: true }}
-                                className={`relative flex flex-col p-10 rounded-[3rem] border-2 bg-white transition-all duration-500 hover:shadow-2xl hover:-translate-y-2 ${tier.color} ${tier.featured ? 'ring-4 ring-indigo-500/10' : ''}`}
-                            >
-                                {tier.featured && (
-                                    <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest rounded-full shadow-lg">
-                                        Most Popular
-                                    </div>
-                                )}
-                                <div className="mb-8">
-                                    <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${tier.accent}`}>
-                                        {tier.tier}
-                                    </span>
-                                    <h4 className="text-3xl font-black text-slate-900 mt-4 uppercase tracking-tight">{tier.name}</h4>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">{tier.status}</p>
-                                </div>
-                                <p className="text-slate-500 font-medium text-sm leading-relaxed mb-8">{tier.desc}</p>
-                                <div className="space-y-4 flex-grow">
-                                    {tier.features.map((feature, fIdx) => (
-                                        <div key={fIdx} className="flex items-center gap-3 text-xs font-bold text-slate-600">
-                                            <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
-                                            {feature}
-                                        </div>
-                                    ))}
-                                </div>
-                                <button 
-                                    onClick={() => setIsRequestModalOpen(true)}
-                                    className={`mt-10 w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-95 ${tier.featured ? 'bg-slate-900 text-white shadow-xl shadow-slate-200 hover:bg-slate-800' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-100'}`}
-                                >
-                                    {tier.status === 'Free Access' ? 'Current Node' : 'Request Upgrade'}
-                                </button>
-                            </motion.div>
-                        ))}
                     </div>
                 </div>
             </main>

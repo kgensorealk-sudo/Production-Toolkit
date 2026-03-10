@@ -1,11 +1,14 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { diffLines, diffWordsWithSpace, Change } from 'diff';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
+import { useSettings } from '../contexts/SettingsContext';
+import { Cpu } from 'lucide-react';
 
 const QuickDiff: React.FC = () => {
+    const { isHardwareAccelerated } = useSettings();
     const [origText, setOrigText] = useState('');
     const [changedText, setChangedText] = useState('');
     const [showResults, setShowResults] = useState(false);
@@ -13,6 +16,15 @@ const QuickDiff: React.FC = () => {
     const [diffRows, setDiffRows] = useState<React.ReactNode[]>([]);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const workerRef = useRef<Worker | null>(null);
+
+    useEffect(() => {
+        return () => {
+            if (workerRef.current) {
+                workerRef.current.terminate();
+            }
+        };
+    }, []);
 
     const escapeHtml = (unsafe: string) => unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -52,6 +64,43 @@ const QuickDiff: React.FC = () => {
         return lines;
     };
 
+    const renderRows = (rowsData: any[]) => {
+        return rowsData.map((row: any) => {
+            const { id, type, lContent, rContent, lNum, rNum } = row;
+            
+            let lClass = '';
+            let rClass = '';
+            let lNumClass = 'bg-slate-50'; 
+            let rNumClass = 'bg-slate-50';
+
+            if (type === 'delete') {
+                lClass = 'bg-red-50';
+                lNumClass = 'bg-red-100';
+            } else if (type === 'insert') {
+                rClass = 'bg-emerald-50';
+                rNumClass = 'bg-emerald-100';
+            } else if (type === 'replace') {
+                if (lContent !== undefined) {
+                    lClass = 'bg-red-50';
+                    lNumClass = 'bg-red-100';
+                }
+                if (rContent !== undefined) {
+                    rClass = 'bg-emerald-50';
+                    rNumClass = 'bg-emerald-100';
+                }
+            }
+
+            return (
+                <tr key={id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                    <td className={`w-12 text-right text-xs text-slate-500 p-1 border-r border-slate-200 select-none font-mono ${lNumClass}`}>{lNum}</td>
+                    <td className={`p-1 font-mono text-sm text-slate-700 whitespace-pre-wrap break-words leading-tight ${lClass}`} dangerouslySetInnerHTML={{__html: lContent || ''}}></td>
+                    <td className={`w-12 text-right text-xs text-slate-500 p-1 border-r border-slate-200 border-l select-none font-mono ${rNumClass}`}>{rNum}</td>
+                    <td className={`p-1 font-mono text-sm text-slate-700 whitespace-pre-wrap break-words leading-tight ${rClass}`} dangerouslySetInnerHTML={{__html: rContent || ''}}></td>
+                </tr>
+            );
+        });
+    };
+
     const runDiff = () => {
         if (!origText && !changedText) {
             setToast({ msg: 'Please enter text to compare', type: 'warn' });
@@ -59,110 +108,105 @@ const QuickDiff: React.FC = () => {
         }
 
         setIsLoading(true);
-        setTimeout(() => {
-            const diff = diffLines(origText, changedText);
-            let added = 0, deleted = 0;
-            diff.forEach(part => {
-                if (part.added) added += part.value.length;
-                if (part.removed) deleted += part.value.length;
-            });
-            setDiffStats(`${added} added, ${deleted} removed`);
 
-            // Build Rows
-            let rows: React.ReactNode[] = [];
-            let leftLineNum = 1;
-            let rightLineNum = 1;
-
-            let i = 0;
-            while(i < diff.length) {
-                const current = diff[i];
-                let type = 'equal';
-                let leftVal = '', rightVal = '';
-
-                if (current.removed && diff[i+1]?.added) {
-                    type = 'replace';
-                    leftVal = current.value;
-                    rightVal = diff[i+1].value;
-                    i += 2;
-                } else if (current.removed) {
-                    type = 'delete';
-                    leftVal = current.value;
-                    i++;
-                } else if (current.added) {
-                    type = 'insert';
-                    rightVal = current.value;
-                    i++;
-                } else {
-                    leftVal = rightVal = current.value;
-                    i++;
+        if (isHardwareAccelerated) {
+            if (workerRef.current) workerRef.current.terminate();
+            
+            workerRef.current = new Worker(new URL('../utils/diffWorker.ts', import.meta.url), { type: 'module' });
+            
+            workerRef.current.onmessage = (e) => {
+                const { stats, rowsData, error } = e.data;
+                if (error) {
+                    setToast({ msg: `Worker Error: ${error}`, type: 'error' });
+                    setIsLoading(false);
+                    return;
                 }
+                setDiffStats(stats);
+                setDiffRows(renderRows(rowsData));
+                setShowResults(true);
+                setIsLoading(false);
+            };
 
-                let leftLines: string[] = [];
-                let rightLines: string[] = [];
+            workerRef.current.postMessage({ origText, changedText });
+        } else {
+            setTimeout(() => {
+                const diff = diffLines(origText, changedText);
+                let added = 0, deleted = 0;
+                diff.forEach(part => {
+                    if (part.added) added += part.value.length;
+                    if (part.removed) deleted += part.value.length;
+                });
+                setDiffStats(`${added} added, ${deleted} removed`);
 
-                if (type === 'replace') {
-                    const wordDiff = diffWordsWithSpace(leftVal, rightVal);
-                    leftLines = buildLines(wordDiff, true);
-                    rightLines = buildLines(wordDiff, false);
-                } else if (type === 'delete') {
-                    leftLines = buildLines([{removed: true, value: leftVal} as Change], true);
-                } else if (type === 'insert') {
-                    rightLines = buildLines([{added: true, value: rightVal} as Change], false);
-                } else {
-                     // Equal
-                     const lines = leftVal.split('\n');
-                     if (lines.length > 0 && lines[lines.length-1] === '') lines.pop(); 
-                     // Simple text escape for equal parts
-                     leftLines = lines.map(escapeHtml);
-                     rightLines = [...leftLines];
+                // Build Rows
+                let rows: any[] = [];
+                let leftLineNum = 1;
+                let rightLineNum = 1;
+
+                let i = 0;
+                while(i < diff.length) {
+                    const current = diff[i];
+                    let type = 'equal';
+                    let leftVal = '', rightVal = '';
+
+                    if (current.removed && diff[i+1]?.added) {
+                        type = 'replace';
+                        leftVal = current.value;
+                        rightVal = diff[i+1].value;
+                        i += 2;
+                    } else if (current.removed) {
+                        type = 'delete';
+                        leftVal = current.value;
+                        i++;
+                    } else if (current.added) {
+                        type = 'insert';
+                        rightVal = current.value;
+                        i++;
+                    } else {
+                        leftVal = rightVal = current.value;
+                        i++;
+                    }
+
+                    let leftLines: string[] = [];
+                    let rightLines: string[] = [];
+
+                    if (type === 'replace') {
+                        const wordDiff = diffWordsWithSpace(leftVal, rightVal);
+                        leftLines = buildLines(wordDiff, true);
+                        rightLines = buildLines(wordDiff, false);
+                    } else if (type === 'delete') {
+                        leftLines = buildLines([{removed: true, value: leftVal} as Change], true);
+                    } else if (type === 'insert') {
+                        rightLines = buildLines([{added: true, value: rightVal} as Change], false);
+                    } else {
+                        const lines = leftVal.split('\n');
+                        if (lines.length > 0 && lines[lines.length-1] === '') lines.pop(); 
+                        leftLines = lines.map(escapeHtml);
+                        rightLines = [...leftLines];
+                    }
+
+                    const maxRows = Math.max(leftLines.length, rightLines.length);
+                    for (let r = 0; r < maxRows; r++) {
+                        const lContent = leftLines[r];
+                        const rContent = rightLines[r];
+                        const lNum = lContent !== undefined ? leftLineNum++ : '';
+                        const rNum = rContent !== undefined ? rightLineNum++ : '';
+                        
+                        rows.push({
+                            id: `${i}-${r}`,
+                            type,
+                            lContent,
+                            rContent,
+                            lNum,
+                            rNum
+                        });
+                    }
                 }
-
-                const maxRows = Math.max(leftLines.length, rightLines.length);
-                for (let r = 0; r < maxRows; r++) {
-                     const lContent = leftLines[r];
-                     const rContent = rightLines[r];
-                     const lNum = lContent !== undefined ? leftLineNum++ : '';
-                     const rNum = rContent !== undefined ? rightLineNum++ : '';
-                     
-                     // Determine Content Cell Backgrounds
-                     let lClass = '';
-                     let rClass = '';
-                     
-                     // Determine Line Number Cell Backgrounds (explicit to avoid conflicts)
-                     let lNumClass = 'bg-slate-50'; 
-                     let rNumClass = 'bg-slate-50';
-
-                     if (type === 'delete') {
-                         lClass = 'bg-red-50';
-                         lNumClass = 'bg-red-100';
-                     } else if (type === 'insert') {
-                         rClass = 'bg-emerald-50';
-                         rNumClass = 'bg-emerald-100';
-                     } else if (type === 'replace') {
-                         if (lContent !== undefined) {
-                             lClass = 'bg-red-50';
-                             lNumClass = 'bg-red-100';
-                         }
-                         if (rContent !== undefined) {
-                             rClass = 'bg-emerald-50';
-                             rNumClass = 'bg-emerald-100';
-                         }
-                     }
-
-                     rows.push(
-                        <tr key={`${i}-${r}`} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                            <td className={`w-12 text-right text-xs text-slate-500 p-1 border-r border-slate-200 select-none font-mono ${lNumClass}`}>{lNum}</td>
-                            <td className={`p-1 font-mono text-sm text-slate-700 whitespace-pre-wrap break-words leading-tight ${lClass}`} dangerouslySetInnerHTML={{__html: lContent || ''}}></td>
-                            <td className={`w-12 text-right text-xs text-slate-500 p-1 border-r border-slate-200 border-l select-none font-mono ${rNumClass}`}>{rNum}</td>
-                            <td className={`p-1 font-mono text-sm text-slate-700 whitespace-pre-wrap break-words leading-tight ${rClass}`} dangerouslySetInnerHTML={{__html: rContent || ''}}></td>
-                        </tr>
-                     );
-                }
-            }
-            setDiffRows(rows);
-            setShowResults(true);
-            setIsLoading(false);
-        }, 800);
+                setDiffRows(renderRows(rows));
+                setShowResults(true);
+                setIsLoading(false);
+            }, 800);
+        }
     };
 
     // Keyboard Shortcuts
@@ -185,7 +229,7 @@ const QuickDiff: React.FC = () => {
 
             {!showResults ? (
                 <div className="relative grid grid-cols-1 lg:grid-cols-2 gap-8 h-[500px] animate-scale-in">
-                    {isLoading && <LoadingOverlay message="Analyzing Differences..." color="orange" />}
+                    {isLoading && <LoadingOverlay message={isHardwareAccelerated ? "GPU-Accelerated Analysis..." : "Analyzing Differences..."} color={isHardwareAccelerated ? "amber" : "orange"} />}
                     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col focus-within:ring-2 focus-within:ring-orange-100 transition-all duration-300">
                         <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center">
                             <label className="font-bold text-slate-700 text-sm flex items-center gap-2">
@@ -225,6 +269,12 @@ const QuickDiff: React.FC = () => {
                         <div className="flex items-center gap-3">
                             <span className="text-sm font-bold text-slate-700">Comparison Result</span>
                             <span className="text-xs font-mono font-medium text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200 shadow-sm">{diffStats}</span>
+                            {isHardwareAccelerated && (
+                                <span className="flex items-center gap-1 text-[9px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100 uppercase tracking-widest">
+                                    <Cpu size={10} className="animate-pulse" />
+                                    Accelerated
+                                </span>
+                            )}
                         </div>
                     </div>
                     <div className="max-h-[70vh] overflow-auto custom-scrollbar">

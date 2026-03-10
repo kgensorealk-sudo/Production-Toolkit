@@ -245,7 +245,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                             <div className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-amber-500'}`}></div>
                             Status: {isOnline ? 'Synchronized' : 'Offline Mode'}
                         </span>
-                        <span>v1.8.0_STABLE</span>
+                        <span>v1.7.0</span>
                     </div>
                 </div>
             </footer>

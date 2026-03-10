@@ -58,8 +58,8 @@ const CitationLinker: React.FC = () => {
     };
 
     const extractYear = (text: string) => {
-        const match = text.match(/\b(19|20)\d{2}\b/);
-        return match ? match[0] : '';
+        const match = text.match(/\b(18|19|20)\d{2}[a-z]?\b/i);
+        return match ? match[0].toLowerCase() : '';
     };
 
     const extractFirstName = (text: string) => {
@@ -174,12 +174,12 @@ const CitationLinker: React.FC = () => {
                 const labelMap = new Map<string, string>(); 
                 const nameDateIndex: BibIndex[] = []; 
 
-                const bibRegex = /<ce:bib-reference\b[^>]*?id="([^"]+)"[^>]*>([\s\S]*?)<\/ce:bib-reference>/gi;
+                const bibRegex = /<(?:ce:)?bib-reference\b[^>]*?id="([^"]+)"[^>]*>([\s\S]*?)<\/(?:ce:)?bib-reference>/gi;
                 let bibMatch;
                 while ((bibMatch = bibRegex.exec(input)) !== null) {
                     const id = bibMatch[1];
                     const content = bibMatch[2];
-                    const labelMatch = content.match(/<ce:label>(.*?)<\/ce:label>/i);
+                    const labelMatch = content.match(/<(?:ce:)?label>(.*?)<\/(?:ce:)?label>/i);
                     
                     if (labelMatch) {
                         const labelText = labelMatch[1].replace(/<[^>]+>/g, '').replace(/[\[\]]/g, '').trim();
@@ -197,13 +197,15 @@ const CitationLinker: React.FC = () => {
                 }
 
                 const orphans: ResolutionItem[] = [];
-                const tagRegex = /<ce:cross-refs?\b([^>]*)>([\s\S]*?)<\/ce:cross-refs?>/gi;
+                const tagRegex = /<(ce:)?(cross-refs?|intra-refs?|inter-refs?)\b([^>]*)>([\s\S]*?)<\/\1\2>/gi;
                 let tagMatch;
                 while ((tagMatch = tagRegex.exec(input)) !== null) {
                     const fullTag = tagMatch[0];
-                    const attrs = tagMatch[1];
-                    const text = tagMatch[2].trim();
-                    const originalIsPlural = fullTag.includes('cross-refs');
+                    const prefix = tagMatch[1] || '';
+                    const baseTag = tagMatch[2];
+                    const attrs = tagMatch[3];
+                    const text = tagMatch[4].trim();
+                    const originalIsPlural = baseTag.endsWith('s');
 
                     const idMatch = attrs.match(/\bid="([^"]+)"/);
                     const refidMatch = attrs.match(/\brefid="([^"]+)"/);
@@ -340,7 +342,12 @@ const CitationLinker: React.FC = () => {
 
                     const idAttr = targetId ? ` id="${targetId}"` : '';
                     const refidAttr = targetRefid ? ` refid="${targetRefid}"` : '';
-                    const tagName = (targetMissingRefid && res.missingRefid) ? (res.targetIsPlural ? 'ce:cross-refs' : 'ce:cross-ref') : (res.originalIsPlural ? 'ce:cross-refs' : 'ce:cross-ref');
+                    
+                    // Maintain original tag prefix and base name if possible, but adjust pluralization if needed
+                    const tagMatch = res.originalTag.match(/^<((?:ce:)?)(cross-refs?|intra-refs?|inter-refs?)/i);
+                    const prefix = tagMatch ? tagMatch[1] : 'ce:';
+                    const baseName = tagMatch ? tagMatch[2].replace(/s$/, '') : 'cross-ref';
+                    const tagName = (targetMissingRefid && res.missingRefid) ? (res.targetIsPlural ? `${prefix}${baseName}s` : `${prefix}${baseName}`) : (res.originalIsPlural ? `${prefix}${baseName}s` : `${prefix}${baseName}`);
                     
                     const newTag = `<${tagName}${idAttr}${refidAttr}>${res.textContent}</${tagName}>`;
                     result = result.replace(res.originalTag, newTag);

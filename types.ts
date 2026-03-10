@@ -58,12 +58,10 @@ export enum ToolId {
     UNCITED_CLEANER = 'uncitedCleaner',
     OTHER_REF_SCANNER = 'otherRefScanner',
     REF_EXTRACTOR = 'refExtractor',
-    REF_PURGER = 'refPurger',
     GRANT_TAGGER = 'grantTagger',
     ID_AUDITOR = 'idAuditor',
     COMMENT_REPLACER = 'commentReplacer',
     CITATION_LINKER = 'citationLinker',
-    JM_QUERY_GEN = 'jmQueryGen',
     DOCS = 'docs',
     DASHBOARD = 'dashboard'
 }
