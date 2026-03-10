@@ -28,7 +28,7 @@ import {
     ShieldAlert,
     History
 } from 'lucide-react';
-import { ToolId } from '../types';
+import { ToolId, SubscriptionTier } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import AnnouncementModal from '../components/AnnouncementModal';
 import ToolTipsModal from '../components/ToolTipsModal';
@@ -167,6 +167,16 @@ const Dashboard: React.FC = () => {
     const [activeTipTool, setActiveTipTool] = useState<{id: string, name: string} | null>(null);
     const [isReleaseNotesOpen, setIsReleaseNotesOpen] = useState(false);
 
+    const getTierDisplayName = () => {
+        if (isAdmin) return 'Administrator';
+        switch (profile?.subscription_tier) {
+            case SubscriptionTier.SCRIBE: return 'Scribe Node';
+            case SubscriptionTier.ARTISAN: return 'Artisan Node';
+            case SubscriptionTier.VISIONARY: return 'Visionary Node';
+            default: return 'Standard Node';
+        }
+    };
+
     useEffect(() => {
         localStorage.setItem('pinned_tools', JSON.stringify(pinnedTools));
     }, [pinnedTools]);
@@ -279,6 +289,17 @@ const Dashboard: React.FC = () => {
                         <h2 className="text-4xl font-black text-slate-900 tracking-tight mb-4 uppercase">
                             Workspace <span className="text-indigo-600">Console</span>
                         </h2>
+                        <div className="flex items-center gap-2 mb-4">
+                             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active Node:</span>
+                             <span className={`text-[10px] font-black px-3 py-1 rounded-lg border uppercase tracking-widest ${isAdmin ? 'bg-indigo-50 text-indigo-600 border-indigo-100' : profile?.is_subscribed ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>
+                                 {getTierDisplayName()}
+                             </span>
+                             {!isAdmin && !profile?.is_subscribed && (
+                                 <span className="text-[9px] font-bold text-indigo-500 uppercase tracking-widest animate-pulse">
+                                     + Monthly Free Tools Enabled
+                                 </span>
+                             )}
+                        </div>
                         <p className="text-slate-500 font-medium leading-relaxed">
                             Integrated environment for technical XML production and citation integrity management. 
                             Select a module below to begin processing.

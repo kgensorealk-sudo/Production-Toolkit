@@ -16,6 +16,25 @@ export default defineConfig(({ mode }) => {
       target: 'esnext',
       sourcemap: mode === 'development',
       minify: 'esbuild',
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (id.includes('react') || id.includes('router')) {
+                return 'vendor-react';
+              }
+              if (id.includes('lucide') || id.includes('motion')) {
+                return 'vendor-ui';
+              }
+              if (id.includes('supabase') || id.includes('google') || id.includes('diff')) {
+                return 'vendor-utils';
+              }
+              return 'vendor-others';
+            }
+          }
+        }
+      },
+      chunkSizeWarningLimit: 1000,
     },
     server: {
       port: 3000,

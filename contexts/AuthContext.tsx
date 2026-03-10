@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
-import { UserProfile } from '../types';
+import { UserProfile, SubscriptionTier } from '../types';
 import { INACTIVITY_LIMIT } from '../constants';
 
 type Session = any;
@@ -191,10 +191,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
                 const unlockedTools = keysData ? keysData.map(k => k.tool) : [];
                 let isActive = profileData.is_subscribed;
-                if (user?.email === SUPER_ADMIN_EMAIL) isActive = true;
-                else if (profileData.subscription_end && new Date(profileData.subscription_end) < new Date()) isActive = false;
+                let tier = profileData.subscription_tier || SubscriptionTier.NONE;
 
-                setProfile({ ...profileData, is_subscribed: isActive, unlocked_tools: unlockedTools });
+                if (user?.email === SUPER_ADMIN_EMAIL) {
+                    isActive = true;
+                    tier = SubscriptionTier.VISIONARY;
+                } else if (profileData.subscription_end && new Date(profileData.subscription_end) < new Date()) {
+                    isActive = false;
+                    tier = SubscriptionTier.NONE;
+                }
+
+                setProfile({ 
+                    ...profileData, 
+                    is_subscribed: isActive, 
+                    subscription_tier: tier,
+                    unlocked_tools: unlockedTools 
+                });
                 updateLastSeen(userId);
             } catch (e) {
                 console.error("CRITICAL_SYNC_FAILURE:", e);

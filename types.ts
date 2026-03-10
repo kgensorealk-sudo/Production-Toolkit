@@ -24,11 +24,19 @@ export interface DiffGroup {
     text?: string;
 }
 
+export enum SubscriptionTier {
+    NONE = 'none',
+    SCRIBE = 'scribe',
+    ARTISAN = 'artisan',
+    VISIONARY = 'visionary'
+}
+
 export interface UserProfile {
     id: string;
     email: string;
     role: string;
     is_subscribed: boolean;
+    subscription_tier: SubscriptionTier;
     subscription_end?: string;
     trial_start?: string;
     trial_end?: string;
