@@ -236,4 +236,14 @@ CREATE POLICY "Admins can delete feedback" ON public.feedback
 -- 14. REALTIME ENABLEMENT
 -- Ensure system_settings table is part of the realtime publication
 -- Note: This requires superuser privileges in a standard SQL editor.
-ALTER PUBLICATION supabase_realtime ADD TABLE public.system_settings;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' 
+    AND schemaname = 'public' 
+    AND tablename = 'system_settings'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.system_settings;
+  END IF;
+END $$;

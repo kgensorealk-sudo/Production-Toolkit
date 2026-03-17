@@ -42,7 +42,10 @@ const CitationLinker: React.FC = () => {
     // Configuration States
     const [targetMissingRefid, setTargetMissingRefid] = useState(true);
     const [targetMissingId, setTargetMissingId] = useState(true);
+    const [cleanDoi, setCleanDoi] = useState(true);
     const [cfStart, setCfStart] = useState<number>(3000);
+    const [doiCount, setDoiCount] = useState(0);
+    const [affectedDoiLabels, setAffectedDoiLabels] = useState<string[]>([]);
 
     const escapeHtml = (unsafe: string) => unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -69,9 +72,14 @@ const CitationLinker: React.FC = () => {
         return match ? match[0].toLowerCase() : '';
     };
 
+    const extractYears = (text: string) => {
+        const matches = text.match(/\b(18|19|20)\d{2}[a-z]?\b/gi);
+        return matches ? matches.map(m => m.toLowerCase()) : [];
+    };
+
     const extractFirstName = (text: string) => {
-        const clean = text.replace(/<[^>]+>/g, '').replace(/et\s+al\.?/gi, '').replace(/[\(\)\[\]\.,;]/g, ' ').trim();
-        return clean.split(/\s+/)[0].toLowerCase();
+        const clean = normalizeCitation(text);
+        return clean.split(/\s+/)[0] || '';
     };
 
     const buildLines = (diffParts: Change[], isLeft: boolean) => {
@@ -217,6 +225,25 @@ const CitationLinker: React.FC = () => {
                 }
 
                 const orphans: ResolutionItem[] = [];
+                
+                let foundDoiLabels: string[] = [];
+                if (cleanDoi) {
+                    const bibRefRegex = /<(?:ce:)?bib-reference\b[^>]*?id="([^"]+)"[^>]*>([\s\S]*?)<\/(?:ce:)?bib-reference>/gi;
+                    let bibMatch;
+                    const doiPattern = /<sb:host>[\s\S]*?<\/sb:host>\s*<sb:host>\s*<sb:e-host>\s*<ce:inter-ref\b[^>]*xlink:href="https?:\/\/doi\.org\/[^"]+"[^>]*>[\s\S]*?<\/ce:inter-ref>\s*<\/sb:e-host>\s*<\/sb:host>/i;
+                    
+                    while ((bibMatch = bibRefRegex.exec(input)) !== null) {
+                        const content = bibMatch[2];
+                        if (doiPattern.test(content)) {
+                            const labelMatch = content.match(/<(?:ce:)?label>(.*?)<\/(?:ce:)?label>/i);
+                            const labelText = labelMatch ? labelMatch[1].replace(/<[^>]+>/g, '').replace(/[\[\]]/g, '').trim() : 'Unknown Ref';
+                            foundDoiLabels.push(labelText);
+                        }
+                    }
+                }
+                setDoiCount(foundDoiLabels.length);
+                setAffectedDoiLabels(foundDoiLabels);
+
                 const tagRegex = /<(ce:)?(cross-refs?|intra-refs?|inter-refs?)\b([^>]*)>([\s\S]*?)<\/\1\2>/gi;
                 let tagMatch;
                 while ((tagMatch = tagRegex.exec(input)) !== null) {
@@ -237,7 +264,9 @@ const CitationLinker: React.FC = () => {
                     const missingRefid = !existingRefid;
 
                     const isInterRef = baseTag.toLowerCase().includes('inter-ref');
-                    const shouldProcess = (targetMissingRefid && missingRefid && !isInterRef) || (targetMissingId && missingId);
+                    const isDoiLink = isInterRef && text.includes('doi.org/');
+
+                    const shouldProcess = ((targetMissingRefid && missingRefid && !isInterRef) || (targetMissingId && missingId)) && !isDoiLink;
                     if (!shouldProcess) continue;
 
                     let mappedIds: string[] = existingRefid ? existingRefid.split(/\s+/).filter(Boolean) : [];
@@ -282,16 +311,20 @@ const CitationLinker: React.FC = () => {
                                         detectedIds.push(directMatchId);
                                     } else {
                                         const orphanFirstName = extractFirstName(trimmed);
-                                        const orphanYear = extractYear(trimmed);
+                                        const orphanYears = extractYears(trimmed);
 
-                                        let bibMatch = nameDateIndex.find(b => b.normalized === normOrphan);
-                                        if (!bibMatch && orphanFirstName && orphanYear) {
-                                            bibMatch = nameDateIndex.find(b => 
-                                                b.firstName === orphanFirstName && 
-                                                b.year === orphanYear
-                                            );
+                                        let bibMatchWhole = nameDateIndex.find(b => b.normalized === normOrphan);
+                                        if (bibMatchWhole) {
+                                            detectedIds.push(bibMatchWhole.id);
+                                        } else if (orphanFirstName && orphanYears.length > 0) {
+                                            orphanYears.forEach(year => {
+                                                const bibMatch = nameDateIndex.find(b => 
+                                                    b.firstName === orphanFirstName && 
+                                                    b.year === year
+                                                );
+                                                if (bibMatch) detectedIds.push(bibMatch.id);
+                                            });
                                         }
-                                        if (bibMatch) detectedIds.push(bibMatch.id);
                                     }
                                 }
                             });
@@ -322,7 +355,7 @@ const CitationLinker: React.FC = () => {
                     });
                 }
 
-                if (orphans.length === 0) {
+                if (orphans.length === 0 && foundDoiLabels.length === 0) {
                     setToast({ msg: "No items matching the selected protocol toggles.", type: "info" });
                     setIsLoading(false);
                     return;
@@ -330,7 +363,7 @@ const CitationLinker: React.FC = () => {
 
                 setResolutions(orphans);
                 setStep('matrix');
-                setToast({ msg: `Detected ${orphans.length} candidates for protocol injection.`, type: "info" });
+                setToast({ msg: `Detected ${orphans.length} candidates and ${foundDoiLabels.length} DOI cleanups.`, type: "info" });
             } catch (e) {
                 setToast({ msg: "Analysis failure.", type: "error" });
             } finally {
@@ -391,6 +424,10 @@ const CitationLinker: React.FC = () => {
                     result = result.replace(res.originalTag, newTag);
                 });
 
+                if (cleanDoi) {
+                    result = result.replace(/<sb:host>([\s\S]*?)<\/sb:host>\s*<sb:host>\s*<sb:e-host>\s*<ce:inter-ref\b[^>]*xlink:href="https?:\/\/doi\.org\/([^"]+)"[^>]*>[\s\S]*?<\/ce:inter-ref>\s*<\/sb:e-host>\s*<\/sb:host>/gi, '<sb:host>$1<ce:doi>$2</ce:doi></sb:host>');
+                }
+
                 setOutput(result);
                 generateDiff(input, result);
                 setStep('result');
@@ -422,6 +459,8 @@ const CitationLinker: React.FC = () => {
                     <Switch id="toggle-refid" label="Resolve Links" subLabel="Missing refid" checked={targetMissingRefid} onChange={setTargetMissingRefid} color="indigo" />
                     <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
                     <Switch id="toggle-id" label="Enforce IDs" subLabel="Missing id (cfxxxx)" checked={targetMissingId} onChange={setTargetMissingId} color="blue" />
+                    <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
+                    <Switch id="toggle-doi" label="Clean DOIs" subLabel="Convert inter-ref to ce:doi" checked={cleanDoi} onChange={setCleanDoi} color="emerald" />
                     <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
                     
                     <div className="flex flex-col gap-1">
@@ -478,7 +517,7 @@ const CitationLinker: React.FC = () => {
                         <div className="px-10 py-6 border-b border-slate-200 bg-white flex justify-between items-center shadow-sm z-10">
                             <div className="flex flex-col">
                                 <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Resolution Matrix</h3>
-                                <p className="text-xs text-slate-500 font-bold mt-1 uppercase tracking-wider">{resolutions.length} nodes ready for processing</p>
+                                <p className="text-xs text-slate-500 font-bold mt-1 uppercase tracking-wider">{resolutions.length} nodes & {doiCount} DOI cleanups ready</p>
                             </div>
                             <div className="flex gap-4">
                                 <button onClick={() => setStep('input')} className="px-6 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-slate-600 uppercase transition-all tracking-widest">Abort</button>
@@ -487,8 +526,54 @@ const CitationLinker: React.FC = () => {
                                 </button>
                             </div>
                         </div>
-                        <div className="flex-grow overflow-auto p-10 space-y-4 custom-scrollbar">
-                            {resolutions.map((res, idx) => (
+                        <div className="flex-grow overflow-auto p-10 space-y-6 custom-scrollbar">
+                            {doiCount > 0 && cleanDoi && (
+                                <div className="p-6 bg-emerald-50 border-2 border-emerald-100 rounded-[2rem] flex items-center gap-8 shadow-sm animate-pulse-subtle">
+                                    <div className="w-12 h-12 bg-emerald-600 rounded-2xl flex items-center justify-center shrink-0 shadow-lg shadow-emerald-200">
+                                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                        </svg>
+                                    </div>
+                                    <div className="flex-grow">
+                                        <h4 className="text-sm font-black text-emerald-900 uppercase tracking-widest mb-1">Global Protocol: DOI Cleanup</h4>
+                                        <p className="text-xs text-emerald-700 font-medium leading-relaxed">
+                                            The system detected <span className="font-black underline">{doiCount}</span> bibliography entries with external DOI links. 
+                                            These will be converted to native <code className="bg-emerald-100 px-1 rounded text-emerald-800 font-bold">ce:doi</code> tags and merged into their parent host nodes.
+                                        </p>
+                                        <div className="mt-3 flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-2 custom-scrollbar-sm">
+                                            {affectedDoiLabels.map((label, i) => (
+                                                <span key={i} className="text-[9px] font-black bg-white/50 text-emerald-800 px-2 py-0.5 rounded border border-emerald-200 uppercase">{label}</span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="shrink-0">
+                                        <span className="text-[10px] font-black bg-emerald-600 text-white px-3 py-1 rounded-full uppercase tracking-tighter shadow-md">Active</span>
+                                    </div>
+                                </div>
+                            )}
+
+                            {resolutions.filter(r => r.status === 'resolved').length > 0 && (
+                                <div className="p-6 bg-indigo-50 border-2 border-indigo-100 rounded-[2rem] flex items-center gap-8 shadow-sm">
+                                    <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shrink-0 shadow-lg shadow-indigo-200">
+                                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                        </svg>
+                                    </div>
+                                    <div className="flex-grow">
+                                        <h4 className="text-sm font-black text-indigo-900 uppercase tracking-widest mb-1">Citation Protocol: Linking & ID Enforcement</h4>
+                                        <p className="text-xs text-indigo-700 font-medium leading-relaxed">
+                                            The system will process <span className="font-black underline">{resolutions.filter(r => r.status === 'resolved').length}</span> citation nodes. 
+                                            This includes <span className="font-black">resolving missing refids</span> to match bibliography entries and <span className="font-black">injecting unique cfxxxx IDs</span> where required.
+                                        </p>
+                                    </div>
+                                    <div className="shrink-0">
+                                        <span className="text-[10px] font-black bg-indigo-600 text-white px-3 py-1 rounded-full uppercase tracking-tighter shadow-md">Active</span>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="grid grid-cols-1 gap-4">
+                                {resolutions.map((res, idx) => (
                                 <div 
                                     key={idx} 
                                     className={`p-6 bg-white border-2 rounded-[2rem] flex items-center gap-8 transition-all hover:shadow-lg ${res.status === 'resolved' ? 'border-emerald-100' : 'border-rose-100 opacity-60'}`}
@@ -529,6 +614,7 @@ const CitationLinker: React.FC = () => {
                                     </div>
                                 </div>
                             ))}
+                            </div>
                         </div>
                     </div>
                 )}
