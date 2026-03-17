@@ -271,7 +271,7 @@ const QuickDiff: React.FC = () => {
                             <span className="text-xs font-mono font-medium text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200 shadow-sm">{diffStats}</span>
                             {isHardwareAccelerated && (
                                 <span className="flex items-center gap-1 text-[9px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100 uppercase tracking-widest">
-                                    <Cpu size={10} className="animate-pulse" />
+                                    <Cpu size={10} />
                                     Accelerated
                                 </span>
                             )}

@@ -19,6 +19,9 @@ import { supabase } from '../supabaseClient';
 import TrialTimer from './TrialTimer';
 import ExpiryReminderModal from './ExpiryReminderModal';
 import LoadingOverlay from './LoadingOverlay';
+import FeedbackModal from './FeedbackModal';
+import Toast from './Toast';
+import { MessageSquare } from 'lucide-react';
 
 interface LayoutProps {
     children: React.ReactNode;
@@ -34,6 +37,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
     const [hasActiveAnnouncement, setHasActiveAnnouncement] = useState(false);
     const [isAnnouncementUnread, setIsAnnouncementUnread] = useState(false);
     const [isExiting, setIsExiting] = useState(false);
+    const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+    const [toast, setToast] = useState<{ msg: string, type: 'success' | 'warn' | 'error' | 'info' } | null>(null);
     
     const isVercel = window.location.hostname.includes('vercel.app');
 
@@ -206,6 +211,16 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                                     <Settings size={18} />
                                 </button>
                             )}
+
+                            {!isExiting && (
+                                <button 
+                                    onClick={() => setIsFeedbackOpen(true)}
+                                    className="p-2 rounded-xl text-slate-400 hover:text-indigo-600 transition-all"
+                                    title="Send Feedback"
+                                >
+                                    <MessageSquare size={18} />
+                                </button>
+                            )}
                             
                             <div className="h-4 w-px bg-slate-200 mx-1"></div>
                             
@@ -236,6 +251,16 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                     </motion.div>
                 </AnimatePresence>
             </main>
+
+            <FeedbackModal 
+                isOpen={isFeedbackOpen} 
+                onClose={() => setIsFeedbackOpen(false)}
+                onSuccess={(msg) => setToast({ msg, type: 'success' })}
+                onError={(msg) => setToast({ msg, type: 'error' })}
+                toolId={currentTool}
+            />
+
+            {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
 
             <footer className="bg-white border-t border-slate-200/60 py-4 mt-auto">
                 <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-4 text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em]">

@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -169,6 +169,7 @@ const Dashboard: React.FC = () => {
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
     const [activeTipTool, setActiveTipTool] = useState<{id: string, name: string} | null>(null);
     const [isReleaseNotesOpen, setIsReleaseNotesOpen] = useState(false);
+    const isFirstRender = useRef(true);
 
     useEffect(() => {
         localStorage.setItem('pinned_tools', JSON.stringify(pinnedTools));
@@ -310,7 +311,7 @@ const Dashboard: React.FC = () => {
                             onClick={() => setHardwareAccelerated(!isHardwareAccelerated)}
                             className={`flex items-center gap-2 px-5 py-3 rounded-2xl border transition-all active:scale-95 shadow-sm text-[10px] font-black uppercase tracking-widest ${isHardwareAccelerated ? 'bg-amber-50 border-amber-200 text-amber-600' : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-500'}`}
                         >
-                            <Cpu size={14} className={isHardwareAccelerated ? 'animate-pulse' : ''} />
+                            <Cpu size={14} />
                             {isHardwareAccelerated ? 'Accel On' : 'Accel Off'}
                         </button>
                         <button 

@@ -8,7 +8,9 @@ import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 interface ResolutionItem {
     id: string;
     originalTag: string;
+    originalAttrs: string;
     textContent: string;
+    tagType: string;
     status: 'resolved' | 'failed' | 'ignored';
     existingId: string;
     existingRefid: string;
@@ -52,6 +54,11 @@ const CitationLinker: React.FC = () => {
             .replace(/&/g, 'and')
             .replace(/'s\b/gi, '') 
             .replace(/et\s+al\.?/gi, '') 
+            .replace(/\bfigures?\b/g, 'fig')
+            .replace(/\bfigs?\b/g, 'fig')
+            .replace(/\btables?\b/g, 'table')
+            .replace(/\bschemes?\b/g, 'scheme')
+            .replace(/\bboxes?\b/g, 'box')
             .replace(/[\(\)\[\]\.,;]/g, ' ') 
             .replace(/\s+/g, ' ')
             .trim();
@@ -196,6 +203,19 @@ const CitationLinker: React.FC = () => {
                     }
                 }
 
+                // Scan for floats (figures, tables, schemes, boxes, etc.)
+                const floatRegex = /<(?:ce:)?(figure|table|display-formula|textbox|scheme|box)\b[^>]*?id="([^"]+)"[^>]*>([\s\S]*?)<\/(?:ce:)?\1>/gi;
+                let floatMatch;
+                while ((floatMatch = floatRegex.exec(input)) !== null) {
+                    const id = floatMatch[2];
+                    const content = floatMatch[3];
+                    const labelMatch = content.match(/<(?:ce:)?label>(.*?)<\/(?:ce:)?label>/i);
+                    if (labelMatch) {
+                        const labelText = labelMatch[1].replace(/<[^>]+>/g, '').trim();
+                        labelMap.set(normalizeCitation(labelText), id);
+                    }
+                }
+
                 const orphans: ResolutionItem[] = [];
                 const tagRegex = /<(ce:)?(cross-refs?|intra-refs?|inter-refs?)\b([^>]*)>([\s\S]*?)<\/\1\2>/gi;
                 let tagMatch;
@@ -216,13 +236,14 @@ const CitationLinker: React.FC = () => {
                     const missingId = !existingId;
                     const missingRefid = !existingRefid;
 
-                    const shouldProcess = (targetMissingRefid && missingRefid) || (targetMissingId && missingId);
+                    const isInterRef = baseTag.toLowerCase().includes('inter-ref');
+                    const shouldProcess = (targetMissingRefid && missingRefid && !isInterRef) || (targetMissingId && missingId);
                     if (!shouldProcess) continue;
 
                     let mappedIds: string[] = existingRefid ? existingRefid.split(/\s+/).filter(Boolean) : [];
                     let status: 'resolved' | 'failed' | 'ignored' = 'failed';
 
-                    if (missingRefid) {
+                    if (missingRefid && !isInterRef) {
                         const detectedIds: string[] = [];
                         const normWhole = normalizeCitation(text);
                         let wholeMatch = nameDateIndex.find(b => b.normalized === normWhole);
@@ -254,17 +275,24 @@ const CitationLinker: React.FC = () => {
                                 }
                                 else {
                                     const normOrphan = normalizeCitation(trimmed);
-                                    const orphanFirstName = extractFirstName(trimmed);
-                                    const orphanYear = extractYear(trimmed);
+                                    
+                                    // Check labelMap for direct matches (floats or specific labels)
+                                    const directMatchId = labelMap.get(normOrphan);
+                                    if (directMatchId) {
+                                        detectedIds.push(directMatchId);
+                                    } else {
+                                        const orphanFirstName = extractFirstName(trimmed);
+                                        const orphanYear = extractYear(trimmed);
 
-                                    let bibMatch = nameDateIndex.find(b => b.normalized === normOrphan);
-                                    if (!bibMatch && orphanFirstName && orphanYear) {
-                                        bibMatch = nameDateIndex.find(b => 
-                                            b.firstName === orphanFirstName && 
-                                            b.year === orphanYear
-                                        );
+                                        let bibMatch = nameDateIndex.find(b => b.normalized === normOrphan);
+                                        if (!bibMatch && orphanFirstName && orphanYear) {
+                                            bibMatch = nameDateIndex.find(b => 
+                                                b.firstName === orphanFirstName && 
+                                                b.year === orphanYear
+                                            );
+                                        }
+                                        if (bibMatch) detectedIds.push(bibMatch.id);
                                     }
-                                    if (bibMatch) detectedIds.push(bibMatch.id);
                                 }
                             });
                         }
@@ -273,14 +301,16 @@ const CitationLinker: React.FC = () => {
 
                     const targetIsPlural = mappedIds.length > 1;
 
-                    if ((missingRefid && mappedIds.length > 0) || !missingRefid) {
+                    if ((!isInterRef && missingRefid && mappedIds.length > 0) || !missingRefid || (isInterRef && !missingId)) {
                         status = 'resolved';
                     }
 
                     orphans.push({
                         id: `orphan_${orphans.length}`,
                         originalTag: fullTag,
+                        originalAttrs: attrs,
                         textContent: text,
+                        tagType: baseTag,
                         status,
                         existingId,
                         existingRefid,
@@ -340,8 +370,16 @@ const CitationLinker: React.FC = () => {
                         targetRefid = res.mappedIds.join(' ');
                     }
 
+                    // Clean original attributes of id and refid to avoid duplicates
+                    let cleanAttrs = res.originalAttrs
+                        .replace(/\bid="[^"]*"/g, '')
+                        .replace(/\brefid="[^"]*"/g, '')
+                        .replace(/\s+/g, ' ')
+                        .trim();
+
                     const idAttr = targetId ? ` id="${targetId}"` : '';
                     const refidAttr = targetRefid ? ` refid="${targetRefid}"` : '';
+                    const otherAttrs = cleanAttrs ? ` ${cleanAttrs}` : '';
                     
                     // Maintain original tag prefix and base name if possible, but adjust pluralization if needed
                     const tagMatch = res.originalTag.match(/^<((?:ce:)?)(cross-refs?|intra-refs?|inter-refs?)/i);
@@ -349,7 +387,7 @@ const CitationLinker: React.FC = () => {
                     const baseName = tagMatch ? tagMatch[2].replace(/s$/, '') : 'cross-ref';
                     const tagName = (targetMissingRefid && res.missingRefid) ? (res.targetIsPlural ? `${prefix}${baseName}s` : `${prefix}${baseName}`) : (res.originalIsPlural ? `${prefix}${baseName}s` : `${prefix}${baseName}`);
                     
-                    const newTag = `<${tagName}${idAttr}${refidAttr}>${res.textContent}</${tagName}>`;
+                    const newTag = `<${tagName}${idAttr}${refidAttr}${otherAttrs}>${res.textContent}</${tagName}>`;
                     result = result.replace(res.originalTag, newTag);
                 });
 
@@ -372,7 +410,7 @@ const CitationLinker: React.FC = () => {
 
     return (
         <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-            <div className="mb-10 text-center animate-fade-in">
+            <div className="mb-10 text-center animate-fade-in relative">
                 <h1 className="text-3xl font-black text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase tracking-tighter">Citation Linker Pro</h1>
                 <p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic leading-relaxed">
                     Automated resolution and ID enforcement for <code>ce:cross-ref</code> tags.
@@ -459,13 +497,16 @@ const CitationLinker: React.FC = () => {
                                     <div className="min-w-0 flex-grow">
                                         <div className="flex items-center gap-3 mb-2">
                                             <div className="flex gap-1">
-                                                <span className={`text-[10px] font-black px-2 py-1 rounded-lg border uppercase tracking-widest ${res.originalIsPlural ? 'bg-indigo-50 text-indigo-600 border-indigo-100' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                                                <span className={`text-[10px] font-black px-2 py-1 rounded-lg border uppercase tracking-widest ${res.tagType.includes('inter-ref') ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100'}`}>
+                                                    {res.tagType}
+                                                </span>
+                                                <span className={`text-[10px] font-black px-2 py-1 rounded-lg border uppercase tracking-widest ${res.originalIsPlural ? 'bg-slate-100 text-slate-600 border-slate-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
                                                     {res.originalIsPlural ? 'Plural' : 'Singular'}
                                                 </span>
                                             </div>
                                             <div className="flex gap-2">
                                                 {targetMissingId && res.missingId && <span className="text-[8px] font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 uppercase">Will Inject ID</span>}
-                                                {targetMissingRefid && res.missingRefid && res.status === 'resolved' && <span className="text-[8px] font-black text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 uppercase">Will Resolve Link</span>}
+                                                {targetMissingRefid && res.missingRefid && res.status === 'resolved' && !res.tagType.includes('inter-ref') && <span className="text-[8px] font-black text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 uppercase">Will Resolve Link</span>}
                                             </div>
                                             <span className="text-[10px] font-mono text-slate-400 font-bold ml-auto">TXT: "{res.textContent}"</span>
                                         </div>

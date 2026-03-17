@@ -35,6 +35,18 @@ interface UsageLog {
     timestamp: string;
 }
 
+interface FeedbackRecord {
+    id: string;
+    user_id: string;
+    tool_id: string;
+    type: 'bug' | 'feature';
+    content: string;
+    created_at: string;
+    profiles?: {
+        email: string;
+    };
+}
+
 type IntelligenceRange = '24h' | '7d' | '30d' | 'all';
 
 const DURATION_OPTIONS = [
@@ -98,7 +110,7 @@ const formatLastSeen = (timestamp?: string) => {
 };
 
 const AdminDashboard: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'users' | 'keys' | 'announcements' | 'config' | 'intelligence'>('users');
+    const [activeTab, setActiveTab] = useState<'users' | 'keys' | 'announcements' | 'config' | 'intelligence' | 'feedback'>('users');
     const [isLoading, setIsLoading] = useState(false);
     const [isReleaseNotesOpen, setIsReleaseNotesOpen] = useState(false);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
@@ -119,6 +131,7 @@ const AdminDashboard: React.FC = () => {
     const [keyQty, setKeyQty] = useState<number>(1);
 
     const [usageLogs, setUsageLogs] = useState<UsageLog[]>([]);
+    const [feedbacks, setFeedbacks] = useState<FeedbackRecord[]>([]);
     const [intelRange, setIntelRange] = useState<IntelligenceRange>('7d');
     const [focusedUserId, setFocusedUserId] = useState<string | null>(null);
     
@@ -218,6 +231,22 @@ const AdminDashboard: React.FC = () => {
         }
     }, []);
 
+    const fetchFeedbacks = useCallback(async (isSilent = false) => {
+        if (!isSilent) setIsLoading(true);
+        try {
+            const { data, error } = await supabase
+                .from('feedback')
+                .select('*, profiles(email)')
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            setFeedbacks(data || []);
+        } catch (error: any) {
+            if (!isSilent) setToast({ msg: 'Feedback fetch failed', type: 'error' });
+        } finally {
+            if (!isSilent) setIsLoading(false);
+        }
+    }, []);
+
     const refreshActiveTab = useCallback(async (isSilent = true) => {
         if (Date.now() - lastSyncTimeRef.current < 3000) return;
         lastSyncTimeRef.current = Date.now();
@@ -225,13 +254,14 @@ const AdminDashboard: React.FC = () => {
         try {
             if (activeTab === 'users') await fetchUsers(isSilent);
             else if (activeTab === 'announcements') await fetchAnnouncements(isSilent);
+            else if (activeTab === 'feedback') await fetchFeedbacks(isSilent);
             else if (activeTab === 'keys') { await Promise.all([fetchUsers(true), fetchAccessKeys(isSilent)]); }
             else if (activeTab === 'config') { await Promise.all([fetchIntelligence(true), refreshFreeTools()]); }
             else if (activeTab === 'intelligence') await fetchIntelligence(isSilent);
         } catch (e) {
             console.error("Silent sync failed:", e);
         }
-    }, [activeTab, fetchUsers, fetchAnnouncements, fetchAccessKeys, refreshFreeTools, fetchIntelligence]);
+    }, [activeTab, fetchUsers, fetchAnnouncements, fetchAccessKeys, refreshFreeTools, fetchIntelligence, fetchFeedbacks]);
 
     useEffect(() => {
         const handleWake = () => {
@@ -507,6 +537,29 @@ const AdminDashboard: React.FC = () => {
         });
     };
 
+    const handleDeleteFeedback = (id: string) => {
+        setConfirmConfig({
+            isOpen: true,
+            title: 'Delete Feedback',
+            message: 'Are you sure you want to delete this feedback entry?',
+            confirmLabel: 'Delete',
+            type: 'danger',
+            onConfirm: async () => {
+                setIsLoading(true);
+                try {
+                    const { error } = await supabase.from('feedback').delete().eq('id', id);
+                    if (error) throw error;
+                    setFeedbacks(prev => prev.filter(f => f.id !== id));
+                    setToast({ msg: 'Feedback deleted', type: 'success' });
+                } catch (err: any) {
+                    setToast({ msg: 'Failed to delete feedback', type: 'error' });
+                } finally {
+                    setIsLoading(false);
+                }
+            }
+        });
+    };
+
     const activeNodesCount = users.filter(u => {
         if (!u.last_seen) return false;
         return (Date.now() - new Date(u.last_seen).getTime()) < ONLINE_THRESHOLD_MS;
@@ -662,10 +715,11 @@ const AdminDashboard: React.FC = () => {
                 </div>
             </div>
 
-            <div className="flex space-x-1 bg-slate-200/50 p-1 rounded-xl mb-6 w-full max-w-4xl overflow-x-auto">
+            <div className="flex space-x-1 bg-slate-200/50 p-1 rounded-xl mb-6 w-full max-w-5xl overflow-x-auto">
                 <button onClick={() => setActiveTab('users')} className={`flex-1 py-2.5 px-6 text-sm font-bold rounded-lg transition-all ${activeTab === 'users' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Personnel</button>
                 <button onClick={() => setActiveTab('keys')} className={`flex-1 py-2.5 px-6 text-sm font-bold rounded-lg transition-all ${activeTab === 'keys' ? 'bg-white text-indigo-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Key Matrix</button>
                 <button onClick={() => setActiveTab('intelligence')} className={`flex-1 py-2.5 px-6 text-sm font-bold rounded-lg transition-all ${activeTab === 'intelligence' ? 'bg-white text-purple-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Intelligence</button>
+                <button onClick={() => setActiveTab('feedback')} className={`flex-1 py-2.5 px-6 text-sm font-bold rounded-lg transition-all ${activeTab === 'feedback' ? 'bg-white text-amber-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Feedback</button>
                 <button onClick={() => setActiveTab('config')} className={`flex-1 py-2.5 px-6 text-sm font-bold rounded-lg transition-all ${activeTab === 'config' ? 'bg-white text-emerald-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Protocols</button>
                 <button onClick={() => setActiveTab('announcements')} className={`flex-1 py-2.5 px-6 text-sm font-bold rounded-lg transition-all ${activeTab === 'announcements' ? 'bg-white text-indigo-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Broadcasts</button>
             </div>
@@ -1315,6 +1369,71 @@ const AdminDashboard: React.FC = () => {
                                     </div>
                                 )}
                             </div>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'feedback' && (
+                    <div className="p-10 animate-fade-in flex flex-col h-full">
+                        <div className="flex items-center justify-between mb-10">
+                            <div className="flex flex-col">
+                                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">User Feedback Matrix</h3>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mt-1">Direct Operator Communications</p>
+                            </div>
+                            <div className="bg-amber-50 border border-amber-100 px-4 py-2 rounded-xl flex items-center gap-3">
+                                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                                <span className="text-[10px] font-black text-amber-700 uppercase tracking-widest">{feedbacks.length} Reports Logged</span>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto pb-20">
+                            {feedbacks.length > 0 ? feedbacks.map((f) => (
+                                <div key={f.id} className="bg-white border-2 border-slate-100 rounded-[2rem] p-8 hover:border-amber-200 transition-all shadow-sm flex flex-col group relative">
+                                    <div className="flex justify-between items-start mb-6">
+                                        <div className="flex flex-col gap-2">
+                                            <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border w-max ${
+                                                f.type === 'bug' ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100'
+                                            }`}>
+                                                {f.type}
+                                            </span>
+                                            <span className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-tight">
+                                                REF_{f.id.slice(0, 8)}
+                                            </span>
+                                        </div>
+                                        <button 
+                                            onClick={() => handleDeleteFeedback(f.id)}
+                                            className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                                            title="Delete Feedback"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                        </button>
+                                    </div>
+
+                                    <div className="flex-grow mb-8">
+                                        <p className="text-sm font-medium text-slate-700 leading-relaxed italic">"{f.content}"</p>
+                                    </div>
+
+                                    <div className="mt-auto pt-6 border-t border-slate-50 flex flex-col gap-3">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Operator:</span>
+                                            <span className="text-[10px] font-bold text-slate-600 truncate max-w-[150px]">{f.profiles?.email || 'Unknown'}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Context Node:</span>
+                                            <span className="text-[10px] font-black text-indigo-500 uppercase tracking-tighter">{f.tool_id ? getToolName(f.tool_id) : 'Global'}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Timestamp:</span>
+                                            <span className="text-[10px] font-mono font-bold text-slate-400">{new Date(f.created_at).toLocaleDateString()}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )) : (
+                                <div className="col-span-full py-40 flex flex-col items-center justify-center grayscale opacity-30">
+                                    <svg className="w-20 h-20 mb-6 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
+                                    <p className="text-sm font-black uppercase tracking-[0.4em] text-slate-400">Feedback Matrix Clear</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}

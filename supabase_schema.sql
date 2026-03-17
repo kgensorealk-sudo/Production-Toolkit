@@ -206,6 +206,33 @@ TO authenticated
 USING (is_admin())
 WITH CHECK (is_admin());
 
+-- 15. FEEDBACK TABLE
+CREATE TABLE IF NOT EXISTS public.feedback (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES public.profiles(id),
+  tool_id TEXT, -- Optional, to track which tool feedback is from
+  type TEXT NOT NULL, -- 'bug' or 'feature'
+  content TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE public.feedback ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can insert own feedback" ON public.feedback;
+CREATE POLICY "Users can insert own feedback" ON public.feedback
+  FOR INSERT TO authenticated
+  WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Admins can view all feedback" ON public.feedback;
+CREATE POLICY "Admins can view all feedback" ON public.feedback
+  FOR SELECT TO authenticated
+  USING (is_admin());
+
+DROP POLICY IF EXISTS "Admins can delete feedback" ON public.feedback;
+CREATE POLICY "Admins can delete feedback" ON public.feedback
+  FOR DELETE TO authenticated
+  USING (is_admin());
+
 -- 14. REALTIME ENABLEMENT
 -- Ensure system_settings table is part of the realtime publication
 -- Note: This requires superuser privileges in a standard SQL editor.
