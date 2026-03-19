@@ -62,7 +62,9 @@ const CitationLinker: React.FC = () => {
             .replace(/\btables?\b/g, 'table')
             .replace(/\bschemes?\b/g, 'scheme')
             .replace(/\bboxes?\b/g, 'box')
-            .replace(/[\(\)\[\]\.,;]/g, ' ') 
+            .replace(/[\(\)\[\];]/g, ' ') 
+            .replace(/\.(?!\d)/g, ' ')
+            .replace(/,(?![a-z]\b)/gi, ' ')
             .replace(/\s+/g, ' ')
             .trim();
     };
@@ -73,13 +75,60 @@ const CitationLinker: React.FC = () => {
     };
 
     const extractYears = (text: string) => {
-        const matches = text.match(/\b(18|19|20)\d{2}[a-z]?\b/gi);
-        return matches ? matches.map(m => m.toLowerCase()) : [];
+        const results: string[] = [];
+        
+        // 1. Handle ranges like 2020-2022
+        const rangePattern = /\b((?:18|19|20)\d{2})[\-–—]((?:18|19|20)\d{2})\b/g;
+        let rangeMatch;
+        while ((rangeMatch = rangePattern.exec(text)) !== null) {
+            const start = parseInt(rangeMatch[1]);
+            const end = parseInt(rangeMatch[2]);
+            if (start <= end && end - start < 20) { // Safety check
+                for (let y = start; y <= end; y++) {
+                    results.push(y.toString());
+                }
+            }
+        }
+
+        // 2. Match 4-digit year + optional suffix, followed by optional comma/space separated suffixes
+        const yearPattern = /\b((?:18|19|20)\d{2})([a-z]?)((?:[\s,;&/]+[a-z])*)\b/gi;
+        let match;
+        
+        while ((match = yearPattern.exec(text)) !== null) {
+            const yearBase = match[1];
+            const firstSuffix = match[2];
+            const extraSuffixes = match[3];
+
+            const y1 = (yearBase + firstSuffix).toLowerCase();
+            if (!results.includes(y1)) results.push(y1);
+
+            if (extraSuffixes) {
+                const suffixes = extraSuffixes.split(/[\s,;&/]+/).map(s => s.trim()).filter(Boolean);
+                suffixes.forEach(s => {
+                    const yN = (yearBase + s).toLowerCase();
+                    if (!results.includes(yN)) results.push(yN);
+                });
+            }
+        }
+        return results;
     };
 
     const extractFirstName = (text: string) => {
         const clean = normalizeCitation(text);
-        return clean.split(/\s+/)[0] || '';
+        // Filter out common connectors, years, and short initials to get the actual first surname
+        const parts = clean.split(/\s+/)
+            .map(p => p.replace(/^[^\w]+|[^\w]+$/g, ''))
+            .filter(p => 
+                p && 
+                !['and', 'et', 'al'].includes(p) && 
+                !/^(18|19|20)\d{2}[a-z]?$/.test(p)
+            );
+        
+        // Prefer parts longer than 1 char (skip initials like 'C')
+        const longParts = parts.filter(p => p.length > 1);
+        if (longParts.length > 0) return longParts[0];
+        
+        return parts[0] || '';
     };
 
     const buildLines = (diffParts: Change[], isLeft: boolean) => {
@@ -201,11 +250,16 @@ const CitationLinker: React.FC = () => {
                         if (/^\d+$/.test(labelText)) {
                             labelMap.set(labelText, id);
                         } else {
-                            nameDateIndex.push({
-                                id,
-                                normalized: normalizeCitation(labelText),
-                                firstName: extractFirstName(labelText),
-                                year: extractYear(labelText)
+                            const firstName = extractFirstName(labelText);
+                            const years = extractYears(labelText);
+                            
+                            years.forEach(y => {
+                                nameDateIndex.push({
+                                    id,
+                                    normalized: normalizeCitation(labelText),
+                                    firstName,
+                                    year: y
+                                });
                             });
                         }
                     }
@@ -273,18 +327,20 @@ const CitationLinker: React.FC = () => {
                     let status: 'resolved' | 'failed' | 'ignored' = 'failed';
 
                     if (missingRefid && !isInterRef) {
-                        const detectedIds: string[] = [];
+                        const detectedIds = new Set<string>();
                         const normWhole = normalizeCitation(text);
-                        let wholeMatch = nameDateIndex.find(b => b.normalized === normWhole);
+                        const wholeMatches = nameDateIndex.filter(b => b.normalized === normWhole);
                         
-                        if (wholeMatch) {
-                            detectedIds.push(wholeMatch.id);
+                        if (wholeMatches.length > 0) {
+                            wholeMatches.forEach(m => detectedIds.add(m.id));
                         } else {
-                            const isNumeric = /^\s*\[?\s*\d+/.test(text);
-                            const parts = isNumeric ? text.split(/[,;]|\band\b/i) : text.split(/[;]|\band\b/i);
+                            const isNumeric = /^\s*\[?\s*\d+/.test(text) && !/\b(18|19|20)\d{2}\b/.test(text);
+                            const parts = isNumeric ? text.split(/[,;]|\band\b/i) : text.split(/;/);
 
                             parts.forEach(part => {
-                                const trimmed = part.replace(/[\[\]]/g, '').trim();
+                                // Resolve entities like &amp; before processing
+                                const resolvedPart = part.replace(/&amp;/g, 'and').replace(/&/g, 'and');
+                                const trimmed = resolvedPart.replace(/[\[\]]/g, '').trim();
                                 if (!trimmed) return;
 
                                 if (/[\-–—]/.test(trimmed) && /^\d+[\-–—]\d+$/.test(trimmed)) {
@@ -294,13 +350,13 @@ const CitationLinker: React.FC = () => {
                                     if (!isNaN(start) && !isNaN(end)) {
                                         for (let n = start; n <= end; n++) {
                                             const id = labelMap.get(n.toString());
-                                            if (id) detectedIds.push(id);
+                                            if (id) detectedIds.add(id);
                                         }
                                     }
                                 } 
                                 else if (/^\d+$/.test(trimmed)) {
                                     const id = labelMap.get(trimmed);
-                                    if (id) detectedIds.push(id);
+                                    if (id) detectedIds.add(id);
                                 }
                                 else {
                                     const normOrphan = normalizeCitation(trimmed);
@@ -308,28 +364,28 @@ const CitationLinker: React.FC = () => {
                                     // Check labelMap for direct matches (floats or specific labels)
                                     const directMatchId = labelMap.get(normOrphan);
                                     if (directMatchId) {
-                                        detectedIds.push(directMatchId);
+                                        detectedIds.add(directMatchId);
                                     } else {
                                         const orphanFirstName = extractFirstName(trimmed);
                                         const orphanYears = extractYears(trimmed);
 
-                                        let bibMatchWhole = nameDateIndex.find(b => b.normalized === normOrphan);
-                                        if (bibMatchWhole) {
-                                            detectedIds.push(bibMatchWhole.id);
+                                        const bibMatchesWhole = nameDateIndex.filter(b => b.normalized === normOrphan);
+                                        if (bibMatchesWhole.length > 0) {
+                                            bibMatchesWhole.forEach(m => detectedIds.add(m.id));
                                         } else if (orphanFirstName && orphanYears.length > 0) {
                                             orphanYears.forEach(year => {
-                                                const bibMatch = nameDateIndex.find(b => 
+                                                const matches = nameDateIndex.filter(b => 
                                                     b.firstName === orphanFirstName && 
                                                     b.year === year
                                                 );
-                                                if (bibMatch) detectedIds.push(bibMatch.id);
+                                                matches.forEach(m => detectedIds.add(m.id));
                                             });
                                         }
                                     }
                                 }
                             });
                         }
-                        mappedIds = detectedIds;
+                        mappedIds = Array.from(detectedIds);
                     }
 
                     const targetIsPlural = mappedIds.length > 1;

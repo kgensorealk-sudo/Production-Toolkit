@@ -21,9 +21,11 @@ import GrantTagger from './pages/GrantTagger';
 import IdAuditor from './pages/IdAuditor';
 import CommentReplacer from './pages/CommentReplacer';
 import CitationLinker from './pages/CitationLinker';
+import SectionAuditor from './pages/SectionAuditor';
 import Docs from './pages/Docs';
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
+import Experimental from './pages/Experimental';
 import AuthModal from './components/AuthModal';
 import InactivityTracker from './components/InactivityTracker';
 import { ToolId } from './types';
@@ -93,9 +95,9 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
     if (loading) return <LoadingOverlay message="Validating Session..." color="indigo" />;
     if (!session) return <Navigate to="/login" replace />;
     return (
-        <InactivityTracker>
+        <>
             {children}
-        </InactivityTracker>
+        </>
     );
 };
 
@@ -104,9 +106,9 @@ const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     if (loading) return <LoadingOverlay message="Checking Authority..." color="slate" />;
     if (!session || !isAdmin) return <Navigate to="/" replace />;
     return (
-        <InactivityTracker>
+        <>
             {children}
-        </InactivityTracker>
+        </>
     );
 };
 
@@ -115,34 +117,38 @@ const App: React.FC = () => {
         <ErrorBoundary>
             <SettingsProvider>
                 <AuthProvider>
-                    <HashRouter>
-                        <Routes>
-                            <Route path="/login" element={<Login />} />
-                            <Route path="/" element={<ProtectedRoute><Layout isLanding={true}><Landing /></Layout></ProtectedRoute>} />
-                            <Route path="/admin" element={<AdminRoute><Layout><AdminDashboard /></Layout></AdminRoute>} />
-                            <Route path="/dashboard" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />
-                            <Route path="/docs" element={<ProtectedRoute><Layout><Docs /></Layout></ProtectedRoute>} />
-                            
-                            <Route path="/tableBeautifier" element={<ProtectedRoute><Layout currentTool={ToolId.TABLE_BEAUTIFIER}><NodeAccessController toolId={ToolId.TABLE_BEAUTIFIER} displayName="Table XML Beautifier" mode="key-exclusive"><TableBeautifier /></NodeAccessController></Layout></ProtectedRoute>} />
-                            <Route path="/xmlRenumber" element={<ProtectedRoute><Layout currentTool={ToolId.XML_RENUMBER}><NodeAccessController toolId={ToolId.XML_RENUMBER} displayName="XML Normalizer" mode="key-allowed"><XmlRenumber /></NodeAccessController></Layout></ProtectedRoute>} />
-                            <Route path="/creditGenerator" element={<ProtectedRoute><Layout currentTool={ToolId.CREDIT_GENERATOR}><NodeAccessController toolId={ToolId.CREDIT_GENERATOR} displayName="CRediT Tagging" mode="key-allowed"><CreditGenerator /></NodeAccessController></Layout></ProtectedRoute>} />
-                            
-                            <Route path="/uncitedCleaner" element={<ProtectedRoute><Layout currentTool={ToolId.UNCITED_CLEANER}><NodeAccessController toolId={ToolId.UNCITED_CLEANER} displayName="Uncited Ref Cleaner" mode="subscription-only"><UncitedRefCleaner /></NodeAccessController></Layout></ProtectedRoute>} />
-                            <Route path="/otherRefScanner" element={<ProtectedRoute><Layout currentTool={ToolId.OTHER_REF_SCANNER}><NodeAccessController toolId={ToolId.OTHER_REF_SCANNER} displayName="Other-Ref Scanner" mode="subscription-only"><OtherRefScanner /></NodeAccessController></Layout></ProtectedRoute>} />
-                            <Route path="/quickDiff" element={<ProtectedRoute><Layout currentTool={ToolId.QUICK_DIFF}><NodeAccessController toolId={ToolId.QUICK_DIFF} displayName="Quick Text Diff" mode="subscription-only"><QuickDiff /></NodeAccessController></Layout></ProtectedRoute>} />
-                            <Route path="/tagCleaner" element={<ProtectedRoute><Layout currentTool={ToolId.TAG_CLEANER}><NodeAccessController toolId={ToolId.TAG_CLEANER} displayName="XML Tag Cleaner" mode="subscription-only"><TagCleaner /></NodeAccessController></Layout></ProtectedRoute>} />
-                            <Route path="/tableFixer" element={<ProtectedRoute><Layout currentTool={ToolId.TABLE_FIXER}><NodeAccessController toolId={ToolId.TABLE_FIXER} displayName="XML Table Fixer" mode="subscription-only"><TableFixer /></NodeAccessController></Layout></ProtectedRoute>} />
-                            <Route path="/highlightsGen" element={<ProtectedRoute><Layout currentTool={ToolId.HIGHLIGHTS_GEN}><NodeAccessController toolId={ToolId.HIGHLIGHTS_GEN} displayName="Article Highlights Gen" mode="subscription-only"><ArticleHighlights /></NodeAccessController></Layout></ProtectedRoute>} />
-                            <Route path="/viewSync" element={<ProtectedRoute><Layout currentTool={ToolId.VIEW_SYNC}><NodeAccessController toolId={ToolId.VIEW_SYNC} displayName="View Synchronizer" mode="subscription-only"><ViewSync /></NodeAccessController></Layout></ProtectedRoute>} />
-                            <Route path="/referenceGen" element={<ProtectedRoute><Layout currentTool={ToolId.REFERENCE_GEN}><NodeAccessController toolId={ToolId.REFERENCE_GEN} displayName="Reference Updater" mode="subscription-only"><ReferenceUpdater /></NodeAccessController></Layout></ProtectedRoute>} />
-                            <Route path="/refDupeCheck" element={<ProtectedRoute><Layout currentTool={ToolId.REF_DUPE_CHECK}><NodeAccessController toolId={ToolId.REF_DUPE_CHECK} displayName="Duplicate Ref Remover" mode="subscription-only"><ReferenceDupeChecker /></NodeAccessController></Layout></ProtectedRoute>} />
-                            <Route path="/refExtractor" element={<ProtectedRoute><Layout currentTool={ToolId.REF_EXTRACTOR}><NodeAccessController toolId={ToolId.REF_EXTRACTOR} displayName="Bibliography Extractor" mode="subscription-only"><ReferenceExtractor /></NodeAccessController></Layout></ProtectedRoute>} />
-                            <Route path="/grantTagger" element={<ProtectedRoute><Layout currentTool={ToolId.GRANT_TAGGER}><NodeAccessController toolId={ToolId.GRANT_TAGGER} displayName="Grant Tagger" mode="subscription-only"><GrantTagger /></NodeAccessController></Layout></ProtectedRoute>} />
-                            <Route path="/idAuditor" element={<ProtectedRoute><Layout currentTool={ToolId.ID_AUDITOR}><NodeAccessController toolId={ToolId.ID_AUDITOR} displayName="ID Prefix Auditor" mode="subscription-only"><IdAuditor /></NodeAccessController></Layout></ProtectedRoute>} />
-                            <Route path="/commentReplacer" element={<ProtectedRoute><Layout currentTool={ToolId.COMMENT_REPLACER}><NodeAccessController toolId={ToolId.COMMENT_REPLACER} displayName="Comment Replacer" mode="subscription-only"><CommentReplacer /></NodeAccessController></Layout></ProtectedRoute>} />
-                            <Route path="/citationLinker" element={<ProtectedRoute><Layout currentTool={ToolId.CITATION_LINKER}><NodeAccessController toolId={ToolId.CITATION_LINKER} displayName="Citation Linker Pro" mode="key-exclusive"><CitationLinker /></NodeAccessController></Layout></ProtectedRoute>} />
-                        </Routes>
-                    </HashRouter>
+                    <InactivityTracker>
+                        <HashRouter>
+                            <Routes>
+                                <Route path="/login" element={<Login />} />
+                                <Route path="/" element={<ProtectedRoute><Layout isLanding={true}><Landing /></Layout></ProtectedRoute>} />
+                                <Route path="/admin" element={<AdminRoute><Layout><AdminDashboard /></Layout></AdminRoute>} />
+                                <Route path="/dashboard" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />
+                                <Route path="/experimental" element={<ProtectedRoute><Layout><Experimental /></Layout></ProtectedRoute>} />
+                                <Route path="/docs" element={<ProtectedRoute><Layout><Docs /></Layout></ProtectedRoute>} />
+                                
+                                <Route path="/tableBeautifier" element={<ProtectedRoute><Layout currentTool={ToolId.TABLE_BEAUTIFIER}><NodeAccessController toolId={ToolId.TABLE_BEAUTIFIER} displayName="Table XML Beautifier" mode="key-exclusive"><TableBeautifier /></NodeAccessController></Layout></ProtectedRoute>} />
+                                <Route path="/xmlRenumber" element={<ProtectedRoute><Layout currentTool={ToolId.XML_RENUMBER}><NodeAccessController toolId={ToolId.XML_RENUMBER} displayName="XML Normalizer" mode="key-allowed"><XmlRenumber /></NodeAccessController></Layout></ProtectedRoute>} />
+                                <Route path="/creditGenerator" element={<ProtectedRoute><Layout currentTool={ToolId.CREDIT_GENERATOR}><NodeAccessController toolId={ToolId.CREDIT_GENERATOR} displayName="CRediT Tagging" mode="key-allowed"><CreditGenerator /></NodeAccessController></Layout></ProtectedRoute>} />
+                                
+                                <Route path="/uncitedCleaner" element={<ProtectedRoute><Layout currentTool={ToolId.UNCITED_CLEANER}><NodeAccessController toolId={ToolId.UNCITED_CLEANER} displayName="Uncited Ref Cleaner" mode="subscription-only"><UncitedRefCleaner /></NodeAccessController></Layout></ProtectedRoute>} />
+                                <Route path="/otherRefScanner" element={<ProtectedRoute><Layout currentTool={ToolId.OTHER_REF_SCANNER}><NodeAccessController toolId={ToolId.OTHER_REF_SCANNER} displayName="Other-Ref Scanner" mode="subscription-only"><OtherRefScanner /></NodeAccessController></Layout></ProtectedRoute>} />
+                                <Route path="/quickDiff" element={<ProtectedRoute><Layout currentTool={ToolId.QUICK_DIFF}><NodeAccessController toolId={ToolId.QUICK_DIFF} displayName="Quick Text Diff" mode="subscription-only"><QuickDiff /></NodeAccessController></Layout></ProtectedRoute>} />
+                                <Route path="/tagCleaner" element={<ProtectedRoute><Layout currentTool={ToolId.TAG_CLEANER}><NodeAccessController toolId={ToolId.TAG_CLEANER} displayName="XML Tag Cleaner" mode="subscription-only"><TagCleaner /></NodeAccessController></Layout></ProtectedRoute>} />
+                                <Route path="/tableFixer" element={<ProtectedRoute><Layout currentTool={ToolId.TABLE_FIXER}><NodeAccessController toolId={ToolId.TABLE_FIXER} displayName="XML Table Fixer" mode="subscription-only"><TableFixer /></NodeAccessController></Layout></ProtectedRoute>} />
+                                <Route path="/highlightsGen" element={<ProtectedRoute><Layout currentTool={ToolId.HIGHLIGHTS_GEN}><NodeAccessController toolId={ToolId.HIGHLIGHTS_GEN} displayName="Article Highlights Gen" mode="subscription-only"><ArticleHighlights /></NodeAccessController></Layout></ProtectedRoute>} />
+                                <Route path="/viewSync" element={<ProtectedRoute><Layout currentTool={ToolId.VIEW_SYNC}><NodeAccessController toolId={ToolId.VIEW_SYNC} displayName="View Synchronizer" mode="subscription-only"><ViewSync /></NodeAccessController></Layout></ProtectedRoute>} />
+                                <Route path="/referenceGen" element={<ProtectedRoute><Layout currentTool={ToolId.REFERENCE_GEN}><NodeAccessController toolId={ToolId.REFERENCE_GEN} displayName="Reference Updater" mode="subscription-only"><ReferenceUpdater /></NodeAccessController></Layout></ProtectedRoute>} />
+                                <Route path="/refDupeCheck" element={<ProtectedRoute><Layout currentTool={ToolId.REF_DUPE_CHECK}><NodeAccessController toolId={ToolId.REF_DUPE_CHECK} displayName="Duplicate Ref Remover" mode="subscription-only"><ReferenceDupeChecker /></NodeAccessController></Layout></ProtectedRoute>} />
+                                <Route path="/refExtractor" element={<ProtectedRoute><Layout currentTool={ToolId.REF_EXTRACTOR}><NodeAccessController toolId={ToolId.REF_EXTRACTOR} displayName="Bibliography Extractor" mode="subscription-only"><ReferenceExtractor /></NodeAccessController></Layout></ProtectedRoute>} />
+                                <Route path="/grantTagger" element={<ProtectedRoute><Layout currentTool={ToolId.GRANT_TAGGER}><NodeAccessController toolId={ToolId.GRANT_TAGGER} displayName="Grant Tagger" mode="subscription-only"><GrantTagger /></NodeAccessController></Layout></ProtectedRoute>} />
+                                <Route path="/idAuditor" element={<ProtectedRoute><Layout currentTool={ToolId.ID_AUDITOR}><NodeAccessController toolId={ToolId.ID_AUDITOR} displayName="ID Prefix Auditor" mode="subscription-only"><IdAuditor /></NodeAccessController></Layout></ProtectedRoute>} />
+                                <Route path="/commentReplacer" element={<ProtectedRoute><Layout currentTool={ToolId.COMMENT_REPLACER}><NodeAccessController toolId={ToolId.COMMENT_REPLACER} displayName="Comment Replacer" mode="subscription-only"><CommentReplacer /></NodeAccessController></Layout></ProtectedRoute>} />
+                                <Route path="/citationLinker" element={<ProtectedRoute><Layout currentTool={ToolId.CITATION_LINKER}><NodeAccessController toolId={ToolId.CITATION_LINKER} displayName="Citation Linker Pro" mode="key-exclusive"><CitationLinker /></NodeAccessController></Layout></ProtectedRoute>} />
+                                <Route path="/sectionAuditor" element={<ProtectedRoute><Layout currentTool={ToolId.SECTION_AUDITOR}><NodeAccessController toolId={ToolId.SECTION_AUDITOR} displayName="Section Auditor" mode="subscription-only"><SectionAuditor /></NodeAccessController></Layout></ProtectedRoute>} />
+                            </Routes>
+                        </HashRouter>
+                    </InactivityTracker>
                 </AuthProvider>
             </SettingsProvider>
         </ErrorBoundary>

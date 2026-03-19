@@ -11,6 +11,17 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.8.0',
+    date: '2026-03-19',
+    title: 'Experimental Protocols & Toolkit Reorganization',
+    type: 'minor',
+    changes: [
+      { type: 'feature', description: 'New "Experimental Protocols" tab for sandbox modules and non-official tools.' },
+      { type: 'improvement', description: 'Relocated Comment Replacer and Section Auditor to Experimental section.' },
+      { type: 'improvement', description: 'Updated application versioning to v1.8.0.' }
+    ]
+  },
+  {
     version: '1.7.0',
     date: '2026-03-10',
     title: 'Table Beautifier Evolution & Toolkit Refinement',

@@ -54,9 +54,10 @@ interface ToolCardProps {
     lockType: 'key' | 'subscription' | 'none';
     isFree: boolean;
     expiry?: string;
+    isExperimental?: boolean;
 }
 
-const ToolCard: React.FC<ToolCardProps> = ({ id, title, desc, iconBg, iconText, borderColor, Icon, onClick, onTipClick, onPinClick, isPinned, delay, lockType, isFree, expiry }) => {
+const ToolCard: React.FC<ToolCardProps> = ({ id, title, desc, iconBg, iconText, borderColor, Icon, onClick, onTipClick, onPinClick, isPinned, delay, lockType, isFree, expiry, isExperimental }) => {
     const isKeyExclusive = id === ToolId.TABLE_BEAUTIFIER || id === ToolId.CITATION_LINKER;
     const isLocked = lockType !== 'none' && !isFree;
     
@@ -127,6 +128,11 @@ const ToolCard: React.FC<ToolCardProps> = ({ id, title, desc, iconBg, iconText, 
                 <div className="flex flex-col flex-grow">
                     <div className="flex items-center gap-2 mb-2">
                         <h3 className={`text-lg font-black transition-colors uppercase tracking-tight ${isLocked ? 'text-slate-400' : 'text-slate-800 group-hover:text-indigo-700'}`}>{title}</h3>
+                        {isExperimental && (
+                            <span className="text-[8px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 uppercase tracking-widest">
+                                Experimental
+                            </span>
+                        )}
                         {isFree && (
                             <span className="text-[8px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 uppercase tracking-widest">
                                 {timeLeft || 'Free'}
@@ -212,7 +218,6 @@ const Dashboard: React.FC = () => {
         { id: ToolId.XML_RENUMBER, title: "XML Normalizer", desc: "Automatically renumbers bibliography citations and updates all cross-references.", iconBg: "bg-blue-50", iconText: "text-blue-600", borderColor: "bg-blue-500", Icon: Database },
         { id: ToolId.REF_EXTRACTOR, title: "Bibliography Extractor", desc: "Pure-text bibliography isolation with automated punctuation and spacing normalization for Word.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: FileSearch },
         { id: ToolId.GRANT_TAGGER, title: "Grant Tagger", desc: "Identify and tag grant sponsors and numbers within funding statements with XML cross-linking.", iconBg: "bg-emerald-50", iconText: "text-emerald-600", borderColor: "bg-emerald-500", Icon: Tags },
-        { id: ToolId.COMMENT_REPLACER, title: "Comment Replacer", desc: "Extract and clean reference replacements buried in XML editorial comment tags.", iconBg: "bg-amber-50", iconText: "text-amber-600", borderColor: "bg-amber-500", Icon: SearchCode },
         { id: ToolId.UNCITED_CLEANER, title: "Uncited Ref Cleaner", desc: "Detect references with no body citations. Perform bulk purging while preserving document integrity.", iconBg: "bg-rose-50", iconText: "text-rose-600", borderColor: "bg-rose-600", Icon: Eraser },
         { id: ToolId.ID_AUDITOR, title: "ID Prefix Auditor", desc: "Audit and normalize ID sequences in references. Fixes non-standard prefixes while maintaining internal document links.", iconBg: "bg-violet-50", iconText: "text-violet-600", borderColor: "bg-violet-500", Icon: ShieldAlert },
         { id: ToolId.CITATION_LINKER, title: "Citation Linker Pro", desc: "Auto-scans orphan citation tags and links them to bibliography IDs based on text content.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: Link },
@@ -237,7 +242,7 @@ const Dashboard: React.FC = () => {
     const sections = useMemo(() => {
         const filtered = filteredTools;
         const featured = filtered.filter(t => !pinnedTools.includes(t.id) && freeTools.includes(t.id) && (t.id === ToolId.TABLE_BEAUTIFIER || t.id === ToolId.CITATION_LINKER));
-        const pinned = filtered.filter(t => pinnedTools.includes(t.id));
+        const pinned = filteredTools.filter(t => pinnedTools.includes(t.id));
         const active = filtered.filter(t => !pinnedTools.includes(t.id) && !featured.some(f => f.id === t.id) && (freeTools.includes(t.id) || getLockType(t.id) === 'none'));
         const locked = filtered.filter(t => !pinnedTools.includes(t.id) && !featured.some(f => f.id === t.id) && !freeTools.includes(t.id) && getLockType(t.id) !== 'none');
         return { featured, pinned, active, locked };
@@ -305,7 +310,7 @@ const Dashboard: React.FC = () => {
                             className="flex items-center gap-2 px-5 py-3 rounded-2xl border bg-white hover:bg-slate-50 border-slate-200 text-slate-500 transition-all active:scale-95 shadow-sm text-[10px] font-black uppercase tracking-widest"
                         >
                             <History size={14} />
-                            v1.7.0
+                            v1.8.0
                         </button>
                         <button 
                             onClick={() => setHardwareAccelerated(!isHardwareAccelerated)}

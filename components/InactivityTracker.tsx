@@ -47,7 +47,12 @@ const InactivityTracker: React.FC<{ children: React.ReactNode }> = ({ children }
             'keypress',
             'scroll',
             'touchstart',
-            'click'
+            'click',
+            'wheel',
+            'pointerdown',
+            'pointermove',
+            'input',
+            'focus'
         ];
 
         resetTimer();
@@ -58,14 +63,16 @@ const InactivityTracker: React.FC<{ children: React.ReactNode }> = ({ children }
             resetTimer();
         };
 
+        // Use capture: true to ensure we catch events even if children stop propagation
+        // This is critical for scroll events which don't bubble
         events.forEach(event => {
-            window.addEventListener(event, handleActivity);
+            window.addEventListener(event, handleActivity, { capture: true, passive: true });
         });
 
         return () => {
             clearTimers();
             events.forEach(event => {
-                window.removeEventListener(event, handleActivity);
+                window.removeEventListener(event, handleActivity, { capture: true });
             });
         };
     }, [resetTimer, clearTimers]);

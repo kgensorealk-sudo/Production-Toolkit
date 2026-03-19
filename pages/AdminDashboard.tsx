@@ -695,7 +695,7 @@ const AdminDashboard: React.FC = () => {
                         className="bg-white border border-slate-200 px-6 py-2.5 rounded-xl text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] shadow-sm hover:bg-slate-50 transition-all flex items-center gap-3"
                     >
                         <History size={14} />
-                        v1.7.0
+                        v1.8.0
                     </button>
                     <button 
                         onClick={systemHardReset}

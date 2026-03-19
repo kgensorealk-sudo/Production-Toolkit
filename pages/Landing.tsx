@@ -136,7 +136,7 @@ const Landing: React.FC = () => {
                                 className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] hover:bg-indigo-100 transition-colors"
                              >
                                 <History size={10} />
-                                v1.7.0 Stable Release
+                                v1.8.0 Stable Release
                              </motion.button>
                              <h1 className="text-6xl lg:text-8xl font-black text-slate-900 tracking-tighter leading-[0.85] uppercase">
                                 Precision <br/>

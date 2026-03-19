@@ -203,6 +203,16 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                                 </button>
                             )}
 
+                            {!isLanding && !isExiting && (
+                                <button 
+                                    onClick={() => navigate('/experimental')} 
+                                    className={`p-2 rounded-xl transition-all ${location.pathname === '/experimental' ? 'bg-white text-amber-600 shadow-sm border border-slate-200/50' : 'text-slate-400 hover:text-amber-600'}`}
+                                    title="Experimental Protocols"
+                                >
+                                    <FlaskConical size={18} />
+                                </button>
+                            )}
+
                             {isAdmin && !isExiting && (
                                 <button 
                                     onClick={() => navigate('/admin')} 
@@ -270,7 +280,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                             <div className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-amber-500'}`}></div>
                             Status: {isOnline ? 'Synchronized' : 'Offline Mode'}
                         </span>
-                        <span>v1.7.0</span>
+                        <span>v1.8.0</span>
                     </div>
                 </div>
             </footer>
