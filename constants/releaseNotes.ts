@@ -17,7 +17,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     type: 'minor',
     changes: [
       { type: 'feature', description: 'New "Experimental Protocols" tab for sandbox modules and non-official tools.' },
-      { type: 'improvement', description: 'Relocated Comment Replacer and Section Auditor to Experimental section.' },
+      { type: 'improvement', description: 'Relocated Comment Replacer, Section Auditor, and Ref Dupe Checker to Experimental section.' },
       { type: 'improvement', description: 'Updated application versioning to v1.8.0.' }
     ]
   },

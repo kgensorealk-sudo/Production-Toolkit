@@ -20,7 +20,8 @@ import {
     Eraser,
     Table,
     Sparkles,
-    RefreshCw
+    RefreshCw,
+    Hash
 } from 'lucide-react';
 import { ToolId } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -172,7 +173,9 @@ const Experimental: React.FC = () => {
 
     const EXPERIMENTAL_TOOLS = [
         { id: ToolId.COMMENT_REPLACER, title: "Comment Replacer", desc: "Extract and clean reference replacements buried in XML editorial comment tags.", iconBg: "bg-amber-50", iconText: "text-amber-600", borderColor: "bg-amber-500", Icon: SearchCode, isExperimental: true },
-        { id: ToolId.SECTION_AUDITOR, title: "Section Auditor", desc: "Identify and validate section labels, titles, and nesting levels within the XML structure.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: Database, isExperimental: true }
+        { id: ToolId.SECTION_AUDITOR, title: "Section Auditor", desc: "Identify and validate section labels, titles, and nesting levels within the XML structure.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: Database, isExperimental: true },
+        { id: ToolId.REF_DUPE_CHECK, title: "Ref Dupe Checker", desc: "Find and merge citations with similar titles. Auto-relinks references to the kept item.", iconBg: "bg-rose-50", iconText: "text-rose-600", borderColor: "bg-rose-500", Icon: GitCompare, isExperimental: true },
+        { id: ToolId.AFFILIATION_SEQUENCER, title: "Affiliation Sequencer", desc: "Re-maps affiliation IDs and labels to sequential order while updating cross-references.", iconBg: "bg-emerald-50", iconText: "text-emerald-600", borderColor: "bg-emerald-500", Icon: Hash, isExperimental: true }
     ];
 
     const filteredTools = useMemo(() => {
