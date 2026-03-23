@@ -95,9 +95,16 @@ const QuickDiff: React.FC = () => {
 
     const renderRows = (data: any[]) => {
         let localChangeCount = 0;
+        let currentBlockIdx = -1;
         return data.map((row: any) => {
             const { id, type, lContent, rContent, lNum, rNum, isFirstInBlock } = row;
             
+            if (isFirstInBlock) {
+                currentBlockIdx = localChangeCount++;
+            } else if (type === 'equal') {
+                currentBlockIdx = -1;
+            }
+
             let lClass = '';
             let rClass = '';
             let lNumClass = 'bg-slate-50'; 
@@ -121,15 +128,14 @@ const QuickDiff: React.FC = () => {
             }
 
             const isChange = type !== 'equal';
-            const changeIndex = isFirstInBlock ? localChangeCount++ : -1;
-            const currentBlockIndex = isFirstInBlock ? localChangeCount - 1 : -1;
 
             return (
                 <tr 
                     key={id} 
-                    className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${isChange && currentChangeIndex === (isFirstInBlock ? currentBlockIndex : -1) ? 'bg-orange-50/50 ring-1 ring-orange-200 ring-inset z-10' : ''}`}
+                    className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
                     data-change-row={isChange ? 'true' : undefined}
-                    data-change-index={isFirstInBlock ? currentBlockIndex : undefined}
+                    data-change-index={isFirstInBlock ? currentBlockIdx : undefined}
+                    data-change-index-group={isChange ? currentBlockIdx : undefined}
                 >
                     <td className={`w-12 text-right text-xs text-slate-500 p-1 border-r border-slate-200 select-none font-mono ${lNumClass}`}>{lNum}</td>
                     <td className={`p-1 font-mono text-sm text-slate-700 whitespace-pre-wrap break-words leading-tight ${lClass}`} dangerouslySetInnerHTML={{__html: lContent || ''}}></td>
@@ -140,7 +146,21 @@ const QuickDiff: React.FC = () => {
         });
     };
 
-    const diffRows = React.useMemo(() => renderRows(rowsData), [rowsData, currentChangeIndex]);
+    const diffRows = React.useMemo(() => renderRows(rowsData), [rowsData]);
+
+    useEffect(() => {
+        if (!diffContainerRef.current) return;
+        
+        // Remove old highlights
+        const oldHighlights = diffContainerRef.current.querySelectorAll('.active-change-highlight');
+        oldHighlights.forEach(el => el.classList.remove('active-change-highlight', 'bg-orange-50/50', 'ring-1', 'ring-orange-200', 'ring-inset', 'z-10'));
+
+        if (currentChangeIndex === -1) return;
+
+        // Add new highlights
+        const newHighlights = diffContainerRef.current.querySelectorAll(`[data-change-index-group="${currentChangeIndex}"]`);
+        newHighlights.forEach(el => el.classList.add('active-change-highlight', 'bg-orange-50/50', 'ring-1', 'ring-orange-200', 'ring-inset', 'z-10'));
+    }, [currentChangeIndex, rowsData]);
 
     const runDiff = () => {
         if (!origText && !changedText) {
@@ -259,7 +279,7 @@ const QuickDiff: React.FC = () => {
                 setCurrentChangeIndex(-1);
                 setShowResults(true);
                 setIsLoading(false);
-            }, 800);
+            }, 50);
         }
     };
 

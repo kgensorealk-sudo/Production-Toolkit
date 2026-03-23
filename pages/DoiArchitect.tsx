@@ -409,14 +409,15 @@ const DOIArchitect: React.FC = () => {
                 if (isChange && r === 0) {
                     localChangeCount++;
                 }
-                const currentBlockIndex = localChangeCount - 1;
+                const currentBlockIdx = isChange ? localChangeCount - 1 : -1;
 
                 rows.push(
                     <tr 
                         key={`${i}-${r}`} 
-                        className={`border-b border-slate-100 hover:bg-slate-50/50 transition-colors group ${isChange && currentChangeIndex === currentBlockIndex ? 'bg-indigo-50/50 ring-1 ring-indigo-200 ring-inset z-10' : ''}`}
+                        className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors group"
                         data-change-row={isChange ? 'true' : undefined}
-                        data-change-index={isChange && r === 0 ? currentBlockIndex : undefined}
+                        data-change-index={isChange && r === 0 ? currentBlockIdx : undefined}
+                        data-change-index-group={isChange ? currentBlockIdx : undefined}
                     >
                         <td className={`w-12 text-right text-[10px] font-medium p-2 border-r border-slate-100 select-none font-mono transition-colors ${lNumClass}`}>
                             {lNum}
@@ -436,6 +437,20 @@ const DOIArchitect: React.FC = () => {
         }
         return { rows, count: localChangeCount };
     }, [input, output]);
+
+    React.useEffect(() => {
+        if (!diffContainerRef.current) return;
+        
+        // Remove old highlights
+        const oldHighlights = diffContainerRef.current.querySelectorAll('.active-change-highlight');
+        oldHighlights.forEach(el => el.classList.remove('active-change-highlight', 'bg-indigo-50/50', 'ring-1', 'ring-indigo-200', 'ring-inset', 'z-10'));
+
+        if (currentChangeIndex === -1) return;
+
+        // Add new highlights
+        const newHighlights = diffContainerRef.current.querySelectorAll(`[data-change-index-group="${currentChangeIndex}"]`);
+        newHighlights.forEach(el => el.classList.add('active-change-highlight', 'bg-indigo-50/50', 'ring-1', 'ring-indigo-200', 'ring-inset', 'z-10'));
+    }, [currentChangeIndex, diffRows]);
 
     const renderDiff = () => {
         return (
