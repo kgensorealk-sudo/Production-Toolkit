@@ -5,7 +5,7 @@ import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 import { useSettings } from '../contexts/SettingsContext';
-import { Cpu } from 'lucide-react';
+import { Cpu, ChevronDown, ChevronUp } from 'lucide-react';
 
 const QuickDiff: React.FC = () => {
     const { isHardwareAccelerated } = useSettings();
@@ -13,10 +13,13 @@ const QuickDiff: React.FC = () => {
     const [changedText, setChangedText] = useState('');
     const [showResults, setShowResults] = useState(false);
     const [diffStats, setDiffStats] = useState('');
-    const [diffRows, setDiffRows] = useState<React.ReactNode[]>([]);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [currentChangeIndex, setCurrentChangeIndex] = useState(-1);
+    const [changeCount, setChangeCount] = useState(0);
+    const [rowsData, setRowsData] = useState<any[]>([]);
     const workerRef = useRef<Worker | null>(null);
+    const diffContainerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         return () => {
@@ -64,9 +67,36 @@ const QuickDiff: React.FC = () => {
         return lines;
     };
 
-    const renderRows = (rowsData: any[]) => {
-        return rowsData.map((row: any) => {
-            const { id, type, lContent, rContent, lNum, rNum } = row;
+    const scrollToChange = (direction: 'next' | 'prev') => {
+        if (!diffContainerRef.current) return;
+        const changeRows = diffContainerRef.current.querySelectorAll('[data-change-row="true"][data-change-index]');
+        if (changeRows.length === 0) return;
+
+        let nextIndex = currentChangeIndex;
+
+        if (direction === 'next') {
+            if (currentChangeIndex === changeRows.length - 1) {
+                setToast({ msg: 'End of changes reached. Nothing follows.', type: 'warn' });
+                return;
+            }
+            nextIndex = currentChangeIndex + 1;
+        } else {
+            if (currentChangeIndex <= 0) {
+                setToast({ msg: 'Start of changes reached. No previous changes.', type: 'warn' });
+                return;
+            }
+            nextIndex = currentChangeIndex - 1;
+        }
+
+        const targetRow = changeRows[nextIndex] as HTMLElement;
+        targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setCurrentChangeIndex(nextIndex);
+    };
+
+    const renderRows = (data: any[]) => {
+        let localChangeCount = 0;
+        return data.map((row: any) => {
+            const { id, type, lContent, rContent, lNum, rNum, isFirstInBlock } = row;
             
             let lClass = '';
             let rClass = '';
@@ -90,8 +120,17 @@ const QuickDiff: React.FC = () => {
                 }
             }
 
+            const isChange = type !== 'equal';
+            const changeIndex = isFirstInBlock ? localChangeCount++ : -1;
+            const currentBlockIndex = isFirstInBlock ? localChangeCount - 1 : -1;
+
             return (
-                <tr key={id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                <tr 
+                    key={id} 
+                    className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${isChange && currentChangeIndex === (isFirstInBlock ? currentBlockIndex : -1) ? 'bg-orange-50/50 ring-1 ring-orange-200 ring-inset z-10' : ''}`}
+                    data-change-row={isChange ? 'true' : undefined}
+                    data-change-index={isFirstInBlock ? currentBlockIndex : undefined}
+                >
                     <td className={`w-12 text-right text-xs text-slate-500 p-1 border-r border-slate-200 select-none font-mono ${lNumClass}`}>{lNum}</td>
                     <td className={`p-1 font-mono text-sm text-slate-700 whitespace-pre-wrap break-words leading-tight ${lClass}`} dangerouslySetInnerHTML={{__html: lContent || ''}}></td>
                     <td className={`w-12 text-right text-xs text-slate-500 p-1 border-r border-slate-200 border-l select-none font-mono ${rNumClass}`}>{rNum}</td>
@@ -100,6 +139,8 @@ const QuickDiff: React.FC = () => {
             );
         });
     };
+
+    const diffRows = React.useMemo(() => renderRows(rowsData), [rowsData, currentChangeIndex]);
 
     const runDiff = () => {
         if (!origText && !changedText) {
@@ -115,14 +156,20 @@ const QuickDiff: React.FC = () => {
             workerRef.current = new Worker(new URL('../utils/diffWorker.ts', import.meta.url), { type: 'module' });
             
             workerRef.current.onmessage = (e) => {
-                const { stats, rowsData, error } = e.data;
+                const { stats, rowsData: incomingRows, error } = e.data;
                 if (error) {
                     setToast({ msg: `Worker Error: ${error}`, type: 'error' });
                     setIsLoading(false);
                     return;
                 }
                 setDiffStats(stats);
-                setDiffRows(renderRows(rowsData));
+                setRowsData(incomingRows);
+                
+                let count = 0;
+                incomingRows.forEach((r: any) => { if (r.type !== 'equal' && r.isFirstInBlock) count++; });
+                setChangeCount(count);
+                setCurrentChangeIndex(-1);
+
                 setShowResults(true);
                 setIsLoading(false);
             };
@@ -138,7 +185,7 @@ const QuickDiff: React.FC = () => {
                 });
                 setDiffStats(`${added} added, ${deleted} removed`);
 
-                // Build Rows
+                let localChangeCount = 0;
                 let rows: any[] = [];
                 let leftLineNum = 1;
                 let rightLineNum = 1;
@@ -192,17 +239,24 @@ const QuickDiff: React.FC = () => {
                         const lNum = lContent !== undefined ? leftLineNum++ : '';
                         const rNum = rContent !== undefined ? rightLineNum++ : '';
                         
+                        const isChange = type !== 'equal';
+                        const isFirstInBlock = isChange && r === 0;
+                        if (isFirstInBlock) localChangeCount++;
+
                         rows.push({
                             id: `${i}-${r}`,
                             type,
                             lContent,
                             rContent,
                             lNum,
-                            rNum
+                            rNum,
+                            isFirstInBlock
                         });
                     }
                 }
-                setDiffRows(renderRows(rows));
+                setRowsData(rows);
+                setChangeCount(localChangeCount);
+                setCurrentChangeIndex(-1);
                 setShowResults(true);
                 setIsLoading(false);
             }, 800);
@@ -265,7 +319,7 @@ const QuickDiff: React.FC = () => {
                 </div>
             ) : (
                 <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm bg-white animate-fade-in ring-1 ring-slate-900/5">
-                     <div className="bg-slate-50 border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-10 backdrop-blur-md bg-slate-50/90">
+                    <div className="bg-slate-50 border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-10 backdrop-blur-md bg-slate-50/90">
                         <div className="flex items-center gap-3">
                             <span className="text-sm font-bold text-slate-700">Comparison Result</span>
                             <span className="text-xs font-mono font-medium text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200 shadow-sm">{diffStats}</span>
@@ -275,9 +329,30 @@ const QuickDiff: React.FC = () => {
                                     Accelerated
                                 </span>
                             )}
+                            {changeCount > 0 && (
+                                <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-slate-200 ml-2">
+                                    <button 
+                                        onClick={() => scrollToChange('prev')}
+                                        className="p-1 text-slate-500 hover:text-orange-600 hover:bg-slate-50 rounded transition-all"
+                                        title="Previous Change"
+                                    >
+                                        <ChevronUp className="w-3.5 h-3.5" />
+                                    </button>
+                                    <span className="text-[9px] font-bold text-slate-500 px-1 min-w-[3rem] text-center">
+                                        {changeCount > 0 ? (currentChangeIndex === -1 ? 0 : currentChangeIndex + 1) : 0} / {changeCount}
+                                    </span>
+                                    <button 
+                                        onClick={() => scrollToChange('next')}
+                                        className="p-1 text-slate-500 hover:text-orange-600 hover:bg-slate-50 rounded transition-all"
+                                        title="Next Change"
+                                    >
+                                        <ChevronDown className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     </div>
-                    <div className="max-h-[70vh] overflow-auto custom-scrollbar">
+                    <div ref={diffContainerRef} className="max-h-[70vh] overflow-auto custom-scrollbar">
                         <table className="w-full text-sm font-mono border-collapse table-fixed bg-white">
                             <colgroup>
                                 <col className="w-12 border-r border-slate-200" />

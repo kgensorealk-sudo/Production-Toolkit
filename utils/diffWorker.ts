@@ -101,6 +101,7 @@ self.onmessage = (e: MessageEvent) => {
                  rightLines = [...leftLines];
             }
 
+            const isChange = type !== 'equal';
             const maxRows = Math.max(leftLines.length, rightLines.length);
             for (let r = 0; r < maxRows; r++) {
                  const lContent = leftLines[r];
@@ -114,7 +115,8 @@ self.onmessage = (e: MessageEvent) => {
                      lContent,
                      rContent,
                      lNum,
-                     rNum
+                     rNum,
+                     isFirstInBlock: isChange && r === 0
                  });
             }
         }

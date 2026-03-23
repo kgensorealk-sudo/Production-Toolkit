@@ -23,6 +23,7 @@ import CommentReplacer from './pages/CommentReplacer';
 import CitationLinker from './pages/CitationLinker';
 import SectionAuditor from './pages/SectionAuditor';
 import AffiliationSequencer from './pages/AffiliationSequencer';
+import DoiArchitect from './pages/DoiArchitect';
 import Docs from './pages/Docs';
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
@@ -148,6 +149,7 @@ const App: React.FC = () => {
                                 <Route path="/citationLinker" element={<ProtectedRoute><Layout currentTool={ToolId.CITATION_LINKER}><NodeAccessController toolId={ToolId.CITATION_LINKER} displayName="Citation Linker Pro" mode="key-exclusive"><CitationLinker /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/sectionAuditor" element={<ProtectedRoute><Layout currentTool={ToolId.SECTION_AUDITOR}><NodeAccessController toolId={ToolId.SECTION_AUDITOR} displayName="Section Auditor" mode="subscription-only"><SectionAuditor /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/affiliationSequencer" element={<ProtectedRoute><Layout currentTool={ToolId.AFFILIATION_SEQUENCER}><NodeAccessController toolId={ToolId.AFFILIATION_SEQUENCER} displayName="Affiliation Sequencer" mode="subscription-only"><AffiliationSequencer /></NodeAccessController></Layout></ProtectedRoute>} />
+                                <Route path="/doiArchitect" element={<ProtectedRoute><Layout currentTool={ToolId.DOI_ARCHITECT}><NodeAccessController toolId={ToolId.DOI_ARCHITECT} displayName="DOI Architect" mode="subscription-only"><DoiArchitect /></NodeAccessController></Layout></ProtectedRoute>} />
                             </Routes>
                         </HashRouter>
                     </InactivityTracker>
