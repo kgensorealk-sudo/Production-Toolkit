@@ -177,7 +177,7 @@ const Experimental: React.FC = () => {
         { id: ToolId.SECTION_AUDITOR, title: "Section Auditor", desc: "Identify and validate section labels, titles, and nesting levels within the XML structure.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: Database, isExperimental: true },
         { id: ToolId.REF_DUPE_CHECK, title: "Ref Dupe Checker", desc: "Find and merge citations with similar titles. Auto-relinks references to the kept item.", iconBg: "bg-rose-50", iconText: "text-rose-600", borderColor: "bg-rose-500", Icon: GitCompare, isExperimental: true },
         { id: ToolId.AFFILIATION_SEQUENCER, title: "Affiliation Sequencer", desc: "Re-maps affiliation IDs and labels to sequential order while updating cross-references.", iconBg: "bg-emerald-50", iconText: "text-emerald-600", borderColor: "bg-emerald-500", Icon: Hash, isExperimental: true },
-        { id: ToolId.DOI_ARCHITECT, title: "DOI Architect", desc: "Repairs structural DOI placement in Elsevier XML by migrating DOIs from e-host to host elements.", iconBg: "bg-slate-50", iconText: "text-slate-900", borderColor: "bg-slate-900", Icon: Terminal, isExperimental: true }
+        { id: ToolId.STRUCTURAL_ARCHITECT, title: "Structural Node Architect", desc: "Repairs structural DOI placement and standardizes name/initials spacing in Elsevier XML.", iconBg: "bg-slate-50", iconText: "text-slate-900", borderColor: "bg-slate-900", Icon: Terminal, isExperimental: true }
     ];
 
     const filteredTools = useMemo(() => {

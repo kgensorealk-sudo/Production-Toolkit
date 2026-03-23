@@ -191,7 +191,8 @@ const IdAuditor: React.FC = () => {
                         let hasNameSpacingViolation = false;
                         let nameMatch;
                         while ((nameMatch = nameSpacingRegex.exec(elementContent)) !== null) {
-                            if (/\. +(?=[A-Z]\.)/.test(nameMatch[1])) {
+                            const nameText = nameMatch[1];
+                            if (/\b[A-Z]\b(?!\.)/.test(nameText) || /\. +(?=[A-Z]\.)/.test(nameText)) {
                                 hasNameSpacingViolation = true;
                                 break;
                             }
@@ -248,8 +249,13 @@ const IdAuditor: React.FC = () => {
                 
                 // 1. Surgical Given-Name Spacing Fix
                 processedXml = processedXml.replace(/(<ce:given-name\b[^>]*>)(.*?)(<\/ce:given-name>)/gi, (match, open, content, close) => {
-                    const sanitizedContent = content.replace(/\. +(?=[A-Z]\.)/g, '.');
-                    return `${open}${sanitizedContent}${close}`;
+                    let fixed = content.replace(/\b([A-Z])\b(?!\.)/g, '$1.');
+                    let prev;
+                    do {
+                        prev = fixed;
+                        fixed = fixed.replace(/([A-Z]\.)\s+([A-Z]\.)/g, '$1$2');
+                    } while (fixed !== prev);
+                    return `${open}${fixed}${close}`;
                 });
 
                 // 2. ID Mapping Logic

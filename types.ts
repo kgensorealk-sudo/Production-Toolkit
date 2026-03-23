@@ -64,7 +64,7 @@ export enum ToolId {
     CITATION_LINKER = 'citationLinker',
     SECTION_AUDITOR = 'sectionAuditor',
     AFFILIATION_SEQUENCER = 'affiliationSequencer',
-    DOI_ARCHITECT = 'doiArchitect',
+    STRUCTURAL_ARCHITECT = 'structuralArchitect',
     DOCS = 'docs',
     DASHBOARD = 'dashboard'
 }
