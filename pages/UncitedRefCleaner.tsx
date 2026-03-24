@@ -1,9 +1,11 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { diffLines, diffWordsWithSpace, Change } from 'diff';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
+import { ChevronUp, ChevronDown, GitCompare } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface RefItem {
     id: string;
@@ -22,7 +24,10 @@ const UncitedRefCleaner: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'xml' | 'report' | 'diff'>('xml');
     const [isLoading, setIsLoading] = useState(false);
     const [toast, setToast] = useState<{ msg: string, type: 'success' | 'warn' | 'error' } | null>(null);
-    const [diffElements, setDiffElements] = useState<React.ReactNode>(null);
+    const [rowsData, setRowsData] = useState<any[]>([]);
+    const [currentChangeIndex, setCurrentChangeIndex] = useState(0);
+    const [totalChanges, setTotalChanges] = useState(0);
+    const diffContainerRef = useRef<HTMLDivElement>(null);
 
     const escapeHtml = (unsafe: string) => unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -71,10 +76,38 @@ const UncitedRefCleaner: React.FC = () => {
         return lines;
     };
 
+    const scrollToChange = (direction: 'next' | 'prev') => {
+        if (!diffContainerRef.current || totalChanges === 0) return;
+
+        let nextIndex = direction === 'next' ? currentChangeIndex + 1 : currentChangeIndex - 1;
+        if (nextIndex > totalChanges) nextIndex = 1;
+        if (nextIndex < 1) nextIndex = totalChanges;
+
+        const targetRow = diffContainerRef.current.querySelector(`tr[data-change-index-group="${nextIndex}"]`);
+        if (targetRow) {
+            targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setCurrentChangeIndex(nextIndex);
+        }
+    };
+
+    useEffect(() => {
+        if (!diffContainerRef.current) return;
+        
+        const oldHighlights = diffContainerRef.current.querySelectorAll('.active-change-highlight');
+        oldHighlights.forEach(el => el.classList.remove('active-change-highlight', 'bg-orange-100/50', 'ring-1', 'ring-orange-300', 'ring-inset', 'z-10', 'relative'));
+
+        if (currentChangeIndex === 0) return;
+
+        const newHighlights = diffContainerRef.current.querySelectorAll(`[data-change-index-group="${currentChangeIndex}"]`);
+        newHighlights.forEach(el => el.classList.add('active-change-highlight', 'bg-orange-100/50', 'ring-1', 'ring-orange-300', 'ring-inset', 'z-10', 'relative'));
+    }, [currentChangeIndex, rowsData, activeTab]);
+
     const generateDiff = (original: string, modified: string) => {
         const diff = diffLines(original, modified);
-        let rows: React.ReactNode[] = [];
+        let rows: any[] = [];
         let leftLineNum = 1, rightLineNum = 1, i = 0;
+        let localChangeCount = 0;
+
         while(i < diff.length) {
             const current = diff[i];
             let type = 'equal', leftVal = '', rightVal = '';
@@ -106,27 +139,51 @@ const UncitedRefCleaner: React.FC = () => {
             for (let r = 0; r < maxRows; r++) {
                 const lContent = leftLines[r], rContent = rightLines[r];
                 const lNum = lContent !== undefined ? leftLineNum++ : '', rNum = rContent !== undefined ? rightLineNum++ : '';
-                let lClass = lContent !== undefined && type === 'delete' ? 'bg-rose-50/50' : (type === 'replace' ? 'bg-rose-50/30' : '');
-                let rClass = rContent !== undefined && type === 'insert' ? 'bg-emerald-50/50' : (type === 'replace' ? 'bg-emerald-50/30' : '');
-                rows.push(
-                    <tr key={`${i}-${r}`} className="border-b border-slate-100 hover:bg-slate-50 transition-colors duration-75">
-                        <td className={`w-10 text-right text-[10px] text-slate-400 p-1 border-r border-slate-200 select-none bg-slate-50 font-mono ${lClass}`}>{lNum}</td>
-                        <td className={`p-1.5 font-mono text-xs text-slate-600 whitespace-pre-wrap break-all leading-relaxed ${lClass}`} dangerouslySetInnerHTML={{__html: lContent || ''}}></td>
-                        <td className={`w-10 text-right text-[10px] text-slate-400 p-1 border-r border-slate-200 border-l select-none bg-slate-50 font-mono ${rClass}`}>{rNum}</td>
-                        <td className={`p-1.5 font-mono text-xs text-slate-600 whitespace-pre-wrap break-all leading-relaxed ${rClass}`} dangerouslySetInnerHTML={{__html: rContent || ''}}></td>
-                    </tr>
-                );
+                
+                const isChange = type !== 'equal';
+                const isFirstInBlock = isChange && r === 0;
+                if (isFirstInBlock) localChangeCount++;
+
+                rows.push({
+                    id: `${i}-${r}`,
+                    type,
+                    lContent,
+                    rContent,
+                    lNum,
+                    rNum,
+                    isFirstInBlock,
+                    changeIndex: isFirstInBlock ? localChangeCount : undefined,
+                    changeGroup: isChange ? localChangeCount : undefined
+                });
             }
         }
-        setDiffElements(
-            <div className="rounded-lg border border-slate-200 overflow-hidden bg-white shadow-inner m-4">
-                <table className="w-full text-sm font-mono border-collapse table-fixed">
-                    <colgroup><col className="w-10 bg-slate-50" /><col className="w-[calc(50%-2.5rem)]" /><col className="w-10 bg-slate-50 border-l" /><col className="w-[calc(50%-2.5rem)]" /></colgroup>
-                    <tbody>{rows}</tbody>
-                </table>
-            </div>
-        );
+        setRowsData(rows);
+        setTotalChanges(localChangeCount);
+        setCurrentChangeIndex(localChangeCount > 0 ? 1 : 0);
     };
+
+    const diffRows = React.useMemo(() => {
+        return rowsData.map(row => {
+            const { id, type, lContent, rContent, lNum, rNum, isFirstInBlock, changeIndex, changeGroup } = row;
+            let lClass = lContent !== undefined && type === 'delete' ? 'bg-rose-50/50' : (type === 'replace' ? 'bg-rose-50/30' : '');
+            let rClass = rContent !== undefined && type === 'insert' ? 'bg-emerald-50/50' : (type === 'replace' ? 'bg-emerald-50/30' : '');
+            
+            return (
+                <tr 
+                    key={id} 
+                    className="border-b border-slate-100 hover:bg-slate-50 transition-colors duration-75"
+                    data-change-row={changeGroup ? 'true' : undefined}
+                    data-change-index={changeIndex}
+                    data-change-index-group={changeGroup}
+                >
+                    <td className={`w-10 text-right text-[10px] text-slate-400 p-1 border-r border-slate-200 select-none bg-slate-50 font-mono ${lClass}`}>{lNum}</td>
+                    <td className={`p-1.5 font-mono text-xs text-slate-600 whitespace-pre-wrap break-all leading-relaxed ${lClass}`} dangerouslySetInnerHTML={{__html: lContent || ''}}></td>
+                    <td className={`w-10 text-right text-[10px] text-slate-400 p-1 border-r border-slate-200 border-l select-none bg-slate-50 font-mono ${rClass}`}>{rNum}</td>
+                    <td className={`p-1.5 font-mono text-xs text-slate-600 whitespace-pre-wrap break-all leading-relaxed ${rClass}`} dangerouslySetInnerHTML={{__html: rContent || ''}}></td>
+                </tr>
+            );
+        });
+    }, [rowsData]);
 
     const scanUncited = () => {
         if (!input.trim()) { setToast({ msg: "Please paste XML first.", type: "warn" }); return; }
@@ -398,8 +455,54 @@ const UncitedRefCleaner: React.FC = () => {
                             )}
 
                             {activeTab === 'diff' && (
-                                <div className="absolute inset-0 overflow-auto custom-scrollbar">
-                                    {diffElements}
+                                <div className="absolute inset-0 flex flex-col overflow-hidden">
+                                    <div ref={diffContainerRef} className="flex-grow overflow-auto custom-scrollbar">
+                                        <div className="rounded-lg border border-slate-200 overflow-hidden bg-white shadow-inner m-4">
+                                            <table className="w-full text-sm font-mono border-collapse table-fixed">
+                                                <colgroup><col className="w-10 bg-slate-50" /><col className="w-[calc(50%-2.5rem)]" /><col className="w-10 bg-slate-50 border-l" /><col className="w-[calc(50%-2.5rem)]" /></colgroup>
+                                                <tbody>{diffRows}</tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+
+                                    <AnimatePresence>
+                                        {totalChanges > 0 && (
+                                            <motion.div 
+                                                initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                exit={{ opacity: 0, y: 20, scale: 0.95 }}
+                                                className="absolute bottom-8 right-8 flex items-center gap-2 bg-white/90 backdrop-blur-xl border border-slate-200/50 rounded-2xl p-2 shadow-[0_20px_50px_rgba(0,0,0,0.15)] z-30 ring-1 ring-slate-900/5"
+                                            >
+                                                <div className="flex items-center gap-1 pr-2 border-r border-slate-100">
+                                                    <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center">
+                                                        <GitCompare className="w-4 h-4 text-indigo-600" strokeWidth={2.5} />
+                                                    </div>
+                                                    <div className="flex flex-col px-2">
+                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter leading-none mb-0.5">Changes</span>
+                                                        <span className="text-xs font-black text-slate-900 tabular-nums leading-none">
+                                                            {currentChangeIndex} <span className="text-slate-300 mx-0.5">/</span> {totalChanges}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    <button 
+                                                        onClick={() => scrollToChange('prev')}
+                                                        className="p-2.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition-all text-slate-600 hover:text-indigo-600 group"
+                                                        title="Previous Change (Shift+Tab)"
+                                                    >
+                                                        <ChevronUp className="w-5 h-5 group-active:-translate-y-0.5 transition-transform" strokeWidth={3} />
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => scrollToChange('next')}
+                                                        className="p-2.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition-all text-slate-600 hover:text-indigo-600 group"
+                                                        title="Next Change (Tab)"
+                                                    >
+                                                        <ChevronDown className="w-5 h-5 group-active:translate-y-0.5 transition-transform" strokeWidth={3} />
+                                                    </button>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
                                 </div>
                             )}
                         </div>

@@ -1,6 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { diffLines, diffWordsWithSpace, Change } from 'diff';
+import { ChevronUp, ChevronDown, GitCompare } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
@@ -25,6 +27,9 @@ const XmlRenumber: React.FC = () => {
     const [reportData, setReportData] = useState<ReferenceChange[]>([]);
     const [extractedRefs, setExtractedRefs] = useState<string[]>([]);
     const [diffElements, setDiffElements] = useState<React.ReactNode>(null);
+    const [currentChangeIndex, setCurrentChangeIndex] = useState(0);
+    const [totalChanges, setTotalChanges] = useState(0);
+    const diffContainerRef = useRef<HTMLDivElement>(null);
     
     const [searchQuery, setSearchQuery] = useState('');
     const [filterChangedOnly, setFilterChangedOnly] = useState(false);
@@ -122,6 +127,7 @@ const XmlRenumber: React.FC = () => {
         let rows: React.ReactNode[] = [];
         let leftLineNum = 1;
         let rightLineNum = 1;
+        let changeCount = 0;
 
         let i = 0;
         while(i < diff.length) {
@@ -134,14 +140,17 @@ const XmlRenumber: React.FC = () => {
                 leftVal = current.value;
                 rightVal = diff[i+1].value;
                 i += 2;
+                changeCount++;
             } else if (current.removed) {
                 type = 'delete';
                 leftVal = current.value;
                 i++;
+                changeCount++;
             } else if (current.added) {
                 type = 'insert';
                 rightVal = current.value;
                 i++;
+                changeCount++;
             } else {
                 leftVal = rightVal = current.value;
                 i++;
@@ -177,7 +186,13 @@ const XmlRenumber: React.FC = () => {
                  if (type === 'equal') { lClass = ''; rClass = ''; }
 
                  rows.push(
-                    <tr key={`${i}-${r}`} className="border-b border-slate-100 hover:bg-slate-50 transition-colors duration-75">
+                    <tr 
+                        key={`${i}-${r}`} 
+                        className="border-b border-slate-100 hover:bg-slate-50 transition-colors duration-75"
+                        data-change-row={type !== 'equal' ? "true" : undefined}
+                        data-change-index={type !== 'equal' ? changeCount : undefined}
+                        data-change-index-group={type !== 'equal' ? changeCount : undefined}
+                    >
                         <td className={`w-12 text-right text-xs text-slate-400 p-1 border-r border-slate-200 select-none bg-slate-50 font-mono ${lClass}`}>{lNum}</td>
                         <td className={`p-1 font-mono text-sm text-slate-700 whitespace-pre-wrap break-all leading-tight ${lClass}`} dangerouslySetInnerHTML={{__html: lContent || ''}}></td>
                         <td className={`w-12 text-right text-xs text-slate-400 p-1 border-r border-slate-200 border-l select-none bg-slate-50 font-mono ${rClass}`}>{rNum}</td>
@@ -187,6 +202,9 @@ const XmlRenumber: React.FC = () => {
             }
         }
         
+        setTotalChanges(changeCount);
+        setCurrentChangeIndex(changeCount > 0 ? 1 : 0);
+
         setDiffElements(
             <table className="w-full text-sm font-mono border-collapse table-fixed bg-white">
                 <colgroup>
@@ -199,6 +217,32 @@ const XmlRenumber: React.FC = () => {
             </table>
         );
     };
+
+    const scrollToChange = (direction: 'next' | 'prev') => {
+        if (!diffContainerRef.current || totalChanges === 0) return;
+
+        let nextIndex = direction === 'next' ? currentChangeIndex + 1 : currentChangeIndex - 1;
+        if (nextIndex > totalChanges) nextIndex = 1;
+        if (nextIndex < 1) nextIndex = totalChanges;
+
+        const targetRow = diffContainerRef.current.querySelector(`tr[data-change-index-group="${nextIndex}"]`);
+        if (targetRow) {
+            targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setCurrentChangeIndex(nextIndex);
+        }
+    };
+
+    useEffect(() => {
+        if (!diffContainerRef.current || currentChangeIndex === 0) return;
+
+        const allRows = diffContainerRef.current.querySelectorAll('tr[data-change-index-group]');
+        allRows.forEach(row => row.classList.remove('bg-indigo-50/50', 'ring-1', 'ring-indigo-200', 'ring-inset', 'z-10', 'relative'));
+
+        const activeRows = diffContainerRef.current.querySelectorAll(`tr[data-change-index-group="${currentChangeIndex}"]`);
+        activeRows.forEach(row => {
+            row.classList.add('bg-indigo-50/50', 'ring-1', 'ring-indigo-200', 'ring-inset', 'z-10', 'relative');
+        });
+    }, [currentChangeIndex]);
 
     const renumber = () => {
         if (!input.trim()) {
@@ -494,13 +538,58 @@ const XmlRenumber: React.FC = () => {
                             )}
                             
                             {activeTab === 'diff' && (
-                                <div className="min-w-full min-h-full">
-                                    {diffElements ? diffElements : (
-                                        <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60">
-                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                                            <p className="text-sm">Run process to view diff</p>
-                                        </div>
-                                    )}
+                                <div className="flex-grow relative flex flex-col overflow-hidden h-full">
+                                    <div 
+                                        ref={diffContainerRef}
+                                        className="absolute inset-0 overflow-auto custom-scrollbar"
+                                    >
+                                        {diffElements ? diffElements : (
+                                            <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60">
+                                                <GitCompare size={48} strokeWidth={1} className="mb-3 text-slate-300" />
+                                                <p className="text-sm font-medium uppercase tracking-widest">Run process to view diff</p>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Floating Diff Navigation */}
+                                    <AnimatePresence>
+                                        {totalChanges > 0 && (
+                                            <motion.div 
+                                                initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                exit={{ opacity: 0, y: 20, scale: 0.95 }}
+                                                className="absolute bottom-8 right-8 flex items-center gap-2 bg-white/90 backdrop-blur-xl border border-slate-200/50 rounded-2xl p-2 shadow-[0_20px_50px_rgba(0,0,0,0.15)] z-30 ring-1 ring-slate-900/5"
+                                            >
+                                                <div className="flex items-center gap-1 pr-2 border-r border-slate-100">
+                                                    <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center">
+                                                        <GitCompare className="w-4 h-4 text-indigo-600" strokeWidth={2.5} />
+                                                    </div>
+                                                    <div className="flex flex-col px-2">
+                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter leading-none mb-0.5">Changes</span>
+                                                        <span className="text-xs font-black text-slate-900 tabular-nums leading-none">
+                                                            {currentChangeIndex} <span className="text-slate-300 mx-0.5">/</span> {totalChanges}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    <button 
+                                                        onClick={() => scrollToChange('prev')}
+                                                        className="p-2.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition-all text-slate-600 hover:text-indigo-600 group"
+                                                        title="Previous Change (Shift+Tab)"
+                                                    >
+                                                        <ChevronUp className="w-5 h-5 group-active:-translate-y-0.5 transition-transform" strokeWidth={3} />
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => scrollToChange('next')}
+                                                        className="p-2.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition-all text-slate-600 hover:text-indigo-600 group"
+                                                        title="Next Change (Tab)"
+                                                    >
+                                                        <ChevronDown className="w-5 h-5 group-active:translate-y-0.5 transition-transform" strokeWidth={3} />
+                                                    </button>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
                                 </div>
                             )}
 

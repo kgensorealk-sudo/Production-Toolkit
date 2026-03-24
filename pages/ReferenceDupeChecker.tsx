@@ -23,7 +23,9 @@ import {
     ArrowDownWideNarrow,
     Filter,
     UploadCloud,
-    FileCode
+    FileCode,
+    ChevronUp,
+    ChevronDown
 } from 'lucide-react';
 import * as Diff from 'diff';
 import Toast from '../components/Toast';
@@ -81,8 +83,11 @@ const ReferenceDupeChecker: React.FC = () => {
     const [isDiffing, setIsDiffing] = useState(false);
     const [diffRows, setDiffRows] = useState<any[]>([]);
     const [isDragging, setIsDragging] = useState(false);
+    const [currentChangeIndex, setCurrentChangeIndex] = useState(0);
+    const [totalChanges, setTotalChanges] = useState(0);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const diffContainerRef = useRef<HTMLDivElement>(null);
 
     const escapeHtml = (unsafe: string) => unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -181,6 +186,8 @@ const ReferenceDupeChecker: React.FC = () => {
     const generateDiff = (original: string, modified: string) => {
         if (!original && !modified) {
             setDiffRows([]);
+            setTotalChanges(0);
+            setCurrentChangeIndex(0);
             return;
         }
         
@@ -202,6 +209,7 @@ const ReferenceDupeChecker: React.FC = () => {
                 let leftLineNum = 1;
                 let rightLineNum = 1;
                 let i = 0;
+                let changeCounter = 0;
                 
                 while (i < diff.length) {
                     const current = diff[i];
@@ -248,6 +256,9 @@ const ReferenceDupeChecker: React.FC = () => {
                     }
 
                     const maxRows = Math.max(leftLines.length, rightLines.length);
+                    const isChange = type !== 'equal';
+                    if (isChange) changeCounter++;
+
                     for (let r = 0; r < maxRows; r++) {
                         rows.push({
                             leftNum: leftLines[r] !== undefined ? leftLineNum++ : null,
@@ -255,20 +266,57 @@ const ReferenceDupeChecker: React.FC = () => {
                             rightNum: rightLines[r] !== undefined ? rightLineNum++ : null,
                             rightContent: rightLines[r] || '',
                             type,
-                            id: `diff-${i}-${r}-${Math.random().toString(36).substring(2, 7)}`
+                            id: `diff-${i}-${r}-${Math.random().toString(36).substring(2, 7)}`,
+                            changeIndex: isChange ? changeCounter : null,
+                            isFirstInGroup: isChange && r === 0
                         });
                     }
                 }
                 setDiffRows(rows);
+                setTotalChanges(changeCounter);
+                setCurrentChangeIndex(changeCounter > 0 ? 1 : 0);
             } catch (error) {
                 console.error("Diff generation failed:", error);
                 setToast({ msg: "Failed to generate diff view", type: "error" });
                 setDiffRows([]);
+                setTotalChanges(0);
+                setCurrentChangeIndex(0);
             } finally {
                 setIsDiffing(false);
             }
         }, 150);
     };
+
+    const scrollToChange = (direction: 'next' | 'prev') => {
+        if (totalChanges === 0) return;
+        
+        let targetIndex = direction === 'next' ? currentChangeIndex + 1 : currentChangeIndex - 1;
+        if (targetIndex > totalChanges) targetIndex = 1;
+        if (targetIndex < 1) targetIndex = totalChanges;
+        
+        const targetRow = diffContainerRef.current?.querySelector(`[data-change-index-group="${targetIndex}"]`);
+        if (targetRow) {
+            targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setCurrentChangeIndex(targetIndex);
+        }
+    };
+
+    useEffect(() => {
+        if (currentChangeIndex > 0 && diffContainerRef.current) {
+            const rows = diffContainerRef.current.querySelectorAll(`[data-change-index="${currentChangeIndex}"]`);
+            const allRows = diffContainerRef.current.querySelectorAll('[data-change-index]');
+            allRows.forEach(r => r.classList.remove('bg-emerald-500/20', 'bg-rose-500/20', 'ring-1', 'ring-emerald-500/50', 'ring-rose-500/50', 'z-10', 'relative'));
+            
+            rows.forEach(row => {
+                const type = row.getAttribute('data-type');
+                if (type === 'insert' || type === 'replace') {
+                    row.classList.add('bg-emerald-500/20', 'ring-1', 'ring-emerald-500/50', 'z-10', 'relative');
+                } else if (type === 'delete') {
+                    row.classList.add('bg-rose-500/20', 'ring-1', 'ring-rose-500/50', 'z-10', 'relative');
+                }
+            });
+        }
+    }, [currentChangeIndex]);
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -1166,7 +1214,7 @@ const ReferenceDupeChecker: React.FC = () => {
                                     <motion.div 
                                         initial={{ opacity: 0 }}
                                         animate={{ opacity: 1 }}
-                                        className="flex-grow flex flex-col min-h-0 overflow-auto custom-scrollbar-emerald bg-slate-900 p-8"
+                                        className="flex-grow flex flex-col min-h-0 overflow-hidden bg-slate-900 p-8 relative"
                                     >
                                         {isDiffing ? (
                                             <div className="h-full flex flex-col items-center justify-center text-slate-600">
@@ -1174,60 +1222,108 @@ const ReferenceDupeChecker: React.FC = () => {
                                                 <p className="text-[9px] font-black uppercase tracking-[0.3em] animate-pulse">Generating Differential Stream...</p>
                                             </div>
                                         ) : diffRows.length > 0 ? (
-                                            <div className="border border-slate-800 rounded-2xl overflow-hidden shadow-2xl bg-slate-900 ring-1 ring-white/5">
-                                                <div className="bg-slate-800/80 border-b border-slate-700 px-6 py-3 flex justify-between items-center sticky top-0 z-20 backdrop-blur-md">
-                                                    <div className="flex items-center gap-3">
-                                                        <span className="text-[10px] font-black text-white uppercase tracking-widest">Comparison Matrix</span>
-                                                        <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                                                            {diffRows.length} NODES ANALYZED
-                                                        </span>
+                                            <>
+                                                <div className="border border-slate-800 rounded-2xl overflow-hidden shadow-2xl bg-slate-900 ring-1 ring-white/5 flex-grow flex flex-col min-h-0">
+                                                    <div className="bg-slate-800/80 border-b border-slate-700 px-6 py-3 flex justify-between items-center sticky top-0 z-20 backdrop-blur-md">
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="text-[10px] font-black text-white uppercase tracking-widest">Comparison Matrix</span>
+                                                            <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                                                                {diffRows.length} NODES ANALYZED
+                                                            </span>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                                <div className="overflow-auto custom-scrollbar-emerald">
-                                                    <table className="w-full text-[11px] font-mono border-collapse table-fixed bg-slate-900">
-                                                        <colgroup>
-                                                            <col className="w-10 border-r border-slate-800" />
-                                                            <col className="w-[calc(50%-2.5rem)]" />
-                                                            <col className="w-10 border-r border-slate-800 border-l border-slate-800" />
-                                                            <col className="w-[calc(50%-2.5rem)]" />
-                                                        </colgroup>
-                                                        <tbody>
-                                                            {diffRows.map((row) => {
-                                                                let lClass = '';
-                                                                let rClass = '';
-                                                                let lNumClass = 'bg-slate-900 text-slate-700'; 
-                                                                let rNumClass = 'bg-slate-900 text-slate-700';
+                                                    <div ref={diffContainerRef} className="overflow-auto custom-scrollbar-emerald flex-grow">
+                                                        <table className="w-full text-[11px] font-mono border-collapse table-fixed bg-slate-900">
+                                                            <colgroup>
+                                                                <col className="w-10 border-r border-slate-800" />
+                                                                <col className="w-[calc(50%-2.5rem)]" />
+                                                                <col className="w-10 border-r border-slate-800 border-l border-slate-800" />
+                                                                <col className="w-[calc(50%-2.5rem)]" />
+                                                            </colgroup>
+                                                            <tbody>
+                                                                {diffRows.map((row) => {
+                                                                    let lClass = '';
+                                                                    let rClass = '';
+                                                                    let lNumClass = 'bg-slate-900 text-slate-700'; 
+                                                                    let rNumClass = 'bg-slate-900 text-slate-700';
 
-                                                                if (row.type === 'delete') {
-                                                                    lClass = 'bg-rose-500/10 text-rose-300/80';
-                                                                    lNumClass = 'bg-rose-500/20 text-rose-400';
-                                                                } else if (row.type === 'insert') {
-                                                                    rClass = 'bg-emerald-500/10 text-emerald-300/80';
-                                                                    rNumClass = 'bg-emerald-500/20 text-emerald-400';
-                                                                } else if (row.type === 'replace') {
-                                                                    if (row.leftNum !== null) {
+                                                                    if (row.type === 'delete') {
                                                                         lClass = 'bg-rose-500/10 text-rose-300/80';
                                                                         lNumClass = 'bg-rose-500/20 text-rose-400';
-                                                                    }
-                                                                    if (row.rightNum !== null) {
+                                                                    } else if (row.type === 'insert') {
                                                                         rClass = 'bg-emerald-500/10 text-emerald-300/80';
                                                                         rNumClass = 'bg-emerald-500/20 text-emerald-400';
+                                                                    } else if (row.type === 'replace') {
+                                                                        if (row.leftNum !== null) {
+                                                                            lClass = 'bg-rose-500/10 text-rose-300/80';
+                                                                            lNumClass = 'bg-rose-500/20 text-rose-400';
+                                                                        }
+                                                                        if (row.rightNum !== null) {
+                                                                            rClass = 'bg-emerald-500/10 text-emerald-300/80';
+                                                                            rNumClass = 'bg-emerald-500/20 text-emerald-400';
+                                                                        }
                                                                     }
-                                                                }
 
-                                                                return (
-                                                                    <tr key={row.id} className="border-b border-slate-800/50 hover:bg-white/5 transition-colors">
-                                                                        <td className={`w-10 text-right text-[9px] p-1 border-r border-slate-800 select-none font-mono ${lNumClass}`}>{row.leftNum || ''}</td>
-                                                                        <td className={`p-2 font-mono text-[11px] whitespace-pre-wrap break-words leading-relaxed ${lClass || 'text-slate-400'}`} dangerouslySetInnerHTML={{ __html: row.leftContent }}></td>
-                                                                        <td className={`w-10 text-right text-[9px] p-1 border-r border-slate-800 border-l border-slate-800 select-none font-mono ${rNumClass}`}>{row.rightNum || ''}</td>
-                                                                        <td className={`p-2 font-mono text-[11px] whitespace-pre-wrap break-words leading-relaxed ${rClass || 'text-slate-400'}`} dangerouslySetInnerHTML={{ __html: row.rightContent }}></td>
-                                                                    </tr>
-                                                                );
-                                                            })}
-                                                        </tbody>
-                                                    </table>
+                                                                    return (
+                                                                        <tr 
+                                                                            key={row.id} 
+                                                                            className="border-b border-slate-800/50 hover:bg-white/5 transition-colors"
+                                                                            data-change-index={row.changeIndex}
+                                                                            data-change-index-group={row.isFirstInGroup ? row.changeIndex : undefined}
+                                                                            data-type={row.type}
+                                                                        >
+                                                                            <td className={`w-10 text-right text-[9px] p-1 border-r border-slate-800 select-none font-mono ${lNumClass}`}>{row.leftNum || ''}</td>
+                                                                            <td className={`p-2 font-mono text-[11px] whitespace-pre-wrap break-words leading-relaxed ${lClass || 'text-slate-400'}`} dangerouslySetInnerHTML={{ __html: row.leftContent }}></td>
+                                                                            <td className={`w-10 text-right text-[9px] p-1 border-r border-slate-800 border-l border-slate-800 select-none font-mono ${rNumClass}`}>{row.rightNum || ''}</td>
+                                                                            <td className={`p-2 font-mono text-[11px] whitespace-pre-wrap break-words leading-relaxed ${rClass || 'text-slate-400'}`} dangerouslySetInnerHTML={{ __html: row.rightContent }}></td>
+                                                                        </tr>
+                                                                    );
+                                                                })}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
                                                 </div>
-                                            </div>
+
+                                                {/* Floating Diff Navigation */}
+                                                <AnimatePresence>
+                                                    {totalChanges > 0 && (
+                                                        <motion.div 
+                                                            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                                                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+                                                            className="absolute bottom-12 right-12 flex items-center gap-2 bg-white/90 backdrop-blur-xl border border-slate-200/50 rounded-2xl p-2 shadow-[0_20px_50px_rgba(0,0,0,0.15)] z-30 ring-1 ring-slate-900/5"
+                                                        >
+                                                            <div className="flex items-center gap-1 pr-2 border-r border-slate-100">
+                                                                <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center">
+                                                                    <GitCompare className="w-4 h-4 text-indigo-600" strokeWidth={2.5} />
+                                                                </div>
+                                                                <div className="flex flex-col px-2">
+                                                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter leading-none mb-0.5">Changes</span>
+                                                                    <span className="text-xs font-black text-slate-900 tabular-nums leading-none">
+                                                                        {currentChangeIndex} <span className="text-slate-300 mx-0.5">/</span> {totalChanges}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center gap-1">
+                                                                <button 
+                                                                    onClick={() => scrollToChange('prev')}
+                                                                    className="p-2.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition-all text-slate-600 hover:text-indigo-600 group"
+                                                                    title="Previous Change (Shift+Tab)"
+                                                                >
+                                                                    <ChevronUp className="w-5 h-5 group-active:-translate-y-0.5 transition-transform" strokeWidth={3} />
+                                                                </button>
+                                                                <button 
+                                                                    onClick={() => scrollToChange('next')}
+                                                                    className="p-2.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition-all text-slate-600 hover:text-indigo-600 group"
+                                                                    title="Next Change (Tab)"
+                                                                >
+                                                                    <ChevronDown className="w-5 h-5 group-active:translate-y-0.5 transition-transform" strokeWidth={3} />
+                                                                </button>
+                                                            </div>
+                                                        </motion.div>
+                                                    )}
+                                                </AnimatePresence>
+                                            </>
                                         ) : (
                                             <div className="h-full flex flex-col items-center justify-center text-slate-700">
                                                 <GitCompare size={40} className="mb-4 opacity-10" />

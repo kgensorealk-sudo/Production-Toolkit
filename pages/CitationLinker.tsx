@@ -4,7 +4,8 @@ import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import Switch from '../components/Switch';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
-import { ChevronUp, ChevronDown } from 'lucide-react';
+import { ChevronUp, ChevronDown, GitCompare } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface ResolutionItem {
     id: string;
@@ -802,31 +803,44 @@ const CitationLinker: React.FC = () => {
                                     <div ref={diffContainerRef} className="flex-grow overflow-auto custom-scrollbar">
                                         {diffElements}
                                     </div>
-                                    {totalChanges > 0 && (
-                                        <div className="absolute bottom-8 right-10 flex items-center gap-3 bg-white/95 backdrop-blur-md px-5 py-3 rounded-[2rem] border border-slate-200 shadow-2xl z-30 animate-in fade-in slide-in-from-bottom-4 duration-500 ring-1 ring-slate-900/5">
-                                            <div className="flex flex-col items-end mr-3">
-                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Audit Stream</span>
-                                                <span className="text-xs font-black text-indigo-600 tabular-nums leading-none">{currentChangeIndex + 1} <span className="text-slate-300 mx-0.5">/</span> {totalChanges}</span>
-                                            </div>
-                                            <div className="h-8 w-[1px] bg-slate-100 mx-1"></div>
-                                            <div className="flex gap-1.5">
-                                                <button 
-                                                    onClick={() => scrollToChange('prev')}
-                                                    className="p-2.5 hover:bg-slate-50 rounded-2xl text-slate-600 transition-all active:scale-90 hover:text-indigo-600"
-                                                    title="Previous Change"
-                                                >
-                                                    <ChevronUp className="w-5 h-5" />
-                                                </button>
-                                                <button 
-                                                    onClick={() => scrollToChange('next')}
-                                                    className="p-2.5 hover:bg-slate-50 rounded-2xl text-slate-600 transition-all active:scale-90 hover:text-indigo-600"
-                                                    title="Next Change"
-                                                >
-                                                    <ChevronDown className="w-5 h-5" />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )}
+                                    <AnimatePresence>
+                                        {totalChanges > 0 && (
+                                            <motion.div 
+                                                initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                exit={{ opacity: 0, y: 20, scale: 0.95 }}
+                                                className="absolute bottom-8 right-10 flex items-center gap-2 bg-white/90 backdrop-blur-xl border border-slate-200/50 rounded-2xl p-2 shadow-[0_20px_50px_rgba(0,0,0,0.15)] z-30 ring-1 ring-slate-900/5"
+                                            >
+                                                <div className="flex items-center gap-1 pr-2 border-r border-slate-100">
+                                                    <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center">
+                                                        <GitCompare className="w-4 h-4 text-indigo-600" strokeWidth={2.5} />
+                                                    </div>
+                                                    <div className="flex flex-col px-2">
+                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter leading-none mb-0.5">Changes</span>
+                                                        <span className="text-xs font-black text-slate-900 tabular-nums leading-none">
+                                                            {currentChangeIndex + 1} <span className="text-slate-300 mx-0.5">/</span> {totalChanges}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    <button 
+                                                        onClick={() => scrollToChange('prev')}
+                                                        className="p-2.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition-all text-slate-600 hover:text-indigo-600 group"
+                                                        title="Previous Change (Shift+Tab)"
+                                                    >
+                                                        <ChevronUp className="w-5 h-5 group-active:-translate-y-0.5 transition-transform" strokeWidth={3} />
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => scrollToChange('next')}
+                                                        className="p-2.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition-all text-slate-600 hover:text-indigo-600 group"
+                                                        title="Next Change (Tab)"
+                                                    >
+                                                        <ChevronDown className="w-5 h-5 group-active:translate-y-0.5 transition-transform" strokeWidth={3} />
+                                                    </button>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
                                 </div>
                             )}
                         </div>

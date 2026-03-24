@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { diffLines, diffArrays, Change } from 'diff';
+import { ChevronUp, ChevronDown, GitCompare } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
@@ -20,8 +22,12 @@ const TableFixer: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<'selection' | 'result' | 'diff'>('selection');
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
-    const [diffElements, setDiffElements] = useState<React.ReactNode>(null);
+    const [diffRows, setDiffRows] = useState<any[]>([]);
+    const [currentChangeIndex, setCurrentChangeIndex] = useState(0);
+    const [totalChanges, setTotalChanges] = useState(0);
     const [mode, setMode] = useState<'detach' | 'attach'>('detach');
+
+    const diffContainerRef = useRef<HTMLDivElement>(null);
 
     // ID Configuration States
     const [tfStart, setTfStart] = useState<number>(4000);
@@ -87,9 +93,10 @@ const TableFixer: React.FC = () => {
 
     const generateDiff = (original: string, modified: string) => {
         const diff = diffLines(original, modified);
-        let rows: React.ReactNode[] = [];
+        let rows: any[] = [];
         let leftLineNum = 1;
         let rightLineNum = 1;
+        let changeCounter = 0;
 
         let i = 0;
         while(i < diff.length) {
@@ -139,39 +146,63 @@ const TableFixer: React.FC = () => {
             }
 
             const maxRows = Math.max(leftLines.length, rightLines.length);
+            const isChange = type !== 'equal';
+            if (isChange) changeCounter++;
+
             for (let r = 0; r < maxRows; r++) {
                  const lContent = leftLines[r];
                  const rContent = rightLines[r];
-                 const lNum = lContent !== undefined ? leftLineNum++ : '';
-                 const rNum = rContent !== undefined ? rightLineNum++ : '';
+                 const lNum = lContent !== undefined ? leftLineNum++ : null;
+                 const rNum = rContent !== undefined ? rightLineNum++ : null;
                  
-                 let lClass = lContent !== undefined && type === 'delete' ? 'bg-rose-50/50' : (type === 'replace' ? 'bg-rose-50/30' : '');
-                 let rClass = rContent !== undefined && type === 'insert' ? 'bg-emerald-50/50' : (type === 'replace' ? 'bg-emerald-50/30' : '');
-                 if (type === 'equal') { lClass = ''; rClass = ''; }
-
-                 rows.push(
-                    <tr key={`${i}-${r}`} className="border-b border-slate-100 hover:bg-slate-50 transition-colors duration-75">
-                        <td className={`w-12 text-right text-xs text-slate-400 p-1 border-r border-slate-200 select-none bg-slate-50 font-mono ${lClass}`}>{lNum}</td>
-                        <td className={`p-1 font-mono text-sm text-slate-700 whitespace-pre-wrap break-all leading-tight ${lClass}`} dangerouslySetInnerHTML={{__html: lContent || ''}}></td>
-                        <td className={`w-12 text-right text-xs text-slate-400 p-1 border-r border-slate-200 border-l select-none bg-slate-50 font-mono ${rClass}`}>{rNum}</td>
-                        <td className={`p-1 font-mono text-sm text-slate-700 whitespace-pre-wrap break-all leading-tight ${rClass}`} dangerouslySetInnerHTML={{__html: rContent || ''}}></td>
-                    </tr>
-                 );
+                 rows.push({
+                    leftNum: lNum,
+                    leftContent: lContent || '',
+                    rightNum: rNum,
+                    rightContent: rContent || '',
+                    type,
+                    id: `${i}-${r}`,
+                    changeIndex: isChange ? changeCounter : null,
+                    isFirstInGroup: isChange && r === 0
+                 });
             }
         }
         
-        setDiffElements(
-            <table className="w-full text-sm font-mono border-collapse table-fixed bg-white">
-                <colgroup>
-                    <col className="w-12 bg-slate-50 border-r border-slate-200" />
-                    <col className="w-[calc(50%-3rem)]" />
-                    <col className="w-12 bg-slate-50 border-r border-slate-200 border-l border-slate-200" />
-                    <col className="w-[calc(50%-3rem)]" />
-                </colgroup>
-                <tbody>{rows}</tbody>
-            </table>
-        );
+        setDiffRows(rows);
+        setTotalChanges(changeCounter);
+        setCurrentChangeIndex(changeCounter > 0 ? 1 : 0);
     };
+
+    const scrollToChange = (direction: 'next' | 'prev') => {
+        if (totalChanges === 0) return;
+        
+        let targetIndex = direction === 'next' ? currentChangeIndex + 1 : currentChangeIndex - 1;
+        if (targetIndex > totalChanges) targetIndex = 1;
+        if (targetIndex < 1) targetIndex = totalChanges;
+        
+        const targetRow = diffContainerRef.current?.querySelector(`[data-change-index-group="${targetIndex}"]`);
+        if (targetRow) {
+            targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setCurrentChangeIndex(targetIndex);
+        }
+    };
+
+    useEffect(() => {
+        if (currentChangeIndex > 0 && diffContainerRef.current) {
+            const rows = diffContainerRef.current.querySelectorAll(`[data-change-index="${currentChangeIndex}"]`);
+            const allRows = diffContainerRef.current.querySelectorAll('[data-change-index]');
+            allRows.forEach(r => r.classList.remove('bg-emerald-100', 'bg-rose-100', 'ring-1', 'ring-emerald-400', 'ring-rose-400', 'z-10', 'relative'));
+            
+            rows.forEach(row => {
+                const type = row.getAttribute('data-type');
+                if (type === 'insert' || type === 'replace') {
+                    row.classList.add('bg-emerald-100', 'ring-1', 'ring-emerald-400', 'z-10', 'relative');
+                } else if (type === 'delete') {
+                    row.classList.add('bg-rose-100', 'ring-1', 'ring-rose-400', 'z-10', 'relative');
+                }
+            });
+        }
+    }, [currentChangeIndex]);
 
     useEffect(() => {
         if (!input) {
@@ -554,7 +585,89 @@ const TableFixer: React.FC = () => {
                         )}
 
                         {activeTab === 'diff' && (
-                             <div className="absolute inset-0 overflow-auto custom-scrollbar bg-white">{diffElements ? diffElements : <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60"><svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mb-3 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg><p className="text-sm font-medium">Run conversion to see differences.</p></div>}</div>
+                             <div className="absolute inset-0 overflow-hidden bg-white flex flex-col">
+                                {diffRows.length > 0 ? (
+                                    <>
+                                        <div ref={diffContainerRef} className="flex-grow overflow-auto custom-scrollbar relative">
+                                            <table className="w-full text-sm font-mono border-collapse table-fixed bg-white">
+                                                <colgroup>
+                                                    <col className="w-12 bg-slate-50 border-r border-slate-200" />
+                                                    <col className="w-[calc(50%-3rem)]" />
+                                                    <col className="w-12 bg-slate-50 border-r border-slate-200 border-l border-slate-200" />
+                                                    <col className="w-[calc(50%-3rem)]" />
+                                                </colgroup>
+                                                <tbody>
+                                                    {diffRows.map((row) => {
+                                                        let lClass = row.leftNum !== null && row.type === 'delete' ? 'bg-rose-50/50' : (row.type === 'replace' ? 'bg-rose-50/30' : '');
+                                                        let rClass = row.rightNum !== null && row.type === 'insert' ? 'bg-emerald-50/50' : (row.type === 'replace' ? 'bg-emerald-50/30' : '');
+                                                        if (row.type === 'equal') { lClass = ''; rClass = ''; }
+
+                                                        return (
+                                                            <tr 
+                                                                key={row.id} 
+                                                                className="border-b border-slate-100 hover:bg-slate-50 transition-colors duration-75"
+                                                                data-change-index={row.changeIndex}
+                                                                data-change-index-group={row.isFirstInGroup ? row.changeIndex : undefined}
+                                                                data-type={row.type}
+                                                            >
+                                                                <td className={`w-12 text-right text-xs text-slate-400 p-1 border-r border-slate-200 select-none bg-slate-50 font-mono ${lClass}`}>{row.leftNum || ''}</td>
+                                                                <td className={`p-1 font-mono text-sm text-slate-700 whitespace-pre-wrap break-all leading-tight ${lClass}`} dangerouslySetInnerHTML={{__html: row.leftContent || ''}}></td>
+                                                                <td className={`w-12 text-right text-xs text-slate-400 p-1 border-r border-slate-200 border-l select-none bg-slate-50 font-mono ${rClass}`}>{row.rightNum || ''}</td>
+                                                                <td className={`p-1 font-mono text-sm text-slate-700 whitespace-pre-wrap break-all leading-tight ${rClass}`} dangerouslySetInnerHTML={{__html: row.rightContent || ''}}></td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+
+                                        {/* Floating Diff Navigation */}
+                                        <AnimatePresence>
+                                            {totalChanges > 0 && (
+                                                <motion.div 
+                                                    initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                    exit={{ opacity: 0, y: 20, scale: 0.95 }}
+                                                    className="absolute bottom-8 right-8 flex items-center gap-2 bg-white/90 backdrop-blur-xl border border-slate-200/50 rounded-2xl p-2 shadow-[0_20px_50px_rgba(0,0,0,0.15)] z-30 ring-1 ring-slate-900/5"
+                                                >
+                                                    <div className="flex items-center gap-1 pr-2 border-r border-slate-100">
+                                                        <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center">
+                                                            <GitCompare className="w-4 h-4 text-indigo-600" strokeWidth={2.5} />
+                                                        </div>
+                                                        <div className="flex flex-col px-2">
+                                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter leading-none mb-0.5">Changes</span>
+                                                            <span className="text-xs font-black text-slate-900 tabular-nums leading-none">
+                                                                {currentChangeIndex} <span className="text-slate-300 mx-0.5">/</span> {totalChanges}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-1">
+                                                        <button 
+                                                            onClick={() => scrollToChange('prev')}
+                                                            className="p-2.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition-all text-slate-600 hover:text-indigo-600 group"
+                                                            title="Previous Change (Shift+Tab)"
+                                                        >
+                                                            <ChevronUp className="w-5 h-5 group-active:-translate-y-0.5 transition-transform" strokeWidth={3} />
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => scrollToChange('next')}
+                                                            className="p-2.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition-all text-slate-600 hover:text-indigo-600 group"
+                                                            title="Next Change (Tab)"
+                                                        >
+                                                            <ChevronDown className="w-5 h-5 group-active:translate-y-0.5 transition-transform" strokeWidth={3} />
+                                                        </button>
+                                                    </div>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+                                    </>
+                                ) : (
+                                    <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60">
+                                        <GitCompare size={48} strokeWidth={1} className="mb-3 text-slate-300" />
+                                        <p className="text-sm font-medium uppercase tracking-widest">Run conversion to see differences.</p>
+                                    </div>
+                                )}
+                             </div>
                         )}
                     </div>
                 </div>

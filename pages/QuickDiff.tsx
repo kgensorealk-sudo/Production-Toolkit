@@ -5,7 +5,8 @@ import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 import { useSettings } from '../contexts/SettingsContext';
-import { Cpu, ChevronDown, ChevronUp } from 'lucide-react';
+import { Cpu, ChevronDown, ChevronUp, GitCompare } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 const QuickDiff: React.FC = () => {
     const { isHardwareAccelerated } = useSettings();
@@ -15,7 +16,7 @@ const QuickDiff: React.FC = () => {
     const [diffStats, setDiffStats] = useState('');
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
     const [isLoading, setIsLoading] = useState(false);
-    const [currentChangeIndex, setCurrentChangeIndex] = useState(-1);
+    const [currentChangeIndex, setCurrentChangeIndex] = useState(0);
     const [changeCount, setChangeCount] = useState(0);
     const [rowsData, setRowsData] = useState<any[]>([]);
     const workerRef = useRef<Worker | null>(null);
@@ -68,29 +69,17 @@ const QuickDiff: React.FC = () => {
     };
 
     const scrollToChange = (direction: 'next' | 'prev') => {
-        if (!diffContainerRef.current) return;
-        const changeRows = diffContainerRef.current.querySelectorAll('[data-change-row="true"][data-change-index]');
-        if (changeRows.length === 0) return;
+        if (!diffContainerRef.current || changeCount === 0) return;
 
-        let nextIndex = currentChangeIndex;
+        let nextIndex = direction === 'next' ? currentChangeIndex + 1 : currentChangeIndex - 1;
+        if (nextIndex > changeCount) nextIndex = 1;
+        if (nextIndex < 1) nextIndex = changeCount;
 
-        if (direction === 'next') {
-            if (currentChangeIndex === changeRows.length - 1) {
-                setToast({ msg: 'End of changes reached. Nothing follows.', type: 'warn' });
-                return;
-            }
-            nextIndex = currentChangeIndex + 1;
-        } else {
-            if (currentChangeIndex <= 0) {
-                setToast({ msg: 'Start of changes reached. No previous changes.', type: 'warn' });
-                return;
-            }
-            nextIndex = currentChangeIndex - 1;
+        const targetRow = diffContainerRef.current.querySelector(`tr[data-change-index-group="${nextIndex}"]`);
+        if (targetRow) {
+            targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setCurrentChangeIndex(nextIndex);
         }
-
-        const targetRow = changeRows[nextIndex] as HTMLElement;
-        targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        setCurrentChangeIndex(nextIndex);
     };
 
     const renderRows = (data: any[]) => {
@@ -153,13 +142,13 @@ const QuickDiff: React.FC = () => {
         
         // Remove old highlights
         const oldHighlights = diffContainerRef.current.querySelectorAll('.active-change-highlight');
-        oldHighlights.forEach(el => el.classList.remove('active-change-highlight', 'bg-orange-50/50', 'ring-1', 'ring-orange-200', 'ring-inset', 'z-10'));
+        oldHighlights.forEach(el => el.classList.remove('active-change-highlight', 'bg-orange-50/50', 'ring-1', 'ring-orange-200', 'ring-inset', 'z-10', 'relative'));
 
-        if (currentChangeIndex === -1) return;
+        if (currentChangeIndex === 0) return;
 
         // Add new highlights
         const newHighlights = diffContainerRef.current.querySelectorAll(`[data-change-index-group="${currentChangeIndex}"]`);
-        newHighlights.forEach(el => el.classList.add('active-change-highlight', 'bg-orange-50/50', 'ring-1', 'ring-orange-200', 'ring-inset', 'z-10'));
+        newHighlights.forEach(el => el.classList.add('active-change-highlight', 'bg-orange-50/50', 'ring-1', 'ring-orange-200', 'ring-inset', 'z-10', 'relative'));
     }, [currentChangeIndex, rowsData]);
 
     const runDiff = () => {
@@ -188,7 +177,7 @@ const QuickDiff: React.FC = () => {
                 let count = 0;
                 incomingRows.forEach((r: any) => { if (r.type !== 'equal' && r.isFirstInBlock) count++; });
                 setChangeCount(count);
-                setCurrentChangeIndex(-1);
+                setCurrentChangeIndex(count > 0 ? 1 : 0);
 
                 setShowResults(true);
                 setIsLoading(false);
@@ -276,7 +265,7 @@ const QuickDiff: React.FC = () => {
                 }
                 setRowsData(rows);
                 setChangeCount(localChangeCount);
-                setCurrentChangeIndex(-1);
+                setCurrentChangeIndex(localChangeCount > 0 ? 1 : 0);
                 setShowResults(true);
                 setIsLoading(false);
             }, 50);
@@ -349,41 +338,61 @@ const QuickDiff: React.FC = () => {
                                     Accelerated
                                 </span>
                             )}
-                            {changeCount > 0 && (
-                                <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-slate-200 ml-2">
-                                    <button 
-                                        onClick={() => scrollToChange('prev')}
-                                        className="p-1 text-slate-500 hover:text-orange-600 hover:bg-slate-50 rounded transition-all"
-                                        title="Previous Change"
-                                    >
-                                        <ChevronUp className="w-3.5 h-3.5" />
-                                    </button>
-                                    <span className="text-[9px] font-bold text-slate-500 px-1 min-w-[3rem] text-center">
-                                        {changeCount > 0 ? (currentChangeIndex === -1 ? 0 : currentChangeIndex + 1) : 0} / {changeCount}
-                                    </span>
-                                    <button 
-                                        onClick={() => scrollToChange('next')}
-                                        className="p-1 text-slate-500 hover:text-orange-600 hover:bg-slate-50 rounded transition-all"
-                                        title="Next Change"
-                                    >
-                                        <ChevronDown className="w-3.5 h-3.5" />
-                                    </button>
-                                </div>
-                            )}
                         </div>
                     </div>
-                    <div ref={diffContainerRef} className="max-h-[70vh] overflow-auto custom-scrollbar">
-                        <table className="w-full text-sm font-mono border-collapse table-fixed bg-white">
-                            <colgroup>
-                                <col className="w-12 border-r border-slate-200" />
-                                <col className="w-[calc(50%-3rem)]" />
-                                <col className="w-12 border-r border-slate-200 border-l border-slate-200" />
-                                <col className="w-[calc(50%-3rem)]" />
-                            </colgroup>
-                            <tbody>
-                                {diffRows}
-                            </tbody>
-                        </table>
+                    <div className="relative flex flex-col overflow-hidden h-full">
+                        <div ref={diffContainerRef} className="max-h-[70vh] overflow-auto custom-scrollbar">
+                            <table className="w-full text-sm font-mono border-collapse table-fixed bg-white">
+                                <colgroup>
+                                    <col className="w-12 border-r border-slate-200" />
+                                    <col className="w-[calc(50%-3rem)]" />
+                                    <col className="w-12 border-r border-slate-200 border-l border-slate-200" />
+                                    <col className="w-[calc(50%-3rem)]" />
+                                </colgroup>
+                                <tbody>
+                                    {diffRows}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <AnimatePresence>
+                            {changeCount > 0 && (
+                                <motion.div 
+                                    initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: 20, scale: 0.95 }}
+                                    className="absolute bottom-8 right-8 flex items-center gap-2 bg-white/90 backdrop-blur-xl border border-slate-200/50 rounded-2xl p-2 shadow-[0_20px_50px_rgba(0,0,0,0.15)] z-30 ring-1 ring-slate-900/5"
+                                >
+                                    <div className="flex items-center gap-1 pr-2 border-r border-slate-100">
+                                        <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center">
+                                            <GitCompare className="w-4 h-4 text-indigo-600" strokeWidth={2.5} />
+                                        </div>
+                                        <div className="flex flex-col px-2">
+                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter leading-none mb-0.5">Changes</span>
+                                            <span className="text-xs font-black text-slate-900 tabular-nums leading-none">
+                                                {currentChangeIndex} <span className="text-slate-300 mx-0.5">/</span> {changeCount}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <button 
+                                            onClick={() => scrollToChange('prev')}
+                                            className="p-2.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition-all text-slate-600 hover:text-indigo-600 group"
+                                            title="Previous Change (Shift+Tab)"
+                                        >
+                                            <ChevronUp className="w-5 h-5 group-active:-translate-y-0.5 transition-transform" strokeWidth={3} />
+                                        </button>
+                                        <button 
+                                            onClick={() => scrollToChange('next')}
+                                            className="p-2.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition-all text-slate-600 hover:text-indigo-600 group"
+                                            title="Next Change (Tab)"
+                                        >
+                                            <ChevronDown className="w-5 h-5 group-active:translate-y-0.5 transition-transform" strokeWidth={3} />
+                                        </button>
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </div>
                 </div>
             )}

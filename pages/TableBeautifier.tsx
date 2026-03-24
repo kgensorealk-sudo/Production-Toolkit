@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { diffLines, diffWordsWithSpace, Change } from 'diff';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
+import { ChevronUp, ChevronDown, GitCompare } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 type AlignType = 'left' | 'center' | 'right' | 'char' | 'none' | 'strip';
 
@@ -11,7 +13,10 @@ const TableBeautifier: React.FC = () => {
     const [output, setOutput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<'raw' | 'diff'>('raw');
-    const [diffElements, setDiffElements] = useState<React.ReactNode>(null);
+    const [rowsData, setRowsData] = useState<any[]>([]);
+    const [currentChangeIndex, setCurrentChangeIndex] = useState(0);
+    const [totalChanges, setTotalChanges] = useState(0);
+    const diffContainerRef = useRef<HTMLDivElement>(null);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
 
     // Alignment States
@@ -73,11 +78,38 @@ const TableBeautifier: React.FC = () => {
         return lines;
     };
 
+    const scrollToChange = (direction: 'next' | 'prev') => {
+        if (!diffContainerRef.current || totalChanges === 0) return;
+
+        let nextIndex = direction === 'next' ? currentChangeIndex + 1 : currentChangeIndex - 1;
+        if (nextIndex > totalChanges) nextIndex = 1;
+        if (nextIndex < 1) nextIndex = totalChanges;
+
+        const targetRow = diffContainerRef.current.querySelector(`tr[data-change-index-group="${nextIndex}"]`);
+        if (targetRow) {
+            targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setCurrentChangeIndex(nextIndex);
+        }
+    };
+
+    useEffect(() => {
+        if (!diffContainerRef.current) return;
+        
+        const oldHighlights = diffContainerRef.current.querySelectorAll('.active-change-highlight');
+        oldHighlights.forEach(el => el.classList.remove('active-change-highlight', 'bg-orange-100/50', 'ring-1', 'ring-orange-300', 'ring-inset', 'z-10', 'relative'));
+
+        if (currentChangeIndex === 0) return;
+
+        const newHighlights = diffContainerRef.current.querySelectorAll(`[data-change-index-group="${currentChangeIndex}"]`);
+        newHighlights.forEach(el => el.classList.add('active-change-highlight', 'bg-orange-100/50', 'ring-1', 'ring-orange-300', 'ring-inset', 'z-10', 'relative'));
+    }, [currentChangeIndex, rowsData, activeTab]);
+
     const generateDiff = (original: string, modified: string) => {
         const diff = diffLines(original, modified);
-        let rows: React.ReactNode[] = [];
+        let rows: any[] = [];
         let leftLineNum = 1;
         let rightLineNum = 1;
+        let localChangeCount = 0;
 
         let i = 0;
         while(i < diff.length) {
@@ -120,45 +152,51 @@ const TableBeautifier: React.FC = () => {
                  const lNum = lContent !== undefined ? leftLineNum++ : '';
                  const rNum = rContent !== undefined ? rightLineNum++ : '';
                  
-                 let lClass = lContent !== undefined && type === 'delete' ? 'bg-rose-50/70' : (type === 'replace' ? 'bg-rose-50/30' : '');
-                 let rClass = rContent !== undefined && type === 'insert' ? 'bg-emerald-50/70' : (type === 'replace' ? 'bg-emerald-50/30' : '');
-                 if (type === 'equal') { lClass = ''; rClass = ''; }
+                 const isChange = type !== 'equal';
+                 const isFirstInBlock = isChange && r === 0;
+                 if (isFirstInBlock) localChangeCount++;
 
-                 rows.push(
-                    <tr key={`${i}-${r}`} className="border-b border-slate-100 hover:bg-slate-50 transition-colors duration-75">
-                        <td className={`w-14 text-right text-[10px] text-slate-400 p-1.5 pr-3 border-r border-slate-200 select-none bg-slate-50/80 font-mono ${lClass}`}>{lNum}</td>
-                        <td className={`p-1.5 pl-4 font-mono text-[11px] text-slate-700 whitespace-pre-wrap break-all leading-relaxed ${lClass}`} dangerouslySetInnerHTML={{__html: lContent || ''}}></td>
-                        <td className={`w-14 text-right text-[10px] text-slate-400 p-1.5 pr-3 border-r border-slate-200 border-l select-none bg-slate-50/80 font-mono ${rClass}`}>{rNum}</td>
-                        <td className={`p-1.5 pl-4 font-mono text-[11px] text-slate-700 whitespace-pre-wrap break-all leading-relaxed ${rClass}`} dangerouslySetInnerHTML={{__html: rContent || ''}}></td>
-                    </tr>
-                 );
+                 rows.push({
+                    id: `${i}-${r}`,
+                    type,
+                    lContent,
+                    rContent,
+                    lNum,
+                    rNum,
+                    isFirstInBlock,
+                    changeIndex: isFirstInBlock ? localChangeCount : undefined,
+                    changeGroup: isChange ? localChangeCount : undefined
+                 });
             }
         }
-        
-        setDiffElements(
-            <div className="bg-white">
-                <table className="w-full text-sm font-mono border-collapse table-fixed">
-                    <colgroup>
-                        <col className="w-14" />
-                        <col className="w-[calc(50%-3.5rem)]" />
-                        <col className="w-14 border-l border-slate-200" />
-                        <col className="w-[calc(50%-3.5rem)]" />
-                    </colgroup>
-                    <thead className="sticky top-0 z-20 bg-slate-100 border-b border-slate-200 shadow-sm">
-                        <tr>
-                            <th colSpan={2} className="px-6 py-3 text-left text-[11px] font-extrabold text-slate-500 uppercase tracking-widest bg-slate-100/95 backdrop-blur">
-                                <span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-slate-400"></span>Baseline Structure</span>
-                            </th>
-                            <th colSpan={2} className="px-6 py-3 text-left text-[11px] font-extrabold text-slate-500 uppercase tracking-widest bg-slate-100/95 backdrop-blur border-l border-slate-200">
-                                <span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-emerald-400"></span>Modified Protocol</span>
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody>{rows}</tbody>
-                </table>
-            </div>
-        );
+        setRowsData(rows);
+        setTotalChanges(localChangeCount);
+        setCurrentChangeIndex(localChangeCount > 0 ? 1 : 0);
     };
+
+    const diffRows = React.useMemo(() => {
+        return rowsData.map(row => {
+            const { id, type, lContent, rContent, lNum, rNum, isFirstInBlock, changeIndex, changeGroup } = row;
+            let lClass = lContent !== undefined && type === 'delete' ? 'bg-rose-50/70' : (type === 'replace' ? 'bg-rose-50/30' : '');
+            let rClass = rContent !== undefined && type === 'insert' ? 'bg-emerald-50/70' : (type === 'replace' ? 'bg-emerald-50/30' : '');
+            if (type === 'equal') { lClass = ''; rClass = ''; }
+
+            return (
+                <tr 
+                    key={id} 
+                    className="border-b border-slate-100 hover:bg-slate-50 transition-colors duration-75"
+                    data-change-row={changeGroup ? 'true' : undefined}
+                    data-change-index={changeIndex}
+                    data-change-index-group={changeGroup}
+                >
+                    <td className={`w-14 text-right text-[10px] text-slate-400 p-1.5 pr-3 border-r border-slate-200 select-none bg-slate-50/80 font-mono ${lClass}`}>{lNum}</td>
+                    <td className={`p-1.5 pl-4 font-mono text-[11px] text-slate-700 whitespace-pre-wrap break-all leading-relaxed ${lClass}`} dangerouslySetInnerHTML={{__html: lContent || ''}}></td>
+                    <td className={`w-14 text-right text-[10px] text-slate-400 p-1.5 pr-3 border-r border-slate-200 border-l select-none bg-slate-50/80 font-mono ${rClass}`}>{rNum}</td>
+                    <td className={`p-1.5 pl-4 font-mono text-[11px] text-slate-700 whitespace-pre-wrap break-all leading-relaxed ${rClass}`} dangerouslySetInnerHTML={{__html: rContent || ''}}></td>
+                </tr>
+            );
+        });
+    }, [rowsData]);
 
     const beautifyStructure = (xml: string) => {
         let res = xml;
@@ -244,7 +282,9 @@ const TableBeautifier: React.FC = () => {
     const clearAll = () => {
         setInput('');
         setOutput('');
-        setDiffElements(null);
+        setRowsData([]);
+        setTotalChanges(0);
+        setCurrentChangeIndex(0);
         setToast({ msg: "Cleared.", type: "warn" });
     };
 
@@ -378,7 +418,7 @@ const TableBeautifier: React.FC = () => {
                              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-pink-600 text-white text-[10px] font-mono shadow-lg shadow-pink-500/30">1</span>
                             Condensed XML Row
                         </label>
-                        <button onClick={() => { setInput(''); setDiffElements(null); setOutput(''); }} title="Alt+Delete" className="text-[10px] font-black text-slate-400 hover:text-rose-500 uppercase tracking-widest transition-colors">Clear</button>
+                        <button onClick={() => { setInput(''); setOutput(''); setRowsData([]); setTotalChanges(0); setCurrentChangeIndex(0); }} title="Alt+Delete" className="text-[10px] font-black text-slate-400 hover:text-rose-500 uppercase tracking-widest transition-colors">Clear</button>
                     </div>
                     
                     <textarea 
@@ -438,13 +478,74 @@ const TableBeautifier: React.FC = () => {
                          )}
 
                          {activeTab === 'diff' && (
-                             <div className="absolute inset-0 overflow-auto custom-scrollbar bg-white">
-                                 {diffElements ? diffElements : (
-                                    <div className="h-full flex flex-col items-center justify-center text-slate-300 opacity-60 grayscale">
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                                        <p className="text-sm font-black uppercase tracking-[0.25em]">Awaiting System Process</p>
-                                    </div>
-                                 )}
+                             <div className="absolute inset-0 flex flex-col overflow-hidden bg-white">
+                                 <div ref={diffContainerRef} className="flex-grow overflow-auto custom-scrollbar">
+                                     {rowsData.length > 0 ? (
+                                         <table className="w-full text-sm font-mono border-collapse table-fixed">
+                                             <colgroup>
+                                                 <col className="w-14" />
+                                                 <col className="w-[calc(50%-3.5rem)]" />
+                                                 <col className="w-14 border-l border-slate-200" />
+                                                 <col className="w-[calc(50%-3.5rem)]" />
+                                             </colgroup>
+                                             <thead className="sticky top-0 z-20 bg-slate-100 border-b border-slate-200 shadow-sm">
+                                                 <tr>
+                                                     <th colSpan={2} className="px-6 py-3 text-left text-[11px] font-extrabold text-slate-500 uppercase tracking-widest bg-slate-100/95 backdrop-blur">
+                                                         <span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-slate-400"></span>Baseline Structure</span>
+                                                     </th>
+                                                     <th colSpan={2} className="px-6 py-3 text-left text-[11px] font-extrabold text-slate-500 uppercase tracking-widest bg-slate-100/95 backdrop-blur border-l border-slate-200">
+                                                         <span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-emerald-400"></span>Modified Protocol</span>
+                                                     </th>
+                                                 </tr>
+                                             </thead>
+                                             <tbody>{diffRows}</tbody>
+                                         </table>
+                                     ) : (
+                                        <div className="h-full flex flex-col items-center justify-center text-slate-300 opacity-60 grayscale">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                            <p className="text-sm font-black uppercase tracking-[0.25em]">Awaiting System Process</p>
+                                        </div>
+                                     )}
+                                 </div>
+
+                                 <AnimatePresence>
+                                     {totalChanges > 0 && (
+                                         <motion.div 
+                                             initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                                             animate={{ opacity: 1, y: 0, scale: 1 }}
+                                             exit={{ opacity: 0, y: 20, scale: 0.95 }}
+                                             className="absolute bottom-8 right-8 flex items-center gap-2 bg-white/90 backdrop-blur-xl border border-slate-200/50 rounded-2xl p-2 shadow-[0_20px_50px_rgba(0,0,0,0.15)] z-30 ring-1 ring-slate-900/5"
+                                         >
+                                             <div className="flex items-center gap-1 pr-2 border-r border-slate-100">
+                                                 <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center">
+                                                     <GitCompare className="w-4 h-4 text-indigo-600" strokeWidth={2.5} />
+                                                 </div>
+                                                 <div className="flex flex-col px-2">
+                                                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter leading-none mb-0.5">Changes</span>
+                                                     <span className="text-xs font-black text-slate-900 tabular-nums leading-none">
+                                                         {currentChangeIndex} <span className="text-slate-300 mx-0.5">/</span> {totalChanges}
+                                                     </span>
+                                                 </div>
+                                             </div>
+                                             <div className="flex items-center gap-1">
+                                                 <button 
+                                                     onClick={() => scrollToChange('prev')}
+                                                     className="p-2.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition-all text-slate-600 hover:text-indigo-600 group"
+                                                     title="Previous Change (Shift+Tab)"
+                                                 >
+                                                     <ChevronUp className="w-5 h-5 group-active:-translate-y-0.5 transition-transform" strokeWidth={3} />
+                                                 </button>
+                                                 <button 
+                                                     onClick={() => scrollToChange('next')}
+                                                     className="p-2.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition-all text-slate-600 hover:text-indigo-600 group"
+                                                     title="Next Change (Tab)"
+                                                 >
+                                                     <ChevronDown className="w-5 h-5 group-active:translate-y-0.5 transition-transform" strokeWidth={3} />
+                                                 </button>
+                                             </div>
+                                         </motion.div>
+                                     )}
+                                 </AnimatePresence>
                              </div>
                          )}
                     </div>
