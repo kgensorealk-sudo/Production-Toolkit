@@ -506,26 +506,53 @@ const StructuralNodeArchitect: React.FC = () => {
 
     const renderDiff = () => {
         return (
-            <div ref={diffContainerRef} className="flex-grow overflow-auto custom-scrollbar bg-white">
-                <table className="w-full text-sm font-mono border-collapse table-fixed">
-                    <colgroup>
-                        <col className="w-12" />
-                        <col className="w-[calc(50%-3rem)]" />
-                        <col className="w-12" />
-                        <col className="w-[calc(50%-3rem)]" />
-                    </colgroup>
-                    <thead className="sticky top-0 z-20 bg-slate-50/90 backdrop-blur-md text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-200">
-                        <tr>
-                            <th className="py-2.5 px-2 border-r border-slate-200 text-center">LN</th>
-                            <th className="py-2.5 px-6 text-left border-r border-slate-200">Source_Buffer</th>
-                            <th className="py-2.5 px-2 border-r border-slate-200 text-center">LN</th>
-                            <th className="py-2.5 px-6 text-left">Repaired_Node</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {diffRows}
-                    </tbody>
-                </table>
+            <div className="flex-grow relative flex flex-col overflow-hidden">
+                <div ref={diffContainerRef} className="flex-grow overflow-auto custom-scrollbar bg-white">
+                    <table className="w-full text-sm font-mono border-collapse table-fixed">
+                        <colgroup>
+                            <col className="w-12" />
+                            <col className="w-[calc(50%-3rem)]" />
+                            <col className="w-12" />
+                            <col className="w-[calc(50%-3rem)]" />
+                        </colgroup>
+                        <thead className="sticky top-0 z-20 bg-slate-50/90 backdrop-blur-md text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-200">
+                            <tr>
+                                <th className="py-2.5 px-2 border-r border-slate-200 text-center">LN</th>
+                                <th className="py-2.5 px-6 text-left border-r border-slate-200">Source_Buffer</th>
+                                <th className="py-2.5 px-2 border-r border-slate-200 text-center">LN</th>
+                                <th className="py-2.5 px-6 text-left">Repaired_Node</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {diffRows}
+                        </tbody>
+                    </table>
+                </div>
+                {calculatedChangeCount > 0 && (
+                    <div className="absolute bottom-8 right-10 flex items-center gap-3 bg-white/95 backdrop-blur-md px-5 py-3 rounded-[2rem] border border-slate-200 shadow-2xl z-30 animate-in fade-in slide-in-from-bottom-4 duration-500 ring-1 ring-slate-900/5">
+                        <div className="flex flex-col items-end mr-3">
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Audit Stream</span>
+                            <span className="text-xs font-black text-indigo-600 tabular-nums leading-none">{(currentChangeIndex === -1 ? 0 : currentChangeIndex + 1)} <span className="text-slate-300 mx-0.5">/</span> {calculatedChangeCount}</span>
+                        </div>
+                        <div className="h-8 w-[1px] bg-slate-100 mx-1"></div>
+                        <div className="flex gap-1.5">
+                            <button 
+                                onClick={() => scrollToChange('prev')}
+                                className="p-2.5 hover:bg-slate-50 rounded-2xl text-slate-600 transition-all active:scale-90 hover:text-indigo-600"
+                                title="Previous Change"
+                            >
+                                <ChevronUp className="w-5 h-5" />
+                            </button>
+                            <button 
+                                onClick={() => scrollToChange('next')}
+                                className="p-2.5 hover:bg-slate-50 rounded-2xl text-slate-600 transition-all active:scale-90 hover:text-indigo-600"
+                                title="Next Change"
+                            >
+                                <ChevronDown className="w-5 h-5" />
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         );
     };

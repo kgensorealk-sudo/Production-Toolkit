@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { diffLines, Change, diffWordsWithSpace } from 'diff';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import Switch from '../components/Switch';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
+import { ChevronUp, ChevronDown } from 'lucide-react';
 
 interface ResolutionItem {
     id: string;
@@ -19,6 +20,7 @@ interface ResolutionItem {
     targetIsPlural: boolean;
     missingRefid: boolean;
     missingId: boolean;
+    isDuplicate: boolean;
 }
 
 interface BibIndex {
@@ -38,10 +40,14 @@ const CitationLinker: React.FC = () => {
     const [toast, setToast] = useState<{ msg: string, type: 'success' | 'warn' | 'error' | 'info' } | null>(null);
     const [activeTab, setActiveTab] = useState<'xml' | 'diff'>('xml');
     const [diffElements, setDiffElements] = useState<React.ReactNode>(null);
+    const [currentChangeIndex, setCurrentChangeIndex] = useState(-1);
+    const [totalChanges, setTotalChanges] = useState(0);
+    const diffContainerRef = useRef<HTMLDivElement>(null);
 
     // Configuration States
     const [targetMissingRefid, setTargetMissingRefid] = useState(true);
     const [targetMissingId, setTargetMissingId] = useState(true);
+    const [targetDuplicateId, setTargetDuplicateId] = useState(true);
     const [cleanDoi, setCleanDoi] = useState(true);
     const [cfStart, setCfStart] = useState<number>(3000);
     const [doiCount, setDoiCount] = useState(0);
@@ -168,6 +174,8 @@ const CitationLinker: React.FC = () => {
         const diff = diffLines(original, modified);
         let rows: React.ReactNode[] = [];
         let leftLineNum = 1, rightLineNum = 1, i = 0;
+        let changeCount = 0;
+
         while(i < diff.length) {
             const current = diff[i];
             let type = 'equal', leftVal = '', rightVal = '';
@@ -180,6 +188,11 @@ const CitationLinker: React.FC = () => {
             } else {
                 leftVal = rightVal = current.value; i++;
             }
+
+            const isChange = type !== 'equal';
+            if (isChange) changeCount++;
+            const currentBlockIdx = isChange ? changeCount - 1 : -1;
+
             let leftLines: string[] = [], rightLines: string[] = [];
             if (type === 'replace') {
                 const wordDiff = diffWordsWithSpace(leftVal, rightVal);
@@ -203,7 +216,13 @@ const CitationLinker: React.FC = () => {
                 let lClass = lContent !== undefined && type === 'delete' ? 'bg-rose-50/70' : (type === 'replace' ? 'bg-rose-50/30' : '');
                 let rClass = rContent !== undefined && type === 'insert' ? 'bg-emerald-50/70' : (type === 'replace' ? 'bg-emerald-50/30' : '');
                 rows.push(
-                    <tr key={`${i}-${r}`} className="hover:bg-slate-50 transition-colors duration-75 group border-b border-slate-100/30 last:border-0">
+                    <tr 
+                        key={`${i}-${r}`} 
+                        className="hover:bg-slate-50 transition-colors duration-75 group border-b border-slate-100/30 last:border-0"
+                        data-change-row={isChange ? 'true' : undefined}
+                        data-change-index={isChange && r === 0 ? currentBlockIdx : undefined}
+                        data-change-index-group={isChange ? currentBlockIdx : undefined}
+                    >
                         <td className={`w-14 text-right text-[10px] text-slate-400 p-1.5 pr-3 border-r border-slate-200 select-none bg-slate-50/80 font-mono ${lClass}`}>{lNum}</td>
                         <td className={`p-1.5 pl-4 font-mono text-[11px] text-slate-700 whitespace-pre-wrap break-all leading-relaxed ${lClass}`} dangerouslySetInnerHTML={{__html: lContent || ''}}></td>
                         <td className={`w-14 text-right text-[10px] text-slate-400 p-1.5 pr-3 border-r border-slate-200 border-l select-none bg-slate-50/80 font-mono ${rClass}`}>{rNum}</td>
@@ -212,6 +231,7 @@ const CitationLinker: React.FC = () => {
                 );
             }
         }
+        setTotalChanges(changeCount);
         setDiffElements(
             <div className="bg-white">
                 <table className="w-full text-sm font-mono border-collapse table-fixed">
@@ -227,6 +247,46 @@ const CitationLinker: React.FC = () => {
             </div>
         );
     };
+
+    const scrollToChange = (direction: 'next' | 'prev') => {
+        if (!diffContainerRef.current) return;
+        const changeRows = diffContainerRef.current.querySelectorAll('[data-change-row="true"][data-change-index]');
+        if (changeRows.length === 0) return;
+
+        let nextIndex = currentChangeIndex;
+
+        if (direction === 'next') {
+            if (currentChangeIndex === changeRows.length - 1) {
+                setToast({ msg: 'End of changes reached.', type: 'info' });
+                return;
+            }
+            nextIndex = currentChangeIndex + 1;
+        } else {
+            if (currentChangeIndex <= 0) {
+                setToast({ msg: 'Start of changes reached.', type: 'info' });
+                return;
+            }
+            nextIndex = currentChangeIndex - 1;
+        }
+
+        const targetRow = changeRows[nextIndex] as HTMLElement;
+        targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setCurrentChangeIndex(nextIndex);
+    };
+
+    useEffect(() => {
+        if (!diffContainerRef.current) return;
+        
+        // Remove old highlights
+        const oldHighlights = diffContainerRef.current.querySelectorAll('.active-change-highlight');
+        oldHighlights.forEach(el => el.classList.remove('active-change-highlight', 'bg-indigo-50/50', 'ring-1', 'ring-indigo-200', 'ring-inset', 'z-10'));
+
+        if (currentChangeIndex === -1) return;
+
+        // Add new highlights
+        const newHighlights = diffContainerRef.current.querySelectorAll(`[data-change-index-group="${currentChangeIndex}"]`);
+        newHighlights.forEach(el => el.classList.add('active-change-highlight', 'bg-indigo-50/50', 'ring-1', 'ring-indigo-200', 'ring-inset', 'z-10'));
+    }, [currentChangeIndex, diffElements]);
 
     const runAnalysis = () => {
         if (!input.trim()) { setToast({ msg: "Please paste XML source.", type: "warn" }); return; }
@@ -280,6 +340,15 @@ const CitationLinker: React.FC = () => {
 
                 const orphans: ResolutionItem[] = [];
                 
+                // Pre-scan for all IDs to detect duplicates
+                const idCounts = new Map<string, number>();
+                const allIdRegex = /\bid="([^"]+)"/g;
+                let idMatch;
+                while ((idMatch = allIdRegex.exec(input)) !== null) {
+                    const id = idMatch[1];
+                    idCounts.set(id, (idCounts.get(id) || 0) + 1);
+                }
+
                 let foundDoiLabels: string[] = [];
                 if (cleanDoi) {
                     const bibRefRegex = /<(?:ce:)?bib-reference\b[^>]*?id="([^"]+)"[^>]*>([\s\S]*?)<\/(?:ce:)?bib-reference>/gi;
@@ -316,11 +385,12 @@ const CitationLinker: React.FC = () => {
 
                     const missingId = !existingId;
                     const missingRefid = !existingRefid;
+                    const isDuplicate = !!existingId && (idCounts.get(existingId) || 0) > 1;
 
                     const isInterRef = baseTag.toLowerCase().includes('inter-ref');
                     const isDoiLink = isInterRef && text.includes('doi.org/');
 
-                    const shouldProcess = ((targetMissingRefid && missingRefid && !isInterRef) || (targetMissingId && missingId)) && !isDoiLink;
+                    const shouldProcess = ((targetMissingRefid && missingRefid && !isInterRef) || (targetMissingId && missingId) || (targetDuplicateId && isDuplicate)) && !isDoiLink;
                     if (!shouldProcess) continue;
 
                     let mappedIds: string[] = existingRefid ? existingRefid.split(/\s+/).filter(Boolean) : [];
@@ -407,7 +477,8 @@ const CitationLinker: React.FC = () => {
                         originalIsPlural,
                         targetIsPlural,
                         missingId,
-                        missingRefid
+                        missingRefid,
+                        isDuplicate
                     });
                 }
 
@@ -435,13 +506,15 @@ const CitationLinker: React.FC = () => {
         setTimeout(() => {
             try {
                 let cfCounter = cfStart;
-                const existingCf = input.match(/id="cf(\d+)"/g);
-                if (existingCf) {
-                    const maxExisting = existingCf.reduce((m, c) => {
+                // Robust detection of existing cf IDs in the entire document (id, refid, or text)
+                const allExistingCf = input.match(/cf(\d+)/g);
+                if (allExistingCf) {
+                    const maxExisting = allExistingCf.reduce((m, c) => {
                         const num = parseInt(c.match(/\d+/)![0]);
-                        return Math.max(m, num);
+                        return isNaN(num) ? m : Math.max(m, num);
                     }, 0);
-                    cfCounter = Math.max(cfCounter, Math.ceil((maxExisting + 5) / 5) * 5);
+                    // Ensure we start at least 5 units above the max existing, rounded to next 5
+                    cfCounter = Math.max(cfCounter, (Math.floor(maxExisting / 5) + 1) * 5);
                 }
 
                 let result = input;
@@ -449,7 +522,7 @@ const CitationLinker: React.FC = () => {
 
                 activeResolutions.forEach(res => {
                     let targetId = res.existingId;
-                    if (targetMissingId && res.missingId) {
+                    if ((targetMissingId && res.missingId) || (targetDuplicateId && res.isDuplicate)) {
                         targetId = `cf${cfCounter.toString().padStart(4, '0')}`;
                         cfCounter += 5;
                     }
@@ -515,6 +588,8 @@ const CitationLinker: React.FC = () => {
                     <Switch id="toggle-refid" label="Resolve Links" subLabel="Missing refid" checked={targetMissingRefid} onChange={setTargetMissingRefid} color="indigo" />
                     <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
                     <Switch id="toggle-id" label="Enforce IDs" subLabel="Missing id (cfxxxx)" checked={targetMissingId} onChange={setTargetMissingId} color="blue" />
+                    <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
+                    <Switch id="toggle-dup" label="Fix Duplicates" subLabel="Re-assign duplicate IDs" checked={targetDuplicateId} onChange={setTargetDuplicateId} color="amber" />
                     <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
                     <Switch id="toggle-doi" label="Clean DOIs" subLabel="Convert inter-ref to ce:doi" checked={cleanDoi} onChange={setCleanDoi} color="emerald" />
                     <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
@@ -647,6 +722,7 @@ const CitationLinker: React.FC = () => {
                                             </div>
                                             <div className="flex gap-2">
                                                 {targetMissingId && res.missingId && <span className="text-[8px] font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 uppercase">Will Inject ID</span>}
+                                                {targetDuplicateId && res.isDuplicate && <span className="text-[8px] font-black text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100 uppercase">Duplicate ID: {res.existingId}</span>}
                                                 {targetMissingRefid && res.missingRefid && res.status === 'resolved' && !res.tagType.includes('inter-ref') && <span className="text-[8px] font-black text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 uppercase">Will Resolve Link</span>}
                                             </div>
                                             <span className="text-[10px] font-mono text-slate-400 font-bold ml-auto">TXT: "{res.textContent}"</span>
@@ -679,9 +755,32 @@ const CitationLinker: React.FC = () => {
                     <div className="flex flex-col h-full animate-fade-in overflow-hidden">
                         <div className="bg-slate-50 px-10 py-5 border-b border-slate-200 flex justify-between items-center">
                             <h3 className="font-black text-slate-900 text-xs uppercase tracking-widest">Validated Protocol Stream</h3>
-                            <div className="flex gap-4">
-                                <button onClick={() => { navigator.clipboard.writeText(output); setToast({msg:'Copied!', type:'success'}); }} className="bg-emerald-600 text-white border border-emerald-700 px-6 py-2.5 rounded-xl text-[10px] font-black hover:bg-emerald-700 shadow-lg shadow-emerald-500/20 transition-all uppercase tracking-widest">Export Result</button>
-                                <button onClick={() => { setStep('input'); setResolutions([]); }} className="text-xs font-bold text-slate-400 hover:text-slate-600 uppercase tracking-widest">Start New Session</button>
+                            <div className="flex items-center gap-6">
+                                {activeTab === 'diff' && totalChanges > 0 && (
+                                    <div className="flex items-center gap-3 bg-white px-4 py-1.5 rounded-xl border border-slate-200 shadow-sm">
+                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-2">Changes: {currentChangeIndex + 1}/{totalChanges}</span>
+                                        <div className="flex gap-1">
+                                            <button 
+                                                onClick={() => scrollToChange('prev')}
+                                                className="p-1 hover:bg-slate-100 rounded-md text-slate-500 transition-colors"
+                                                title="Previous Change"
+                                            >
+                                                <ChevronUp className="w-4 h-4" />
+                                            </button>
+                                            <button 
+                                                onClick={() => scrollToChange('next')}
+                                                className="p-1 hover:bg-slate-100 rounded-md text-slate-500 transition-colors"
+                                                title="Next Change"
+                                            >
+                                                <ChevronDown className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                                <div className="flex gap-4">
+                                    <button onClick={() => { navigator.clipboard.writeText(output); setToast({msg:'Copied!', type:'success'}); }} className="bg-emerald-600 text-white border border-emerald-700 px-6 py-2.5 rounded-xl text-[10px] font-black hover:bg-emerald-700 shadow-lg shadow-emerald-500/20 transition-all uppercase tracking-widest">Export Result</button>
+                                    <button onClick={() => { setStep('input'); setResolutions([]); setCurrentChangeIndex(-1); setTotalChanges(0); }} className="text-xs font-bold text-slate-400 hover:text-slate-600 uppercase tracking-widest">Start New Session</button>
+                                </div>
                             </div>
                         </div>
                         <div className="bg-white px-10 pt-4 border-b border-slate-100 flex space-x-4">
@@ -699,8 +798,35 @@ const CitationLinker: React.FC = () => {
                                 </div>
                             )}
                             {activeTab === 'diff' && (
-                                <div className="absolute inset-0 overflow-auto custom-scrollbar">
-                                    {diffElements}
+                                <div className="absolute inset-0 flex flex-col">
+                                    <div ref={diffContainerRef} className="flex-grow overflow-auto custom-scrollbar">
+                                        {diffElements}
+                                    </div>
+                                    {totalChanges > 0 && (
+                                        <div className="absolute bottom-8 right-10 flex items-center gap-3 bg-white/95 backdrop-blur-md px-5 py-3 rounded-[2rem] border border-slate-200 shadow-2xl z-30 animate-in fade-in slide-in-from-bottom-4 duration-500 ring-1 ring-slate-900/5">
+                                            <div className="flex flex-col items-end mr-3">
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Audit Stream</span>
+                                                <span className="text-xs font-black text-indigo-600 tabular-nums leading-none">{currentChangeIndex + 1} <span className="text-slate-300 mx-0.5">/</span> {totalChanges}</span>
+                                            </div>
+                                            <div className="h-8 w-[1px] bg-slate-100 mx-1"></div>
+                                            <div className="flex gap-1.5">
+                                                <button 
+                                                    onClick={() => scrollToChange('prev')}
+                                                    className="p-2.5 hover:bg-slate-50 rounded-2xl text-slate-600 transition-all active:scale-90 hover:text-indigo-600"
+                                                    title="Previous Change"
+                                                >
+                                                    <ChevronUp className="w-5 h-5" />
+                                                </button>
+                                                <button 
+                                                    onClick={() => scrollToChange('next')}
+                                                    className="p-2.5 hover:bg-slate-50 rounded-2xl text-slate-600 transition-all active:scale-90 hover:text-indigo-600"
+                                                    title="Next Change"
+                                                >
+                                                    <ChevronDown className="w-5 h-5" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
