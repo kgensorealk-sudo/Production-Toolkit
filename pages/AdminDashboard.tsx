@@ -6,7 +6,7 @@ import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import ConfirmationModal from '../components/ConfirmationModal';
 import ReleaseNotesModal from '../components/ReleaseNotesModal';
-import { History } from 'lucide-react';
+import { History, Info } from 'lucide-react';
 
 interface Announcement {
     id: string;
@@ -47,7 +47,7 @@ interface FeedbackRecord {
     };
 }
 
-type IntelligenceRange = '24h' | '7d' | '30d' | 'all';
+type IntelligenceRange = '24h' | '7d' | '30d';
 
 const DURATION_OPTIONS = [
     { label: '1 Min (Testing)', value: 'trial_1m', type: 'trial' },
@@ -208,7 +208,7 @@ const AdminDashboard: React.FC = () => {
     const fetchIntelligence = useCallback(async (isSilent = false) => {
         if (!isSilent) setIsLoading(true);
         try {
-            const { data, error } = await supabase.from('usage_logs').select('*').order('timestamp', { ascending: false });
+            const { data, error } = await supabase.from('usage_logs').select('*, profiles(email, is_subscribed, subscription_end)').order('timestamp', { ascending: false });
             if (error) throw error;
             setUsageLogs(data || []);
         } catch (error: any) {
@@ -257,7 +257,7 @@ const AdminDashboard: React.FC = () => {
             else if (activeTab === 'feedback') await fetchFeedbacks(isSilent);
             else if (activeTab === 'keys') { await Promise.all([fetchUsers(true), fetchAccessKeys(isSilent)]); }
             else if (activeTab === 'config') { await Promise.all([fetchIntelligence(true), refreshFreeTools()]); }
-            else if (activeTab === 'intelligence') await fetchIntelligence(isSilent);
+            else if (activeTab === 'intelligence') await Promise.all([fetchUsers(true), fetchAccessKeys(true), fetchIntelligence(isSilent)]);
         } catch (e) {
             console.error("Silent sync failed:", e);
         }
@@ -566,7 +566,7 @@ const AdminDashboard: React.FC = () => {
     }).length;
 
     const intelligenceMetrics = useMemo(() => {
-        if (usageLogs.length === 0) return { globalRanking: [], userAffinities: [], rareTools: [], filteredTotal: 0, growth: 0, segments: { premium: 0, standard: 0, segmentCounts: {} }, hourlyIntensity: new Array(24).fill(0), recentActivity: [], toolUsage24h: {} };
+        if (usageLogs.length === 0) return { globalRanking: [], userAffinities: [], rareTools: [], filteredTotal: 0, growth: 0, segments: { premium: 0, standard: 0, segmentCounts: { premium: {}, standard: {} } }, hourlyIntensity: new Array(24).fill(0), recentActivity: [], toolUsage24h: {}, anomalies: [] };
 
         const now = new Date().getTime();
         const userMap = new Map<string, UserProfile>(users.map(u => [u.id, u]));
@@ -576,14 +576,13 @@ const AdminDashboard: React.FC = () => {
                 case '24h': return 24 * 60 * 60 * 1000;
                 case '7d': return 7 * 24 * 60 * 60 * 1000;
                 case '30d': return 30 * 24 * 60 * 60 * 1000;
-                default: return Infinity;
+                default: return 30 * 24 * 60 * 60 * 1000;
             }
         };
 
         const rangeMs = getRangeMs(intelRange);
         
         const filteredLogs = usageLogs.filter(log => {
-            if (intelRange === 'all') return true;
             const logTime = new Date(log.timestamp).getTime();
             return (now - logTime) <= rangeMs;
         });
@@ -602,17 +601,15 @@ const AdminDashboard: React.FC = () => {
         });
 
         let growth = 0;
-        if (intelRange !== 'all') {
-            const prevWindowLogs = usageLogs.filter(log => {
-                const logTime = new Date(log.timestamp).getTime();
-                const diff = now - logTime;
-                return diff > rangeMs && diff <= (rangeMs * 2);
-            });
-            if (prevWindowLogs.length > 0) {
-                growth = Math.round(((filteredLogs.length - prevWindowLogs.length) / prevWindowLogs.length) * 100);
-            } else {
-                growth = filteredLogs.length > 0 ? 100 : 0;
-            }
+        const prevWindowLogs = usageLogs.filter(log => {
+            const logTime = new Date(log.timestamp).getTime();
+            const diff = now - logTime;
+            return diff > rangeMs && diff <= (rangeMs * 2);
+        });
+        if (prevWindowLogs.length > 0) {
+            growth = Math.round(((filteredLogs.length - prevWindowLogs.length) / prevWindowLogs.length) * 100);
+        } else {
+            growth = filteredLogs.length > 0 ? 100 : 0;
         }
 
         const toolCounts: Record<string, number> = {};
@@ -641,7 +638,7 @@ const AdminDashboard: React.FC = () => {
 
         const allAvailableTools = Object.values(ToolId).filter(id => id !== 'dashboard' && id !== 'docs');
         const globalRanking = allAvailableTools.map(id => ({ id, name: getToolName(id), count: toolCounts[id] || 0 })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
-        const rareTools = globalRanking.filter(r => r.count < (intelRange === 'all' ? 10 : (intelRange === '30d' ? 5 : 2))).reverse();
+        const rareTools = globalRanking.filter(r => r.count < (intelRange === '30d' ? 5 : 2)).reverse();
 
         const userAffinities = users.map(user => {
             const counts = userToolCounts[user.id] || {};
@@ -663,8 +660,23 @@ const AdminDashboard: React.FC = () => {
             user: userMap.get(log.user_id)?.email || `Anonymous_${log.user_id.slice(0,4)}`
         }));
 
-        return { globalRanking, userAffinities, rareTools, filteredTotal: filteredLogs.length, growth, segments: { premium: premiumUsage, standard: standardUsage, segmentCounts }, hourlyIntensity, recentActivity, toolUsage24h };
-    }, [usageLogs, users, intelRange]);
+        const anomalies = filteredLogs.filter(log => {
+            const user = userMap.get(log.user_id);
+            if (!user) return false;
+            const isPremium = !!user.is_subscribed;
+            const isFree = !!freeToolsData[log.tool_id];
+            const hasKey = accessKeys.some(k => k.user_id === log.user_id && (k.tool === log.tool_id || k.tool === 'universal') && k.is_used);
+            return !isPremium && !isFree && !hasKey;
+        }).map(log => ({
+            id: log.id,
+            timestamp: log.timestamp,
+            toolName: getToolName(log.tool_id),
+            user: userMap.get(log.user_id)?.email || `Unknown_${log.user_id.slice(0,4)}`,
+            userId: log.user_id
+        }));
+
+        return { globalRanking, userAffinities, rareTools, filteredTotal: filteredLogs.length, growth, segments: { premium: premiumUsage, standard: standardUsage, segmentCounts }, hourlyIntensity, recentActivity, toolUsage24h, anomalies };
+    }, [usageLogs, users, intelRange, freeToolsData, accessKeys]);
 
     const focusedUser = useMemo(() => {
         if (!focusedUserId) return null;
@@ -935,271 +947,417 @@ const AdminDashboard: React.FC = () => {
                 )}
 
                 {activeTab === 'intelligence' && (
-                    <div className="p-8 lg:p-12 space-y-12 animate-fade-in flex flex-col pb-32">
-                        <div className="flex flex-col sm:flex-row items-center justify-between gap-6 bg-slate-50 p-8 rounded-[2.5rem] border border-slate-200 shadow-inner">
-                            <div className="flex items-center gap-5">
-                                <div className="w-14 h-14 bg-purple-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-purple-500/30">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                    <div className="p-4 lg:p-6 space-y-4 animate-fade-in flex flex-col pb-24 max-w-[1600px] mx-auto relative">
+                        {/* Technical Grid Background Overlay */}
+                        <div className="absolute inset-0 bg-[linear-gradient(to_right,#e2e8f0_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f0_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-[0.15] pointer-events-none -z-10"></div>
+                        
+                        {/* Header Section - More Compact */}
+                        <div className="flex flex-col lg:flex-row items-stretch gap-4">
+                            <div className="flex-grow flex items-center justify-between gap-4 bg-slate-950 p-4 rounded-2xl border border-slate-800 shadow-2xl relative overflow-hidden">
+                                <div className="absolute inset-0 bg-[linear-gradient(45deg,rgba(99,102,241,0.03)_25%,transparent_25%,transparent_50%,rgba(99,102,241,0.03)_50%,rgba(99,102,241,0.03)_75%,transparent_75%,transparent)] bg-[length:4px_4px] pointer-events-none opacity-20"></div>
+                                <div className="flex items-center gap-4 relative z-10">
+                                    <div className="w-12 h-12 bg-indigo-600/20 rounded-xl flex items-center justify-center text-indigo-400 border border-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.1)]">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                                    </div>
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <h2 className="text-xl font-black text-white uppercase tracking-tight">Intelligence Node</h2>
+                                            <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 text-[11px] font-black rounded border border-emerald-500/20 uppercase tracking-widest animate-pulse">Active</span>
+                                        </div>
+                                        <p className="text-xs font-mono text-slate-500 uppercase tracking-[0.2em] mt-1">ID: INTEL_CORE_01 // {intelligenceMetrics.filteredTotal} LOGS</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Intelligence Node</h2>
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mt-1">{intelligenceMetrics.filteredTotal} System Actions Logged</p>
+                                
+                                <div className="flex items-center gap-2 relative z-10">
+                                    <button onClick={() => refreshActiveTab(false)} className="p-1.5 bg-white/5 border border-white/10 rounded-lg text-slate-400 hover:text-indigo-400 transition-all hover:bg-white/10" title="Refresh Live Data">
+                                        <svg className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                                    </button>
+                                    <button onClick={exportRawTelemetry} className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-[10px] font-black text-slate-400 uppercase tracking-widest hover:bg-white/10 transition-all flex items-center gap-2">
+                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                                        Export
+                                    </button>
                                 </div>
                             </div>
-                            
-                            <div className="flex items-center gap-4">
-                                <button onClick={() => refreshActiveTab(false)} className="p-2.5 bg-white border border-slate-200 rounded-xl text-slate-400 hover:text-indigo-600 transition-all shadow-sm" title="Refresh Live Data">
-                                    <svg className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                                </button>
-                                <button onClick={exportRawTelemetry} className="px-6 py-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-black text-slate-500 uppercase tracking-widest hover:bg-slate-50 shadow-sm transition-all flex items-center gap-2">
-                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                                    Export Logs
-                                </button>
-                                <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm">
-                                    {(['24h', '7d', '30d', 'all'] as const).map(range => (
-                                        <button 
-                                            key={range}
-                                            onClick={() => setIntelRange(range)}
-                                            className={`px-8 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all ${intelRange === range ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/20' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
-                                        >
-                                            {range === '24h' ? 'Daily' : range === '7d' ? 'Weekly' : range === '30d' ? 'Monthly' : 'All'}
-                                        </button>
-                                    ))}
-                                </div>
+
+                            <div className="flex bg-slate-200/50 p-1 rounded-xl border border-slate-300 shadow-inner shrink-0">
+                                {(['24h', '7d', '30d'] as const).map(range => (
+                                    <button 
+                                        key={range}
+                                        onClick={() => setIntelRange(range)}
+                                        className={`px-6 py-2.5 rounded-lg text-xs font-black uppercase tracking-[0.15em] transition-all ${intelRange === range ? 'bg-indigo-600 text-white shadow-lg scale-[1.02]' : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'}`}
+                                    >
+                                        {range === '24h' ? 'Daily' : range === '7d' ? 'Weekly' : 'Monthly'}
+                                    </button>
+                                ))}
                             </div>
                         </div>
 
-                        <section className="grid grid-cols-1 md:grid-cols-4 gap-8">
-                            <div className="p-8 bg-indigo-50 border border-indigo-100 rounded-[2.5rem] shadow-sm flex flex-col justify-center text-center">
-                                <div className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.4em] mb-3">Premium Pulse</div>
-                                <div className="text-5xl font-black text-indigo-900 leading-none mb-4">{intelligenceMetrics.segments.premium}</div>
-                                <div className="text-[9px] font-bold text-indigo-300 uppercase tracking-widest">Authorized Operations</div>
+                        {/* Metrics Grid - Higher Density */}
+                        <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col relative overflow-hidden group hover:border-indigo-200 transition-colors">
+                                <div className="flex items-center gap-1.5 mb-2">
+                                    <div className="text-xs font-black text-slate-400 uppercase tracking-[0.3em]">Premium Pulse</div>
+                                    <span title="Total module actions performed by authorized (subscribed) personnel" className="cursor-help">
+                                        <Info size={12} className="text-slate-300" />
+                                    </span>
+                                </div>
+                                <div className="text-3xl font-black text-slate-900 font-mono leading-none">{intelligenceMetrics.segments.premium}</div>
+                                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mt-2">Subscribed Interactions</p>
+                                <div className="mt-4 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                                    <div className="h-full bg-indigo-500" style={{ width: `${(intelligenceMetrics.segments.premium / (intelligenceMetrics.filteredTotal || 1)) * 100}%` }}></div>
+                                </div>
                             </div>
-                            <div className="p-8 bg-emerald-50 border border-emerald-100 rounded-[2.5rem] shadow-sm flex flex-col justify-center text-center">
-                                <div className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.4em] mb-3">Standard Pulse</div>
-                                <div className="text-5xl font-black text-emerald-900 leading-none mb-4">{intelligenceMetrics.segments.standard}</div>
-                                <div className="text-[9px] font-bold text-emerald-300 uppercase tracking-widest">Public Traffic</div>
+                            <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col relative overflow-hidden group hover:border-emerald-200 transition-colors">
+                                <div className="flex items-center gap-1.5 mb-2">
+                                    <div className="text-xs font-black text-slate-400 uppercase tracking-[0.3em]">Standard Pulse</div>
+                                    <span title="Total module actions performed by standard (non-subscribed) personnel" className="cursor-help">
+                                        <Info size={12} className="text-slate-300" />
+                                    </span>
+                                </div>
+                                <div className="text-3xl font-black text-slate-900 font-mono leading-none">{intelligenceMetrics.segments.standard}</div>
+                                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mt-2">Standard Interactions</p>
+                                <div className="mt-4 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                                    <div className="h-full bg-emerald-500" style={{ width: `${(intelligenceMetrics.segments.standard / (intelligenceMetrics.filteredTotal || 1)) * 100}%` }}></div>
+                                </div>
                             </div>
-                            <div className="p-8 bg-purple-50 border border-purple-100 rounded-[2.5rem] shadow-sm flex flex-col justify-center text-center">
-                                <div className="text-[10px] font-black text-purple-400 uppercase tracking-[0.4em] mb-3">Velocity Growth</div>
-                                <div className={`text-5xl font-black leading-none mb-4 ${intelligenceMetrics.growth >= 0 ? 'text-purple-900' : 'text-rose-600'}`}>
+                            <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col relative overflow-hidden group hover:border-purple-200 transition-colors">
+                                <div className="flex items-center gap-1.5 mb-2">
+                                    <div className="text-xs font-black text-slate-400 uppercase tracking-[0.3em]">Velocity Growth</div>
+                                    <span title="Percentage change in total usage volume compared to the previous equivalent time window" className="cursor-help">
+                                        <Info size={12} className="text-slate-300" />
+                                    </span>
+                                </div>
+                                <div className={`text-3xl font-black font-mono leading-none ${intelligenceMetrics.growth >= 0 ? 'text-purple-600' : 'text-rose-600'}`}>
                                     {intelligenceMetrics.growth >= 0 ? '+' : ''}{intelligenceMetrics.growth}%
                                 </div>
-                                <div className="text-[9px] font-bold text-purple-300 uppercase tracking-widest">Vs Previous Window</div>
+                                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mt-2">Usage Delta (vs Prev)</p>
+                                <div className="mt-4 flex items-center gap-1.5">
+                                    <div className={`w-2 h-2 rounded-full ${intelligenceMetrics.growth >= 0 ? 'bg-purple-500' : 'bg-rose-500'}`}></div>
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Trend Analysis</span>
+                                </div>
                             </div>
-                            <div className="p-8 bg-slate-900 rounded-[2.5rem] shadow-xl flex flex-col justify-center text-center relative overflow-hidden">
-                                <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 to-transparent"></div>
-                                <div className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.4em] mb-3 relative z-10">Persistence</div>
-                                <div className="text-5xl font-black text-white leading-none mb-4 relative z-10">
+                            <div className="p-5 bg-slate-950 rounded-2xl shadow-xl flex flex-col relative overflow-hidden border border-slate-800">
+                                <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent"></div>
+                                <div className="flex items-center gap-1.5 mb-2 relative z-10">
+                                    <div className="text-xs font-black text-indigo-400/60 uppercase tracking-[0.3em]">Persistence</div>
+                                    <span title="Percentage of total registered personnel who have been active within this time range" className="cursor-help">
+                                        <Info size={12} className="text-indigo-400/30" />
+                                    </span>
+                                </div>
+                                <div className="text-3xl font-black text-white font-mono relative z-10 leading-none">
                                     {users.length > 0 ? Math.round((intelligenceMetrics.userAffinities.length / users.length) * 100) : 0}%
                                 </div>
-                                <div className="text-[9px] font-bold text-slate-500 uppercase tracking-widest relative z-10">Operator Retention</div>
+                                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mt-2 relative z-10">Active Personnel Ratio</p>
+                                <div className="mt-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest relative z-10 flex items-center gap-2">
+                                    <span className="w-2 h-2 bg-indigo-500 rounded-full"></span>
+                                    Operator Retention
+                                </div>
                             </div>
                         </section>
 
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
-                            <section className="bg-white border border-slate-200 p-10 rounded-[3rem] shadow-sm">
-                                <div className="flex items-center gap-4 mb-8">
-                                    <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600 shadow-sm border border-amber-100">
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 items-stretch">
+                            <section className="lg:col-span-2 bg-white border border-slate-200 p-5 rounded-3xl shadow-sm flex flex-col">
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-8 h-8 bg-amber-50 rounded-lg flex items-center justify-center text-amber-600 border border-amber-100">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                            <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Temporal Heatmap</h3>
+                                            <span title="Visualizes module usage intensity across a 24-hour cycle. Darker colors indicate higher frequency of actions during that hour." className="cursor-help">
+                                                <Info size={12} className="text-slate-300" />
+                                            </span>
+                                        </div>
                                     </div>
-                                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Temporal Heatmap</h3>
+                                    <div className="flex flex-col items-end">
+                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">24H Protocol Cycle</span>
+                                        <span className="text-[9px] text-slate-400 uppercase tracking-tighter">Intensity Distribution</span>
+                                    </div>
                                 </div>
-                                <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-12 gap-2">
+                                <div className="grid grid-cols-6 sm:grid-cols-12 gap-1 flex-grow">
                                     {intelligenceMetrics.hourlyIntensity.map((val, hour) => {
                                         const maxIntensity = Math.max(...intelligenceMetrics.hourlyIntensity, 1);
                                         const opacity = (val / maxIntensity) * 0.9 + 0.1;
                                         return (
-                                            <div key={hour} className="group relative">
+                                            <div key={hour} className="group relative flex flex-col">
                                                 <div 
-                                                    className="h-10 rounded-lg transition-all duration-500"
-                                                    style={{ backgroundColor: `rgba(99, 102, 241, ${opacity})`, boxShadow: val > (maxIntensity * 0.8) ? '0 0 10px rgba(99, 102, 241, 0.3)' : 'none' }}
+                                                    className="flex-grow rounded-sm transition-all duration-500 hover:ring-2 hover:ring-indigo-300"
+                                                    style={{ backgroundColor: `rgba(99, 102, 241, ${opacity})`, boxShadow: val > (maxIntensity * 0.8) ? '0 0 8px rgba(99, 102, 241, 0.2)' : 'none' }}
                                                 ></div>
-                                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-slate-900 text-white text-[9px] font-black p-2 rounded shadow-xl whitespace-nowrap z-20">
-                                                    {hour}:00 - {val} Hits
+                                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-slate-950 text-white text-[9px] font-black p-1.5 rounded shadow-xl whitespace-nowrap z-20 border border-white/10">
+                                                    {hour}:00 // {val} HITS
                                                 </div>
-                                                <span className="text-[8px] font-bold text-slate-400 mt-1 block text-center uppercase">{hour}h</span>
+                                                <span className="text-[8px] font-bold text-slate-400 mt-0.5 text-center uppercase">{hour}h</span>
                                             </div>
                                         );
                                     })}
                                 </div>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-6 italic text-center">Normalized usage density across a 24-hour protocol cycle</p>
                             </section>
 
-                            <section className="bg-slate-900 p-10 rounded-[3rem] shadow-2xl relative overflow-hidden">
-                                <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-bl-full"></div>
-                                <div className="flex items-center gap-4 mb-8">
-                                    <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center text-indigo-400 shadow-sm border border-white/5">
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                            <section className="bg-slate-950 p-5 rounded-3xl shadow-2xl relative overflow-hidden flex flex-col border border-slate-800">
+                                <div className="absolute top-0 right-0 w-20 h-20 bg-indigo-500/5 rounded-bl-full"></div>
+                                <div className="flex items-center gap-2 mb-4 relative z-10">
+                                    <div className="w-8 h-8 bg-white/5 rounded-lg flex items-center justify-center text-indigo-400 border border-white/5">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                                     </div>
-                                    <h3 className="text-xl font-black text-white uppercase tracking-tight">Live Protocol Feed</h3>
+                                    <div className="flex items-center gap-1.5">
+                                        <h3 className="text-sm font-black text-white uppercase tracking-tight">Live Feed</h3>
+                                        <span title="Real-time stream of the most recent module access events across the entire platform." className="cursor-help">
+                                            <Info size={12} className="text-slate-500" />
+                                        </span>
+                                    </div>
+                                    <span className="text-[9px] font-black text-indigo-400/40 uppercase tracking-widest ml-auto">Real-time Stream</span>
                                 </div>
-                                <div className="space-y-4">
+                                <div className="space-y-2 max-h-[240px] overflow-y-auto custom-scrollbar pr-1 relative z-10">
                                     {intelligenceMetrics.recentActivity.length > 0 ? intelligenceMetrics.recentActivity.map((act) => (
-                                        <div key={act.id} className="flex items-center gap-4 p-4 bg-white/5 rounded-2xl border border-white/5 hover:bg-white/10 transition-colors">
-                                            <div className="w-2 h-2 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.8)]"></div>
+                                        <div key={act.id} className="flex items-center gap-2 p-2 bg-white/5 rounded-lg border border-white/5 hover:bg-white/10 transition-colors">
+                                            <div className="w-2 h-2 rounded-full bg-indigo-500 shadow-[0_0_6px_rgba(99,102,241,0.8)]"></div>
                                             <div className="flex-grow min-w-0">
-                                                <p className="text-xs font-bold text-indigo-300 uppercase tracking-tighter truncate">{act.toolName}</p>
-                                                <p className="text-[9px] text-slate-500 font-mono truncate">{act.user}</p>
+                                                <p className="text-[11px] font-black text-indigo-300 uppercase tracking-tighter truncate">{act.toolName}</p>
+                                                <p className="text-[10px] text-slate-500 font-mono truncate">{act.user}</p>
                                             </div>
                                             <span className="text-[9px] font-black text-slate-600 uppercase whitespace-nowrap">{new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                         </div>
                                     )) : (
-                                        <div className="py-20 text-center opacity-20"><p className="text-xs font-black uppercase text-white">System Signal Silent</p></div>
+                                        <div className="py-8 text-center opacity-20"><p className="text-[11px] font-black uppercase text-white">Signal Silent</p></div>
                                     )}
                                 </div>
                             </section>
                         </div>
 
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
-                            <section>
-                                <div className="flex items-center gap-4 mb-8">
-                                    <div className="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center text-purple-600 shadow-sm border border-purple-100">
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
+                            <section className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <div className="w-7 h-7 bg-purple-50 rounded-lg flex items-center justify-center text-purple-600 border border-purple-100">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
                                     </div>
-                                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Module Saturation Leaderboard</h3>
+                                    <div className="flex items-center gap-1.5">
+                                        <h3 className="text-xs font-black text-slate-900 uppercase tracking-tight">Module Saturation Leaderboard</h3>
+                                        <span title="Ranking of modules by total utilization. The progress bar shows the ratio of Premium (Indigo) vs Standard (Emerald) usage for each module." className="cursor-help">
+                                            <Info size={10} className="text-slate-300" />
+                                        </span>
+                                    </div>
+                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-auto">Utilization Ranking</span>
                                 </div>
-                                <div className="space-y-8">
-                                    {intelligenceMetrics.globalRanking.length > 0 ? intelligenceMetrics.globalRanking.slice(0, 8).map((tool) => {
+                                <div className="space-y-4 max-h-[350px] overflow-y-auto custom-scrollbar pr-2">
+                                    {intelligenceMetrics.globalRanking.length > 0 ? intelligenceMetrics.globalRanking.map((tool) => {
                                         const premCount = intelligenceMetrics.segments.segmentCounts.premium[tool.id] || 0;
                                         const stdCount = intelligenceMetrics.segments.segmentCounts.standard[tool.id] || 0;
                                         const premPercent = tool.count > 0 ? (premCount / tool.count) * 100 : 0;
                                         return (
-                                            <div key={tool.id} className="relative">
-                                                <div className="flex justify-between items-end mb-2.5">
+                                            <div key={tool.id} className="relative group p-2 rounded-xl hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-100">
+                                                <div className="flex justify-between items-end mb-1">
                                                     <div className="flex flex-col">
-                                                        <span className="text-[11px] font-black text-slate-700 uppercase tracking-widest">{tool.name}</span>
-                                                        <div className="flex items-center gap-2 mt-1">
-                                                            <span className="text-[8px] font-black text-indigo-400 uppercase">Premium: {premCount}</span>
-                                                            <span className="text-[8px] font-black text-slate-300">/</span>
-                                                            <span className="text-[8px] font-black text-emerald-400 uppercase">Std: {stdCount}</span>
+                                                        <span className="text-[11px] font-black text-slate-800 uppercase tracking-widest">{tool.name}</span>
+                                                        <div className="flex items-center gap-2 mt-0.5">
+                                                            <span className="text-[8px] font-black text-indigo-500 uppercase">PREM: {premCount}</span>
+                                                            <span className="text-[8px] font-black text-emerald-500 uppercase">STD: {stdCount}</span>
                                                         </div>
                                                     </div>
-                                                    <span className="text-[10px] font-black text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">{tool.count}</span>
+                                                    <span className="text-[10px] font-mono font-black text-indigo-600">{tool.count}</span>
                                                 </div>
-                                                <div className="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden shadow-inner border border-slate-200/50 flex">
-                                                    <div className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 transition-all duration-1000 ease-out" style={{ width: `${premPercent}%` }}></div>
-                                                    <div className="h-full bg-emerald-400 transition-all duration-1000 ease-out" style={{ width: `${100 - premPercent}%` }}></div>
+                                                <div className="h-1 w-full bg-slate-100 rounded-full overflow-hidden flex">
+                                                    <div className="h-full bg-indigo-500 transition-all duration-1000" style={{ width: `${premPercent}%` }}></div>
+                                                    <div className="h-full bg-emerald-400 transition-all duration-1000" style={{ width: `${100 - premPercent}%` }}></div>
                                                 </div>
                                             </div>
                                         );
                                     }) : (
-                                        <div className="py-20 text-center opacity-30 bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200">
-                                            <p className="text-xs font-bold uppercase tracking-widest text-slate-400">System Silence Detected</p>
+                                        <div className="py-8 text-center opacity-30 bg-slate-50 rounded-xl border-2 border-dashed border-slate-200">
+                                            <p className="text-[8px] font-bold uppercase tracking-widest text-slate-400">No Saturation Data</p>
                                         </div>
                                     )}
                                 </div>
                             </section>
 
-                            <section>
-                                <div className="flex items-center gap-4 mb-8">
-                                    <div className="w-10 h-10 bg-rose-50 rounded-xl flex items-center justify-center text-rose-600 shadow-sm border border-rose-100">
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                            <section className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <div className="w-7 h-7 bg-rose-50 rounded-lg flex items-center justify-center text-rose-600 border border-rose-100">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
                                     </div>
-                                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Cold Node Analysis</h3>
+                                    <div className="flex items-center gap-1.5">
+                                        <h3 className="text-xs font-black text-slate-900 uppercase tracking-tight">Cold Node Analysis</h3>
+                                        <span title="Identifies modules with critically low engagement levels during the selected time period. These nodes may require optimization or promotional focus." className="cursor-help">
+                                            <Info size={10} className="text-slate-300" />
+                                        </span>
+                                    </div>
+                                    <span className="text-[8px] font-black text-rose-400 uppercase tracking-widest ml-auto">Low Engagement</span>
                                 </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                <div className="grid grid-cols-2 gap-3">
                                     {intelligenceMetrics.rareTools.length > 0 ? (
                                         intelligenceMetrics.rareTools.slice(0, 4).map(tool => (
-                                            <div key={tool.id} className="p-6 bg-white border border-slate-200 rounded-[2.5rem] flex flex-col items-center text-center shadow-sm hover:shadow-md transition-all hover:border-rose-200">
-                                                <span className="text-[10px] font-black text-rose-500 uppercase tracking-[0.2em] mb-2">Low Velocity</span>
-                                                <h4 className="text-xs font-bold text-slate-800 uppercase mb-4 leading-snug">{tool.name}</h4>
-                                                <span className="text-[9px] font-mono font-black bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 text-slate-400">{tool.count} hits</span>
+                                            <div key={tool.id} className="p-4 bg-slate-50 border border-slate-100 rounded-xl flex flex-col items-center text-center hover:border-rose-200 transition-colors">
+                                                <span className="text-[9px] font-black text-rose-500 uppercase tracking-widest mb-1">Low Velocity</span>
+                                                <h4 className="text-[11px] font-bold text-slate-800 uppercase mb-2 truncate w-full">{tool.name}</h4>
+                                                <span className="text-[10px] font-mono font-black text-slate-400">{tool.count} HITS</span>
                                             </div>
                                         ))
                                     ) : (
-                                        <div className="col-span-full py-20 flex flex-col items-center justify-center bg-emerald-50/30 rounded-[2.5rem] border-2 border-dashed border-emerald-100 opacity-60">
-                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mb-3 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                            <p className="text-xs font-black uppercase tracking-widest text-emerald-600">Global saturation optimal</p>
+                                        <div className="col-span-full py-8 flex flex-col items-center justify-center bg-emerald-50/30 rounded-xl border-2 border-dashed border-emerald-100 opacity-60">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Saturation Optimal</p>
                                         </div>
                                     )}
                                 </div>
                             </section>
                         </div>
 
-                        <div className="grid grid-cols-1 xl:grid-cols-3 gap-10 pb-20">
-                            <section className="xl:col-span-2">
-                                <div className="flex items-center gap-4 mb-8">
-                                    <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 shadow-sm border border-indigo-100">
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                            <section className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm">
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-8 h-8 bg-rose-50 rounded-lg flex items-center justify-center text-rose-600 border border-rose-100">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                            <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Security Anomalies</h3>
+                                            <span title="Logs module access attempts that do not meet authorization criteria (e.g., non-premium users accessing premium-only modules without a valid key)." className="cursor-help">
+                                                <Info size={12} className="text-slate-300" />
+                                            </span>
+                                        </div>
+                                        <span className="text-[9px] font-black text-rose-400 uppercase tracking-widest ml-auto">Access Violations</span>
                                     </div>
-                                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Personnel Engagement Audit</h3>
+                                    {intelligenceMetrics.anomalies && intelligenceMetrics.anomalies.length > 0 && (
+                                        <span className="px-2.5 py-1 bg-rose-600 text-white text-[10px] font-black rounded-full uppercase tracking-widest animate-pulse">
+                                            {intelligenceMetrics.anomalies.length} BREACHES
+                                        </span>
+                                    )}
                                 </div>
-                                <div className="overflow-x-auto shadow-sm rounded-3xl border border-slate-200">
-                                    <table className="min-w-full divide-y divide-slate-100 bg-slate-50/30">
-                                        <thead className="bg-white/80 backdrop-blur-sm">
-                                            <tr>
-                                                <th className="px-8 py-5 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Operator</th>
-                                                <th className="px-8 py-5 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Primary Protocol</th>
-                                                <th className="px-8 py-5 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">Action Index</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-100">
-                                            {intelligenceMetrics.userAffinities.length > 0 ? intelligenceMetrics.userAffinities.map((ua) => (
-                                                <tr key={ua.id} onClick={() => setFocusedUserId(ua.id)} className={`cursor-pointer transition-all ${focusedUserId === ua.id ? 'bg-indigo-600 ring-4 ring-indigo-100' : 'hover:bg-white'}`}>
-                                                    <td className={`px-8 py-5 text-sm font-bold ${focusedUserId === ua.id ? 'text-white' : 'text-slate-900'}`}>{ua.email}</td>
-                                                    <td className="px-8 py-5"><span className={`px-4 py-1.5 text-[10px] font-black rounded-xl shadow-sm uppercase tracking-tighter border ${focusedUserId === ua.id ? 'bg-white/10 border-white/20 text-white' : 'bg-white border-indigo-100 text-indigo-600'}`}>{ua.topTool}</span></td>
-                                                    <td className="px-8 py-5 text-center"><span className={`text-[11px] font-mono font-bold ${focusedUserId === ua.id ? 'text-indigo-200' : 'text-slate-500'}`}>{ua.totalActions} logged</span></td>
-                                                </tr>
-                                            )) : (
-                                                <tr><td colSpan={3} className="px-8 py-20 text-center opacity-30 text-[10px] font-black uppercase tracking-widest text-slate-400">No active sessions in current window</td></tr>
-                                            )}
-                                        </tbody>
-                                    </table>
+                                <div className="overflow-hidden">
+                                    <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
+                                        {intelligenceMetrics.anomalies && intelligenceMetrics.anomalies.length > 0 ? (
+                                            <table className="min-w-full divide-y divide-slate-100">
+                                                <thead className="bg-slate-50 sticky top-0 z-10">
+                                                    <tr>
+                                                        <th className="px-4 py-3 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Operator</th>
+                                                        <th className="px-4 py-3 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Module</th>
+                                                        <th className="px-4 py-3 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">Time</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-100">
+                                                    {intelligenceMetrics.anomalies.map((anomaly, idx) => (
+                                                        <tr key={idx} className="hover:bg-rose-50/30 transition-colors group">
+                                                            <td className="px-4 py-3">
+                                                                <div className="flex flex-col">
+                                                                    <span className="text-xs font-bold text-slate-900 group-hover:text-rose-700">{anomaly.user}</span>
+                                                                    <span className="text-[9px] font-mono text-slate-400 uppercase">{anomaly.userId.slice(0, 8)}</span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-black rounded uppercase border border-slate-200">
+                                                                    {anomaly.toolName}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-4 py-3 text-right">
+                                                                <span className="text-[11px] font-mono font-bold text-slate-400">
+                                                                    {new Date(anomaly.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit' })}
+                                                                </span>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        ) : (
+                                            <div className="py-12 flex flex-col items-center justify-center text-center">
+                                                <div className="w-10 h-10 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-500 mb-3 border border-emerald-100">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+                                                </div>
+                                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Perimeter Secure</p>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </section>
 
-                            <section className="xl:col-span-1">
-                                {focusedUser ? (
-                                    <div className="bg-slate-900 rounded-[2.5rem] p-10 text-white shadow-2xl shadow-slate-900/40 sticky top-24 animate-slide-up ring-4 ring-slate-800">
-                                        <div className="flex justify-between items-start mb-12">
-                                            <div className="flex flex-col">
-                                                <span className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.4em] mb-3">Operator DNA</span>
-                                                <h4 className="text-2xl font-black truncate max-w-[200px] uppercase tracking-tighter leading-none">{focusedUser.email.split('@')[0]}</h4>
-                                                <p className="text-[10px] text-slate-500 truncate lowercase mt-2 font-mono">{focusedUser.email}</p>
-                                            </div>
-                                            <button onClick={() => setFocusedUserId(null)} className="p-3 hover:bg-white/10 rounded-2xl transition-colors text-slate-500 hover:text-white border border-white/10">
-                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" /></svg>
-                                            </button>
-                                        </div>
-                                        <div className="space-y-10">
-                                            <div>
-                                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-6 border-b border-white/5 pb-2">Module Utilization Profile</p>
-                                                <div className="space-y-6">
-                                                    {focusedUser.breakdown.map((item, i) => (
-                                                        <div key={i} className="group">
-                                                            <div className="flex justify-between text-[11px] font-bold mb-2.5">
-                                                                <span className="text-slate-300 group-hover:text-white transition-colors uppercase tracking-wider">{item.name}</span>
-                                                                <span className="text-indigo-400 font-mono">{item.count}</span>
-                                                            </div>
-                                                            <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden shadow-inner">
-                                                                <div className="h-full bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.6)] transition-all duration-1000 ease-out" style={{ width: `${(item.count / focusedUser.totalActions) * 100}%` }}></div>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                            {focusedUser.lastAction && (
-                                                <div className="pt-10 border-t border-white/10">
-                                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-4">Last Protocol Access</p>
-                                                    <div className="p-5 bg-white/5 rounded-3xl border border-white/5 shadow-inner">
-                                                        <span className="text-[11px] font-black text-indigo-300 block mb-2 uppercase tracking-widest">{getToolName(focusedUser.lastAction.tool)}</span>
-                                                        <span className="text-[10px] text-slate-500 font-mono italic">{new Date(focusedUser.lastAction.time).toLocaleString()}</span>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
+                            <section className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm flex flex-col">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600 border border-indigo-100">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
                                     </div>
-                                ) : (
-                                    <div className="h-full flex flex-col items-center justify-center p-12 text-center bg-slate-50 rounded-[2.5rem] border-2 border-dashed border-slate-200 opacity-60">
-                                        <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center text-slate-300 mb-6 shadow-sm border border-slate-100">
-                                            <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                                        </div>
-                                        <p className="text-sm font-black uppercase tracking-[0.2em] text-slate-400">Telemetry Disengaged</p>
-                                        <p className="text-[10px] text-slate-400 mt-3 font-medium px-8 leading-relaxed italic text-center">Select an operator to inspect their module usage DNA.</p>
+                                    <div className="flex items-center gap-1.5">
+                                        <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Personnel Engagement Audit</h3>
+                                        <span title="Detailed breakdown of individual operator activity. Shows their primary protocol (most used module) and total platform interactions." className="cursor-help">
+                                            <Info size={12} className="text-slate-300" />
+                                        </span>
                                     </div>
-                                )}
+                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-auto">Operator Activity Logs</span>
+                                </div>
+                                <div className="overflow-hidden flex-grow">
+                                    <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
+                                        <table className="min-w-full divide-y divide-slate-100">
+                                                <thead className="bg-slate-50 sticky top-0 z-10">
+                                                    <tr>
+                                                        <th className="px-4 py-3 text-left text-[11px] font-black text-slate-400 uppercase tracking-widest">Operator</th>
+                                                        <th className="px-4 py-3 text-left text-[11px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Primary Protocol</th>
+                                                        <th className="px-4 py-3 text-center text-[11px] font-black text-slate-400 uppercase tracking-widest">Index</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-100">
+                                                    {intelligenceMetrics.userAffinities.length > 0 ? intelligenceMetrics.userAffinities.map((ua) => (
+                                                        <tr key={ua.id} onClick={() => setFocusedUserId(ua.id)} className={`cursor-pointer transition-all ${focusedUserId === ua.id ? 'bg-indigo-600' : 'hover:bg-slate-50'}`}>
+                                                            <td className={`px-4 py-3 text-xs font-bold ${focusedUserId === ua.id ? 'text-white' : 'text-slate-900'}`}>{ua.email.split('@')[0]}</td>
+                                                            <td className="px-4 py-3 whitespace-nowrap"><span className={`px-2 py-0.5 text-[10px] font-black rounded uppercase border whitespace-nowrap ${focusedUserId === ua.id ? 'bg-white/10 border-white/20 text-white' : 'bg-white border-indigo-100 text-indigo-600'}`}>{ua.topTool}</span></td>
+                                                            <td className={`px-4 py-3 text-center text-[11px] font-mono font-bold ${focusedUserId === ua.id ? 'text-indigo-200' : 'text-slate-500'}`}>{ua.totalActions}</td>
+                                                        </tr>
+                                                    )) : (
+                                                        <tr><td colSpan={3} className="px-4 py-8 text-center opacity-30 text-xs font-black uppercase tracking-widest text-slate-400">No Active Sessions</td></tr>
+                                                    )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
                             </section>
+                        </div>
+
+                        <div className="pb-20">
+                            {focusedUser ? (
+                                <div className="bg-slate-900 rounded-[2.5rem] p-10 text-white shadow-2xl shadow-slate-900/40 animate-slide-up ring-4 ring-slate-800">
+                                    <div className="flex justify-between items-start mb-12">
+                                        <div className="flex flex-col">
+                                            <span className="text-[11px] font-black text-indigo-400 uppercase tracking-[0.4em] mb-3">Operator DNA</span>
+                                            <h4 className="text-2xl font-black truncate max-w-[200px] uppercase tracking-tighter leading-none">{focusedUser.email.split('@')[0]}</h4>
+                                            <p className="text-[11px] text-slate-500 truncate lowercase mt-2 font-mono">{focusedUser.email}</p>
+                                        </div>
+                                        <button onClick={() => setFocusedUserId(null)} className="p-3 hover:bg-white/10 rounded-2xl transition-colors text-slate-500 hover:text-white border border-white/10">
+                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" /></svg>
+                                        </button>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                                        <div>
+                                            <p className="text-[11px] font-black text-slate-500 uppercase tracking-[0.2em] mb-6 border-b border-white/5 pb-2">Module Utilization Profile</p>
+                                            <div className="space-y-6">
+                                                {focusedUser.breakdown.map((item, i) => (
+                                                    <div key={i} className="group">
+                                                        <div className="flex justify-between text-[12px] font-bold mb-2.5">
+                                                            <span className="text-slate-300 group-hover:text-white transition-colors uppercase tracking-wider">{item.name}</span>
+                                                            <span className="text-indigo-400 font-mono">{item.count}</span>
+                                                        </div>
+                                                        <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden shadow-inner">
+                                                            <div className="h-full bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.6)] transition-all duration-1000 ease-out" style={{ width: `${(item.count / focusedUser.totalActions) * 100}%` }}></div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        {focusedUser.lastAction && (
+                                            <div className="flex flex-col justify-center">
+                                                <p className="text-[11px] font-black text-slate-500 uppercase tracking-[0.2em] mb-4">Last Protocol Access</p>
+                                                <div className="p-8 bg-white/5 rounded-[2rem] border border-white/5 shadow-inner text-center">
+                                                    <span className="text-xl font-black text-indigo-300 block mb-3 uppercase tracking-widest">{getToolName(focusedUser.lastAction.tool)}</span>
+                                                    <span className="text-sm text-slate-500 font-mono italic">{new Date(focusedUser.lastAction.time).toLocaleString()}</span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="h-full flex flex-col items-center justify-center p-12 text-center bg-slate-50 rounded-[2.5rem] border-2 border-dashed border-slate-200 opacity-60">
+                                    <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center text-slate-300 mb-6 shadow-sm border border-slate-100">
+                                        <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                    </div>
+                                    <p className="text-sm font-black uppercase tracking-[0.2em] text-slate-400">Telemetry Disengaged</p>
+                                    <p className="text-[11px] text-slate-400 mt-3 font-medium px-8 leading-relaxed italic text-center">Select an operator from the Audit table to inspect their module usage DNA.</p>
+                                </div>
+                            )}
                         </div>
                         
                         <div className="pt-20 pb-32 border-t border-slate-100">
@@ -1209,13 +1367,13 @@ const AdminDashboard: React.FC = () => {
                                         <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                     </div>
                                     <div>
-                                        <h4 className="text-sm font-black text-rose-900 uppercase tracking-tight">Intelligence Danger Zone</h4>
-                                        <p className="text-[10px] font-bold text-rose-400 uppercase tracking-widest mt-1">Purge all production telemetry from the database</p>
+                                        <h4 className="text-base font-black text-rose-900 uppercase tracking-tight">Intelligence Danger Zone</h4>
+                                        <p className="text-xs font-bold text-rose-400 uppercase tracking-widest mt-1">Purge all production telemetry from the database</p>
                                     </div>
                                 </div>
                                 <button 
                                     onClick={purgeTelemetry}
-                                    className="px-8 py-3 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-2xl shadow-xl shadow-rose-200 transition-all active:scale-95"
+                                    className="px-10 py-4 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black uppercase tracking-[0.2em] rounded-2xl shadow-xl shadow-rose-200 transition-all active:scale-95"
                                 >
                                     Reset Intelligence Database
                                 </button>
@@ -1229,8 +1387,8 @@ const AdminDashboard: React.FC = () => {
                         <div className="p-10 bg-white border-r border-slate-200 flex flex-col shadow-inner">
                             <div className="flex justify-between items-center mb-10">
                                 <div className="flex flex-col">
-                                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Signal Transmitter</h3>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mt-1">Deploy Global Broadcast</p>
+                                    <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Signal Transmitter</h3>
+                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.3em] mt-1">Deploy Global Broadcast</p>
                                 </div>
                                 {editingId && (
                                     <button 
@@ -1244,24 +1402,24 @@ const AdminDashboard: React.FC = () => {
                             </div>
                             
                             <form onSubmit={saveAnnouncement} className="space-y-8 flex-grow flex flex-col">
-                                <div className="space-y-2">
-                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Subject Frequency</label>
+                                <div className="space-y-3">
+                                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Subject Frequency</label>
                                     <input 
                                         type="text" 
                                         required 
                                         placeholder="SIGNAL_TITLE_KEY"
                                         value={newTitle} 
                                         onChange={e => setNewTitle(e.target.value)} 
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all placeholder-slate-300 font-mono" 
+                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-5 text-base font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all placeholder-slate-300 font-mono" 
                                     />
                                 </div>
                                 
-                                <div className="space-y-2">
-                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Severity Layer</label>
+                                <div className="space-y-3">
+                                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Severity Layer</label>
                                     <select 
                                         value={newType} 
                                         onChange={e => setNewType(e.target.value as any)} 
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all appearance-none"
+                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-5 text-base font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all appearance-none"
                                     >
                                         <option value="info">STANDARD_PULSE (INFO)</option>
                                         <option value="warning">ALERT_THRESHOLD (WARN)</option>
@@ -1270,14 +1428,14 @@ const AdminDashboard: React.FC = () => {
                                     </select>
                                 </div>
                                 
-                                <div className="space-y-2 flex-grow flex flex-col">
-                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Payload Content</label>
+                                <div className="space-y-3 flex-grow flex flex-col">
+                                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Payload Content</label>
                                     <textarea 
                                         required 
                                         placeholder="ENTER_TRANSMISSION_DATA..."
                                         value={newContent} 
                                         onChange={e => setNewContent(e.target.value)} 
-                                        className="w-full flex-grow bg-slate-50 border-2 border-slate-100 rounded-[2rem] px-6 py-5 text-sm font-medium text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all resize-none leading-relaxed placeholder-slate-300" 
+                                        className="w-full flex-grow bg-slate-50 border-2 border-slate-100 rounded-[2rem] px-8 py-6 text-base font-medium text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all resize-none leading-relaxed placeholder-slate-300" 
                                     />
                                 </div>
                                 
@@ -1295,10 +1453,10 @@ const AdminDashboard: React.FC = () => {
 
                         <div className="lg:col-span-2 p-12 overflow-y-auto custom-scrollbar">
                             <div className="flex items-center justify-between mb-10">
-                                <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.4em]">Signal Logs</h3>
+                                <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.4em]">Signal Logs</h3>
                                 <div className="flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Master Frequency Stable</span>
+                                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Master Frequency Stable</span>
                                 </div>
                             </div>
 
@@ -1377,12 +1535,12 @@ const AdminDashboard: React.FC = () => {
                     <div className="p-10 animate-fade-in flex flex-col h-full">
                         <div className="flex items-center justify-between mb-10">
                             <div className="flex flex-col">
-                                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">User Feedback Matrix</h3>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mt-1">Direct Operator Communications</p>
+                                <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">User Feedback Matrix</h3>
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.3em] mt-1">Direct Operator Communications</p>
                             </div>
-                            <div className="bg-amber-50 border border-amber-100 px-4 py-2 rounded-xl flex items-center gap-3">
-                                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-                                <span className="text-[10px] font-black text-amber-700 uppercase tracking-widest">{feedbacks.length} Reports Logged</span>
+                            <div className="bg-amber-50 border border-amber-100 px-5 py-3 rounded-xl flex items-center gap-4">
+                                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                <span className="text-xs font-black text-amber-700 uppercase tracking-widest">{feedbacks.length} Reports Logged</span>
                             </div>
                         </div>
 

@@ -3,7 +3,6 @@ import { useNavigate, useLocation } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
     LayoutDashboard, 
-    Settings, 
     LogOut, 
     Bell, 
     Wifi, 
@@ -11,7 +10,8 @@ import {
     ShieldCheck, 
     Cloud, 
     Monitor,
-    FlaskConical
+    FlaskConical,
+    User
 } from 'lucide-react';
 import { ToolId } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -217,8 +217,19 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                                 <button 
                                     onClick={() => navigate('/admin')} 
                                     className={`p-2 rounded-xl transition-all ${location.pathname === '/admin' ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/50' : 'text-slate-400 hover:text-indigo-600'}`}
+                                    title="Admin Dashboard"
                                 >
-                                    <Settings size={18} />
+                                    <ShieldCheck size={18} />
+                                </button>
+                            )}
+
+                            {!isLanding && !isExiting && (
+                                <button 
+                                    onClick={() => navigate('/settings')} 
+                                    className={`p-2 rounded-xl transition-all ${location.pathname === '/settings' ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/50' : 'text-slate-400 hover:text-indigo-600'}`}
+                                    title="User Settings"
+                                >
+                                    <User size={18} />
                                 </button>
                             )}
 
@@ -247,7 +258,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                 </div>
             </header>
 
-            <main className={`flex-grow w-full relative z-10 overflow-y-auto custom-scrollbar ${isExiting ? 'pointer-events-none blur-[2px]' : ''}`}>
+            <main className={`flex-grow w-full relative z-10 overflow-y-auto custom-scrollbar flex flex-col ${isExiting ? 'pointer-events-none blur-[2px]' : ''}`}>
                 <AnimatePresence mode="wait">
                     <motion.div
                         key={location.pathname}
@@ -255,7 +266,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -10 }}
                         transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-                        className="h-full"
+                        className="flex-grow flex flex-col"
                     >
                         {children}
                     </motion.div>

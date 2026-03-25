@@ -64,6 +64,11 @@ const ExpiryReminderModal: React.FC = () => {
         setIsOpen(false);
     };
 
+    const handleDashboard = () => {
+        handleClose();
+        navigate('/dashboard');
+    };
+
     const handleContact = () => {
         handleClose();
         // Return to landing page where contact instructions are available
@@ -81,7 +86,7 @@ const ExpiryReminderModal: React.FC = () => {
                 label: 'Access Expired',
                 subLabel: 'Session Authorization Revoked',
                 desc: 'Your authorized production term has concluded. Active node operation requires a valid license extension.',
-                button: 'Contact Administrator'
+                primaryButton: 'Contact Support'
             };
         }
         
@@ -92,7 +97,7 @@ const ExpiryReminderModal: React.FC = () => {
                 label: 'Trial Ending Soon', 
                 subLabel: `System Cutoff in ${daysLeft} ${daysLeft === 1 ? 'Day' : 'Days'}`,
                 desc: 'Your trial period is nearing its term limit. To prevent workflow disruption, please secure a full subscription.',
-                button: 'Request Full Access'
+                primaryButton: 'Contact Support'
               }
             : { 
                 color: 'rose', 
@@ -100,7 +105,7 @@ const ExpiryReminderModal: React.FC = () => {
                 label: 'Renewal Required', 
                 subLabel: `Plan expires in ${daysLeft} ${daysLeft === 1 ? 'Day' : 'Days'}`,
                 desc: 'Your node license is scheduled to expire soon. Please contact your system administrator to renew.',
-                button: 'Manage Subscription'
+                primaryButton: 'Contact Support'
               };
     };
 
@@ -137,14 +142,14 @@ const ExpiryReminderModal: React.FC = () => {
                             onClick={handleContact}
                             className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-4 px-6 rounded-2xl shadow-xl active:scale-95 transition-all uppercase tracking-widest text-xs"
                         >
-                            {theme.button}
+                            {theme.primaryButton}
                         </button>
                         
                         <button 
-                            onClick={handleClose}
+                            onClick={handleDashboard}
                             className="w-full py-3 text-[10px] font-black text-slate-400 hover:text-slate-600 uppercase tracking-[0.2em] transition-colors"
                         >
-                            Dismiss
+                            Return to Dashboard
                         </button>
                     </div>
                 </div>
