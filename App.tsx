@@ -28,7 +28,6 @@ import Docs from './pages/Docs';
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
 import Experimental from './pages/Experimental';
-import UserSettings from './pages/UserSettings';
 import AuthModal from './components/AuthModal';
 import InactivityTracker from './components/InactivityTracker';
 import { ToolId } from './types';
@@ -47,35 +46,29 @@ const NodeAccessController: React.FC<{
     displayName: string,
     mode: 'key-allowed' | 'subscription-only' | 'key-exclusive'
 }> = ({ children, toolId, displayName, mode }) => {
-    const { profile, freeTools, isAdmin, loading, isWakingUp } = useAuth();
+    const { profile, freeTools, isAdmin } = useAuth();
     const navigate = useNavigate();
-    const [showKeyInput, setShowKeyInput] = useState(false);
-
-    // Show loading if we are still initializing
-    if (loading || isWakingUp) {
-        return <LoadingOverlay message="Validating Access..." color="indigo" />;
-    }
 
     const isFree = freeTools.includes(toolId);
     const isSubscribed = mode !== 'key-exclusive' && profile?.is_subscribed;
-    const isUnlockedViaKey = (mode === 'key-allowed' || mode === 'key-exclusive' || mode === 'subscription-only') && 
+    const isUnlockedViaKey = (mode === 'key-allowed' || mode === 'key-exclusive') && 
         (profile?.unlocked_tools?.includes(toolId) || profile?.unlocked_tools?.includes('universal'));
 
     const hasAccess = isAdmin || isFree || isSubscribed || isUnlockedViaKey;
 
     if (hasAccess) return children;
 
-    if (showKeyInput) {
+    if (mode === 'key-allowed' || mode === 'key-exclusive') {
         return (
-            <div className="relative flex-grow w-full flex items-center justify-center bg-slate-50 min-h-[600px]">
+            <div className="relative h-full w-full overflow-hidden flex items-center justify-center bg-slate-50">
                 <div className="absolute inset-0 bg-slate-100 opacity-50 pointer-events-none" />
-                <AuthModal toolId={toolId} toolDisplayName={displayName} onSuccess={() => setShowKeyInput(false)} />
+                <AuthModal toolId={toolId} toolDisplayName={displayName} onSuccess={() => {}} />
             </div>
         );
     }
 
     return (
-        <div className="relative flex-grow w-full bg-slate-100 flex items-center justify-center min-h-[600px]">
+        <div className="relative h-full w-full overflow-hidden bg-slate-100 flex items-center justify-center">
             <div className="bg-white p-12 rounded-[3rem] shadow-2xl max-md w-full border border-slate-200 text-center animate-scale-in relative ring-8 ring-slate-900/5">
                 <div className="mb-8">
                     <div className="w-24 h-24 bg-amber-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6 shadow-sm border border-amber-100">
@@ -85,30 +78,15 @@ const NodeAccessController: React.FC<{
                     </div>
                     <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tight">Access Restricted</h2>
                     <p className="text-slate-500 mt-4 text-sm font-medium leading-relaxed">
-                        {mode === 'key-exclusive' 
-                            ? <>The <b>{displayName}</b> module requires a specific Access Key for activation.</>
-                            : <>The <b>{displayName}</b> module requires a validated Enterprise Subscription or Access Key.</>
-                        }
+                        The <b>{displayName}</b> module requires a validated Enterprise Subscription.
                     </p>
                 </div>
-                
-                <div className="space-y-4">
-                    <button 
-                        type="button"
-                        onClick={() => navigate('/dashboard')} 
-                        className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-4 rounded-2xl shadow-xl transition-all active:scale-95 uppercase tracking-widest text-xs"
-                    >
-                        Return to Workspace
-                    </button>
-                    
-                    <button 
-                        type="button"
-                        onClick={() => setShowKeyInput(true)}
-                        className="w-full py-3 text-[10px] font-black text-slate-400 hover:text-slate-600 uppercase tracking-[0.2em] transition-colors"
-                    >
-                        Have an Access Key?
-                    </button>
-                </div>
+                <button 
+                    onClick={() => navigate('/dashboard')} 
+                    className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-4 rounded-2xl shadow-xl transition-all active:scale-95 uppercase tracking-widest text-xs"
+                >
+                    Return to Workspace
+                </button>
             </div>
         </div>
     );
@@ -149,7 +127,6 @@ const App: React.FC = () => {
                                 <Route path="/admin" element={<AdminRoute><Layout><AdminDashboard /></Layout></AdminRoute>} />
                                 <Route path="/dashboard" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />
                                 <Route path="/experimental" element={<ProtectedRoute><Layout><Experimental /></Layout></ProtectedRoute>} />
-                                <Route path="/settings" element={<ProtectedRoute><Layout><UserSettings /></Layout></ProtectedRoute>} />
                                 <Route path="/docs" element={<ProtectedRoute><Layout><Docs /></Layout></ProtectedRoute>} />
                                 
                                 <Route path="/tableBeautifier" element={<ProtectedRoute><Layout currentTool={ToolId.TABLE_BEAUTIFIER}><NodeAccessController toolId={ToolId.TABLE_BEAUTIFIER} displayName="Table XML Beautifier" mode="key-exclusive"><TableBeautifier /></NodeAccessController></Layout></ProtectedRoute>} />

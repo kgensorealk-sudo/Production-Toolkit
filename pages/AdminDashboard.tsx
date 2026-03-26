@@ -956,15 +956,15 @@ const AdminDashboard: React.FC = () => {
                             <div className="flex-grow flex items-center justify-between gap-4 bg-slate-950 p-4 rounded-2xl border border-slate-800 shadow-2xl relative overflow-hidden">
                                 <div className="absolute inset-0 bg-[linear-gradient(45deg,rgba(99,102,241,0.03)_25%,transparent_25%,transparent_50%,rgba(99,102,241,0.03)_50%,rgba(99,102,241,0.03)_75%,transparent_75%,transparent)] bg-[length:4px_4px] pointer-events-none opacity-20"></div>
                                 <div className="flex items-center gap-4 relative z-10">
-                                    <div className="w-12 h-12 bg-indigo-600/20 rounded-xl flex items-center justify-center text-indigo-400 border border-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.1)]">
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                                    <div className="w-10 h-10 bg-indigo-600/20 rounded-lg flex items-center justify-center text-indigo-400 border border-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.1)]">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
                                     </div>
                                     <div>
                                         <div className="flex items-center gap-2">
-                                            <h2 className="text-xl font-black text-white uppercase tracking-tight">Intelligence Node</h2>
-                                            <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 text-[11px] font-black rounded border border-emerald-500/20 uppercase tracking-widest animate-pulse">Active</span>
+                                            <h2 className="text-lg font-black text-white uppercase tracking-tight">Intelligence Node</h2>
+                                            <span className="px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 text-[9px] font-black rounded border border-emerald-500/20 uppercase tracking-widest animate-pulse">Active</span>
                                         </div>
-                                        <p className="text-xs font-mono text-slate-500 uppercase tracking-[0.2em] mt-1">ID: INTEL_CORE_01 // {intelligenceMetrics.filteredTotal} LOGS</p>
+                                        <p className="text-[10px] font-mono text-slate-500 uppercase tracking-[0.2em] mt-0.5">ID: INTEL_CORE_01 // {intelligenceMetrics.filteredTotal} LOGS</p>
                                     </div>
                                 </div>
                                 
@@ -984,7 +984,7 @@ const AdminDashboard: React.FC = () => {
                                     <button 
                                         key={range}
                                         onClick={() => setIntelRange(range)}
-                                        className={`px-6 py-2.5 rounded-lg text-xs font-black uppercase tracking-[0.15em] transition-all ${intelRange === range ? 'bg-indigo-600 text-white shadow-lg scale-[1.02]' : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'}`}
+                                        className={`px-5 py-2 rounded-lg text-[10px] font-black uppercase tracking-[0.15em] transition-all ${intelRange === range ? 'bg-indigo-600 text-white shadow-lg scale-[1.02]' : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'}`}
                                     >
                                         {range === '24h' ? 'Daily' : range === '7d' ? 'Weekly' : 'Monthly'}
                                     </button>
@@ -993,63 +993,63 @@ const AdminDashboard: React.FC = () => {
                         </div>
 
                         {/* Metrics Grid - Higher Density */}
-                        <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col relative overflow-hidden group hover:border-indigo-200 transition-colors">
-                                <div className="flex items-center gap-1.5 mb-2">
-                                    <div className="text-xs font-black text-slate-400 uppercase tracking-[0.3em]">Premium Pulse</div>
+                        <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col relative overflow-hidden group hover:border-indigo-200 transition-colors">
+                                <div className="flex items-center gap-1.5 mb-1">
+                                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Premium Pulse</div>
                                     <span title="Total module actions performed by authorized (subscribed) personnel" className="cursor-help">
-                                        <Info size={12} className="text-slate-300" />
+                                        <Info size={10} className="text-slate-300" />
                                     </span>
                                 </div>
-                                <div className="text-3xl font-black text-slate-900 font-mono leading-none">{intelligenceMetrics.segments.premium}</div>
-                                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mt-2">Subscribed Interactions</p>
-                                <div className="mt-4 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                                <div className="text-2xl font-black text-slate-900 font-mono leading-none">{intelligenceMetrics.segments.premium}</div>
+                                <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mt-1">Subscribed Interactions</p>
+                                <div className="mt-3 h-1 w-full bg-slate-100 rounded-full overflow-hidden">
                                     <div className="h-full bg-indigo-500" style={{ width: `${(intelligenceMetrics.segments.premium / (intelligenceMetrics.filteredTotal || 1)) * 100}%` }}></div>
                                 </div>
                             </div>
-                            <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col relative overflow-hidden group hover:border-emerald-200 transition-colors">
-                                <div className="flex items-center gap-1.5 mb-2">
-                                    <div className="text-xs font-black text-slate-400 uppercase tracking-[0.3em]">Standard Pulse</div>
+                            <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col relative overflow-hidden group hover:border-emerald-200 transition-colors">
+                                <div className="flex items-center gap-1.5 mb-1">
+                                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Standard Pulse</div>
                                     <span title="Total module actions performed by standard (non-subscribed) personnel" className="cursor-help">
-                                        <Info size={12} className="text-slate-300" />
+                                        <Info size={10} className="text-slate-300" />
                                     </span>
                                 </div>
-                                <div className="text-3xl font-black text-slate-900 font-mono leading-none">{intelligenceMetrics.segments.standard}</div>
-                                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mt-2">Standard Interactions</p>
-                                <div className="mt-4 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                                <div className="text-2xl font-black text-slate-900 font-mono leading-none">{intelligenceMetrics.segments.standard}</div>
+                                <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mt-1">Standard Interactions</p>
+                                <div className="mt-3 h-1 w-full bg-slate-100 rounded-full overflow-hidden">
                                     <div className="h-full bg-emerald-500" style={{ width: `${(intelligenceMetrics.segments.standard / (intelligenceMetrics.filteredTotal || 1)) * 100}%` }}></div>
                                 </div>
                             </div>
-                            <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col relative overflow-hidden group hover:border-purple-200 transition-colors">
-                                <div className="flex items-center gap-1.5 mb-2">
-                                    <div className="text-xs font-black text-slate-400 uppercase tracking-[0.3em]">Velocity Growth</div>
+                            <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col relative overflow-hidden group hover:border-purple-200 transition-colors">
+                                <div className="flex items-center gap-1.5 mb-1">
+                                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Velocity Growth</div>
                                     <span title="Percentage change in total usage volume compared to the previous equivalent time window" className="cursor-help">
-                                        <Info size={12} className="text-slate-300" />
+                                        <Info size={10} className="text-slate-300" />
                                     </span>
                                 </div>
-                                <div className={`text-3xl font-black font-mono leading-none ${intelligenceMetrics.growth >= 0 ? 'text-purple-600' : 'text-rose-600'}`}>
+                                <div className={`text-2xl font-black font-mono leading-none ${intelligenceMetrics.growth >= 0 ? 'text-purple-600' : 'text-rose-600'}`}>
                                     {intelligenceMetrics.growth >= 0 ? '+' : ''}{intelligenceMetrics.growth}%
                                 </div>
-                                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mt-2">Usage Delta (vs Prev)</p>
-                                <div className="mt-4 flex items-center gap-1.5">
-                                    <div className={`w-2 h-2 rounded-full ${intelligenceMetrics.growth >= 0 ? 'bg-purple-500' : 'bg-rose-500'}`}></div>
-                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Trend Analysis</span>
+                                <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mt-1">Usage Delta (vs Prev)</p>
+                                <div className="mt-3 flex items-center gap-1">
+                                    <div className={`w-1.5 h-1.5 rounded-full ${intelligenceMetrics.growth >= 0 ? 'bg-purple-500' : 'bg-rose-500'}`}></div>
+                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Trend Analysis</span>
                                 </div>
                             </div>
-                            <div className="p-5 bg-slate-950 rounded-2xl shadow-xl flex flex-col relative overflow-hidden border border-slate-800">
+                            <div className="p-4 bg-slate-950 rounded-2xl shadow-xl flex flex-col relative overflow-hidden border border-slate-800">
                                 <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent"></div>
-                                <div className="flex items-center gap-1.5 mb-2 relative z-10">
-                                    <div className="text-xs font-black text-indigo-400/60 uppercase tracking-[0.3em]">Persistence</div>
+                                <div className="flex items-center gap-1.5 mb-1 relative z-10">
+                                    <div className="text-[10px] font-black text-indigo-400/60 uppercase tracking-[0.3em]">Persistence</div>
                                     <span title="Percentage of total registered personnel who have been active within this time range" className="cursor-help">
-                                        <Info size={12} className="text-indigo-400/30" />
+                                        <Info size={10} className="text-indigo-400/30" />
                                     </span>
                                 </div>
-                                <div className="text-3xl font-black text-white font-mono relative z-10 leading-none">
+                                <div className="text-2xl font-black text-white font-mono relative z-10 leading-none">
                                     {users.length > 0 ? Math.round((intelligenceMetrics.userAffinities.length / users.length) * 100) : 0}%
                                 </div>
-                                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mt-2 relative z-10">Active Personnel Ratio</p>
-                                <div className="mt-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest relative z-10 flex items-center gap-2">
-                                    <span className="w-2 h-2 bg-indigo-500 rounded-full"></span>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-1 relative z-10">Active Personnel Ratio</p>
+                                <div className="mt-3 text-[9px] font-bold text-slate-500 uppercase tracking-widest relative z-10 flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span>
                                     Operator Retention
                                 </div>
                             </div>
@@ -1059,19 +1059,19 @@ const AdminDashboard: React.FC = () => {
                             <section className="lg:col-span-2 bg-white border border-slate-200 p-5 rounded-3xl shadow-sm flex flex-col">
                                 <div className="flex items-center justify-between mb-4">
                                     <div className="flex items-center gap-2">
-                                        <div className="w-8 h-8 bg-amber-50 rounded-lg flex items-center justify-center text-amber-600 border border-amber-100">
-                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                        <div className="w-7 h-7 bg-amber-50 rounded-lg flex items-center justify-center text-amber-600 border border-amber-100">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                         </div>
                                         <div className="flex items-center gap-1.5">
-                                            <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Temporal Heatmap</h3>
+                                            <h3 className="text-xs font-black text-slate-900 uppercase tracking-tight">Temporal Heatmap</h3>
                                             <span title="Visualizes module usage intensity across a 24-hour cycle. Darker colors indicate higher frequency of actions during that hour." className="cursor-help">
-                                                <Info size={12} className="text-slate-300" />
+                                                <Info size={10} className="text-slate-300" />
                                             </span>
                                         </div>
                                     </div>
                                     <div className="flex flex-col items-end">
-                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">24H Protocol Cycle</span>
-                                        <span className="text-[9px] text-slate-400 uppercase tracking-tighter">Intensity Distribution</span>
+                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">24H Protocol Cycle</span>
+                                        <span className="text-[8px] text-slate-400 uppercase tracking-tighter">Intensity Distribution</span>
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-6 sm:grid-cols-12 gap-1 flex-grow">
@@ -1097,29 +1097,29 @@ const AdminDashboard: React.FC = () => {
                             <section className="bg-slate-950 p-5 rounded-3xl shadow-2xl relative overflow-hidden flex flex-col border border-slate-800">
                                 <div className="absolute top-0 right-0 w-20 h-20 bg-indigo-500/5 rounded-bl-full"></div>
                                 <div className="flex items-center gap-2 mb-4 relative z-10">
-                                    <div className="w-8 h-8 bg-white/5 rounded-lg flex items-center justify-center text-indigo-400 border border-white/5">
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                    <div className="w-7 h-7 bg-white/5 rounded-lg flex items-center justify-center text-indigo-400 border border-white/5">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                                     </div>
                                     <div className="flex items-center gap-1.5">
-                                        <h3 className="text-sm font-black text-white uppercase tracking-tight">Live Feed</h3>
+                                        <h3 className="text-xs font-black text-white uppercase tracking-tight">Live Feed</h3>
                                         <span title="Real-time stream of the most recent module access events across the entire platform." className="cursor-help">
-                                            <Info size={12} className="text-slate-500" />
+                                            <Info size={10} className="text-slate-500" />
                                         </span>
                                     </div>
-                                    <span className="text-[9px] font-black text-indigo-400/40 uppercase tracking-widest ml-auto">Real-time Stream</span>
+                                    <span className="text-[8px] font-black text-indigo-400/40 uppercase tracking-widest ml-auto">Real-time Stream</span>
                                 </div>
                                 <div className="space-y-2 max-h-[240px] overflow-y-auto custom-scrollbar pr-1 relative z-10">
                                     {intelligenceMetrics.recentActivity.length > 0 ? intelligenceMetrics.recentActivity.map((act) => (
                                         <div key={act.id} className="flex items-center gap-2 p-2 bg-white/5 rounded-lg border border-white/5 hover:bg-white/10 transition-colors">
-                                            <div className="w-2 h-2 rounded-full bg-indigo-500 shadow-[0_0_6px_rgba(99,102,241,0.8)]"></div>
+                                            <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 shadow-[0_0_6px_rgba(99,102,241,0.8)]"></div>
                                             <div className="flex-grow min-w-0">
-                                                <p className="text-[11px] font-black text-indigo-300 uppercase tracking-tighter truncate">{act.toolName}</p>
-                                                <p className="text-[10px] text-slate-500 font-mono truncate">{act.user}</p>
+                                                <p className="text-[10px] font-black text-indigo-300 uppercase tracking-tighter truncate">{act.toolName}</p>
+                                                <p className="text-[9px] text-slate-500 font-mono truncate">{act.user}</p>
                                             </div>
-                                            <span className="text-[9px] font-black text-slate-600 uppercase whitespace-nowrap">{new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                            <span className="text-[8px] font-black text-slate-600 uppercase whitespace-nowrap">{new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                         </div>
                                     )) : (
-                                        <div className="py-8 text-center opacity-20"><p className="text-[11px] font-black uppercase text-white">Signal Silent</p></div>
+                                        <div className="py-8 text-center opacity-20"><p className="text-[10px] font-black uppercase text-white">Signal Silent</p></div>
                                     )}
                                 </div>
                             </section>
@@ -1205,19 +1205,19 @@ const AdminDashboard: React.FC = () => {
                             <section className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm">
                                 <div className="flex items-center justify-between mb-4">
                                     <div className="flex items-center gap-2">
-                                        <div className="w-8 h-8 bg-rose-50 rounded-lg flex items-center justify-center text-rose-600 border border-rose-100">
-                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                                        <div className="w-7 h-7 bg-rose-50 rounded-lg flex items-center justify-center text-rose-600 border border-rose-100">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
                                         </div>
                                         <div className="flex items-center gap-1.5">
-                                            <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Security Anomalies</h3>
+                                            <h3 className="text-xs font-black text-slate-900 uppercase tracking-tight">Security Anomalies</h3>
                                             <span title="Logs module access attempts that do not meet authorization criteria (e.g., non-premium users accessing premium-only modules without a valid key)." className="cursor-help">
-                                                <Info size={12} className="text-slate-300" />
+                                                <Info size={10} className="text-slate-300" />
                                             </span>
                                         </div>
-                                        <span className="text-[9px] font-black text-rose-400 uppercase tracking-widest ml-auto">Access Violations</span>
+                                        <span className="text-[8px] font-black text-rose-400 uppercase tracking-widest ml-auto">Access Violations</span>
                                     </div>
                                     {intelligenceMetrics.anomalies && intelligenceMetrics.anomalies.length > 0 && (
-                                        <span className="px-2.5 py-1 bg-rose-600 text-white text-[10px] font-black rounded-full uppercase tracking-widest animate-pulse">
+                                        <span className="px-2 py-0.5 bg-rose-600 text-white text-[9px] font-black rounded-full uppercase tracking-widest animate-pulse">
                                             {intelligenceMetrics.anomalies.length} BREACHES
                                         </span>
                                     )}
@@ -1228,27 +1228,27 @@ const AdminDashboard: React.FC = () => {
                                             <table className="min-w-full divide-y divide-slate-100">
                                                 <thead className="bg-slate-50 sticky top-0 z-10">
                                                     <tr>
-                                                        <th className="px-4 py-3 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Operator</th>
-                                                        <th className="px-4 py-3 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Module</th>
-                                                        <th className="px-4 py-3 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">Time</th>
+                                                        <th className="px-4 py-2 text-left text-[9px] font-black text-slate-400 uppercase tracking-widest">Operator</th>
+                                                        <th className="px-4 py-2 text-left text-[9px] font-black text-slate-400 uppercase tracking-widest">Module</th>
+                                                        <th className="px-4 py-2 text-right text-[9px] font-black text-slate-400 uppercase tracking-widest">Time</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-slate-100">
                                                     {intelligenceMetrics.anomalies.map((anomaly, idx) => (
                                                         <tr key={idx} className="hover:bg-rose-50/30 transition-colors group">
-                                                            <td className="px-4 py-3">
+                                                            <td className="px-4 py-2">
                                                                 <div className="flex flex-col">
-                                                                    <span className="text-xs font-bold text-slate-900 group-hover:text-rose-700">{anomaly.user}</span>
-                                                                    <span className="text-[9px] font-mono text-slate-400 uppercase">{anomaly.userId.slice(0, 8)}</span>
+                                                                    <span className="text-[11px] font-bold text-slate-900 group-hover:text-rose-700">{anomaly.user}</span>
+                                                                    <span className="text-[8px] font-mono text-slate-400 uppercase">{anomaly.userId.slice(0, 8)}</span>
                                                                 </div>
                                                             </td>
-                                                            <td className="px-4 py-3">
-                                                                <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-black rounded uppercase border border-slate-200">
+                                                            <td className="px-4 py-2">
+                                                                <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 text-[9px] font-black rounded uppercase border border-slate-200">
                                                                     {anomaly.toolName}
                                                                 </span>
                                                             </td>
-                                                            <td className="px-4 py-3 text-right">
-                                                                <span className="text-[11px] font-mono font-bold text-slate-400">
+                                                            <td className="px-4 py-2 text-right">
+                                                                <span className="text-[10px] font-mono font-bold text-slate-400">
                                                                     {new Date(anomaly.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit' })}
                                                                 </span>
                                                             </td>
@@ -1270,36 +1270,36 @@ const AdminDashboard: React.FC = () => {
 
                             <section className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm flex flex-col">
                                 <div className="flex items-center gap-2 mb-4">
-                                    <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600 border border-indigo-100">
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                                    <div className="w-7 h-7 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600 border border-indigo-100">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
                                     </div>
                                     <div className="flex items-center gap-1.5">
-                                        <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Personnel Engagement Audit</h3>
+                                        <h3 className="text-xs font-black text-slate-900 uppercase tracking-tight">Personnel Engagement Audit</h3>
                                         <span title="Detailed breakdown of individual operator activity. Shows their primary protocol (most used module) and total platform interactions." className="cursor-help">
-                                            <Info size={12} className="text-slate-300" />
+                                            <Info size={10} className="text-slate-300" />
                                         </span>
                                     </div>
-                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-auto">Operator Activity Logs</span>
+                                    <span className="text-[6px] font-black text-slate-400 uppercase tracking-widest ml-auto">Operator Activity Logs</span>
                                 </div>
                                 <div className="overflow-hidden flex-grow">
                                     <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
                                         <table className="min-w-full divide-y divide-slate-100">
                                                 <thead className="bg-slate-50 sticky top-0 z-10">
                                                     <tr>
-                                                        <th className="px-4 py-3 text-left text-[11px] font-black text-slate-400 uppercase tracking-widest">Operator</th>
-                                                        <th className="px-4 py-3 text-left text-[11px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Primary Protocol</th>
-                                                        <th className="px-4 py-3 text-center text-[11px] font-black text-slate-400 uppercase tracking-widest">Index</th>
+                                                        <th className="px-4 py-2 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Operator</th>
+                                                        <th className="px-4 py-2 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Primary Protocol</th>
+                                                        <th className="px-4 py-2 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">Index</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-slate-100">
                                                     {intelligenceMetrics.userAffinities.length > 0 ? intelligenceMetrics.userAffinities.map((ua) => (
                                                         <tr key={ua.id} onClick={() => setFocusedUserId(ua.id)} className={`cursor-pointer transition-all ${focusedUserId === ua.id ? 'bg-indigo-600' : 'hover:bg-slate-50'}`}>
-                                                            <td className={`px-4 py-3 text-xs font-bold ${focusedUserId === ua.id ? 'text-white' : 'text-slate-900'}`}>{ua.email.split('@')[0]}</td>
-                                                            <td className="px-4 py-3 whitespace-nowrap"><span className={`px-2 py-0.5 text-[10px] font-black rounded uppercase border whitespace-nowrap ${focusedUserId === ua.id ? 'bg-white/10 border-white/20 text-white' : 'bg-white border-indigo-100 text-indigo-600'}`}>{ua.topTool}</span></td>
-                                                            <td className={`px-4 py-3 text-center text-[11px] font-mono font-bold ${focusedUserId === ua.id ? 'text-indigo-200' : 'text-slate-500'}`}>{ua.totalActions}</td>
+                                                            <td className={`px-4 py-2 text-[11px] font-bold ${focusedUserId === ua.id ? 'text-white' : 'text-slate-900'}`}>{ua.email.split('@')[0]}</td>
+                                                            <td className="px-4 py-2 whitespace-nowrap"><span className={`px-1.5 py-0.5 text-[9px] font-black rounded uppercase border whitespace-nowrap ${focusedUserId === ua.id ? 'bg-white/10 border-white/20 text-white' : 'bg-white border-indigo-100 text-indigo-600'}`}>{ua.topTool}</span></td>
+                                                            <td className={`px-4 py-2 text-center text-[10px] font-mono font-bold ${focusedUserId === ua.id ? 'text-indigo-200' : 'text-slate-500'}`}>{ua.totalActions}</td>
                                                         </tr>
                                                     )) : (
-                                                        <tr><td colSpan={3} className="px-4 py-8 text-center opacity-30 text-xs font-black uppercase tracking-widest text-slate-400">No Active Sessions</td></tr>
+                                                        <tr><td colSpan={3} className="px-4 py-8 text-center opacity-30 text-[10px] font-black uppercase tracking-widest text-slate-400">No Active Sessions</td></tr>
                                                     )}
                                             </tbody>
                                         </table>
@@ -1367,13 +1367,13 @@ const AdminDashboard: React.FC = () => {
                                         <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                     </div>
                                     <div>
-                                        <h4 className="text-base font-black text-rose-900 uppercase tracking-tight">Intelligence Danger Zone</h4>
-                                        <p className="text-xs font-bold text-rose-400 uppercase tracking-widest mt-1">Purge all production telemetry from the database</p>
+                                        <h4 className="text-sm font-black text-rose-900 uppercase tracking-tight">Intelligence Danger Zone</h4>
+                                        <p className="text-[11px] font-bold text-rose-400 uppercase tracking-widest mt-1">Purge all production telemetry from the database</p>
                                     </div>
                                 </div>
                                 <button 
                                     onClick={purgeTelemetry}
-                                    className="px-10 py-4 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black uppercase tracking-[0.2em] rounded-2xl shadow-xl shadow-rose-200 transition-all active:scale-95"
+                                    className="px-8 py-3 bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-black uppercase tracking-[0.2em] rounded-2xl shadow-xl shadow-rose-200 transition-all active:scale-95"
                                 >
                                     Reset Intelligence Database
                                 </button>
@@ -1387,8 +1387,8 @@ const AdminDashboard: React.FC = () => {
                         <div className="p-10 bg-white border-r border-slate-200 flex flex-col shadow-inner">
                             <div className="flex justify-between items-center mb-10">
                                 <div className="flex flex-col">
-                                    <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Signal Transmitter</h3>
-                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.3em] mt-1">Deploy Global Broadcast</p>
+                                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Signal Transmitter</h3>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mt-1">Deploy Global Broadcast</p>
                                 </div>
                                 {editingId && (
                                     <button 
@@ -1402,24 +1402,24 @@ const AdminDashboard: React.FC = () => {
                             </div>
                             
                             <form onSubmit={saveAnnouncement} className="space-y-8 flex-grow flex flex-col">
-                                <div className="space-y-3">
-                                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Subject Frequency</label>
+                                <div className="space-y-2">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Subject Frequency</label>
                                     <input 
                                         type="text" 
                                         required 
                                         placeholder="SIGNAL_TITLE_KEY"
                                         value={newTitle} 
                                         onChange={e => setNewTitle(e.target.value)} 
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-5 text-base font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all placeholder-slate-300 font-mono" 
+                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all placeholder-slate-300 font-mono" 
                                     />
                                 </div>
                                 
-                                <div className="space-y-3">
-                                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Severity Layer</label>
+                                <div className="space-y-2">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Severity Layer</label>
                                     <select 
                                         value={newType} 
                                         onChange={e => setNewType(e.target.value as any)} 
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-5 text-base font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all appearance-none"
+                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all appearance-none"
                                     >
                                         <option value="info">STANDARD_PULSE (INFO)</option>
                                         <option value="warning">ALERT_THRESHOLD (WARN)</option>
@@ -1428,14 +1428,14 @@ const AdminDashboard: React.FC = () => {
                                     </select>
                                 </div>
                                 
-                                <div className="space-y-3 flex-grow flex flex-col">
-                                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Payload Content</label>
+                                <div className="space-y-2 flex-grow flex flex-col">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Payload Content</label>
                                     <textarea 
                                         required 
                                         placeholder="ENTER_TRANSMISSION_DATA..."
                                         value={newContent} 
                                         onChange={e => setNewContent(e.target.value)} 
-                                        className="w-full flex-grow bg-slate-50 border-2 border-slate-100 rounded-[2rem] px-8 py-6 text-base font-medium text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all resize-none leading-relaxed placeholder-slate-300" 
+                                        className="w-full flex-grow bg-slate-50 border-2 border-slate-100 rounded-[2rem] px-6 py-5 text-sm font-medium text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all resize-none leading-relaxed placeholder-slate-300" 
                                     />
                                 </div>
                                 
@@ -1453,10 +1453,10 @@ const AdminDashboard: React.FC = () => {
 
                         <div className="lg:col-span-2 p-12 overflow-y-auto custom-scrollbar">
                             <div className="flex items-center justify-between mb-10">
-                                <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.4em]">Signal Logs</h3>
+                                <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.4em]">Signal Logs</h3>
                                 <div className="flex items-center gap-2">
-                                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></div>
-                                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Master Frequency Stable</span>
+                                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Master Frequency Stable</span>
                                 </div>
                             </div>
 
@@ -1535,12 +1535,12 @@ const AdminDashboard: React.FC = () => {
                     <div className="p-10 animate-fade-in flex flex-col h-full">
                         <div className="flex items-center justify-between mb-10">
                             <div className="flex flex-col">
-                                <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">User Feedback Matrix</h3>
-                                <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.3em] mt-1">Direct Operator Communications</p>
+                                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">User Feedback Matrix</h3>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mt-1">Direct Operator Communications</p>
                             </div>
-                            <div className="bg-amber-50 border border-amber-100 px-5 py-3 rounded-xl flex items-center gap-4">
-                                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
-                                <span className="text-xs font-black text-amber-700 uppercase tracking-widest">{feedbacks.length} Reports Logged</span>
+                            <div className="bg-amber-50 border border-amber-100 px-4 py-2 rounded-xl flex items-center gap-3">
+                                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                                <span className="text-[10px] font-black text-amber-700 uppercase tracking-widest">{feedbacks.length} Reports Logged</span>
                             </div>
                         </div>
 
