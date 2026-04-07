@@ -471,7 +471,7 @@ const TableFixer: React.FC = () => {
     const themeColor = mode === 'detach' ? 'pink' : 'blue';
 
     return (
-        <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+        <div className="max-w-full mx-auto px-2 py-8 sm:px-4 lg:px-6">
             <div className="mb-8 text-center animate-fade-in">
                 <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase tracking-tighter">XML Table Fixer Pro</h1>
                 <p className="text-lg text-slate-500 max-w-2xl mx-auto font-medium">Surgical footnote management. DTD-strict nesting hierarchy and consolidated legends.</p>
@@ -526,8 +526,8 @@ const TableFixer: React.FC = () => {
                 </div>
             </div>
 
-            <div className={`grid gap-8 h-[600px] transition-all duration-300 ${activeTab === 'diff' ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
-                <div className={`bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col group focus-within:ring-2 ${mode === 'detach' ? 'focus-within:ring-pink-100' : 'focus-within:ring-blue-100'} transition-all duration-300 ${activeTab === 'diff' ? 'hidden' : 'flex'}`}>
+            <div className={`grid gap-8 min-h-[600px] transition-all duration-300 ${activeTab === 'diff' ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
+                <div className={`bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col group focus-within:ring-2 ${mode === 'detach' ? 'focus-within:ring-pink-100' : 'focus-within:ring-blue-100'} transition-all duration-300 ${activeTab === 'diff' ? 'hidden' : 'flex'} min-h-[500px]`}>
                     <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center">
                         <label className="font-bold text-slate-700 text-sm flex items-center gap-2"><span className="flex h-6 w-6 items-center justify-center rounded-md bg-white border border-slate-200 text-xs text-slate-500 font-mono shadow-sm">1</span>Input XML</label>
                         <div className="flex gap-2">
@@ -538,7 +538,7 @@ const TableFixer: React.FC = () => {
                     <textarea value={input} onChange={(e) => setInput(e.target.value)} className="w-full h-full p-6 text-sm font-mono text-slate-800 border-0 focus:ring-0 outline-none bg-white resize-none leading-relaxed placeholder-slate-300" placeholder={mode === 'detach' ? "Paste <ce:table> containing footnotes..." : "Paste <ce:table> containing legend items..."} spellCheck={false} />
                 </div>
 
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col relative">
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col relative min-h-[500px]">
                      <div className="flex border-b border-slate-100 bg-slate-50">
                         <button onClick={() => setActiveTab('selection')} className={`flex-1 py-3 text-sm font-bold transition-all border-r border-slate-100 ${activeTab === 'selection' ? `bg-white ${mode === 'detach' ? 'text-pink-600' : 'text-blue-600'}` : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'}`}><span className="flex items-center justify-center gap-2"><span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${activeTab === 'selection' ? (mode === 'detach' ? 'bg-pink-100 text-pink-600' : 'bg-blue-100 text-blue-600') : 'bg-slate-200 text-slate-500'}`}>2</span>Selection</span></button>
                         <button onClick={() => setActiveTab('result')} className={`flex-1 py-3 text-sm font-bold transition-all border-r border-slate-100 ${activeTab === 'result' ? `bg-white text-emerald-600` : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'}`}><span className="flex items-center justify-center gap-2"><span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${activeTab === 'result' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-500'}`}>3</span>Result</span></button>

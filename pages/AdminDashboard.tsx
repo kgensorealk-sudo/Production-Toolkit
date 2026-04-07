@@ -1,18 +1,18 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
-import { UserProfile, ToolId } from '../types';
-import { useAuth } from '../contexts/AuthContext';
+import { UserProfile, ToolId, DefaultAvatar } from '../types';
+import { useAuth, withRetry } from '../contexts/AuthContext';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import ConfirmationModal from '../components/ConfirmationModal';
-import ReleaseNotesModal from '../components/ReleaseNotesModal';
-import { History, Info } from 'lucide-react';
+import { History, Info, X } from 'lucide-react';
 
 interface Announcement {
     id: string;
     title: string;
     content: string;
     type: 'warning' | 'info' | 'success' | 'error';
+    category: 'system_alerts' | 'security_updates' | 'maintenance_windows';
     is_active: boolean;
     created_at: string;
 }
@@ -110,9 +110,8 @@ const formatLastSeen = (timestamp?: string) => {
 };
 
 const AdminDashboard: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'users' | 'keys' | 'announcements' | 'config' | 'intelligence' | 'feedback'>('users');
+    const [activeTab, setActiveTab] = useState<'users' | 'keys' | 'announcements' | 'config' | 'intelligence' | 'feedback' | 'avatars'>('users');
     const [isLoading, setIsLoading] = useState(false);
-    const [isReleaseNotesOpen, setIsReleaseNotesOpen] = useState(false);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
     const { freeToolsData, refreshFreeTools, refreshProfile } = useAuth();
 
@@ -125,6 +124,11 @@ const AdminDashboard: React.FC = () => {
     const [newTitle, setNewTitle] = useState('');
     const [newContent, setNewContent] = useState('');
     const [newType, setNewType] = useState<'info' | 'warning' | 'success' | 'error'>('info');
+    const [newCategory, setNewCategory] = useState<'system_alerts' | 'security_updates' | 'maintenance_windows'>('system_alerts');
+
+    const [defaultAvatars, setDefaultAvatars] = useState<DefaultAvatar[]>([]);
+    const [newAvatarName, setNewAvatarName] = useState('');
+    const [avatarFile, setAvatarFile] = useState<File | null>(null);
 
     const [accessKeys, setAccessKeys] = useState<AccessKeyRecord[]>([]);
     const [keyTool, setKeyTool] = useState<string>('universal');
@@ -169,8 +173,11 @@ const AdminDashboard: React.FC = () => {
     const fetchUsers = useCallback(async (isSilent = false) => {
         if (!isSilent) setIsLoading(true);
         try {
-            const { data, error } = await supabase.from('profiles').select('*').order('last_seen', { ascending: false, nullsFirst: false });
-            if (error) throw error;
+            const data = await withRetry(async () => {
+                const { data, error } = await supabase.from('profiles').select('*').order('last_seen', { ascending: false, nullsFirst: false });
+                if (error) throw error;
+                return data;
+            });
             if (data) {
                 setUsers(data);
                 setSelectedDurations(prev => {
@@ -195,8 +202,11 @@ const AdminDashboard: React.FC = () => {
     const fetchAccessKeys = useCallback(async (isSilent = false) => {
         if (!isSilent) setIsLoading(true);
         try {
-            const { data, error } = await supabase.from('access_keys').select('*').order('created_at', { ascending: false });
-            if (error) throw error;
+            const data = await withRetry(async () => {
+                const { data, error } = await supabase.from('access_keys').select('*').order('created_at', { ascending: false });
+                if (error) throw error;
+                return data;
+            });
             setAccessKeys(data || []);
         } catch (error: any) {
             if (!isSilent) setToast({ msg: `Key database fetch failed: ${error.message}`, type: 'error' });
@@ -208,8 +218,11 @@ const AdminDashboard: React.FC = () => {
     const fetchIntelligence = useCallback(async (isSilent = false) => {
         if (!isSilent) setIsLoading(true);
         try {
-            const { data, error } = await supabase.from('usage_logs').select('*, profiles(email, is_subscribed, subscription_end)').order('timestamp', { ascending: false });
-            if (error) throw error;
+            const data = await withRetry(async () => {
+                const { data, error } = await supabase.from('usage_logs').select('*, profiles(email, is_subscribed, subscription_end)').order('timestamp', { ascending: false });
+                if (error) throw error;
+                return data;
+            });
             setUsageLogs(data || []);
         } catch (error: any) {
             console.warn("Usage logs sync pending.");
@@ -221,8 +234,11 @@ const AdminDashboard: React.FC = () => {
     const fetchAnnouncements = useCallback(async (isSilent = false) => {
         if (!isSilent) setIsLoading(true);
         try {
-            const { data, error } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
-            if (error) throw error;
+            const data = await withRetry(async () => {
+                const { data, error } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
+                if (error) throw error;
+                return data;
+            });
             setAnnouncements(data || []);
         } catch (error: any) { 
             if (!isSilent) setToast({ msg: 'Broadcast fetch failed', type: 'error' }); 
@@ -231,14 +247,50 @@ const AdminDashboard: React.FC = () => {
         }
     }, []);
 
+    const fetchDefaultAvatars = useCallback(async (isSilent = false) => {
+        if (!isSilent) setIsLoading(true);
+        try {
+            // Ensure storage bucket exists
+            try {
+                await withRetry(async () => {
+                    const { data: buckets } = await supabase.storage.listBuckets();
+                    const exists = buckets?.some(b => b.name === 'avatars');
+                    if (!exists) {
+                        await supabase.storage.createBucket('avatars', {
+                            public: true,
+                            allowedMimeTypes: ['image/png', 'image/jpeg', 'image/webp'],
+                            fileSizeLimit: 2097152 // 2MB
+                        });
+                    }
+                }, 2);
+            } catch (storageErr) {
+                console.warn("Storage bucket auto-provisioning failed:", storageErr);
+            }
+
+            const data = await withRetry(async () => {
+                const { data, error } = await supabase.from('default_avatars').select('*').order('created_at', { ascending: false });
+                if (error) throw error;
+                return data;
+            });
+            setDefaultAvatars(data || []);
+        } catch (error: any) {
+            if (!isSilent) setToast({ msg: 'Avatar fetch failed', type: 'error' });
+        } finally {
+            if (!isSilent) setIsLoading(false);
+        }
+    }, []);
+
     const fetchFeedbacks = useCallback(async (isSilent = false) => {
         if (!isSilent) setIsLoading(true);
         try {
-            const { data, error } = await supabase
-                .from('feedback')
-                .select('*, profiles(email)')
-                .order('created_at', { ascending: false });
-            if (error) throw error;
+            const data = await withRetry(async () => {
+                const { data, error } = await supabase
+                    .from('feedback')
+                    .select('*, profiles(email)')
+                    .order('created_at', { ascending: false });
+                if (error) throw error;
+                return data;
+            });
             setFeedbacks(data || []);
         } catch (error: any) {
             if (!isSilent) setToast({ msg: 'Feedback fetch failed', type: 'error' });
@@ -255,6 +307,7 @@ const AdminDashboard: React.FC = () => {
             if (activeTab === 'users') await fetchUsers(isSilent);
             else if (activeTab === 'announcements') await fetchAnnouncements(isSilent);
             else if (activeTab === 'feedback') await fetchFeedbacks(isSilent);
+            else if (activeTab === 'avatars') await fetchDefaultAvatars(isSilent);
             else if (activeTab === 'keys') { await Promise.all([fetchUsers(true), fetchAccessKeys(isSilent)]); }
             else if (activeTab === 'config') { await Promise.all([fetchIntelligence(true), refreshFreeTools()]); }
             else if (activeTab === 'intelligence') await Promise.all([fetchUsers(true), fetchAccessKeys(true), fetchIntelligence(isSilent)]);
@@ -280,6 +333,19 @@ const AdminDashboard: React.FC = () => {
     useEffect(() => {
         refreshActiveTab(false);
     }, [activeTab]); 
+
+    // Safety Timeout for Loading State
+    useEffect(() => {
+        let timeout: ReturnType<typeof setTimeout>;
+        if (isLoading) {
+            timeout = setTimeout(() => {
+                console.warn("Operation timed out. Forcing loading state to false.");
+                setIsLoading(false);
+                setToast({ msg: "System response delayed. Please try again.", type: 'warn' });
+            }, 30000); // 30s safety cutoff
+        }
+        return () => clearTimeout(timeout);
+    }, [isLoading]);
 
     const systemHardReset = async () => {
         setIsLoading(true);
@@ -310,8 +376,10 @@ const AdminDashboard: React.FC = () => {
             onConfirm: async () => {
                 setIsLoading(true);
                 try {
-                    const { error } = await supabase.from('usage_logs').delete().neq('tool_id', 'SYSTEM_RESERVED_VAL');
-                    if (error) throw error;
+                    await withRetry(async () => {
+                        const { error } = await supabase.from('usage_logs').delete().neq('tool_id', 'SYSTEM_RESERVED_VAL');
+                        if (error) throw error;
+                    });
                     setUsageLogs([]);
                     setToast({ msg: "Telemetry databases purged successfully.", type: "success" });
                 } catch (err: any) {
@@ -351,8 +419,10 @@ const AdminDashboard: React.FC = () => {
     const handleRevokeKey = async (keyRecord: AccessKeyRecord) => {
         setIsLoading(true);
         try {
-            const { error } = await supabase.from('access_keys').update({ is_used: false, user_id: null, device_id: null, used_at: null }).eq('id', keyRecord.id);
-            if (error) throw error;
+            await withRetry(async () => {
+                const { error } = await supabase.from('access_keys').update({ is_used: false, user_id: null, device_id: null, used_at: null }).eq('id', keyRecord.id);
+                if (error) throw error;
+            });
             setAccessKeys(prev => prev.map(k => k.id === keyRecord.id ? { ...k, is_used: false, user_id: undefined, device_id: undefined, used_at: undefined } : k));
             setToast({ msg: 'Key access reset.', type: 'success' });
         } catch (err: any) {
@@ -366,8 +436,10 @@ const AdminDashboard: React.FC = () => {
             onConfirm: async () => {
                 setIsLoading(true);
                 try {
-                    const { error } = await supabase.from('access_keys').delete().eq('id', keyId);
-                    if (error) throw error;
+                    await withRetry(async () => {
+                        const { error } = await supabase.from('access_keys').delete().eq('id', keyId);
+                        if (error) throw error;
+                    });
                     setAccessKeys(prev => prev.filter(k => k.id !== keyId));
                     setToast({ msg: 'Key purged', type: 'success' });
                 } catch (err: any) { setToast({ msg: 'Deletion failed', type: 'error' }); } finally { setIsLoading(false); }
@@ -396,8 +468,10 @@ const AdminDashboard: React.FC = () => {
 
         setIsLoading(true);
         try {
-            const { error } = await supabase.from('profiles').update(updates).eq('id', user.id);
-            if (error) throw error;
+            await withRetry(async () => {
+                const { error } = await supabase.from('profiles').update(updates).eq('id', user.id);
+                if (error) throw error;
+            });
             setUsers(users.map(u => u.id === user.id ? { ...u, ...updates } : u));
             setToast({ msg: newVal ? `Authorized (${durationOption?.label})` : 'Access Terminated', type: 'success' });
         } catch (err: any) { setToast({ msg: 'Operation failed', type: 'error' }); } finally { setIsLoading(false); }
@@ -406,19 +480,28 @@ const AdminDashboard: React.FC = () => {
     const toggleFreeTool = async (tid: string) => {
         setIsLoading(true);
         try {
-            const { data: latest } = await supabase.from('system_settings').select('free_tools_data').eq('id', 'global').maybeSingle();
-            const nextData = { ...latest?.free_tools_data || {} };
-            if (nextData[tid]) delete nextData[tid];
-            else {
-                const expiry = new Date(); 
-                expiry.setDate(expiry.getDate() + promoDuration);
-                nextData[tid] = expiry.toISOString();
-            }
-            const { error } = await supabase.from('system_settings').upsert({ id: 'global', free_tools_data: nextData, updated_at: new Date().toISOString() });
-            if (error) throw error;
+            const nextData = await withRetry(async () => {
+                const { data: latest, error: fetchError } = await supabase.from('system_settings').select('free_tools_data').eq('id', 'global').maybeSingle();
+                if (fetchError) throw fetchError;
+                
+                const next = { ...latest?.free_tools_data || {} };
+                if (next[tid]) delete next[tid];
+                else {
+                    const expiry = new Date(); 
+                    expiry.setDate(expiry.getDate() + promoDuration);
+                    next[tid] = expiry.toISOString();
+                }
+
+                const { error: updateError } = await supabase.from('system_settings').upsert({ id: 'global', free_tools_data: next, updated_at: new Date().toISOString() });
+                if (updateError) throw updateError;
+                return next;
+            });
+            
             await refreshFreeTools();
             setToast({ msg: `System protocol synchronized (${promoDuration}d Promo)`, type: 'success' });
-        } catch (err) { setToast({ msg: 'Protocol update rejected', type: 'error' }); } finally { setIsLoading(false); }
+        } catch (err: any) {
+            setToast({ msg: 'Protocol update rejected', type: 'error' });
+        } finally { setIsLoading(false); }
     };
 
     const masterUnlock = async () => {
@@ -431,16 +514,18 @@ const AdminDashboard: React.FC = () => {
             onConfirm: async () => {
                 setIsLoading(true);
                 try {
-                    const expiry = new Date(); 
-                    expiry.setDate(expiry.getDate() + 1);
-                    const nextData: Record<string, string> = {};
-                    Object.values(ToolId).forEach(tid => { if (tid !== 'dashboard' && tid !== 'docs') nextData[tid] = expiry.toISOString(); });
-                    
-                    const { error } = await supabase.from('system_settings').upsert({ id: 'global', free_tools_data: nextData, updated_at: new Date().toISOString() });
-                    if (error) throw error;
+                    await withRetry(async () => {
+                        const expiry = new Date(); 
+                        expiry.setDate(expiry.getDate() + 1);
+                        const nextData: Record<string, string> = {};
+                        Object.values(ToolId).forEach(tid => { if (tid !== 'dashboard' && tid !== 'docs') nextData[tid] = expiry.toISOString(); });
+                        
+                        const { error } = await supabase.from('system_settings').upsert({ id: 'global', free_tools_data: nextData, updated_at: new Date().toISOString() });
+                        if (error) throw error;
+                    });
                     await refreshFreeTools();
                     setToast({ msg: 'Master protocol deployed: All nodes unlocked.', type: 'success' });
-                } catch (err) { setToast({ msg: 'Unlock sequence failed', type: 'error' }); } finally { setIsLoading(false); }
+                } catch (err: any) { setToast({ msg: 'Unlock sequence failed', type: 'error' }); } finally { setIsLoading(false); }
             }
         });
     };
@@ -455,11 +540,13 @@ const AdminDashboard: React.FC = () => {
             onConfirm: async () => {
                 setIsLoading(true);
                 try {
-                    const { error } = await supabase.from('system_settings').upsert({ id: 'global', free_tools_data: {}, updated_at: new Date().toISOString() });
-                    if (error) throw error;
+                    await withRetry(async () => {
+                        const { error } = await supabase.from('system_settings').upsert({ id: 'global', free_tools_data: {}, updated_at: new Date().toISOString() });
+                        if (error) throw error;
+                    });
                     await refreshFreeTools();
                     setToast({ msg: 'Protocol strictly enforced: All free access revoked.', type: 'warn' });
-                } catch (err) { setToast({ msg: 'Revocation failed', type: 'error' }); } finally { setIsLoading(false); }
+                } catch (err: any) { setToast({ msg: 'Revocation failed', type: 'error' }); } finally { setIsLoading(false); }
             }
         });
     };
@@ -467,14 +554,16 @@ const AdminDashboard: React.FC = () => {
     const generateKeys = async () => {
         setIsLoading(true);
         try {
-            const newKeys = [];
+            const newKeys: any[] = [];
             for (let i = 0; i < keyQty; i++) {
                 const random = Math.random().toString(36).substring(2, 10).toUpperCase();
                 newKeys.push({ key: `${random.slice(0,4)}-${random.slice(4)}`, tool: keyTool, is_used: false });
             }
-            const { data, error } = await supabase.from('access_keys').insert(newKeys).select();
-            if (error) throw error;
-            if (data) setAccessKeys(prev => [...data, ...prev]);
+            await withRetry(async () => {
+                const { data, error } = await supabase.from('access_keys').insert(newKeys).select();
+                if (error) throw error;
+                if (data) setAccessKeys(prev => [...data, ...prev]);
+            });
             setToast({ msg: `Provisioned ${keyQty} keys`, type: 'success' });
         } catch (err: any) { setToast({ msg: 'Generation failed', type: 'error' }); } finally { setIsLoading(false); }
     };
@@ -484,21 +573,43 @@ const AdminDashboard: React.FC = () => {
         setIsLoading(true);
         try {
             if (editingId) {
-                const { error } = await supabase.from('announcements').update({ title: newTitle, content: newContent, type: newType, updated_at: new Date().toISOString() }).eq('id', editingId);
-                if (error) throw error;
-                setAnnouncements(prev => prev.map(a => a.id === editingId ? { ...a, title: newTitle, content: newContent, type: newType } : a));
+                await withRetry(async () => {
+                    const { error } = await supabase.from('announcements').update({ 
+                        title: newTitle, 
+                        content: newContent, 
+                        type: newType, 
+                        category: newCategory,
+                        updated_at: new Date().toISOString() 
+                    }).eq('id', editingId);
+                    if (error) throw error;
+                    setAnnouncements(prev => prev.map(a => a.id === editingId ? { ...a, title: newTitle, content: newContent, type: newType, category: newCategory } : a));
+                });
                 setToast({ msg: 'Broadcast updated', type: 'success' });
             } else {
-                const { data, error } = await supabase.from('announcements').insert([{ title: newTitle, content: newContent, type: newType, is_active: false }]).select();
-                if (error) throw error;
-                if (data) setAnnouncements(prev => [data[0], ...prev]);
+                await withRetry(async () => {
+                    const { data, error } = await supabase.from('announcements').insert([{ 
+                        title: newTitle, 
+                        content: newContent, 
+                        type: newType, 
+                        category: newCategory,
+                        is_active: false 
+                    }]).select();
+                    if (error) throw error;
+                    if (data) setAnnouncements(prev => [data[0], ...prev]);
+                });
                 setToast({ msg: 'Broadcast created', type: 'success' });
             }
-            setNewTitle(''); setNewContent(''); setNewType('info'); setEditingId(null);
+            setNewTitle(''); setNewContent(''); setNewType('info'); setNewCategory('system_alerts'); setEditingId(null);
         } catch (err: any) { setToast({ msg: 'Broadcast failed to save', type: 'error' }); } finally { setIsLoading(false); }
     };
 
-    const editAnnouncement = (a: Announcement) => { setEditingId(a.id); setNewTitle(a.title); setNewContent(a.content); setNewType(a.type); };
+    const editAnnouncement = (a: Announcement) => { 
+        setEditingId(a.id); 
+        setNewTitle(a.title); 
+        setNewContent(a.content); 
+        setNewType(a.type); 
+        setNewCategory(a.category || 'system_alerts');
+    };
 
     const activateAnnouncement = async (id: string) => {
         setIsLoading(true);
@@ -506,9 +617,11 @@ const AdminDashboard: React.FC = () => {
             const target = announcements.find(a => a.id === id);
             if (!target) return;
             const nextStatus = !target.is_active;
-            if (nextStatus) await supabase.from('announcements').update({ is_active: false }).neq('id', id);
-            const { error } = await supabase.from('announcements').update({ is_active: nextStatus }).eq('id', id);
-            if (error) throw error;
+            await withRetry(async () => {
+                if (nextStatus) await supabase.from('announcements').update({ is_active: false }).neq('id', id);
+                const { error } = await supabase.from('announcements').update({ is_active: nextStatus }).eq('id', id);
+                if (error) throw error;
+            });
             setAnnouncements(prev => prev.map(a => (a.id === id ? { ...a, is_active: nextStatus } : (nextStatus ? { ...a, is_active: false } : a))));
             setToast({ msg: nextStatus ? 'Broadcast Live' : 'Broadcast Halted', type: 'success' });
         } catch (err: any) { setToast({ msg: 'State update failed', type: 'error' }); } finally { setIsLoading(false); }
@@ -524,14 +637,84 @@ const AdminDashboard: React.FC = () => {
             onConfirm: async () => {
                 setIsLoading(true);
                 try {
-                    const { error } = await supabase.from('announcements').delete().eq('id', id);
-                    if (error) throw error;
+                    await withRetry(async () => {
+                        const { error } = await supabase.from('announcements').delete().eq('id', id);
+                        if (error) throw error;
+                    });
                     setAnnouncements(prev => prev.filter(a => a.id !== id));
                     setToast({ msg: 'Broadcast purged', type: 'success' });
                 } catch (err: any) { 
                     setToast({ msg: 'Deletion failed', type: 'error' }); 
                 } finally { 
                     setIsLoading(false); 
+                }
+            }
+        });
+    };
+
+    const handleAvatarUpload = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!avatarFile || !newAvatarName) {
+            setToast({ msg: 'Please provide both a name and a file', type: 'warn' });
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            const fileExt = avatarFile.name.split('.').pop();
+            const fileName = `${Math.random()}.${fileExt}`;
+            const filePath = `default-avatars/${fileName}`;
+
+            await withRetry(async () => {
+                const { error: uploadError } = await supabase.storage
+                    .from('avatars')
+                    .upload(filePath, avatarFile);
+                if (uploadError) throw uploadError;
+            });
+
+            const { data: { publicUrl } } = supabase.storage
+                .from('avatars')
+                .getPublicUrl(filePath);
+
+            await withRetry(async () => {
+                const { data, error: dbError } = await supabase
+                    .from('default_avatars')
+                    .insert([{ name: newAvatarName, url: publicUrl }])
+                    .select();
+                if (dbError) throw dbError;
+                if (data) setDefaultAvatars(prev => [data[0], ...prev]);
+            });
+
+            setNewAvatarName('');
+            setAvatarFile(null);
+            setToast({ msg: 'Avatar uploaded successfully', type: 'success' });
+        } catch (err: any) {
+            setToast({ msg: `Upload failed: ${err.message}`, type: 'error' });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const deleteAvatar = async (avatar: DefaultAvatar) => {
+        setConfirmConfig({
+            isOpen: true,
+            title: 'Delete Avatar',
+            message: `Permanently remove ${avatar.name}?`,
+            confirmLabel: 'Delete',
+            type: 'danger',
+            onConfirm: async () => {
+                setIsLoading(true);
+                try {
+                    await withRetry(async () => {
+                        const { error } = await supabase.from('default_avatars').delete().eq('id', avatar.id);
+                        if (error) throw error;
+                    });
+                    setDefaultAvatars(prev => prev.filter(a => a.id !== avatar.id));
+                    setToast({ msg: 'Avatar removed', type: 'success' });
+                } catch (err: any) {
+                    setToast({ msg: 'Deletion failed', type: 'error' });
+                } finally {
+                    setIsLoading(false);
                 }
             }
         });
@@ -547,8 +730,10 @@ const AdminDashboard: React.FC = () => {
             onConfirm: async () => {
                 setIsLoading(true);
                 try {
-                    const { error } = await supabase.from('feedback').delete().eq('id', id);
-                    if (error) throw error;
+                    await withRetry(async () => {
+                        const { error } = await supabase.from('feedback').delete().eq('id', id);
+                        if (error) throw error;
+                    });
                     setFeedbacks(prev => prev.filter(f => f.id !== id));
                     setToast({ msg: 'Feedback deleted', type: 'success' });
                 } catch (err: any) {
@@ -564,6 +749,17 @@ const AdminDashboard: React.FC = () => {
         if (!u.last_seen) return false;
         return (Date.now() - new Date(u.last_seen).getTime()) < ONLINE_THRESHOLD_MS;
     }).length;
+
+    const focusedUserData = useMemo(() => {
+        if (!focusedUserId) return null;
+        const user = users.find(u => u.id === focusedUserId);
+        const logs = usageLogs.filter(l => l.user_id === focusedUserId);
+        const toolStats: Record<string, number> = {};
+        logs.forEach(l => {
+            toolStats[l.tool_id] = (toolStats[l.tool_id] || 0) + 1;
+        });
+        return { user, logs, toolStats };
+    }, [focusedUserId, users, usageLogs]);
 
     const intelligenceMetrics = useMemo(() => {
         if (usageLogs.length === 0) return { globalRanking: [], userAffinities: [], rareTools: [], filteredTotal: 0, growth: 0, segments: { premium: 0, standard: 0, segmentCounts: { premium: {}, standard: {} } }, hourlyIntensity: new Array(24).fill(0), recentActivity: [], toolUsage24h: {}, anomalies: [] };
@@ -646,6 +842,7 @@ const AdminDashboard: React.FC = () => {
             return {
                 id: user.id,
                 email: user.email,
+                avatar_url: user.avatar_url,
                 topTool: sorted.length > 0 ? getToolName(sorted[0][0]) : 'None',
                 totalActions: Object.values(counts).reduce((a, b) => a + b, 0),
                 breakdown: sorted.map(([tid, count]) => ({ name: getToolName(tid), count })),
@@ -653,12 +850,17 @@ const AdminDashboard: React.FC = () => {
             };
         }).filter(ua => ua.totalActions > 0).sort((a, b) => b.totalActions - a.totalActions);
 
-        const recentActivity = usageLogs.slice(0, 10).map(log => ({
-            id: log.id,
-            timestamp: log.timestamp,
-            toolName: getToolName(log.tool_id),
-            user: userMap.get(log.user_id)?.email || `Anonymous_${log.user_id.slice(0,4)}`
-        }));
+        const recentActivity = usageLogs.slice(0, 10).map(log => {
+            const user = userMap.get(log.user_id);
+            return {
+                id: log.id,
+                timestamp: log.timestamp,
+                toolName: getToolName(log.tool_id),
+                user: user?.email || `Anonymous_${log.user_id.slice(0,4)}`,
+                userId: log.user_id,
+                avatar_url: user?.avatar_url
+            };
+        });
 
         const anomalies = filteredLogs.filter(log => {
             const user = userMap.get(log.user_id);
@@ -667,13 +869,17 @@ const AdminDashboard: React.FC = () => {
             const isFree = !!freeToolsData[log.tool_id];
             const hasKey = accessKeys.some(k => k.user_id === log.user_id && (k.tool === log.tool_id || k.tool === 'universal') && k.is_used);
             return !isPremium && !isFree && !hasKey;
-        }).map(log => ({
-            id: log.id,
-            timestamp: log.timestamp,
-            toolName: getToolName(log.tool_id),
-            user: userMap.get(log.user_id)?.email || `Unknown_${log.user_id.slice(0,4)}`,
-            userId: log.user_id
-        }));
+        }).map(log => {
+            const user = userMap.get(log.user_id);
+            return {
+                id: log.id,
+                timestamp: log.timestamp,
+                toolName: getToolName(log.tool_id),
+                user: user?.email || `Unknown_${log.user_id.slice(0,4)}`,
+                userId: log.user_id,
+                avatar_url: user?.avatar_url
+            };
+        });
 
         return { globalRanking, userAffinities, rareTools, filteredTotal: filteredLogs.length, growth, segments: { premium: premiumUsage, standard: standardUsage, segmentCounts }, hourlyIntensity, recentActivity, toolUsage24h, anomalies };
     }, [usageLogs, users, intelRange, freeToolsData, accessKeys]);
@@ -692,8 +898,7 @@ const AdminDashboard: React.FC = () => {
     };
 
     return (
-        <div className="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
-            <ReleaseNotesModal isOpen={isReleaseNotesOpen} onClose={() => setIsReleaseNotesOpen(false)} />
+        <div className="max-w-full mx-auto px-2 py-12 sm:px-4 lg:px-6">
             <ConfirmationModal isOpen={confirmConfig.isOpen} title={confirmConfig.title} message={confirmConfig.message} confirmLabel={confirmConfig.confirmLabel} type={confirmConfig.type} onConfirm={() => { confirmConfig.onConfirm(); setConfirmConfig(prev => ({ ...prev, isOpen: false })); }} onCancel={() => setConfirmConfig(prev => ({ ...prev, isOpen: false }))} />
 
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
@@ -703,25 +908,27 @@ const AdminDashboard: React.FC = () => {
                 </div>
                 <div className="flex gap-4">
                     <button 
-                        onClick={() => setIsReleaseNotesOpen(true)}
-                        className="bg-white border border-slate-200 px-6 py-2.5 rounded-xl text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] shadow-sm hover:bg-slate-50 transition-all flex items-center gap-3"
-                    >
-                        <History size={14} />
-                        v1.8.0
-                    </button>
-                    <button 
                         onClick={systemHardReset}
                         className="bg-white border border-slate-200 px-6 py-2.5 rounded-xl text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] shadow-sm hover:bg-slate-50 transition-all flex items-center gap-3"
                     >
                         <svg className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                         Integrity Sync
                     </button>
-                    <div className="bg-slate-100 px-4 py-2 rounded-xl flex items-center gap-4 border border-slate-200 shadow-sm">
-                        <div className="flex items-center gap-2">
-                            <span className={`w-2.5 h-2.5 rounded-full ${activeNodesCount > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`}></span>
-                            <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">
-                                {activeNodesCount} Active Nodes
-                            </span>
+                    <div className="bg-slate-100 px-4 py-2 rounded-xl flex items-center gap-6 border border-slate-200 shadow-sm">
+                        <div className="flex flex-col items-end">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">System Integrity</span>
+                            <div className="flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                <span className="text-[10px] font-black text-slate-900 uppercase tracking-tighter">Operational</span>
+                            </div>
+                        </div>
+                        <div className="w-px h-6 bg-slate-200"></div>
+                        <div className="flex flex-col items-end">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Active Nodes</span>
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-sm font-black text-slate-900 font-mono leading-none">{activeNodesCount}</span>
+                                <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Live</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -732,6 +939,7 @@ const AdminDashboard: React.FC = () => {
                 <button onClick={() => setActiveTab('keys')} className={`flex-1 py-2.5 px-6 text-sm font-bold rounded-lg transition-all ${activeTab === 'keys' ? 'bg-white text-indigo-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Key Matrix</button>
                 <button onClick={() => setActiveTab('intelligence')} className={`flex-1 py-2.5 px-6 text-sm font-bold rounded-lg transition-all ${activeTab === 'intelligence' ? 'bg-white text-purple-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Intelligence</button>
                 <button onClick={() => setActiveTab('feedback')} className={`flex-1 py-2.5 px-6 text-sm font-bold rounded-lg transition-all ${activeTab === 'feedback' ? 'bg-white text-amber-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Feedback</button>
+                <button onClick={() => setActiveTab('avatars')} className={`flex-1 py-2.5 px-6 text-sm font-bold rounded-lg transition-all ${activeTab === 'avatars' ? 'bg-white text-blue-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Avatars</button>
                 <button onClick={() => setActiveTab('config')} className={`flex-1 py-2.5 px-6 text-sm font-bold rounded-lg transition-all ${activeTab === 'config' ? 'bg-white text-emerald-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Protocols</button>
                 <button onClick={() => setActiveTab('announcements')} className={`flex-1 py-2.5 px-6 text-sm font-bold rounded-lg transition-all ${activeTab === 'announcements' ? 'bg-white text-indigo-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Broadcasts</button>
             </div>
@@ -740,40 +948,79 @@ const AdminDashboard: React.FC = () => {
                 {isLoading && <LoadingOverlay message="Synchronizing..." color="slate" />}
                 
                 {activeTab === 'users' && (
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-slate-100">
-                            <thead className="bg-slate-50 font-black text-slate-400 uppercase tracking-widest text-[10px]">
-                                <tr>
-                                    <th className="px-6 py-4 text-left">Identity</th>
-                                    <th className="px-6 py-4 text-left">Role</th>
-                                    <th className="px-6 py-4 text-left">Status</th>
-                                    <th className="px-6 py-4 text-left">Expiry</th>
-                                    <th className="px-6 py-4 text-center">Activity</th>
-                                    <th className="px-6 py-4 text-left">Control</th>
-                                </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-slate-100 font-medium">
-                                {users.filter(u => u.email.includes(search)).map(u => (
-                                    <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
-                                        <td className="px-6 py-4"><div className="flex flex-col"><span className="text-sm font-bold text-slate-900">{u.email}</span><span className="text-[10px] font-mono text-slate-400 uppercase">{u.id.slice(0, 13)}...</span></div></td>
-                                        <td className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-tighter">{u.role}</td>
-                                        <td className="px-6 py-4"><span className={`px-3 py-1 text-[10px] font-black rounded-full uppercase tracking-widest border ${u.is_subscribed ? 'bg-emerald-50 text-emerald-600 border-emerald-100 shadow-sm' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>{u.is_subscribed ? 'Authorized' : 'Dormant'}</span></td>
-                                        <td className="px-6 py-4">
-                                            <div className="flex flex-col">
-                                                <span className="text-[11px] font-bold text-slate-600">
-                                                    {u.subscription_end ? new Date(u.subscription_end).toLocaleDateString() : 'N/A'}
-                                                </span>
-                                                {u.subscription_end && new Date(u.subscription_end) < new Date() && (
-                                                    <span className="text-[8px] font-black text-rose-500 uppercase tracking-tighter">Terminated</span>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-center"><div className="flex flex-col items-center"><span className="text-[11px] font-bold text-slate-600">{formatLastSeen(u.last_seen)}</span></div></td>
-                                        <td className="px-6 py-4"><div className="flex items-center gap-3">{!u.is_subscribed && (<select value={selectedDurations[u.id] || 'sub_1y'} onChange={(e) => setSelectedDurations(prev => ({...prev, [u.id]: e.target.value}))} className="text-[10px] font-black uppercase py-1.5 rounded-lg border-slate-200 bg-white"><optgroup label="Access Term">{DURATION_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</optgroup></select>)}<button onClick={() => toggleSubscription(u)} className={`text-[10px] font-black px-4 py-2 rounded-xl border border-slate-200 uppercase transition-all shadow-sm ${u.is_subscribed ? 'text-rose-600 border-rose-100 bg-rose-50 hover:bg-rose-600 hover:text-white' : 'text-indigo-600 hover:bg-indigo-600 hover:text-white'}`}>{u.is_subscribed ? 'Terminate' : 'Authorize'}</button></div></td>
+                    <div className="flex flex-col h-full animate-fade-in">
+                        <div className="p-6 border-b border-slate-100 bg-slate-50/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div className="relative flex-grow max-w-md group">
+                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                    <svg className="h-4 w-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                    </svg>
+                                </div>
+                                <input 
+                                    type="text" 
+                                    placeholder="Search by Identity (Email)..." 
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    className="block w-full pl-11 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 placeholder-slate-400 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none shadow-sm"
+                                />
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Filter:</span>
+                                <div className="flex bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
+                                    <button 
+                                        onClick={() => setSearch('')} 
+                                        className={`px-3 py-1.5 text-[10px] font-black uppercase rounded-md transition-all ${!search ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
+                                    >
+                                        All
+                                    </button>
+                                    <button 
+                                        onClick={() => setSearch('Authorized')} 
+                                        className={`px-3 py-1.5 text-[10px] font-black uppercase rounded-md transition-all ${search === 'Authorized' ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
+                                    >
+                                        Authorized
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-slate-100">
+                                <thead className="bg-slate-50 font-black text-slate-400 uppercase tracking-widest text-[10px]">
+                                    <tr>
+                                        <th className="px-6 py-4 text-left">Identity</th>
+                                        <th className="px-6 py-4 text-left">Role</th>
+                                        <th className="px-6 py-4 text-left">Status</th>
+                                        <th className="px-6 py-4 text-left">Expiry</th>
+                                        <th className="px-6 py-4 text-center">Activity</th>
+                                        <th className="px-6 py-4 text-left">Control</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-slate-100 font-medium">
+                                    {users.filter(u => {
+                                        const matchesSearch = u.email.toLowerCase().includes(search.toLowerCase());
+                                        if (search === 'Authorized') return u.is_subscribed;
+                                        return matchesSearch;
+                                    }).map(u => (
+                                        <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
+                                            <td className="px-6 py-4"><div className="flex flex-col"><span className="text-sm font-bold text-slate-900">{u.email}</span><span className="text-[10px] font-mono text-slate-400 uppercase">{u.id.slice(0, 13)}...</span></div></td>
+                                            <td className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-tighter">{u.role}</td>
+                                            <td className="px-6 py-4"><span className={`px-3 py-1 text-[10px] font-black rounded-full uppercase tracking-widest border ${u.is_subscribed ? 'bg-emerald-50 text-emerald-600 border-emerald-100 shadow-sm' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>{u.is_subscribed ? 'Authorized' : 'Dormant'}</span></td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex flex-col">
+                                                    <span className="text-[11px] font-bold text-slate-600">
+                                                        {u.subscription_end ? new Date(u.subscription_end).toLocaleDateString() : 'N/A'}
+                                                    </span>
+                                                    {u.subscription_end && new Date(u.subscription_end) < new Date() && (
+                                                        <span className="text-[8px] font-black text-rose-500 uppercase tracking-tighter">Terminated</span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 text-center"><div className="flex flex-col items-center"><span className="text-[11px] font-bold text-slate-600">{formatLastSeen(u.last_seen)}</span></div></td>
+                                            <td className="px-6 py-4"><div className="flex items-center gap-3">{!u.is_subscribed && (<select value={selectedDurations[u.id] || 'sub_1y'} onChange={(e) => setSelectedDurations(prev => ({...prev, [u.id]: e.target.value}))} className="text-[10px] font-black uppercase py-1.5 rounded-lg border-slate-200 bg-white shadow-sm focus:ring-2 focus:ring-indigo-500/10 transition-all"><optgroup label="Access Term">{DURATION_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</optgroup></select>)}<button onClick={() => toggleSubscription(u)} className={`text-[10px] font-black px-4 py-2 rounded-xl border border-slate-200 uppercase transition-all shadow-sm ${u.is_subscribed ? 'text-rose-600 border-rose-100 bg-rose-50 hover:bg-rose-600 hover:text-white' : 'text-indigo-600 hover:bg-indigo-600 hover:text-white'}`}>{u.is_subscribed ? 'Terminate' : 'Authorize'}</button></div></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 )}
 
@@ -891,7 +1138,7 @@ const AdminDashboard: React.FC = () => {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-16">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-16">
                             {Object.values(ToolId).filter(tid => tid !== 'dashboard' && tid !== 'docs').map(tid => {
                                 const isFree = !!freeToolsData[tid];
                                 const toolName = getToolName(tid);
@@ -956,15 +1203,15 @@ const AdminDashboard: React.FC = () => {
                             <div className="flex-grow flex items-center justify-between gap-4 bg-slate-950 p-4 rounded-2xl border border-slate-800 shadow-2xl relative overflow-hidden">
                                 <div className="absolute inset-0 bg-[linear-gradient(45deg,rgba(99,102,241,0.03)_25%,transparent_25%,transparent_50%,rgba(99,102,241,0.03)_50%,rgba(99,102,241,0.03)_75%,transparent_75%,transparent)] bg-[length:4px_4px] pointer-events-none opacity-20"></div>
                                 <div className="flex items-center gap-4 relative z-10">
-                                    <div className="w-10 h-10 bg-indigo-600/20 rounded-lg flex items-center justify-center text-indigo-400 border border-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.1)]">
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                                    <div className="w-12 h-12 bg-indigo-600/20 rounded-xl flex items-center justify-center text-indigo-400 border border-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.1)]">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
                                     </div>
                                     <div>
                                         <div className="flex items-center gap-2">
-                                            <h2 className="text-lg font-black text-white uppercase tracking-tight">Intelligence Node</h2>
-                                            <span className="px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 text-[9px] font-black rounded border border-emerald-500/20 uppercase tracking-widest animate-pulse">Active</span>
+                                            <h2 className="text-xl font-black text-white uppercase tracking-tight">Intelligence Node</h2>
+                                            <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 text-[11px] font-black rounded border border-emerald-500/20 uppercase tracking-widest animate-pulse">Active</span>
                                         </div>
-                                        <p className="text-[10px] font-mono text-slate-500 uppercase tracking-[0.2em] mt-0.5">ID: INTEL_CORE_01 // {intelligenceMetrics.filteredTotal} LOGS</p>
+                                        <p className="text-xs font-mono text-slate-500 uppercase tracking-[0.2em] mt-1">ID: INTEL_CORE_01 // {intelligenceMetrics.filteredTotal} LOGS</p>
                                     </div>
                                 </div>
                                 
@@ -984,7 +1231,7 @@ const AdminDashboard: React.FC = () => {
                                     <button 
                                         key={range}
                                         onClick={() => setIntelRange(range)}
-                                        className={`px-5 py-2 rounded-lg text-[10px] font-black uppercase tracking-[0.15em] transition-all ${intelRange === range ? 'bg-indigo-600 text-white shadow-lg scale-[1.02]' : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'}`}
+                                        className={`px-6 py-2.5 rounded-lg text-xs font-black uppercase tracking-[0.15em] transition-all ${intelRange === range ? 'bg-indigo-600 text-white shadow-lg scale-[1.02]' : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'}`}
                                     >
                                         {range === '24h' ? 'Daily' : range === '7d' ? 'Weekly' : 'Monthly'}
                                     </button>
@@ -993,63 +1240,63 @@ const AdminDashboard: React.FC = () => {
                         </div>
 
                         {/* Metrics Grid - Higher Density */}
-                        <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col relative overflow-hidden group hover:border-indigo-200 transition-colors">
-                                <div className="flex items-center gap-1.5 mb-1">
-                                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Premium Pulse</div>
+                        <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col relative overflow-hidden group hover:border-indigo-200 transition-colors">
+                                <div className="flex items-center gap-1.5 mb-2">
+                                    <div className="text-xs font-black text-slate-400 uppercase tracking-[0.3em]">Premium Pulse</div>
                                     <span title="Total module actions performed by authorized (subscribed) personnel" className="cursor-help">
-                                        <Info size={10} className="text-slate-300" />
+                                        <Info size={12} className="text-slate-300" />
                                     </span>
                                 </div>
-                                <div className="text-2xl font-black text-slate-900 font-mono leading-none">{intelligenceMetrics.segments.premium}</div>
-                                <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mt-1">Subscribed Interactions</p>
-                                <div className="mt-3 h-1 w-full bg-slate-100 rounded-full overflow-hidden">
+                                <div className="text-3xl font-black text-slate-900 font-mono leading-none">{intelligenceMetrics.segments.premium}</div>
+                                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mt-2">Subscribed Interactions</p>
+                                <div className="mt-4 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
                                     <div className="h-full bg-indigo-500" style={{ width: `${(intelligenceMetrics.segments.premium / (intelligenceMetrics.filteredTotal || 1)) * 100}%` }}></div>
                                 </div>
                             </div>
-                            <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col relative overflow-hidden group hover:border-emerald-200 transition-colors">
-                                <div className="flex items-center gap-1.5 mb-1">
-                                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Standard Pulse</div>
+                            <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col relative overflow-hidden group hover:border-emerald-200 transition-colors">
+                                <div className="flex items-center gap-1.5 mb-2">
+                                    <div className="text-xs font-black text-slate-400 uppercase tracking-[0.3em]">Standard Pulse</div>
                                     <span title="Total module actions performed by standard (non-subscribed) personnel" className="cursor-help">
-                                        <Info size={10} className="text-slate-300" />
+                                        <Info size={12} className="text-slate-300" />
                                     </span>
                                 </div>
-                                <div className="text-2xl font-black text-slate-900 font-mono leading-none">{intelligenceMetrics.segments.standard}</div>
-                                <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mt-1">Standard Interactions</p>
-                                <div className="mt-3 h-1 w-full bg-slate-100 rounded-full overflow-hidden">
+                                <div className="text-3xl font-black text-slate-900 font-mono leading-none">{intelligenceMetrics.segments.standard}</div>
+                                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mt-2">Standard Interactions</p>
+                                <div className="mt-4 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
                                     <div className="h-full bg-emerald-500" style={{ width: `${(intelligenceMetrics.segments.standard / (intelligenceMetrics.filteredTotal || 1)) * 100}%` }}></div>
                                 </div>
                             </div>
-                            <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col relative overflow-hidden group hover:border-purple-200 transition-colors">
-                                <div className="flex items-center gap-1.5 mb-1">
-                                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Velocity Growth</div>
+                            <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col relative overflow-hidden group hover:border-purple-200 transition-colors">
+                                <div className="flex items-center gap-1.5 mb-2">
+                                    <div className="text-xs font-black text-slate-400 uppercase tracking-[0.3em]">Velocity Growth</div>
                                     <span title="Percentage change in total usage volume compared to the previous equivalent time window" className="cursor-help">
-                                        <Info size={10} className="text-slate-300" />
+                                        <Info size={12} className="text-slate-300" />
                                     </span>
                                 </div>
-                                <div className={`text-2xl font-black font-mono leading-none ${intelligenceMetrics.growth >= 0 ? 'text-purple-600' : 'text-rose-600'}`}>
+                                <div className={`text-3xl font-black font-mono leading-none ${intelligenceMetrics.growth >= 0 ? 'text-purple-600' : 'text-rose-600'}`}>
                                     {intelligenceMetrics.growth >= 0 ? '+' : ''}{intelligenceMetrics.growth}%
                                 </div>
-                                <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mt-1">Usage Delta (vs Prev)</p>
-                                <div className="mt-3 flex items-center gap-1">
-                                    <div className={`w-1.5 h-1.5 rounded-full ${intelligenceMetrics.growth >= 0 ? 'bg-purple-500' : 'bg-rose-500'}`}></div>
-                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Trend Analysis</span>
+                                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mt-2">Usage Delta (vs Prev)</p>
+                                <div className="mt-4 flex items-center gap-1.5">
+                                    <div className={`w-2 h-2 rounded-full ${intelligenceMetrics.growth >= 0 ? 'bg-purple-500' : 'bg-rose-500'}`}></div>
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Trend Analysis</span>
                                 </div>
                             </div>
-                            <div className="p-4 bg-slate-950 rounded-2xl shadow-xl flex flex-col relative overflow-hidden border border-slate-800">
+                            <div className="p-5 bg-slate-950 rounded-2xl shadow-xl flex flex-col relative overflow-hidden border border-slate-800">
                                 <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent"></div>
-                                <div className="flex items-center gap-1.5 mb-1 relative z-10">
-                                    <div className="text-[10px] font-black text-indigo-400/60 uppercase tracking-[0.3em]">Persistence</div>
+                                <div className="flex items-center gap-1.5 mb-2 relative z-10">
+                                    <div className="text-xs font-black text-indigo-400/60 uppercase tracking-[0.3em]">Persistence</div>
                                     <span title="Percentage of total registered personnel who have been active within this time range" className="cursor-help">
-                                        <Info size={10} className="text-indigo-400/30" />
+                                        <Info size={12} className="text-indigo-400/30" />
                                     </span>
                                 </div>
-                                <div className="text-2xl font-black text-white font-mono relative z-10 leading-none">
+                                <div className="text-3xl font-black text-white font-mono relative z-10 leading-none">
                                     {users.length > 0 ? Math.round((intelligenceMetrics.userAffinities.length / users.length) * 100) : 0}%
                                 </div>
-                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-1 relative z-10">Active Personnel Ratio</p>
-                                <div className="mt-3 text-[9px] font-bold text-slate-500 uppercase tracking-widest relative z-10 flex items-center gap-1.5">
-                                    <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span>
+                                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mt-2 relative z-10">Active Personnel Ratio</p>
+                                <div className="mt-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest relative z-10 flex items-center gap-2">
+                                    <span className="w-2 h-2 bg-indigo-500 rounded-full"></span>
                                     Operator Retention
                                 </div>
                             </div>
@@ -1059,19 +1306,19 @@ const AdminDashboard: React.FC = () => {
                             <section className="lg:col-span-2 bg-white border border-slate-200 p-5 rounded-3xl shadow-sm flex flex-col">
                                 <div className="flex items-center justify-between mb-4">
                                     <div className="flex items-center gap-2">
-                                        <div className="w-7 h-7 bg-amber-50 rounded-lg flex items-center justify-center text-amber-600 border border-amber-100">
-                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                        <div className="w-8 h-8 bg-amber-50 rounded-lg flex items-center justify-center text-amber-600 border border-amber-100">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                         </div>
                                         <div className="flex items-center gap-1.5">
-                                            <h3 className="text-xs font-black text-slate-900 uppercase tracking-tight">Temporal Heatmap</h3>
+                                            <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Temporal Heatmap</h3>
                                             <span title="Visualizes module usage intensity across a 24-hour cycle. Darker colors indicate higher frequency of actions during that hour." className="cursor-help">
-                                                <Info size={10} className="text-slate-300" />
+                                                <Info size={12} className="text-slate-300" />
                                             </span>
                                         </div>
                                     </div>
                                     <div className="flex flex-col items-end">
-                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">24H Protocol Cycle</span>
-                                        <span className="text-[8px] text-slate-400 uppercase tracking-tighter">Intensity Distribution</span>
+                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">24H Protocol Cycle</span>
+                                        <span className="text-[9px] text-slate-400 uppercase tracking-tighter">Intensity Distribution</span>
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-6 sm:grid-cols-12 gap-1 flex-grow">
@@ -1097,29 +1344,35 @@ const AdminDashboard: React.FC = () => {
                             <section className="bg-slate-950 p-5 rounded-3xl shadow-2xl relative overflow-hidden flex flex-col border border-slate-800">
                                 <div className="absolute top-0 right-0 w-20 h-20 bg-indigo-500/5 rounded-bl-full"></div>
                                 <div className="flex items-center gap-2 mb-4 relative z-10">
-                                    <div className="w-7 h-7 bg-white/5 rounded-lg flex items-center justify-center text-indigo-400 border border-white/5">
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                    <div className="w-8 h-8 bg-white/5 rounded-lg flex items-center justify-center text-indigo-400 border border-white/5">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                                     </div>
                                     <div className="flex items-center gap-1.5">
-                                        <h3 className="text-xs font-black text-white uppercase tracking-tight">Live Feed</h3>
+                                        <h3 className="text-sm font-black text-white uppercase tracking-tight">Live Feed</h3>
                                         <span title="Real-time stream of the most recent module access events across the entire platform." className="cursor-help">
-                                            <Info size={10} className="text-slate-500" />
+                                            <Info size={12} className="text-slate-500" />
                                         </span>
                                     </div>
-                                    <span className="text-[8px] font-black text-indigo-400/40 uppercase tracking-widest ml-auto">Real-time Stream</span>
+                                    <span className="text-[9px] font-black text-indigo-400/40 uppercase tracking-widest ml-auto">Real-time Stream</span>
                                 </div>
                                 <div className="space-y-2 max-h-[240px] overflow-y-auto custom-scrollbar pr-1 relative z-10">
                                     {intelligenceMetrics.recentActivity.length > 0 ? intelligenceMetrics.recentActivity.map((act) => (
-                                        <div key={act.id} className="flex items-center gap-2 p-2 bg-white/5 rounded-lg border border-white/5 hover:bg-white/10 transition-colors">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 shadow-[0_0_6px_rgba(99,102,241,0.8)]"></div>
-                                            <div className="flex-grow min-w-0">
-                                                <p className="text-[10px] font-black text-indigo-300 uppercase tracking-tighter truncate">{act.toolName}</p>
-                                                <p className="text-[9px] text-slate-500 font-mono truncate">{act.user}</p>
+                                        <div key={act.id} onClick={() => setFocusedUserId(act.userId)} className="flex items-center gap-3 p-2 bg-white/5 rounded-lg border border-white/5 hover:bg-white/10 transition-colors cursor-pointer group/item">
+                                            <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex-shrink-0 flex items-center justify-center text-[10px] font-black text-indigo-400 border border-indigo-500/20 overflow-hidden">
+                                                {act.avatar_url ? (
+                                                    <img src={act.avatar_url} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                                ) : (
+                                                    act.user[0].toUpperCase()
+                                                )}
                                             </div>
-                                            <span className="text-[8px] font-black text-slate-600 uppercase whitespace-nowrap">{new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                            <div className="flex-grow min-w-0">
+                                                <p className="text-[11px] font-black text-indigo-300 uppercase tracking-tighter truncate">{act.toolName}</p>
+                                                <p className="text-[10px] text-slate-500 font-mono truncate group-hover/item:text-slate-300 transition-colors">{act.user}</p>
+                                            </div>
+                                            <span className="text-[9px] font-black text-slate-600 uppercase whitespace-nowrap">{new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                         </div>
                                     )) : (
-                                        <div className="py-8 text-center opacity-20"><p className="text-[10px] font-black uppercase text-white">Signal Silent</p></div>
+                                        <div className="py-8 text-center opacity-20"><p className="text-[11px] font-black uppercase text-white">Signal Silent</p></div>
                                     )}
                                 </div>
                             </section>
@@ -1205,19 +1458,19 @@ const AdminDashboard: React.FC = () => {
                             <section className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm">
                                 <div className="flex items-center justify-between mb-4">
                                     <div className="flex items-center gap-2">
-                                        <div className="w-7 h-7 bg-rose-50 rounded-lg flex items-center justify-center text-rose-600 border border-rose-100">
-                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                                        <div className="w-8 h-8 bg-rose-50 rounded-lg flex items-center justify-center text-rose-600 border border-rose-100">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
                                         </div>
                                         <div className="flex items-center gap-1.5">
-                                            <h3 className="text-xs font-black text-slate-900 uppercase tracking-tight">Security Anomalies</h3>
+                                            <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Security Anomalies</h3>
                                             <span title="Logs module access attempts that do not meet authorization criteria (e.g., non-premium users accessing premium-only modules without a valid key)." className="cursor-help">
-                                                <Info size={10} className="text-slate-300" />
+                                                <Info size={12} className="text-slate-300" />
                                             </span>
                                         </div>
-                                        <span className="text-[8px] font-black text-rose-400 uppercase tracking-widest ml-auto">Access Violations</span>
+                                        <span className="text-[9px] font-black text-rose-400 uppercase tracking-widest ml-auto">Access Violations</span>
                                     </div>
                                     {intelligenceMetrics.anomalies && intelligenceMetrics.anomalies.length > 0 && (
-                                        <span className="px-2 py-0.5 bg-rose-600 text-white text-[9px] font-black rounded-full uppercase tracking-widest animate-pulse">
+                                        <span className="px-2.5 py-1 bg-rose-600 text-white text-[10px] font-black rounded-full uppercase tracking-widest animate-pulse">
                                             {intelligenceMetrics.anomalies.length} BREACHES
                                         </span>
                                     )}
@@ -1228,27 +1481,36 @@ const AdminDashboard: React.FC = () => {
                                             <table className="min-w-full divide-y divide-slate-100">
                                                 <thead className="bg-slate-50 sticky top-0 z-10">
                                                     <tr>
-                                                        <th className="px-4 py-2 text-left text-[9px] font-black text-slate-400 uppercase tracking-widest">Operator</th>
-                                                        <th className="px-4 py-2 text-left text-[9px] font-black text-slate-400 uppercase tracking-widest">Module</th>
-                                                        <th className="px-4 py-2 text-right text-[9px] font-black text-slate-400 uppercase tracking-widest">Time</th>
+                                                        <th className="px-4 py-3 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Operator</th>
+                                                        <th className="px-4 py-3 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Module</th>
+                                                        <th className="px-4 py-3 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">Time</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-slate-100">
                                                     {intelligenceMetrics.anomalies.map((anomaly, idx) => (
                                                         <tr key={idx} className="hover:bg-rose-50/30 transition-colors group">
-                                                            <td className="px-4 py-2">
-                                                                <div className="flex flex-col">
-                                                                    <span className="text-[11px] font-bold text-slate-900 group-hover:text-rose-700">{anomaly.user}</span>
-                                                                    <span className="text-[8px] font-mono text-slate-400 uppercase">{anomaly.userId.slice(0, 8)}</span>
+                                                            <td className="px-4 py-3">
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="w-8 h-8 rounded-lg bg-slate-100 flex-shrink-0 flex items-center justify-center text-[10px] font-black text-slate-400 border border-slate-200 overflow-hidden">
+                                                                        {anomaly.avatar_url ? (
+                                                                            <img src={anomaly.avatar_url} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                                                        ) : (
+                                                                            anomaly.user[0].toUpperCase()
+                                                                        )}
+                                                                    </div>
+                                                                    <div className="flex flex-col">
+                                                                        <span className="text-xs font-bold text-slate-900 group-hover:text-rose-700 truncate max-w-[120px]">{anomaly.user}</span>
+                                                                        <span className="text-[9px] font-mono text-slate-400 uppercase">{anomaly.userId.slice(0, 8)}</span>
+                                                                    </div>
                                                                 </div>
                                                             </td>
-                                                            <td className="px-4 py-2">
-                                                                <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 text-[9px] font-black rounded uppercase border border-slate-200">
+                                                            <td className="px-4 py-3">
+                                                                <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-black rounded uppercase border border-slate-200">
                                                                     {anomaly.toolName}
                                                                 </span>
                                                             </td>
-                                                            <td className="px-4 py-2 text-right">
-                                                                <span className="text-[10px] font-mono font-bold text-slate-400">
+                                                            <td className="px-4 py-3 text-right">
+                                                                <span className="text-[11px] font-mono font-bold text-slate-400">
                                                                     {new Date(anomaly.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit' })}
                                                                 </span>
                                                             </td>
@@ -1270,36 +1532,47 @@ const AdminDashboard: React.FC = () => {
 
                             <section className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm flex flex-col">
                                 <div className="flex items-center gap-2 mb-4">
-                                    <div className="w-7 h-7 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600 border border-indigo-100">
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                                    <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600 border border-indigo-100">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
                                     </div>
                                     <div className="flex items-center gap-1.5">
-                                        <h3 className="text-xs font-black text-slate-900 uppercase tracking-tight">Personnel Engagement Audit</h3>
+                                        <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Personnel Engagement Audit</h3>
                                         <span title="Detailed breakdown of individual operator activity. Shows their primary protocol (most used module) and total platform interactions." className="cursor-help">
-                                            <Info size={10} className="text-slate-300" />
+                                            <Info size={12} className="text-slate-300" />
                                         </span>
                                     </div>
-                                    <span className="text-[6px] font-black text-slate-400 uppercase tracking-widest ml-auto">Operator Activity Logs</span>
+                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-auto">Operator Activity Logs</span>
                                 </div>
                                 <div className="overflow-hidden flex-grow">
                                     <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
                                         <table className="min-w-full divide-y divide-slate-100">
                                                 <thead className="bg-slate-50 sticky top-0 z-10">
                                                     <tr>
-                                                        <th className="px-4 py-2 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Operator</th>
-                                                        <th className="px-4 py-2 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Primary Protocol</th>
-                                                        <th className="px-4 py-2 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">Index</th>
+                                                        <th className="px-4 py-3 text-left text-[11px] font-black text-slate-400 uppercase tracking-widest">Operator</th>
+                                                        <th className="px-4 py-3 text-left text-[11px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Primary Protocol</th>
+                                                        <th className="px-4 py-3 text-center text-[11px] font-black text-slate-400 uppercase tracking-widest">Index</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-slate-100">
                                                     {intelligenceMetrics.userAffinities.length > 0 ? intelligenceMetrics.userAffinities.map((ua) => (
                                                         <tr key={ua.id} onClick={() => setFocusedUserId(ua.id)} className={`cursor-pointer transition-all ${focusedUserId === ua.id ? 'bg-indigo-600' : 'hover:bg-slate-50'}`}>
-                                                            <td className={`px-4 py-2 text-[11px] font-bold ${focusedUserId === ua.id ? 'text-white' : 'text-slate-900'}`}>{ua.email.split('@')[0]}</td>
-                                                            <td className="px-4 py-2 whitespace-nowrap"><span className={`px-1.5 py-0.5 text-[9px] font-black rounded uppercase border whitespace-nowrap ${focusedUserId === ua.id ? 'bg-white/10 border-white/20 text-white' : 'bg-white border-indigo-100 text-indigo-600'}`}>{ua.topTool}</span></td>
-                                                            <td className={`px-4 py-2 text-center text-[10px] font-mono font-bold ${focusedUserId === ua.id ? 'text-indigo-200' : 'text-slate-500'}`}>{ua.totalActions}</td>
+                                                            <td className={`px-4 py-3 text-xs font-bold ${focusedUserId === ua.id ? 'text-white' : 'text-slate-900'}`}>
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className={`w-6 h-6 rounded-lg flex-shrink-0 flex items-center justify-center text-[10px] font-black border ${focusedUserId === ua.id ? 'bg-white/20 border-white/30 text-white' : 'bg-indigo-50 border-indigo-100 text-indigo-600'} overflow-hidden`}>
+                                                                        {ua.avatar_url ? (
+                                                                            <img src={ua.avatar_url} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                                                        ) : (
+                                                                            ua.email[0].toUpperCase()
+                                                                        )}
+                                                                    </div>
+                                                                    <span className="truncate max-w-[100px]">{ua.email.split('@')[0]}</span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-3 whitespace-nowrap"><span className={`px-2 py-0.5 text-[10px] font-black rounded uppercase border whitespace-nowrap ${focusedUserId === ua.id ? 'bg-white/10 border-white/20 text-white' : 'bg-white border-indigo-100 text-indigo-600'}`}>{ua.topTool}</span></td>
+                                                            <td className={`px-4 py-3 text-center text-[11px] font-mono font-bold ${focusedUserId === ua.id ? 'text-indigo-200' : 'text-slate-500'}`}>{ua.totalActions}</td>
                                                         </tr>
                                                     )) : (
-                                                        <tr><td colSpan={3} className="px-4 py-8 text-center opacity-30 text-[10px] font-black uppercase tracking-widest text-slate-400">No Active Sessions</td></tr>
+                                                        <tr><td colSpan={3} className="px-4 py-8 text-center opacity-30 text-xs font-black uppercase tracking-widest text-slate-400">No Active Sessions</td></tr>
                                                     )}
                                             </tbody>
                                         </table>
@@ -1309,53 +1582,74 @@ const AdminDashboard: React.FC = () => {
                         </div>
 
                         <div className="pb-20">
-                            {focusedUser ? (
-                                <div className="bg-slate-900 rounded-[2.5rem] p-10 text-white shadow-2xl shadow-slate-900/40 animate-slide-up ring-4 ring-slate-800">
-                                    <div className="flex justify-between items-start mb-12">
-                                        <div className="flex flex-col">
-                                            <span className="text-[11px] font-black text-indigo-400 uppercase tracking-[0.4em] mb-3">Operator DNA</span>
-                                            <h4 className="text-2xl font-black truncate max-w-[200px] uppercase tracking-tighter leading-none">{focusedUser.email.split('@')[0]}</h4>
-                                            <p className="text-[11px] text-slate-500 truncate lowercase mt-2 font-mono">{focusedUser.email}</p>
-                                        </div>
+                            {focusedUserData ? (
+                                <div className="bg-slate-900 rounded-[2.5rem] p-10 text-white shadow-2xl shadow-slate-900/40 animate-slide-up ring-4 ring-slate-800 relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 p-6">
                                         <button onClick={() => setFocusedUserId(null)} className="p-3 hover:bg-white/10 rounded-2xl transition-colors text-slate-500 hover:text-white border border-white/10">
-                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" /></svg>
+                                            <X size={20} />
                                         </button>
                                     </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-                                        <div>
-                                            <p className="text-[11px] font-black text-slate-500 uppercase tracking-[0.2em] mb-6 border-b border-white/5 pb-2">Module Utilization Profile</p>
-                                            <div className="space-y-6">
-                                                {focusedUser.breakdown.map((item, i) => (
-                                                    <div key={i} className="group">
-                                                        <div className="flex justify-between text-[12px] font-bold mb-2.5">
-                                                            <span className="text-slate-300 group-hover:text-white transition-colors uppercase tracking-wider">{item.name}</span>
-                                                            <span className="text-indigo-400 font-mono">{item.count}</span>
+                                    <div className="flex flex-col md:flex-row gap-12 items-start relative z-10">
+                                        <div className="flex-shrink-0">
+                                            <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-4xl font-black text-white shadow-lg border border-white/20 overflow-hidden">
+                                                {focusedUserData.user?.avatar_url ? (
+                                                    <img src={focusedUserData.user.avatar_url} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                                ) : (
+                                                    focusedUserData.user?.email[0].toUpperCase()
+                                                )}
+                                            </div>
+                                            <div className="mt-6 flex flex-col items-center">
+                                                <span className={`px-4 py-1.5 text-[10px] font-black rounded-full uppercase tracking-widest border ${focusedUserData.user?.is_subscribed ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-slate-500/10 text-slate-400 border-slate-500/20'}`}>
+                                                    {focusedUserData.user?.is_subscribed ? 'Authorized' : 'Dormant'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className="flex-grow">
+                                            <div className="flex flex-col md:flex-row md:items-end gap-6 mb-10">
+                                                <div>
+                                                    <h3 className="text-3xl font-black text-white tracking-tight leading-none mb-2">{focusedUserData.user?.email}</h3>
+                                                    <p className="text-xs font-mono text-indigo-400 uppercase tracking-[0.2em]">Operator ID: {focusedUserData.user?.id}</p>
+                                                </div>
+                                                <div className="md:ml-auto flex items-center gap-10">
+                                                    <div className="text-center">
+                                                        <div className="text-2xl font-black text-white font-mono">{focusedUserData.logs.length}</div>
+                                                        <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Actions</div>
+                                                    </div>
+                                                    <div className="text-center">
+                                                        <div className="text-2xl font-black text-white font-mono">{Object.keys(focusedUserData.toolStats).length}</div>
+                                                        <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Tools Used</div>
+                                                    </div>
+                                                    <div className="text-center">
+                                                        <div className="text-2xl font-black text-white font-mono">{formatLastSeen(focusedUserData.user?.last_seen)}</div>
+                                                        <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Last Active</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <p className="text-[11px] font-black text-slate-500 uppercase tracking-[0.2em] mb-6 border-b border-white/5 pb-2">Module Utilization DNA</p>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6">
+                                                {Object.entries(focusedUserData.toolStats).sort(([,a], [,b]) => b - a).map(([tid, count]) => (
+                                                    <div key={tid} className="group">
+                                                        <div className="flex justify-between text-[11px] font-bold mb-2">
+                                                            <span className="text-slate-400 group-hover:text-white transition-colors uppercase tracking-wider">{getToolName(tid)}</span>
+                                                            <span className="text-indigo-400 font-mono">{count}</span>
                                                         </div>
-                                                        <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden shadow-inner">
-                                                            <div className="h-full bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.6)] transition-all duration-1000 ease-out" style={{ width: `${(item.count / focusedUser.totalActions) * 100}%` }}></div>
+                                                        <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                                                            <div className="h-full bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)] transition-all duration-1000" style={{ width: `${(count / focusedUserData.logs.length) * 100}%` }}></div>
                                                         </div>
                                                     </div>
                                                 ))}
                                             </div>
                                         </div>
-                                        {focusedUser.lastAction && (
-                                            <div className="flex flex-col justify-center">
-                                                <p className="text-[11px] font-black text-slate-500 uppercase tracking-[0.2em] mb-4">Last Protocol Access</p>
-                                                <div className="p-8 bg-white/5 rounded-[2rem] border border-white/5 shadow-inner text-center">
-                                                    <span className="text-xl font-black text-indigo-300 block mb-3 uppercase tracking-widest">{getToolName(focusedUser.lastAction.tool)}</span>
-                                                    <span className="text-sm text-slate-500 font-mono italic">{new Date(focusedUser.lastAction.time).toLocaleString()}</span>
-                                                </div>
-                                            </div>
-                                        )}
                                     </div>
                                 </div>
                             ) : (
-                                <div className="h-full flex flex-col items-center justify-center p-12 text-center bg-slate-50 rounded-[2.5rem] border-2 border-dashed border-slate-200 opacity-60">
+                                <div className="h-full flex flex-col items-center justify-center p-20 text-center bg-slate-50 rounded-[2.5rem] border-2 border-dashed border-slate-200 opacity-60">
                                     <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center text-slate-300 mb-6 shadow-sm border border-slate-100">
                                         <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                                     </div>
                                     <p className="text-sm font-black uppercase tracking-[0.2em] text-slate-400">Telemetry Disengaged</p>
-                                    <p className="text-[11px] text-slate-400 mt-3 font-medium px-8 leading-relaxed italic text-center">Select an operator from the Audit table to inspect their module usage DNA.</p>
+                                    <p className="text-[11px] text-slate-400 mt-3 font-medium px-8 leading-relaxed italic text-center">Select an operator from the Audit table or Live Feed to inspect their module usage DNA.</p>
                                 </div>
                             )}
                         </div>
@@ -1367,13 +1661,13 @@ const AdminDashboard: React.FC = () => {
                                         <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                     </div>
                                     <div>
-                                        <h4 className="text-sm font-black text-rose-900 uppercase tracking-tight">Intelligence Danger Zone</h4>
-                                        <p className="text-[11px] font-bold text-rose-400 uppercase tracking-widest mt-1">Purge all production telemetry from the database</p>
+                                        <h4 className="text-base font-black text-rose-900 uppercase tracking-tight">Intelligence Danger Zone</h4>
+                                        <p className="text-xs font-bold text-rose-400 uppercase tracking-widest mt-1">Purge all production telemetry from the database</p>
                                     </div>
                                 </div>
                                 <button 
                                     onClick={purgeTelemetry}
-                                    className="px-8 py-3 bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-black uppercase tracking-[0.2em] rounded-2xl shadow-xl shadow-rose-200 transition-all active:scale-95"
+                                    className="px-10 py-4 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black uppercase tracking-[0.2em] rounded-2xl shadow-xl shadow-rose-200 transition-all active:scale-95"
                                 >
                                     Reset Intelligence Database
                                 </button>
@@ -1387,12 +1681,12 @@ const AdminDashboard: React.FC = () => {
                         <div className="p-10 bg-white border-r border-slate-200 flex flex-col shadow-inner">
                             <div className="flex justify-between items-center mb-10">
                                 <div className="flex flex-col">
-                                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Signal Transmitter</h3>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mt-1">Deploy Global Broadcast</p>
+                                    <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Signal Transmitter</h3>
+                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.3em] mt-1">Deploy Global Broadcast</p>
                                 </div>
                                 {editingId && (
                                     <button 
-                                        onClick={() => { setEditingId(null); setNewTitle(''); setNewContent(''); setNewType('info'); }} 
+                                        onClick={() => { setEditingId(null); setNewTitle(''); setNewContent(''); setNewType('info'); setNewCategory('system_alerts'); }} 
                                         className="w-10 h-10 rounded-xl bg-rose-50 text-rose-500 border border-rose-100 flex items-center justify-center transition-all hover:bg-rose-500 hover:text-white"
                                         title="Cancel Edit"
                                     >
@@ -1402,24 +1696,24 @@ const AdminDashboard: React.FC = () => {
                             </div>
                             
                             <form onSubmit={saveAnnouncement} className="space-y-8 flex-grow flex flex-col">
-                                <div className="space-y-2">
-                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Subject Frequency</label>
+                                <div className="space-y-3">
+                                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Subject Frequency</label>
                                     <input 
                                         type="text" 
                                         required 
                                         placeholder="SIGNAL_TITLE_KEY"
                                         value={newTitle} 
                                         onChange={e => setNewTitle(e.target.value)} 
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all placeholder-slate-300 font-mono" 
+                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-5 text-base font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all placeholder-slate-300 font-mono" 
                                     />
                                 </div>
                                 
-                                <div className="space-y-2">
-                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Severity Layer</label>
+                                <div className="space-y-3">
+                                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Severity Layer</label>
                                     <select 
                                         value={newType} 
                                         onChange={e => setNewType(e.target.value as any)} 
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all appearance-none"
+                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-5 text-base font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all appearance-none"
                                     >
                                         <option value="info">STANDARD_PULSE (INFO)</option>
                                         <option value="warning">ALERT_THRESHOLD (WARN)</option>
@@ -1427,15 +1721,28 @@ const AdminDashboard: React.FC = () => {
                                         <option value="error">CRITICAL_EXCEPTION (ERROR)</option>
                                     </select>
                                 </div>
+
+                                <div className="space-y-3">
+                                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Target Category</label>
+                                    <select 
+                                        value={newCategory} 
+                                        onChange={e => setNewCategory(e.target.value as any)} 
+                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-5 text-base font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all appearance-none"
+                                    >
+                                        <option value="system_alerts">SYSTEM_ALERTS (TOOLS)</option>
+                                        <option value="security_updates">SECURITY_UPDATES (AUTH)</option>
+                                        <option value="maintenance_windows">MAINTENANCE_WINDOWS (DOWNTIME)</option>
+                                    </select>
+                                </div>
                                 
-                                <div className="space-y-2 flex-grow flex flex-col">
-                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Payload Content</label>
+                                <div className="space-y-3 flex-grow flex flex-col">
+                                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Payload Content</label>
                                     <textarea 
                                         required 
                                         placeholder="ENTER_TRANSMISSION_DATA..."
                                         value={newContent} 
                                         onChange={e => setNewContent(e.target.value)} 
-                                        className="w-full flex-grow bg-slate-50 border-2 border-slate-100 rounded-[2rem] px-6 py-5 text-sm font-medium text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all resize-none leading-relaxed placeholder-slate-300" 
+                                        className="w-full flex-grow bg-slate-50 border-2 border-slate-100 rounded-[2rem] px-8 py-6 text-base font-medium text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all resize-none leading-relaxed placeholder-slate-300" 
                                     />
                                 </div>
                                 
@@ -1453,10 +1760,10 @@ const AdminDashboard: React.FC = () => {
 
                         <div className="lg:col-span-2 p-12 overflow-y-auto custom-scrollbar">
                             <div className="flex items-center justify-between mb-10">
-                                <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.4em]">Signal Logs</h3>
+                                <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.4em]">Signal Logs</h3>
                                 <div className="flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Master Frequency Stable</span>
+                                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Master Frequency Stable</span>
                                 </div>
                             </div>
 
@@ -1475,8 +1782,13 @@ const AdminDashboard: React.FC = () => {
                                         }`}>
                                             <div className="flex justify-between items-start mb-6">
                                                 <div className="flex flex-col gap-2">
-                                                    <div className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border w-max ${typeColors[a.type]}`}>
-                                                        {a.type}_TRANS
+                                                    <div className="flex items-center gap-2">
+                                                        <div className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border w-max ${typeColors[a.type]}`}>
+                                                            {a.type}_TRANS
+                                                        </div>
+                                                        <div className="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border border-slate-100 bg-slate-50 text-slate-400 w-max">
+                                                            {a.category?.replace('_', ' ') || 'SYSTEM ALERTS'}
+                                                        </div>
                                                     </div>
                                                     <div className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-tight">
                                                         PKT_{a.id.slice(0, 8)}
@@ -1533,19 +1845,45 @@ const AdminDashboard: React.FC = () => {
 
                 {activeTab === 'feedback' && (
                     <div className="p-10 animate-fade-in flex flex-col h-full">
-                        <div className="flex items-center justify-between mb-10">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between mb-10 gap-6">
                             <div className="flex flex-col">
-                                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">User Feedback Matrix</h3>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mt-1">Direct Operator Communications</p>
+                                <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">User Feedback Matrix</h3>
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.3em] mt-1">Direct Operator Communications</p>
                             </div>
-                            <div className="bg-amber-50 border border-amber-100 px-4 py-2 rounded-xl flex items-center gap-3">
-                                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-                                <span className="text-[10px] font-black text-amber-700 uppercase tracking-widest">{feedbacks.length} Reports Logged</span>
+                            <div className="flex items-center gap-4">
+                                <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+                                    <button 
+                                        onClick={() => setSearch('')} 
+                                        className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${!search || (search !== 'bug' && search !== 'feature') ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:bg-white/50'}`}
+                                    >
+                                        All
+                                    </button>
+                                    <button 
+                                        onClick={() => setSearch('bug')} 
+                                        className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${search === 'bug' ? 'bg-rose-500 text-white shadow-lg' : 'text-slate-500 hover:bg-white/50'}`}
+                                    >
+                                        Bugs
+                                    </button>
+                                    <button 
+                                        onClick={() => setSearch('feature')} 
+                                        className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${search === 'feature' ? 'bg-indigo-500 text-white shadow-lg' : 'text-slate-500 hover:bg-white/50'}`}
+                                    >
+                                        Features
+                                    </button>
+                                </div>
+                                <div className="bg-amber-50 border border-amber-100 px-5 py-3 rounded-xl flex items-center gap-4">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                    <span className="text-xs font-black text-amber-700 uppercase tracking-widest">{feedbacks.length} Reports Logged</span>
+                                </div>
                             </div>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto pb-20">
-                            {feedbacks.length > 0 ? feedbacks.map((f) => (
+                            {feedbacks.length > 0 ? feedbacks.filter(f => {
+                                if (search === 'bug') return f.type === 'bug';
+                                if (search === 'feature') return f.type === 'feature';
+                                return true;
+                            }).map((f) => (
                                 <div key={f.id} className="bg-white border-2 border-slate-100 rounded-[2rem] p-8 hover:border-amber-200 transition-all shadow-sm flex flex-col group relative">
                                     <div className="flex justify-between items-start mb-6">
                                         <div className="flex flex-col gap-2">
@@ -1558,13 +1896,25 @@ const AdminDashboard: React.FC = () => {
                                                 REF_{f.id.slice(0, 8)}
                                             </span>
                                         </div>
-                                        <button 
-                                            onClick={() => handleDeleteFeedback(f.id)}
-                                            className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
-                                            title="Delete Feedback"
-                                        >
-                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                        </button>
+                                        <div className="flex items-center gap-2">
+                                            <button 
+                                                onClick={() => {
+                                                    navigator.clipboard.writeText(f.content);
+                                                    setToast({ msg: 'Feedback content copied to clipboard', type: 'success' });
+                                                }}
+                                                className="p-2 text-slate-300 hover:text-indigo-500 hover:bg-indigo-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                                                title="Copy Content"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002-2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
+                                            </button>
+                                            <button 
+                                                onClick={() => handleDeleteFeedback(f.id)}
+                                                className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                                                title="Delete Feedback"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                            </button>
+                                        </div>
                                     </div>
 
                                     <div className="flex-grow mb-8">
@@ -1592,6 +1942,108 @@ const AdminDashboard: React.FC = () => {
                                     <p className="text-sm font-black uppercase tracking-[0.4em] text-slate-400">Feedback Matrix Clear</p>
                                 </div>
                             )}
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'avatars' && (
+                    <div className="grid grid-cols-1 lg:grid-cols-3 divide-x divide-slate-200 h-full min-h-[700px] bg-slate-50/50">
+                        <div className="p-10 bg-white border-r border-slate-200 flex flex-col shadow-inner">
+                            <div className="flex flex-col mb-10">
+                                <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Identity Provisioner</h3>
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.3em] mt-1">Upload Default Avatars</p>
+                            </div>
+                            
+                            <form onSubmit={handleAvatarUpload} className="space-y-8">
+                                <div className="space-y-3">
+                                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Identity Label</label>
+                                    <input 
+                                        type="text" 
+                                        required 
+                                        placeholder="AVATAR_NAME_KEY"
+                                        value={newAvatarName} 
+                                        onChange={e => setNewAvatarName(e.target.value)} 
+                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-5 text-base font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all placeholder-slate-300 font-mono" 
+                                    />
+                                </div>
+                                
+                                <div className="space-y-3">
+                                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Visual Payload</label>
+                                    <div className="relative group">
+                                        <input 
+                                            type="file" 
+                                            required 
+                                            accept="image/*"
+                                            onChange={e => setAvatarFile(e.target.files?.[0] || null)}
+                                            className="hidden"
+                                            id="avatar-upload"
+                                        />
+                                        <label 
+                                            htmlFor="avatar-upload"
+                                            className="w-full flex flex-col items-center justify-center gap-4 bg-slate-50 border-2 border-dashed border-slate-200 rounded-[2rem] px-8 py-12 cursor-pointer transition-all group-hover:border-indigo-400 group-hover:bg-indigo-50/30"
+                                        >
+                                            <div className="w-16 h-16 rounded-2xl bg-white border-2 border-slate-100 flex items-center justify-center text-slate-400 group-hover:text-indigo-500 group-hover:border-indigo-200 transition-all shadow-sm">
+                                                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                                            </div>
+                                            <div className="text-center">
+                                                <p className="text-sm font-black text-slate-600 uppercase tracking-tight mb-1">
+                                                    {avatarFile ? avatarFile.name : 'Select Image Protocol'}
+                                                </p>
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">PNG, JPG, WEBP (Max 2MB)</p>
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
+                                
+                                <button 
+                                    type="submit" 
+                                    disabled={isLoading}
+                                    className="w-full py-5 bg-slate-900 hover:bg-slate-800 text-white rounded-[2rem] font-black uppercase text-xs tracking-[0.3em] shadow-2xl shadow-slate-200 transition-all active:scale-95 flex items-center justify-center gap-4 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                                    Initialize Upload
+                                </button>
+                            </form>
+                        </div>
+
+                        <div className="lg:col-span-2 p-12 overflow-y-auto custom-scrollbar">
+                            <div className="flex items-center justify-between mb-10">
+                                <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.4em]">Identity Presets</h3>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse"></div>
+                                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Global Presets Active</span>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-8">
+                                {defaultAvatars.map(avatar => (
+                                    <div key={avatar.id} className="group relative flex flex-col p-6 bg-white border-2 border-slate-100 rounded-[2.5rem] transition-all duration-500 hover:border-indigo-500 hover:ring-8 hover:ring-indigo-50 hover:shadow-2xl">
+                                        <div className="aspect-square rounded-[2rem] overflow-hidden mb-6 bg-slate-50 border-2 border-slate-50 group-hover:border-indigo-100 transition-all">
+                                            <img src={avatar.url} alt={avatar.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                        </div>
+                                        <div className="flex flex-col gap-1 text-center">
+                                            <h4 className="text-xs font-black text-slate-900 uppercase tracking-tight truncate px-2">{avatar.name}</h4>
+                                            <span className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">ID: {avatar.id.slice(0, 8)}</span>
+                                        </div>
+                                        
+                                        <button 
+                                            onClick={() => deleteAvatar(avatar)}
+                                            className="absolute -top-3 -right-3 w-10 h-10 bg-rose-500 text-white rounded-2xl flex items-center justify-center shadow-xl opacity-0 group-hover:opacity-100 transition-all hover:bg-rose-600 active:scale-90"
+                                        >
+                                            <X size={18} />
+                                        </button>
+                                    </div>
+                                ))}
+                                
+                                {defaultAvatars.length === 0 && (
+                                    <div className="col-span-full py-32 flex flex-col items-center justify-center gap-6 bg-slate-50/50 rounded-[3rem] border-2 border-dashed border-slate-200">
+                                        <div className="w-20 h-20 rounded-full bg-white border-2 border-slate-100 flex items-center justify-center text-slate-200">
+                                            <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                                        </div>
+                                        <p className="text-xs font-black text-slate-400 uppercase tracking-[0.3em]">No Identity Presets Provisioned</p>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 )}

@@ -187,7 +187,7 @@ const GrantTagger: React.FC = () => {
     }, [statement, grantList]);
 
     return (
-        <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+        <div className="max-w-full mx-auto px-2 py-8 sm:px-4 lg:px-6">
             <div className="mb-10 text-center animate-fade-in">
                 <h1 className="text-3xl font-black text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase tracking-tighter">Grant XML Tagger</h1>
                 <p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic">

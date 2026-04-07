@@ -5,6 +5,7 @@ import { findCreditRole, getSuggestions } from '../utils/creditLogic';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
+import useLocalStorage from '../hooks/useLocalStorage';
 
 interface Issue {
     id: string;
@@ -86,11 +87,10 @@ const getRoleColor = (roleName: string) => {
 };
 
 const CreditGenerator: React.FC = () => {
-    const [input, setInput] = useState('');
-    
-    // Output States
-    const [boldOutput, setBoldOutput] = useState('');
-    const [rolesOutput, setRolesOutput] = useState('');
+    const [input, setInput] = useLocalStorage<string>('credit_generator_input', '');
+    const [boldOutput, setBoldOutput] = useLocalStorage<string>('credit_generator_bold_output', '');
+    const [rolesOutput, setRolesOutput] = useLocalStorage<string>('credit_generator_roles_output', '');
+    const [lastProcessedInput, setLastProcessedInput] = useLocalStorage<string>('credit_generator_last_input', '');
     const [parsedAuthors, setParsedAuthors] = useState<ParsedAuthor[]>([]);
     
     // Report States
@@ -410,6 +410,7 @@ const CreditGenerator: React.FC = () => {
 
             setBoldOutput(finalBold);
             setRolesOutput(rolesSegments.join('\n\n'));
+            setLastProcessedInput(input);
             setReportIssues(newReportIssues);
             setParsedAuthors(parsedAuthorsList);
             setScanStats({ errors: errorCounter, authors: parsedAuthorsList.length }); 
@@ -470,6 +471,8 @@ const CreditGenerator: React.FC = () => {
         }, 0);
     };
 
+    const isStale = (boldOutput || rolesOutput) && input !== lastProcessedInput;
+
     useKeyboardShortcuts({
         onPrimary: generate,
         onCopy: () => {
@@ -481,27 +484,36 @@ const CreditGenerator: React.FC = () => {
         },
         onClear: () => {
             setInput('');
-            setToast({msg: 'Input cleared', type:'warn'});
+            setBoldOutput('');
+            setRolesOutput('');
+            setLastProcessedInput('');
+            setToast({msg: 'All data cleared', type:'warn'});
         }
-    }, [input, boldOutput, rolesOutput, activeTab]);
+    }, [input, boldOutput, rolesOutput, activeTab, lastProcessedInput]);
 
     return (
-        <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+        <div className="max-w-full mx-auto px-2 py-8 sm:px-4 lg:px-6">
             <div className="mb-10 text-center animate-fade-in">
                 <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3">CRediT Authorship Generator</h1>
                 <p className="text-lg text-slate-500 max-w-2xl mx-auto">Smart-parse author roles, correct typos, and generate standardized XML.</p>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-[700px]">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 min-h-[700px]">
                 {/* Input Area */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col relative group focus-within:ring-2 focus-within:ring-purple-100 transition-all duration-300">
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col relative group focus-within:ring-2 focus-within:ring-purple-100 transition-all duration-300 min-h-[500px]">
                     <div className="bg-slate-50 px-4 py-3 border-b border-slate-100 flex justify-between items-center z-20 relative">
                         <label className="font-bold text-slate-700 flex items-center gap-2 text-sm">
                             <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white border border-slate-200 text-xs text-purple-600 font-mono shadow-sm">IN</span>
                             Input Text
                         </label>
                         <div className="flex gap-2">
-                             <button onClick={() => setInput('')} title="Alt+Delete" className="text-xs font-semibold text-slate-400 hover:text-red-500 px-2 py-1 rounded transition-colors">Clear</button>
+                             <button onClick={() => {
+                                 setInput('');
+                                 setBoldOutput('');
+                                 setRolesOutput('');
+                                 setLastProcessedInput('');
+                                 setToast({msg: 'All data cleared', type:'warn'});
+                             }} title="Alt+Delete" className="text-xs font-semibold text-slate-400 hover:text-red-500 px-2 py-1 rounded transition-colors">Clear</button>
                         </div>
                     </div>
                     
@@ -555,6 +567,12 @@ const CreditGenerator: React.FC = () => {
                         <label className="font-bold text-slate-700 flex items-center gap-2 text-sm">
                             <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white border border-slate-200 text-xs text-indigo-600 font-mono shadow-sm">OUT</span>
                             Results
+                            {isStale && (
+                                <span className="ml-2 px-2 py-0.5 bg-amber-100 text-amber-700 text-[9px] font-black rounded-md border border-amber-200 animate-pulse flex items-center gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                                    STALE
+                                </span>
+                            )}
                         </label>
                         <div className="flex items-center gap-2">
                             {activeTab !== 'report' && activeTab !== 'preview' && (
@@ -567,9 +585,13 @@ const CreditGenerator: React.FC = () => {
                                         }
                                     }} 
                                     title="Ctrl+Shift+C"
-                                    className="text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded border border-transparent hover:border-indigo-100 transition-colors flex items-center gap-1"
+                                    className={`text-xs font-bold px-3 py-1.5 rounded border transition-all flex items-center gap-1 active:scale-95 ${
+                                        isStale 
+                                        ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100' 
+                                        : 'text-indigo-600 hover:bg-indigo-50 border-transparent hover:border-indigo-100'
+                                    }`}
                                 >
-                                    Copy
+                                    {isStale ? 'Copy Stale XML' : 'Copy'}
                                 </button>
                             )}
                             {scanStats.errors > 0 && (

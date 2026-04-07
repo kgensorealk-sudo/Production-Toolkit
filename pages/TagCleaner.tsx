@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
+import useLocalStorage from '../hooks/useLocalStorage';
 
 interface ReportItem {
     id: number;
@@ -12,8 +13,9 @@ interface ReportItem {
 }
 
 const TagCleaner: React.FC = () => {
-    const [input, setInput] = useState('');
-    const [output, setOutput] = useState('');
+    const [input, setInput] = useLocalStorage<string>('tag_cleaner_input', '');
+    const [output, setOutput] = useLocalStorage<string>('tag_cleaner_output', '');
+    const [lastProcessedInput, setLastProcessedInput] = useLocalStorage<string>('tag_cleaner_last_input', '');
     const [reportData, setReportData] = useState<ReportItem[]>([]);
     const [activeTab, setActiveTab] = useState<'output' | 'report'>('output');
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
@@ -79,6 +81,7 @@ const TagCleaner: React.FC = () => {
             current = current.replace(/<\/?opt_(?:INS|DEL|comment)(?:\s+[^>]*)?>/gi, '');
 
             setOutput(current);
+            setLastProcessedInput(input);
             setReportData(newReport);
             
             // If we have changes, show the report stats in toast, otherwise just success
@@ -133,6 +136,8 @@ const TagCleaner: React.FC = () => {
         comments: reportData.filter(i => i.type === 'Comment').length
     };
 
+    const isStale = output && input !== lastProcessedInput;
+
     // Keyboard Shortcuts
     useKeyboardShortcuts({
         onPrimary: () => processTags('accept'),
@@ -142,31 +147,38 @@ const TagCleaner: React.FC = () => {
         },
         onClear: () => {
             setInput('');
-            setToast({msg: 'Input cleared', type:'warn'});
+            setOutput('');
+            setLastProcessedInput('');
+            setToast({msg: 'All data cleared', type:'warn'});
         }
-    }, [input, output, activeTab]);
+    }, [input, output, activeTab, lastProcessedInput]);
 
     return (
-        <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-            <div className="mb-10 text-center animate-fade-in">
+        <div className="max-w-full mx-auto px-2 py-8 sm:px-4 lg:px-6 flex flex-col min-h-[calc(100vh-120px)]">
+            <div className="mb-10 text-center animate-fade-in shrink-0">
                 <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3">XML Tag Cleaner</h1>
                 <p className="text-lg text-slate-500 max-w-2xl mx-auto">Manage editorial markup by accepting or rejecting changes in bulk.</p>
             </div>
 
-             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-[600px]">
+             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 flex-grow min-h-[600px]">
                 {/* Input Column */}
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col group focus-within:ring-2 focus-within:ring-teal-100 transition-all duration-300">
-                    <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center">
+                    <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center shrink-0">
                         <label className="font-bold text-slate-700 text-sm flex items-center gap-2">
                              <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white border border-slate-200 text-xs text-slate-500 font-mono shadow-sm">1</span>
                             Input XML
                         </label>
-                        <button onClick={() => setInput('')} title="Alt+Delete" className="text-xs font-semibold text-slate-400 hover:text-red-500 hover:bg-red-50 px-2 py-1 rounded transition-colors">Clear</button>
+                        <button onClick={() => {
+                            setInput('');
+                            setOutput('');
+                            setLastProcessedInput('');
+                            setToast({msg: 'All data cleared', type:'warn'});
+                        }} title="Alt+Delete" className="text-xs font-semibold text-slate-400 hover:text-red-500 hover:bg-red-50 px-2 py-1 rounded transition-colors">Clear</button>
                     </div>
                     <textarea 
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
-                        className="w-full h-full p-6 text-sm font-mono text-slate-800 border-0 focus:ring-0 outline-none bg-white resize-none leading-relaxed placeholder-slate-300" 
+                        className="w-full flex-grow p-6 text-sm font-mono text-slate-800 border-0 focus:ring-0 outline-none bg-white resize-none leading-relaxed placeholder-slate-300" 
                         placeholder="Paste XML with <opt_DEL>, <opt_INS> or <opt_comment> tags..."
                         spellCheck={false}
                     />
@@ -174,13 +186,29 @@ const TagCleaner: React.FC = () => {
                 
                 {/* Output/Report Column */}
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col relative">
-                    <div className="bg-slate-50 px-5 py-2 border-b border-slate-100 flex justify-between items-center">
+                    <div className="bg-slate-50 px-5 py-2 border-b border-slate-100 flex justify-between items-center shrink-0">
                         <label className="font-bold text-slate-700 text-sm flex items-center gap-2">
                             <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white border border-slate-200 text-xs text-teal-600 font-mono shadow-sm">2</span>
                             Results
+                            {isStale && (
+                                <span className="ml-2 px-2 py-0.5 bg-amber-100 text-amber-700 text-[9px] font-black rounded-md border border-amber-200 animate-pulse flex items-center gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                                    STALE
+                                </span>
+                            )}
                         </label>
                         {activeTab === 'output' && (
-                            <button onClick={copyOutput} title="Ctrl+Shift+C" className="text-xs font-bold text-teal-600 hover:bg-teal-50 px-3 py-1.5 rounded border border-transparent hover:border-teal-100 transition-colors">Copy Result</button>
+                            <button 
+                                onClick={copyOutput} 
+                                title="Ctrl+Shift+C" 
+                                className={`text-xs font-bold px-3 py-1.5 rounded border transition-all active:scale-95 ${
+                                    isStale 
+                                    ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100' 
+                                    : 'text-teal-600 hover:bg-teal-50 border-transparent hover:border-teal-100'
+                                }`}
+                            >
+                                {isStale ? 'Copy Stale XML' : 'Copy Result'}
+                            </button>
                         )}
                         {activeTab === 'report' && reportData.length > 0 && (
                             <button onClick={downloadCSV} className="text-xs font-bold text-slate-600 hover:bg-slate-100 px-3 py-1.5 rounded border border-slate-200 transition-colors flex items-center gap-1">
@@ -191,7 +219,7 @@ const TagCleaner: React.FC = () => {
                     </div>
                     
                     {/* Tabs */}
-                    <div className="bg-white px-2 pt-2 border-b border-slate-100 flex space-x-1">
+                    <div className="bg-white px-2 pt-2 border-b border-slate-100 flex space-x-1 shrink-0">
                          <button 
                             onClick={() => setActiveTab('output')} 
                             className={`flex-1 py-2 text-xs font-bold rounded-t-lg transition-all duration-200 border-t border-x ${activeTab === 'output' 
@@ -210,22 +238,22 @@ const TagCleaner: React.FC = () => {
                          </button>
                     </div>
 
-                    <div className="flex-grow relative bg-slate-50 overflow-hidden">
+                    <div className="flex-grow relative bg-slate-50 overflow-hidden flex flex-col">
                          {isLoading && <LoadingOverlay message="Cleaning Tags..." color="teal" />}
                          
                          {activeTab === 'output' && (
                              <textarea 
                                 value={output}
                                 readOnly
-                                className="w-full h-full p-6 text-sm font-mono text-slate-800 border-0 focus:ring-0 outline-none bg-transparent resize-none leading-relaxed" 
+                                className="w-full flex-grow p-6 text-sm font-mono text-slate-800 border-0 focus:ring-0 outline-none bg-transparent resize-none leading-relaxed" 
                                 placeholder="Processed text will appear here..."
                             />
                          )}
 
                          {activeTab === 'report' && (
-                             <div className="h-full flex flex-col bg-white">
+                             <div className="flex-grow flex flex-col bg-white overflow-hidden">
                                  {/* Stats Bar */}
-                                 <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex gap-4 text-xs font-medium text-slate-600">
+                                 <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex gap-4 text-xs font-medium text-slate-600 shrink-0">
                                      <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-slate-400"></span> Total: <b>{stats.total}</b></div>
                                      <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-400"></span> Insertions: <b>{stats.insertions}</b></div>
                                      <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-rose-400"></span> Deletions: <b>{stats.deletions}</b></div>

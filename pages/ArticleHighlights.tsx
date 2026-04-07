@@ -191,7 +191,7 @@ const ArticleHighlights: React.FC = () => {
     useKeyboardShortcuts({ onPrimary: generateXML, onCopy: copyOutput, onClear: clearAll }, [output]);
 
     return (
-        <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+        <div className="max-w-full mx-auto px-2 py-8 sm:px-4 lg:px-6">
             <div className="mb-10 text-center animate-fade-in">
                 <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase tracking-tighter">Article Highlights Generator</h1>
                 <p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic leading-relaxed">Precision extraction of author highlights with enforced 125 character limits and XML normalization.</p>

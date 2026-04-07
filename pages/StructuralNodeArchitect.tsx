@@ -32,12 +32,13 @@ interface AuditItem {
     status: 'fixed' | 'warning' | 'skip';
     doi?: string;
     msg: string;
-    type?: 'doi' | 'name';
+    type?: 'doi' | 'name' | 'id-fix' | 'source-text';
 }
 
 const StructuralNodeArchitect: React.FC = () => {
     const [input, setInput] = useState('');
     const [output, setOutput] = useState('');
+    const [startId, setStartId] = useState(4000);
     const [viewMode, setViewMode] = useState<'output' | 'diff'>('output');
     const [auditData, setAuditData] = useState<AuditItem[]>([]);
     const [isProcessing, setIsProcessing] = useState(false);
@@ -51,6 +52,53 @@ const StructuralNodeArchitect: React.FC = () => {
     const wasWrappedRef = useRef<boolean>(false);
 
     const NS_DECLS = `xmlns:ce="http://www.elsevier.com/xml/common/dtd" xmlns:sb="http://www.elsevier.com/xml/common/structbib/dtd" xmlns:xlink="http://www.w3.org/1999/xlink"`;
+
+    const generateSourceText = (sbRef: Element): string => {
+        const authors: string[] = [];
+        const authorNodes = Array.from(sbRef.getElementsByTagName("sb:author"));
+        authorNodes.forEach(author => {
+            const given = author.getElementsByTagName("ce:given-name")[0]?.textContent || "";
+            const surname = author.getElementsByTagName("ce:surname")[0]?.textContent || "";
+            if (given || surname) {
+                authors.push(`${given} ${surname}`.trim());
+            }
+        });
+
+        const title = sbRef.getElementsByTagName("sb:maintitle")[0]?.textContent || "";
+        
+        const host = sbRef.getElementsByTagName("sb:host")[0];
+        let journal = "";
+        let year = "";
+        let page = "";
+
+        if (host) {
+            const mainTitles = Array.from(host.getElementsByTagName("sb:maintitle"));
+            if (mainTitles.length > 0) {
+                journal = mainTitles[0].textContent || "";
+            }
+            
+            const dateNode = host.getElementsByTagName("sb:date")[0];
+            if (dateNode) year = dateNode.textContent || "";
+            
+            const pageNode = host.getElementsByTagName("sb:first-page")[0];
+            if (pageNode) page = pageNode.textContent || "";
+        }
+
+        let parts: string[] = [];
+        if (authors.length > 0) parts.push(authors.join(", "));
+        if (title) parts.push(title);
+        if (journal) {
+            let journalPart = journal;
+            if (year) journalPart += ` (${year})`;
+            if (page) journalPart += ` ${page}`;
+            parts.push(journalPart);
+        } else {
+            if (year) parts.push(`(${year})`);
+            if (page) parts.push(page);
+        }
+        
+        return parts.join(", ") + ".";
+    };
 
     const fixGivenName = (name: string): string => {
         if (!name) return name;
@@ -97,12 +145,36 @@ const StructuralNodeArchitect: React.FC = () => {
                 return;
             }
 
+            let idCounter = startId;
             references.forEach((ref, index) => {
                 const refId = ref.getAttribute("id") || `REF_${index + 1}`;
                 const sbRef = ref.getElementsByTagName("sb:reference")[0];
                 if (!sbRef) {
                     currentAudit.push({ id: refId, status: 'skip', msg: 'MISSING: <sb:reference> not found.' });
                     return;
+                }
+
+                // ID and Source Text Audit
+                const sbId = sbRef.getAttribute("id") || "";
+                if (sbId.startsWith("or")) {
+                    currentAudit.push({ 
+                        id: refId, 
+                        status: 'fixed', 
+                        msg: `ID: Incorrect prefix detected (${sbId} -> rf${idCounter})`, 
+                        type: 'id-fix' 
+                    });
+                    idCounter += 5;
+                }
+
+                const sourceText = ref.getElementsByTagName("ce:source-text")[0];
+                if (!sourceText) {
+                    currentAudit.push({ 
+                        id: refId, 
+                        status: 'fixed', 
+                        msg: `SOURCE: Missing <ce:source-text> element. (se${idCounter})`, 
+                        type: 'source-text' 
+                    });
+                    idCounter += 5;
                 }
 
                 const hosts = Array.from(sbRef.getElementsByTagName("sb:host"));
@@ -172,10 +244,33 @@ const StructuralNodeArchitect: React.FC = () => {
             const references = Array.from(xmlDoc.getElementsByTagName("ce:bib-reference"));
             const finalAudit: AuditItem[] = [];
 
+            let idCounter = startId;
             references.forEach((ref, index) => {
                 const refId = ref.getAttribute("id") || `REF_${index + 1}`;
                 const sbRef = ref.getElementsByTagName("sb:reference")[0];
                 
+                // ID and Source Text Repair
+                if (sbRef) {
+                    const currentSbId = sbRef.getAttribute("id") || "";
+                    if (currentSbId.startsWith("or")) {
+                        const newId = `rf${idCounter}`;
+                        sbRef.setAttribute("id", newId);
+                        finalAudit.push({ id: refId, status: 'fixed', msg: `REPAIRED: ID prefix corrected to ${newId}.` });
+                        idCounter += 5;
+                    }
+
+                    let sourceText = ref.getElementsByTagName("ce:source-text")[0];
+                    if (!sourceText) {
+                        const newSourceText = xmlDoc.createElement("ce:source-text");
+                        const newSeId = `se${idCounter}`;
+                        newSourceText.setAttribute("id", newSeId);
+                        newSourceText.textContent = generateSourceText(sbRef);
+                        ref.appendChild(newSourceText);
+                        finalAudit.push({ id: refId, status: 'fixed', msg: `REPAIRED: Generated source text (${newSeId}).` });
+                        idCounter += 5;
+                    }
+                }
+
                 // Name Repair
                 const givenNames = Array.from(ref.getElementsByTagName("ce:given-name"));
                 let nameRepaired = false;
@@ -559,7 +654,7 @@ const StructuralNodeArchitect: React.FC = () => {
 
     return (
         <div className="h-[100dvh] bg-[#F8FAFC] text-slate-900 font-sans selection:bg-indigo-100 selection:text-indigo-900 overflow-hidden">
-            <div className="max-w-[1600px] mx-auto p-4 lg:p-8 flex flex-col h-full gap-6">
+            <div className="max-w-full mx-auto p-2 lg:p-4 flex flex-col h-full gap-6">
                 {/* Header */}
                 <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200/60">
                     <div className="flex items-center gap-4">
@@ -669,6 +764,25 @@ const StructuralNodeArchitect: React.FC = () => {
                                 </div>
 
                                 <div className="pt-6 border-t border-slate-100">
+                                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">ID Configuration</h3>
+                                    <div className="flex flex-col gap-3">
+                                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">Starting ID Number</label>
+                                            <div className="flex items-center gap-2">
+                                                <Database className="w-4 h-4 text-indigo-500" />
+                                                <input 
+                                                    type="number" 
+                                                    value={startId}
+                                                    onChange={(e) => setStartId(parseInt(e.target.value) || 0)}
+                                                    className="bg-transparent border-none focus:ring-0 text-sm font-bold text-slate-700 w-full"
+                                                    placeholder="4000"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="pt-6 border-t border-slate-100">
                                     <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Session Metrics</h3>
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
@@ -771,7 +885,9 @@ const StructuralNodeArchitect: React.FC = () => {
                                                                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{item.id}</span>
                                                                         {item.type && (
                                                                             <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${
-                                                                                item.type === 'doi' ? 'bg-indigo-100 text-indigo-600' : 'bg-fuchsia-100 text-fuchsia-600'
+                                                                                item.type === 'doi' ? 'bg-indigo-100 text-indigo-600' : 
+                                                                                item.type === 'name' ? 'bg-fuchsia-100 text-fuchsia-600' :
+                                                                                item.type === 'id-fix' ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'
                                                                             }`}>
                                                                                 {item.type}
                                                                             </span>

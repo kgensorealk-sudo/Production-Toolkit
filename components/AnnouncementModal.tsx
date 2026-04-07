@@ -1,16 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Announcement {
     id: string;
     title: string;
     content: string;
     type: 'warning' | 'info' | 'success' | 'error';
+    category: 'system_alerts' | 'security_updates' | 'maintenance_windows';
     updated_at: string;
     created_at: string;
 }
 
 const AnnouncementModal: React.FC = () => {
+    const { profile } = useAuth();
     const [isOpen, setIsOpen] = useState(false);
     const [announcement, setAnnouncement] = useState<Announcement | null>(null);
 
@@ -20,27 +23,41 @@ const AnnouncementModal: React.FC = () => {
                 .from('announcements')
                 .select('*')
                 .eq('is_active', true)
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .maybeSingle();
+                .order('created_at', { ascending: false });
 
             if (error) return;
 
-            if (data) {
-                const typedData = data as Announcement;
-                setAnnouncement(typedData);
+            if (data && data.length > 0) {
+                const announcements = data as Announcement[];
                 
-                if (forceOpen) {
-                    setIsOpen(true);
-                    return;
-                }
+                // Filter based on user preferences
+                const filtered = announcements.find(a => {
+                    if (!profile) return true; // Show all if profile not loaded (e.g. landing)
+                    const prefs = profile.notification_preferences || {
+                        system_alerts: true,
+                        security_updates: true,
+                        maintenance_windows: true
+                    };
+                    // If category is missing, default to system_alerts
+                    const category = (a.category || 'system_alerts') as keyof typeof prefs;
+                    return prefs[category] !== false;
+                });
 
-                const contentHash = btoa(typedData.content.substring(0, 30)).substring(0, 8);
-                const seenKey = `ann_seen_${typedData.id}_${contentHash}`;
-                const hasSeen = localStorage.getItem(seenKey);
-                
-                if (!hasSeen) {
-                    setIsOpen(true);
+                if (filtered) {
+                    setAnnouncement(filtered);
+                    
+                    if (forceOpen) {
+                        setIsOpen(true);
+                        return;
+                    }
+
+                    const contentHash = btoa(filtered.content.substring(0, 30)).substring(0, 8);
+                    const seenKey = `ann_seen_${filtered.id}_${contentHash}`;
+                    const hasSeen = localStorage.getItem(seenKey);
+                    
+                    if (!hasSeen) {
+                        setIsOpen(true);
+                    }
                 }
             }
         } catch (err) {
@@ -56,7 +73,7 @@ const AnnouncementModal: React.FC = () => {
         window.addEventListener('app:show-announcement', handleManualTrigger);
         
         return () => window.removeEventListener('app:show-announcement', handleManualTrigger);
-    }, []);
+    }, [profile?.notification_preferences]);
 
     const close = () => {
         if (announcement) {

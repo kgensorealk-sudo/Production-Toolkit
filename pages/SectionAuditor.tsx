@@ -121,7 +121,7 @@ const SectionAuditor: React.FC = () => {
     }, [input, step]);
 
     return (
-        <div className="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8 font-sans selection:bg-indigo-100 selection:text-indigo-900">
+        <div className="max-w-full mx-auto px-2 py-12 sm:px-4 lg:px-6 font-sans selection:bg-indigo-100 selection:text-indigo-900">
             <motion.div 
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}

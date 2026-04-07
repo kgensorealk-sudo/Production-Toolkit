@@ -1,11 +1,30 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { diffLines, diffWordsWithSpace, Change } from 'diff';
-import { ChevronUp, ChevronDown, GitCompare } from 'lucide-react';
+import { 
+    ChevronUp, 
+    ChevronDown, 
+    GitCompare, 
+    AlertCircle, 
+    CheckCircle2, 
+    Eye, 
+    X, 
+    AlertTriangle,
+    Check,
+    RotateCcw,
+    Copy,
+    ChevronRight,
+    ChevronLeft,
+    ArrowRight,
+    RefreshCw,
+    Search,
+    FileText
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import Switch from '../components/Switch';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
+import useLocalStorage from '../hooks/useLocalStorage';
 
 interface RefBlock {
     fullTag: string;
@@ -28,25 +47,29 @@ interface ScanItem {
     matchScore?: number;
     isSynthetic?: boolean;
     selected: boolean;
+    reviewed?: boolean;
     sortKey: string;
     originalIndex: number | null; 
     updatedIndex: number | null;
 }
 
 const ReferenceUpdater: React.FC = () => {
-    const [originalXml, setOriginalXml] = useState('');
-    const [updatedXml, setUpdatedXml] = useState('');
-    const [output, setOutput] = useState('');
+    const [originalXml, setOriginalXml] = useLocalStorage<string>('ref_updater_original_xml', '');
+    const [updatedXml, setUpdatedXml] = useLocalStorage<string>('ref_updater_updated_xml', '');
+    const [output, setOutput] = useLocalStorage<string>('ref_updater_output', '');
+    const [lastProcessedOriginal, setLastProcessedOriginal] = useLocalStorage<string>('ref_updater_last_original', '');
+    const [lastProcessedUpdated, setLastProcessedUpdated] = useLocalStorage<string>('ref_updater_last_updated', '');
     const [preserveIds, setPreserveIds] = useState(true);
     const [renumberInternal, setRenumberInternal] = useState(true);
-    const [addOrphans, setAddOrphans] = useState(false);
-    const [isNumberedMode, setIsNumberedMode] = useState(false);
+    const [addOrphans, setAddOrphans] = useState(true);
     const [sortAlphabetically, setSortAlphabetically] = useState(false);
     const [convertAndToAmp, setConvertAndToAmp] = useState(false);
-    const [activeTab, setActiveTab] = useState<'scan' | 'sequence' | 'result' | 'diff'>('scan');
+    const [autoUpdateSmartMatch, setAutoUpdateSmartMatch] = useState(false);
+    const [activeTab, setActiveTab] = useLocalStorage<'scan' | 'sequence' | 'result' | 'diff' | 'report'>('ref_updater_active_tab', 'scan');
     const [isLoading, setIsLoading] = useState(false);
+    const [reviewingItem, setReviewingItem] = useState<ScanItem | null>(null);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'|'info'} | null>(null);
-    const [scanResults, setScanResults] = useState<ScanItem[]>([]);
+    const [scanResults, setScanResults] = useLocalStorage<ScanItem[]>('ref_updater_scan_results', []);
     const [diffElements, setDiffElements] = useState<React.ReactNode>(null);
     const [draggedItemIndex, setDraggedItemIndex] = useState<number | null>(null);
     const [currentChangeIndex, setCurrentChangeIndex] = useState(0);
@@ -312,6 +335,7 @@ const ReferenceUpdater: React.FC = () => {
                             label: formatLabel(origRef.label || updatedRefs[matchIdx].label), 
                             id: origRef.id, 
                             status: matchType === 'Fuzzy' ? 'smart_match' : 'update', 
+                            reviewed: false,
                             matchType, 
                             matchScore, 
                             preview: updatedRefs[matchIdx].content.substring(0, 100).replace(/<[^>]+>/g, '').trim() + '...', 
@@ -367,6 +391,14 @@ const ReferenceUpdater: React.FC = () => {
     };
 
     const executeMergeAsync = async (origRefs: RefBlock[], updatedRefs: RefBlock[]) => {
+        const unreviewed = scanResults.filter(r => r.status === 'smart_match' && !r.reviewed && !autoUpdateSmartMatch);
+        if (unreviewed.length > 0) {
+            setToast({ msg: `Review required for ${unreviewed.length} Smart Matches before merging.`, type: "warn" });
+            setActiveTab('scan');
+            setIsLoading(false);
+            return;
+        }
+
         try {
             const getNextIdMap = (xml: string) => {
                 const prefixes = ['bb', 'rf', 'se', 'ir', 'or', 'tr'];
@@ -396,7 +428,7 @@ const ReferenceUpdater: React.FC = () => {
 
                     if (item.originalIndex !== null) {
                         const origRef = origRefs[item.originalIndex];
-                        if (item.selected && item.updatedIndex !== null && (item.status === 'update' || item.status === 'smart_match')) {
+                        if (item.selected && item.updatedIndex !== null && (item.status === 'update' || (item.status === 'smart_match' && (autoUpdateSmartMatch || item.reviewed)))) {
                             blockMarkup = updatedRefs[item.updatedIndex].fullTag;
                             targetId = origRef.id;
                             isTrulyUnchanged = false;
@@ -441,13 +473,15 @@ const ReferenceUpdater: React.FC = () => {
 
             const joinedResult = finalBlocks.join('\n');
             setOutput(joinedResult);
+            setLastProcessedOriginal(originalXml);
+            setLastProcessedUpdated(updatedXml);
             setActiveTab('result');
             await generateDiffAsync(originalXml, joinedResult);
             setToast({ msg: "Merge Protocol Executed. Unchanged references preserved.", type: "success" });
         } catch (e) { setToast({ msg: "Merge Protocol Failure.", type: "error" }); } finally { setIsLoading(false); }
     };
 
-    const bulkSelect = (selected: boolean) => setScanResults(prev => prev.map(item => ({ ...item, selected })));
+    const bulkSelect = (selected: boolean) => setScanResults((prev: ScanItem[]) => prev.map((item: ScanItem) => ({ ...item, selected })));
 
     const projectedSequence = useMemo(() => {
         if (scanResults.length === 0) return [];
@@ -483,48 +517,186 @@ const ReferenceUpdater: React.FC = () => {
         setSortAlphabetically(false);
     };
 
+    const isStale = output && (originalXml !== lastProcessedOriginal || updatedXml !== lastProcessedUpdated);
+
+    const clearAll = () => {
+        setOriginalXml('');
+        setUpdatedXml('');
+        setOutput('');
+        setLastProcessedOriginal('');
+        setLastProcessedUpdated('');
+        setScanResults([]);
+        setToast({ msg: "All data cleared", type: "warn" });
+    };
+
     useKeyboardShortcuts({
         onPrimary: initiateUpdate,
         onCopy: () => { if (output && activeTab === 'result') { navigator.clipboard.writeText(output); setToast({ msg: "Copied!", type: "success" }); } },
-        onClear: () => { setOriginalXml(''); setUpdatedXml(''); setOutput(''); setScanResults([]); }
-    }, [originalXml, updatedXml, output, scanResults]);
+        onClear: clearAll
+    }, [originalXml, updatedXml, output, scanResults, lastProcessedOriginal, lastProcessedUpdated]);
 
     return (
-        <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+        <div className="max-w-full mx-auto px-2 py-8 sm:px-4 lg:px-6">
             <div className="mb-8 text-center animate-fade-in"><h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase">Reference Updater</h1><p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic leading-relaxed">High-performance bulk merging. Optimized to preserve unchanged IDs and prevent sequence collisions.</p></div>
             
             <div className="flex justify-center mb-8">
                 <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-200 flex flex-wrap items-center justify-center gap-12">
-                    <Switch id="toggle-strict" label="Strict Mode" subLabel={isNumberedMode ? "Exact Matching" : "Fuzzy Matching"} checked={isNumberedMode} onChange={setIsNumberedMode} color="blue" />
-                    <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
                     <Switch id="toggle-orphans" label="Auto-Add" subLabel="New Items" checked={addOrphans} onChange={setAddOrphans} color="emerald" />
+                    <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
+                    <Switch id="toggle-smart-match" label="Auto-Confirm" subLabel="Smart Matches" checked={autoUpdateSmartMatch} onChange={setAutoUpdateSmartMatch} color="purple" />
                     <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
                     <div className="flex gap-3">
                         <button onClick={runAnalysis} className="bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold py-2.5 px-6 rounded-xl border border-slate-200 transition-all active:scale-95 shadow-sm">Analyze Set</button>
-                        <button onClick={initiateUpdate} className="bg-indigo-600 hover:bg-indigo-700 text-white font-black py-2.5 px-8 rounded-xl shadow-lg shadow-indigo-500/20 active:scale-95 transition-all uppercase text-xs tracking-widest">Execute Merge</button>
+                        <button 
+                            onClick={initiateUpdate} 
+                            className={`relative font-black py-2.5 px-8 rounded-xl shadow-lg active:scale-95 transition-all uppercase text-xs tracking-widest ${
+                                scanResults.some(r => r.status === 'smart_match' && !r.reviewed && !autoUpdateSmartMatch)
+                                ? 'bg-purple-600 hover:bg-purple-700 text-white shadow-purple-500/20 ring-2 ring-purple-500 ring-offset-2'
+                                : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-500/20'
+                            }`}
+                        >
+                            {scanResults.some(r => r.status === 'smart_match' && !r.reviewed && !autoUpdateSmartMatch) ? (
+                                <span className="flex items-center gap-2">
+                                    <AlertTriangle size={14} className="animate-pulse" />
+                                    Review Required
+                                </span>
+                            ) : 'Execute Merge'}
+                        </button>
                     </div>
                 </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[700px]">
                 <div className="flex flex-col gap-6 h-full overflow-hidden">
-                    <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col group focus-within:ring-2 focus-within:ring-indigo-100 transition-all"><div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center"><label className="font-bold text-slate-700 text-[10px] uppercase tracking-widest">Original XML Source</label></div><textarea value={originalXml} onChange={e => setOriginalXml(e.target.value)} className="w-full h-full p-6 text-[13px] font-mono text-slate-700 border-0 focus:ring-0 resize-none bg-transparent" placeholder="Paste full article reference list..." spellCheck={false} /></div>
-                    <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col group focus-within:ring-2 focus-within:ring-indigo-100 transition-all"><div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center"><label className="font-bold text-slate-700 text-[10px] uppercase tracking-widest">Updated Corrections Set</label></div><textarea value={updatedXml} onChange={e => setUpdatedXml(e.target.value)} className="w-full h-full p-6 text-[13px] font-mono text-slate-700 border-0 focus:ring-0 resize-none bg-transparent" placeholder="Paste corrections or new items..." spellCheck={false} /></div>
+                    <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col group focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
+                        <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center">
+                            <label className="font-bold text-slate-700 text-[10px] uppercase tracking-widest">Original XML Source</label>
+                            <button onClick={clearAll} title="Alt+Delete" className="text-[10px] font-black text-slate-400 hover:text-rose-500 transition-colors uppercase tracking-widest flex items-center gap-1">
+                                <RotateCcw size={10} />
+                                Clear All
+                            </button>
+                        </div>
+                        <textarea value={originalXml} onChange={e => setOriginalXml(e.target.value)} className="w-full h-full p-6 text-[13px] font-mono text-slate-700 border-0 focus:ring-0 resize-none bg-transparent" placeholder="Paste full article reference list..." spellCheck={false} />
+                    </div>
+                    <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col group focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
+                        <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center">
+                            <label className="font-bold text-slate-700 text-[10px] uppercase tracking-widest">Updated Corrections Set</label>
+                        </div>
+                        <textarea value={updatedXml} onChange={e => setUpdatedXml(e.target.value)} className="w-full h-full p-6 text-[13px] font-mono text-slate-700 border-0 focus:ring-0 resize-none bg-transparent" placeholder="Paste corrections or new items..." spellCheck={false} />
+                    </div>
                 </div>
 
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col relative h-full">
-                    <div className="bg-white px-2 pt-2 border-b border-slate-100 flex space-x-1">{[{ id: 'scan', label: 'Match Matrix' }, { id: 'sequence', label: 'Output Queue' }, { id: 'result', label: 'Merged Stream' }, { id: 'diff', label: 'Audit Log' }].map(tab => (<button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex-1 py-2 text-xs font-bold rounded-t-lg transition-all border-t border-x ${activeTab === tab.id ? 'bg-slate-50 text-indigo-600 border-slate-200 translate-y-[1px]' : 'bg-white text-slate-400 border-transparent hover:bg-slate-50'}`}>{tab.label}</button>))}</div>
+                    <div className="bg-white px-2 pt-2 border-b border-slate-100 flex space-x-1">{[{ id: 'scan', label: 'Match Matrix' }, { id: 'sequence', label: 'Output Queue' }, { id: 'result', label: 'Merged Stream' }, { id: 'diff', label: 'Audit Log' }, { id: 'report', label: 'Change Report' }].map(tab => (<button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex-1 py-2 text-xs font-bold rounded-t-lg transition-all border-t border-x ${activeTab === tab.id ? 'bg-slate-50 text-indigo-600 border-slate-200 translate-y-[1px]' : 'bg-white text-slate-400 border-transparent hover:bg-slate-50'}`}>{tab.label}</button>))}</div>
                     <div className="flex-grow relative bg-slate-50 overflow-hidden flex flex-col min-h-0">
                         {isLoading && <LoadingOverlay message="Executing Protocol Batch..." color="indigo" />}
                         
                         {activeTab === 'scan' && (
                             <div className="h-full overflow-hidden flex flex-col bg-white">
-                                <div className="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">System Reconciler</span><div className="flex gap-2"><button onClick={() => bulkSelect(true)} className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Select All</button><span className="text-slate-300">|</span><button onClick={() => bulkSelect(false)} className="text-[10px] font-black text-slate-400 uppercase tracking-widest">None</button></div></div>
+                                <div className="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                                    <div className="flex items-center gap-3 pl-2">
+                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">System Reconciler</span>
+                                        {scanResults.filter(r => r.status === 'smart_match' && !r.reviewed && !autoUpdateSmartMatch).length > 0 && (
+                                            <span className="flex items-center gap-1.5 px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-[9px] font-black uppercase animate-pulse">
+                                                <AlertCircle size={10} />
+                                                {scanResults.filter(r => r.status === 'smart_match' && !r.reviewed && !autoUpdateSmartMatch).length} Pending Review
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => bulkSelect(true)} className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Select All</button>
+                                        <span className="text-slate-300">|</span>
+                                        <button onClick={() => bulkSelect(false)} className="text-[10px] font-black text-slate-400 uppercase tracking-widest">None</button>
+                                    </div>
+                                </div>
                                 <div className="flex-grow overflow-auto custom-scrollbar">
                                     <table className="w-full text-left text-[11px] border-collapse">
                                         <thead className="bg-slate-50 sticky top-0 border-b border-slate-200 z-10"><tr><th className="p-4 font-bold text-slate-400 uppercase w-8"></th><th className="p-4 font-bold text-slate-500 uppercase w-32 tracking-wider">Node ID</th><th className="p-4 font-bold text-slate-500 uppercase w-24 tracking-wider">Status</th><th className="p-4 font-bold text-slate-500 uppercase tracking-wider">Logic Preview</th></tr></thead>
                                         <tbody className="divide-y divide-slate-100">
-                                            {scanResults.length === 0 ? (<tr><td colSpan={4} className="p-20 text-center text-slate-300 uppercase tracking-[0.2em] font-black italic">Awaiting Set Scan...</td></tr>) : (scanResults.map((item, idx) => (<tr key={idx} className={`transition-colors hover:bg-slate-50/50 ${!item.selected ? 'opacity-30 grayscale' : ''}`}><td className="p-4 text-center"><input type="checkbox" checked={item.selected} onChange={() => setScanResults(prev => prev.map((it, i) => i === idx ? { ...it, selected: !it.selected } : it))} className="rounded border-slate-300 text-indigo-600 h-4 w-4" /></td><td className="p-4 font-mono"><div className="font-bold text-slate-800 truncate max-w-[140px]">{item.label}</div><div className="text-[9px] text-slate-400 uppercase tracking-tighter">ID: {item.id}</div></td><td className="p-4"><div className="flex flex-col gap-1"><span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase border block text-center ${item.status === 'update' || item.status === 'smart_match' ? 'bg-amber-50 text-amber-600 border-amber-200' : item.status === 'add' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : item.status === 'orphan' ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>{item.status.replace('_', ' ')}</span>{item.matchType && <span className="text-[8px] text-slate-300 text-center font-bold uppercase tracking-widest">{item.matchType} ({item.matchScore}%)</span>}</div></td><td className="p-4"><div className="text-slate-500 leading-relaxed font-serif italic line-clamp-1">{item.preview}</div></td></tr>)))}
+                                            {scanResults.length === 0 ? (
+                                                <tr><td colSpan={4} className="p-20 text-center text-slate-300 uppercase tracking-[0.2em] font-black italic">Awaiting Set Scan...</td></tr>
+                                            ) : (
+                                                scanResults.map((item, idx) => {
+                                                    const isSmartMatch = item.status === 'smart_match';
+                                                    const needsReview = isSmartMatch && !item.reviewed && !autoUpdateSmartMatch;
+                                                    
+                                                    return (
+                                                        <tr 
+                                                            key={idx} 
+                                                            className={`transition-all duration-300 ${needsReview ? 'bg-purple-50/80 border-l-4 border-purple-600 shadow-sm relative z-10' : 'hover:bg-slate-50/50'} ${!item.selected ? 'opacity-30 grayscale' : ''}`}
+                                                        >
+                                                            <td className="p-4 text-center">
+                                                                <input 
+                                                                    type="checkbox" 
+                                                                    checked={item.selected} 
+                                                                    onChange={() => setScanResults((prev: ScanItem[]) => prev.map((it: ScanItem, i: number) => i === idx ? { ...it, selected: !it.selected } : it))} 
+                                                                    className="rounded border-slate-300 text-indigo-600 h-4 w-4" 
+                                                                />
+                                                            </td>
+                                                            <td className="p-4 font-mono">
+                                                                <div className="font-bold text-slate-800 truncate max-w-[140px]">{item.label}</div>
+                                                                <div className="text-[9px] text-slate-400 uppercase tracking-tighter">ID: {item.id}</div>
+                                                            </td>
+                                                            <td className="p-4">
+                                                                <div className="flex flex-col gap-1">
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase border block text-center ${
+                                                                            item.status === 'smart_match' 
+                                                                            ? (item.reviewed || autoUpdateSmartMatch ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-purple-600 text-white border-purple-600 shadow-sm') 
+                                                                            : item.status === 'update' ? 'bg-amber-50 text-amber-600 border-amber-200' 
+                                                                            : item.status === 'add' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' 
+                                                                            : item.status === 'orphan' ? 'bg-rose-50 text-rose-600 border-rose-200' 
+                                                                            : 'bg-slate-50 text-slate-500 border-slate-200'
+                                                                        }`}>
+                                                                            {item.status.replace('_', ' ')}
+                                                                        </span>
+                                                                        {needsReview && <AlertCircle size={12} className="text-purple-600 animate-pulse" />}
+                                                                        {item.reviewed && !autoUpdateSmartMatch && <CheckCircle2 size={12} className="text-emerald-500" />}
+                                                                    </div>
+                                                                    {item.matchType && (
+                                                                        <span className="text-[8px] text-slate-400 font-bold uppercase tracking-widest">
+                                                                            {item.matchType} ({item.matchScore}%)
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                            <td className="p-4">
+                                                                <div className="flex items-center justify-between gap-4">
+                                                                    <div className="text-slate-500 leading-relaxed font-serif italic line-clamp-1 flex-grow">
+                                                                        {item.preview}
+                                                                    </div>
+                                                                    {isSmartMatch && (
+                                                                        <div className="flex items-center gap-2">
+                                                                            <button 
+                                                                                onClick={() => setReviewingItem(item)}
+                                                                                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                                                                                title="Compare Details"
+                                                                            >
+                                                                                <Eye size={16} />
+                                                                            </button>
+                                                                            <button 
+                                                                                onClick={() => setScanResults((prev: ScanItem[]) => prev.map((it: ScanItem, i: number) => i === idx ? { ...it, reviewed: !it.reviewed } : it))}
+                                                                                className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm ${
+                                                                                    item.reviewed 
+                                                                                    ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' 
+                                                                                    : 'bg-purple-600 text-white hover:bg-purple-700 shadow-purple-200'
+                                                                                }`}
+                                                                            >
+                                                                                {item.reviewed ? (
+                                                                                    <span className="flex items-center gap-1">
+                                                                                        <Check size={10} strokeWidth={3} />
+                                                                                        Confirmed
+                                                                                    </span>
+                                                                                ) : 'Confirm Match'}
+                                                                            </button>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })
+                                            )}
                                         </tbody>
                                     </table>
                                 </div>
@@ -539,7 +711,7 @@ const ReferenceUpdater: React.FC = () => {
                                         <div key={`${ref.id}-${idx}`} draggable onDragStart={() => setDraggedItemIndex(idx)} onDragOver={(e) => e.preventDefault()} onDrop={() => handleDrop(idx)} className={`flex items-center gap-6 p-5 bg-white border border-slate-200 rounded-[1.5rem] shadow-sm hover:border-indigo-400 transition-all group cursor-grab active:cursor-grabbing ${draggedItemIndex === idx ? 'opacity-40 scale-95' : ''}`}>
                                             <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-[10px] font-black text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors border border-slate-100 shadow-inner">{idx + 1}</div>
                                             <div className="flex-grow min-w-0"><div className="text-sm font-bold text-slate-800 truncate tracking-tight">{ref.label}</div><div className="text-[10px] font-mono text-slate-400 uppercase tracking-widest mt-0.5">TARGET_ID: {ref.id}</div></div>
-                                            <span className={`text-[8px] font-black px-3 py-1.5 rounded-lg border uppercase tracking-[0.15em] ${(ref.status === 'add' || ref.status === 'orphan') ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : (ref.status === 'update' || ref.status === 'smart_match') ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>{ref.status === 'add' ? 'NEW' : ref.status === 'smart_match' ? 'SMART' : (ref.status === 'unchanged' ? 'UNTOUCHED' : 'PINNED')}</span>
+                                            <span className={`text-[8px] font-black px-3 py-1.5 rounded-lg border uppercase tracking-[0.15em] ${ref.status === 'smart_match' ? 'bg-purple-50 text-purple-600 border-purple-100' : (ref.status === 'add' || ref.status === 'orphan') ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : (ref.status === 'update') ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>{ref.status === 'add' ? 'NEW' : ref.status === 'smart_match' ? 'SMART' : (ref.status === 'unchanged' ? 'UNTOUCHED' : 'PINNED')}</span>
                                         </div>
                                     )))}
                                 </div>
@@ -547,7 +719,39 @@ const ReferenceUpdater: React.FC = () => {
                         )}
 
                         {activeTab === 'result' && (
-                             <div className="h-full relative flex flex-col"><textarea value={output} readOnly className="w-full h-full p-8 text-[11px] font-mono text-slate-700 bg-white border-0 focus:ring-0 resize-none leading-loose custom-scrollbar" placeholder="Merged XML stream will be emitted here..." /></div>
+                             <div className="h-full relative flex flex-col bg-white">
+                                 <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                                     <div className="flex items-center gap-3">
+                                         <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600">
+                                             <Check size={16} strokeWidth={3} />
+                                         </div>
+                                         <div>
+                                             <h4 className="text-[10px] font-black text-slate-900 uppercase tracking-widest">Merged XML Stream</h4>
+                                             {isStale && (
+                                                 <span className="text-[9px] text-amber-500 font-black uppercase tracking-widest flex items-center gap-1 mt-0.5">
+                                                     <AlertTriangle size={10} />
+                                                     Stale Output
+                                                 </span>
+                                             )}
+                                         </div>
+                                     </div>
+                                     <button 
+                                         onClick={() => {
+                                             navigator.clipboard.writeText(output);
+                                             setToast({ msg: "Copied!", type: "success" });
+                                         }}
+                                         className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 border ${
+                                             isStale 
+                                             ? 'bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100' 
+                                             : 'bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100'
+                                         }`}
+                                     >
+                                         <Copy size={12} />
+                                         {isStale ? 'Copy Stale XML' : 'Copy XML'}
+                                     </button>
+                                 </div>
+                                 <textarea value={output} readOnly className="w-full flex-grow p-8 text-[11px] font-mono text-slate-700 bg-white border-0 focus:ring-0 resize-none leading-loose custom-scrollbar" placeholder="Merged XML stream will be emitted here..." />
+                             </div>
                         )}
 
                         {activeTab === 'diff' && (
@@ -560,6 +764,105 @@ const ReferenceUpdater: React.FC = () => {
                                  </div>
 
                                  <AnimatePresence>
+                {reviewingItem && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+                        <motion.div 
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setReviewingItem(null)}
+                            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+                        />
+                        <motion.div 
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="relative w-full max-w-5xl bg-white rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+                        >
+                            <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 bg-purple-100 rounded-2xl flex items-center justify-center">
+                                        <GitCompare className="text-purple-600" size={24} />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Smart Match Review</h3>
+                                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Verify fuzzy logic connection</p>
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={() => setReviewingItem(null)}
+                                    className="p-3 hover:bg-slate-200 rounded-2xl transition-all text-slate-400 hover:text-slate-600"
+                                >
+                                    <X size={24} />
+                                </button>
+                            </div>
+
+                            <div className="flex-grow overflow-auto p-8 custom-scrollbar">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Original Record</span>
+                                            <span className="text-[10px] font-mono text-slate-400">ID: {reviewingItem.id}</span>
+                                        </div>
+                                        <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 font-serif italic text-slate-600 leading-relaxed text-sm">
+                                            {parseReferences(originalXml)[reviewingItem.originalIndex!]?.content.replace(/<[^>]+>/g, ' ')}
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[10px] font-black text-purple-600 uppercase tracking-[0.2em]">Smart Match Suggestion</span>
+                                            <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-[9px] font-black uppercase">
+                                                {reviewingItem.matchScore}% Match
+                                            </span>
+                                        </div>
+                                        <div className="p-6 bg-purple-50/50 rounded-3xl border border-purple-100 font-serif italic text-slate-700 leading-relaxed text-sm ring-2 ring-purple-500/10">
+                                            {parseReferences(updatedXml)[reviewingItem.updatedIndex!]?.content.replace(/<[^>]+>/g, ' ')}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="mt-8 p-6 bg-indigo-50/50 rounded-3xl border border-indigo-100">
+                                    <div className="flex items-start gap-4">
+                                        <div className="p-2 bg-white rounded-xl shadow-sm">
+                                            <AlertCircle size={20} className="text-indigo-600" />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-sm font-black text-indigo-900 uppercase tracking-tight">Technical Reasoning</h4>
+                                            <p className="text-xs text-indigo-700/70 mt-1 leading-relaxed">
+                                                The system identified this match using <strong>{reviewingItem.matchType}</strong> analysis. 
+                                                The fingerprint similarity score is {reviewingItem.matchScore}%. 
+                                                Review the metadata and content carefully to ensure these are the same entity.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="px-8 py-6 bg-slate-50 border-t border-slate-100 flex justify-end gap-4">
+                                <button 
+                                    onClick={() => setReviewingItem(null)}
+                                    className="px-6 py-3 text-xs font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-all"
+                                >
+                                    Dismiss
+                                </button>
+                                <button 
+                                    onClick={() => {
+                                        setScanResults((prev: ScanItem[]) => prev.map((it: ScanItem) => it.originalIndex === reviewingItem.originalIndex ? { ...it, reviewed: true } : it));
+                                        setReviewingItem(null);
+                                    }}
+                                    className="px-8 py-3 bg-purple-600 hover:bg-purple-700 text-white text-xs font-black uppercase tracking-widest rounded-2xl shadow-lg shadow-purple-500/20 transition-all active:scale-95 flex items-center gap-2"
+                                >
+                                    <Check size={16} strokeWidth={3} />
+                                    Confirm Match
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
                                      {totalChanges > 0 && (
                                          <motion.div 
                                              initial={{ opacity: 0, y: 20, scale: 0.95 }}
@@ -598,6 +901,68 @@ const ReferenceUpdater: React.FC = () => {
                                      )}
                                  </AnimatePresence>
                              </div>
+                        )}
+
+                        {activeTab === 'report' && (
+                            <div className="h-full overflow-auto p-10 bg-white custom-scrollbar">
+                                <div className="max-w-2xl mx-auto space-y-10">
+                                    <div className="flex items-center justify-between border-b border-slate-100 pb-6">
+                                        <div>
+                                            <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Change Report</h3>
+                                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Audit Log of Reference Updates</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="text-2xl font-black text-indigo-600 leading-none">{scanResults.length}</div>
+                                            <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Total Nodes</div>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                        <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
+                                            <div className="text-lg font-black text-amber-600 leading-none">{scanResults.filter(r => r.status === 'update').length}</div>
+                                            <div className="text-[9px] font-black text-amber-400 uppercase tracking-widest mt-1">Exact Updates</div>
+                                        </div>
+                                        <div className="p-4 bg-purple-50 rounded-2xl border border-purple-100">
+                                            <div className="text-lg font-black text-purple-600 leading-none">{scanResults.filter(r => r.status === 'smart_match').length}</div>
+                                            <div className="text-[9px] font-black text-purple-400 uppercase tracking-widest mt-1">Smart Matches</div>
+                                        </div>
+                                        <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
+                                            <div className="text-lg font-black text-emerald-600 leading-none">{scanResults.filter(r => r.status === 'add').length}</div>
+                                            <div className="text-[9px] font-black text-emerald-400 uppercase tracking-widest mt-1">New Nodes</div>
+                                        </div>
+                                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                            <div className="text-lg font-black text-slate-600 leading-none">{scanResults.filter(r => r.status === 'unchanged').length}</div>
+                                            <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Unchanged</div>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Detailed Ledger</h4>
+                                        <div className="space-y-2">
+                                            {scanResults.filter(r => r.status !== 'unchanged').map((r, i) => (
+                                                <div key={i} className="flex items-center justify-between p-4 bg-slate-50/50 rounded-xl border border-slate-100 group hover:border-indigo-200 transition-all">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className={`w-2 h-2 rounded-full ${r.status === 'update' ? 'bg-amber-400' : r.status === 'smart_match' ? 'bg-purple-400' : 'bg-emerald-400'}`}></div>
+                                                        <div>
+                                                            <div className="text-xs font-bold text-slate-800">{r.label}</div>
+                                                            <div className="text-[9px] text-slate-400 font-mono uppercase">ID: {r.id}</div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className={`text-[9px] font-black uppercase tracking-widest ${r.status === 'update' ? 'text-amber-600' : r.status === 'smart_match' ? 'text-purple-600' : 'text-emerald-600'}`}>
+                                                            {r.status.replace('_', ' ')}
+                                                        </div>
+                                                        {r.matchScore && <div className="text-[8px] font-bold text-slate-300 uppercase tracking-tighter">{r.matchType} {r.matchScore}%</div>}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {scanResults.filter(r => r.status !== 'unchanged').length === 0 && (
+                                                <div className="py-12 text-center text-slate-300 uppercase tracking-widest text-[10px] font-black italic">No modifications detected in current set.</div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         )}
                     </div>
                 </div>

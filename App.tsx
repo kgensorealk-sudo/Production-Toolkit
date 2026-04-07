@@ -28,6 +28,9 @@ import Docs from './pages/Docs';
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
 import Experimental from './pages/Experimental';
+import Messaging from './pages/Messaging';
+import UserSettings from './pages/UserSettings';
+import HtmlViewer from './pages/HtmlViewer';
 import AuthModal from './components/AuthModal';
 import InactivityTracker from './components/InactivityTracker';
 import { ToolId } from './types';
@@ -126,8 +129,11 @@ const App: React.FC = () => {
                                 <Route path="/" element={<ProtectedRoute><Layout isLanding={true}><Landing /></Layout></ProtectedRoute>} />
                                 <Route path="/admin" element={<AdminRoute><Layout><AdminDashboard /></Layout></AdminRoute>} />
                                 <Route path="/dashboard" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />
+                                <Route path="/messaging" element={<ProtectedRoute><Layout><Messaging /></Layout></ProtectedRoute>} />
                                 <Route path="/experimental" element={<ProtectedRoute><Layout><Experimental /></Layout></ProtectedRoute>} />
                                 <Route path="/docs" element={<ProtectedRoute><Layout><Docs /></Layout></ProtectedRoute>} />
+                                <Route path="/settings" element={<ProtectedRoute><Layout><UserSettings /></Layout></ProtectedRoute>} />
+                                <Route path="/view-html" element={<ProtectedRoute><HtmlViewer /></ProtectedRoute>} />
                                 
                                 <Route path="/tableBeautifier" element={<ProtectedRoute><Layout currentTool={ToolId.TABLE_BEAUTIFIER}><NodeAccessController toolId={ToolId.TABLE_BEAUTIFIER} displayName="Table XML Beautifier" mode="key-exclusive"><TableBeautifier /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/xmlRenumber" element={<ProtectedRoute><Layout currentTool={ToolId.XML_RENUMBER}><NodeAccessController toolId={ToolId.XML_RENUMBER} displayName="XML Normalizer" mode="key-allowed"><XmlRenumber /></NodeAccessController></Layout></ProtectedRoute>} />

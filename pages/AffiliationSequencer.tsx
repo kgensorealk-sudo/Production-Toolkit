@@ -19,9 +19,11 @@ import {
     Cpu,
     ChevronUp,
     ChevronDown,
-    GitCompare
+    GitCompare,
+    AlertTriangle
 } from 'lucide-react';
 import Toast from '../components/Toast';
+import useLocalStorage from '../hooks/useLocalStorage';
 
 interface AffiliationIssue {
     index: number;
@@ -41,8 +43,9 @@ interface AuditLine {
 }
 
 const AffiliationSequencer: React.FC = () => {
-    const [input, setInput] = useState('');
-    const [output, setOutput] = useState('');
+    const [input, setInput] = useLocalStorage<string>('affiliation_sequencer_input', '');
+    const [output, setOutput] = useLocalStorage<string>('affiliation_sequencer_output', '');
+    const [lastProcessedInput, setLastProcessedInput] = useLocalStorage<string>('affiliation_sequencer_last_input', '');
     const [isProcessing, setIsProcessing] = useState(false);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
     const [activeTab, setActiveTab] = useState<'xml' | 'report' | 'diff'>('xml');
@@ -338,6 +341,7 @@ const AffiliationSequencer: React.FC = () => {
             const finalXml = input.replace(authorGroupRegex, `<ce:author-group${groupAttrs}>${processedInner}</ce:author-group>`);
 
             setOutput(finalXml);
+            setLastProcessedInput(input);
             setReport(auditLog);
             setStep(2);
             setToast({ msg: "Affiliations sequenced successfully.", type: "success" });
@@ -354,14 +358,18 @@ const AffiliationSequencer: React.FC = () => {
         setToast({ msg: "Resulting XML copied to clipboard.", type: "success" });
     };
 
+    const isStale = output && input !== lastProcessedInput;
+
     const reset = () => {
         setInput('');
         setOutput('');
+        setLastProcessedInput('');
         setReport([]);
         setStep(1);
         setActiveTab('xml');
         setCurrentChangeIndex(0);
         setTotalChanges(0);
+        setToast({ msg: "All data cleared", type: "warn" });
     };
 
     const scrollToChange = (direction: 'next' | 'prev') => {
@@ -579,7 +587,7 @@ const AffiliationSequencer: React.FC = () => {
                 </div>
             </header>
 
-            <main className="flex-grow flex flex-col max-w-7xl w-full mx-auto p-8 gap-8">
+            <main className="flex-grow flex flex-col max-w-full w-full mx-auto p-2 sm:p-4 lg:p-6 gap-8">
                 <AnimatePresence mode="wait">
                     {step === 1 ? (
                         <motion.div 
@@ -718,18 +726,32 @@ const AffiliationSequencer: React.FC = () => {
                                         <h3 className="text-xs font-black text-white uppercase tracking-widest">Sequence Complete</h3>
                                         <div className="flex items-center gap-3 mt-1">
                                             <span className="text-[9px] text-emerald-400 font-black uppercase tracking-widest bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Integrity Verified</span>
+                                            {isStale && (
+                                                <span className="text-[9px] text-amber-400 font-black uppercase tracking-widest bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 flex items-center gap-1">
+                                                    <AlertTriangle size={8} />
+                                                    Stale Output
+                                                </span>
+                                            )}
                                             <span className="text-[9px] text-slate-500 font-black uppercase tracking-widest">{report.length} operations logged</span>
                                         </div>
                                     </div>
                                 </div>
-                                <div className="flex gap-3">
-                                    <button onClick={reset} className="flex items-center gap-3 text-[9px] font-black text-slate-400 bg-slate-800 hover:bg-slate-700 px-6 py-4 rounded-xl border border-slate-700 transition-all uppercase tracking-widest active:scale-95">
-                                        <RotateCcw size={14} /> New Process
-                                    </button>
-                                    <button onClick={copyOutput} className="flex items-center gap-3 text-[9px] font-black text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 px-8 py-4 rounded-xl border border-emerald-500/30 transition-all uppercase tracking-widest active:scale-95 shadow-lg shadow-emerald-500/5">
-                                        <Copy size={14} /> Copy XML
-                                    </button>
-                                </div>
+                                    <div className="flex gap-3">
+                                        <button onClick={reset} className="flex items-center gap-3 text-[9px] font-black text-slate-400 bg-slate-800 hover:bg-slate-700 px-6 py-4 rounded-xl border border-slate-700 transition-all uppercase tracking-widest active:scale-95">
+                                            <RotateCcw size={14} /> New Process
+                                        </button>
+                                        <button 
+                                            onClick={copyOutput} 
+                                            className={`flex items-center gap-3 text-[9px] font-black px-8 py-4 rounded-xl border transition-all uppercase tracking-widest active:scale-95 shadow-lg ${
+                                                isStale 
+                                                ? 'bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20 shadow-amber-500/5' 
+                                                : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20 shadow-emerald-500/5'
+                                            }`}
+                                        >
+                                            <Copy size={14} /> 
+                                            {isStale ? 'Copy Stale XML' : 'Copy XML'}
+                                        </button>
+                                    </div>
                             </div>
 
                             <div className="relative bg-slate-900 px-10 pt-4 border-b border-slate-800 flex space-x-2 overflow-x-auto no-scrollbar z-20">

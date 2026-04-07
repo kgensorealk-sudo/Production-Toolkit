@@ -26,15 +26,14 @@ import {
     UserCheck,
     Highlighter,
     Trash2,
-    ShieldAlert,
-    History
+    ShieldAlert
 } from 'lucide-react';
 import { ToolId } from '../types';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, withRetry } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
+import { supabase } from '../supabaseClient';
 import AnnouncementModal from '../components/AnnouncementModal';
 import ToolTipsModal from '../components/ToolTipsModal';
-import ReleaseNotesModal from '../components/ReleaseNotesModal';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 
@@ -99,7 +98,7 @@ const ToolCard: React.FC<ToolCardProps> = ({ id, title, desc, iconBg, iconText, 
             onClick={onClick}
             className={`group relative glass-panel rounded-3xl p-1 transition-all duration-500 cursor-pointer ${isLocked ? 'opacity-60' : ''} ${isFree && isKeyExclusive ? 'ring-4 ring-emerald-400/20' : ''}`}
         >
-            <div className={`h-full bg-white rounded-[1.4rem] p-6 flex flex-col border border-slate-100 relative overflow-hidden ${isLocked ? 'grayscale-[0.9]' : ''}`}>
+            <div className={`h-full bg-white rounded-[1.4rem] p-5 flex flex-col border border-slate-100 relative overflow-hidden ${isLocked ? 'grayscale-[0.9]' : ''}`}>
                 <div className={`absolute top-0 left-0 w-full h-1 ${isLocked ? 'bg-slate-200' : (isFree ? 'bg-emerald-500' : borderColor)}`}></div>
                 
                 <div className="flex justify-between items-start mb-6">
@@ -174,7 +173,6 @@ const Dashboard: React.FC = () => {
     });
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
     const [activeTipTool, setActiveTipTool] = useState<{id: string, name: string} | null>(null);
-    const [isReleaseNotesOpen, setIsReleaseNotesOpen] = useState(false);
     const isFirstRender = useRef(true);
 
     useEffect(() => {
@@ -191,6 +189,19 @@ const Dashboard: React.FC = () => {
         return 'subscription';
     };
 
+    // Safety Timeout for Sync State
+    useEffect(() => {
+        let timeout: ReturnType<typeof setTimeout>;
+        if (isSyncing) {
+            timeout = setTimeout(() => {
+                console.warn("Sync operation timed out. Forcing state to false.");
+                setIsLoading(false);
+                setToast({ msg: "Sync response delayed. Please check your connection.", type: 'warn' });
+            }, 30000); // 30s safety cutoff
+        }
+        return () => clearTimeout(timeout);
+    }, [isSyncing]);
+
     const handleSync = async () => {
         if (isSyncing) return;
         setIsLoading(true);
@@ -198,11 +209,11 @@ const Dashboard: React.FC = () => {
         
         const failTimer = setTimeout(() => {
             setIsLoading(false);
-            setToast({ msg: "System timed out after 45s. Check network environment.", type: "warn" });
-        }, 45000);
+            setToast({ msg: "System timed out after 30s. Check network environment.", type: "warn" });
+        }, 30000);
 
         try {
-            await refreshProfile();
+            await withRetry(async () => await refreshProfile(), 3);
             clearTimeout(failTimer);
             setToast({ msg: "Node integrity synchronized with database.", type: "success" });
         } catch (e: any) {
@@ -257,9 +268,8 @@ const Dashboard: React.FC = () => {
     };
 
     return (
-        <div className="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
+        <div className="max-w-[1800px] mx-auto px-4 py-12 sm:px-6 lg:px-10">
             <AnnouncementModal />
-            <ReleaseNotesModal isOpen={isReleaseNotesOpen} onClose={() => setIsReleaseNotesOpen(false)} />
             {activeTipTool && <ToolTipsModal toolId={activeTipTool.id} toolName={activeTipTool.name} isOpen={!!activeTipTool} onClose={() => setActiveTipTool(null)} />}
 
             <AnimatePresence>
@@ -305,13 +315,6 @@ const Dashboard: React.FC = () => {
                             />
                         </div>
                         <button 
-                            onClick={() => setIsReleaseNotesOpen(true)}
-                            className="flex items-center gap-2 px-5 py-3 rounded-2xl border bg-white hover:bg-slate-50 border-slate-200 text-slate-500 transition-all active:scale-95 shadow-sm text-[10px] font-black uppercase tracking-widest"
-                        >
-                            <History size={14} />
-                            v1.8.0
-                        </button>
-                        <button 
                             onClick={() => setHardwareAccelerated(!isHardwareAccelerated)}
                             className={`flex items-center gap-2 px-5 py-3 rounded-2xl border transition-all active:scale-95 shadow-sm text-[10px] font-black uppercase tracking-widest ${isHardwareAccelerated ? 'bg-amber-50 border-amber-200 text-amber-600' : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-500'}`}
                         >
@@ -340,7 +343,7 @@ const Dashboard: React.FC = () => {
                             </div>
                             <div className="h-px bg-slate-200 w-full"></div>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                             {sections.featured.map((tool) => (
                                 <ToolCard key={tool.id} {...tool} delay={50} isPinned={pinnedTools.includes(tool.id)} onPinClick={() => handlePinClick(tool.id)} lockType={getLockType(tool.id)} isFree={freeTools.includes(tool.id)} expiry={freeToolsData[tool.id]} onClick={() => navigate(`/${tool.id}`)} onTipClick={(e) => handleTipClick(tool.id, tool.title, e)} />
                             ))}
@@ -357,7 +360,7 @@ const Dashboard: React.FC = () => {
                             </div>
                             <div className="h-px bg-slate-200 w-full"></div>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                             {sections.pinned.map((tool) => (
                                 <ToolCard key={tool.id} {...tool} delay={50} isPinned={true} onPinClick={() => handlePinClick(tool.id)} lockType={getLockType(tool.id)} isFree={freeTools.includes(tool.id)} expiry={freeToolsData[tool.id]} onClick={() => navigate(`/${tool.id}`)} onTipClick={(e) => handleTipClick(tool.id, tool.title, e)} />
                             ))}
@@ -371,7 +374,7 @@ const Dashboard: React.FC = () => {
                             <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] whitespace-nowrap">Active Node Modules</h3>
                             <div className="h-px bg-slate-100 w-full"></div>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                             {sections.active.map((tool, index) => (
                                 <ToolCard key={tool.id} {...tool} delay={100 + (index * 20)} isPinned={false} onPinClick={() => handlePinClick(tool.id)} lockType={getLockType(tool.id)} isFree={freeTools.includes(tool.id)} expiry={freeToolsData[tool.id]} onClick={() => navigate(`/${tool.id}`)} onTipClick={(e) => handleTipClick(tool.id, tool.title, e)} />
                             ))}
@@ -385,7 +388,7 @@ const Dashboard: React.FC = () => {
                             <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em] whitespace-nowrap">Premium System Library</h3>
                             <div className="h-px bg-slate-100 w-full"></div>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                             {sections.locked.map((tool, index) => (
                                 <ToolCard key={tool.id} {...tool} delay={200 + (index * 20)} isPinned={false} onPinClick={() => handlePinClick(tool.id)} lockType={getLockType(tool.id)} isFree={freeTools.includes(tool.id)} onClick={() => navigate(`/${tool.id}`)} onTipClick={(e) => handleTipClick(tool.id, tool.title, e)} />
                             ))}

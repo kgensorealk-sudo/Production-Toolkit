@@ -13,7 +13,7 @@ const Docs: React.FC = () => {
     );
 
     return (
-        <div className="flex flex-grow h-[calc(100vh-64px)] overflow-hidden max-w-7xl mx-auto w-full">
+        <div className="flex flex-grow h-[calc(100vh-64px)] overflow-hidden max-w-full mx-auto w-full">
             <aside className="w-64 bg-white border-r border-slate-200 overflow-y-auto hidden md:block pt-6">
                 <nav className="p-4 space-y-1">
                     <NavBtn id="overview" label="Overview" />

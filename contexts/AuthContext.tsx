@@ -16,6 +16,8 @@ interface AuthContextType {
     isAdmin: boolean;
     isWakingUp: boolean;
     signOut: (isAuto?: boolean) => Promise<void>;
+    updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
+    deleteAccount: () => Promise<void>;
     refreshProfile: () => Promise<void>;
     refreshFreeTools: () => Promise<void>;
 }
@@ -27,15 +29,38 @@ const HEARTBEAT_INTERVAL = 60 * 1000;
 const MAX_SESSION_AGE = 24 * 60 * 60 * 1000; // 24 Hours Hard Cutoff
 
 /**
- * Resiliency Protocol: withRetry
- * Updated to handle Auth Failures gracefully.
+ * Resiliency Protocol: withTimeout
+ * Ensures a promise doesn't hang indefinitely.
  */
-async function withRetry<T>(fn: () => Promise<T>, retries = 5, delay = 1500): Promise<T> {
+export function withTimeout<T>(promise: Promise<T>, timeoutMs: number = 20000): Promise<T> {
+    return Promise.race([
+        promise,
+        new Promise<T>((_, reject) => 
+            setTimeout(() => reject(new Error('REQUEST_TIMEOUT')), timeoutMs)
+        )
+    ]);
+}
+
+/**
+ * Resiliency Protocol: withRetry
+ * Updated to handle Auth Failures gracefully and include a global timeout.
+ */
+export async function withRetry<T>(fn: () => Promise<T>, retries = 5, delay = 1500): Promise<T> {
     try {
-        return await fn();
+        return await withTimeout(fn());
     } catch (err: any) {
         const status = err.status || err.code;
         const errorMsg = err.message?.toLowerCase() || '';
+
+        if (errorMsg === 'request_timeout') {
+            console.warn("REQUEST_TIMEOUT: Operation exceeded time limit.");
+            if (retries > 0) {
+                console.warn(`RETRYING after timeout... (${retries} left)`);
+                await new Promise(r => setTimeout(r, delay));
+                return withRetry(fn, retries - 1, delay * 1.5);
+            }
+            throw err;
+        }
 
         const isAuthFailure = 
             status === 401 || 
@@ -78,6 +103,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const initTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const wakeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const lastWakeSyncRef = useRef<number>(0);
+    const WAKE_SYNC_COOLDOWN = 5 * 60 * 1000; // 5 Minutes
 
     const isAdmin = (
         user?.email === SUPER_ADMIN_EMAIL ||
@@ -95,8 +122,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setLoading(true);
         if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
         try {
-            await (supabase.auth as any).signOut();
+            await withTimeout(supabase.auth.signOut(), 5000);
         } catch (e) {
+            console.warn("Sign out timed out or failed, proceeding with local cleanup.");
         } finally {
             Object.keys(localStorage).forEach(key => { if (key.includes('sb-') || key === 'auth_login_at') localStorage.removeItem(key); });
             setProfile(null); setSession(null); setUser(null);
@@ -120,9 +148,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const warmUpDatabase = async () => {
         try {
-            await supabase.from('system_settings').select('id').eq('id', 'global').limit(1).single();
+            await withRetry(async () => {
+                const { error } = await supabase.from('system_settings').select('id').eq('id', 'global').limit(1).single();
+                if (error) throw error;
+            }, 2);
         } catch (e) {
-            console.warn("Waking up database node...");
+            console.warn("Waking up database node failed or timed out.");
         }
     };
 
@@ -162,28 +193,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         refreshingPromise.current = (async () => {
             try {
-                setIsWakingUp(true);
+                if (!profile) setIsWakingUp(true);
                 await warmUpDatabase();
 
                 const profileData = await withRetry(async () => {
-                    let profileRow = null;
-                    for (let i = 0; i < 3; i++) {
-                        const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
-                        if (data) { profileRow = data; break; }
-                        await new Promise(r => setTimeout(r, 1000));
-                    }
-
-                    if (!profileRow) {
+                    const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+                    if (error) throw error;
+                    
+                    if (!data) {
                         const { data: newData, error: createError } = await supabase.from('profiles').upsert([{ 
                             id: userId, 
                             email: email || '', 
                             role: 'user' 
                         }]).select().maybeSingle();
                         if (createError) throw createError;
-                        profileRow = newData;
+                        return newData;
                     }
-                    return profileRow;
-                });
+                    return data;
+                }, 3);
 
                 if (!profileData) return;
 
@@ -216,16 +243,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (document.visibilityState === 'visible' && user?.id) {
                 if (checkHardExpiry()) return;
                 
+                // Cooldown check to prevent aggressive refreshing
+                const now = Date.now();
+                if (now - lastWakeSyncRef.current < WAKE_SYNC_COOLDOWN) {
+                    return;
+                }
+                
                 if (wakeDebounceRef.current) clearTimeout(wakeDebounceRef.current);
                 wakeDebounceRef.current = setTimeout(async () => {
                     try {
                         const { data } = await (supabase.auth as any).getSession();
                         if (data?.session) {
-                            setSession(data.session);
-                            setUser(data.session.user);
-                            await Promise.allSettled([fetchProfile(data.session.user.id, data.session.user.email), fetchFreeTools()]);
+                            // Only update if the session has actually changed (e.g. token refreshed)
+                            // This prevents unnecessary re-renders that might unmount components
+                            if (data.session.access_token !== session?.access_token) {
+                                lastWakeSyncRef.current = Date.now();
+                                setSession(data.session);
+                                setUser(data.session.user);
+                                await Promise.allSettled([fetchProfile(data.session.user.id, data.session.user.email), fetchFreeTools()]);
+                            }
                         } else {
-                            signOut(true);
+                            console.warn("Wake sync: No active session found. Maintaining current state.");
                         }
                     } catch (err) {
                         console.warn("Wake sync failed.");
@@ -235,13 +273,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
 
         window.addEventListener('visibilitychange', handleWake);
-        window.addEventListener('focus', handleWake);
         return () => {
             window.removeEventListener('visibilitychange', handleWake);
-            window.removeEventListener('focus', handleWake);
             if (wakeDebounceRef.current) clearTimeout(wakeDebounceRef.current);
         };
-    }, [user?.id, fetchProfile, fetchFreeTools, signOut, checkHardExpiry]);
+    }, [user?.id, session?.access_token, fetchProfile, fetchFreeTools, signOut, checkHardExpiry]);
 
     useEffect(() => {
         let mounted = true;
@@ -316,10 +352,57 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
     }, [fetchFreeTools, fetchProfile, signOut, checkHardExpiry]);
 
+    const updateProfile = async (updates: Partial<UserProfile>) => {
+        if (!user?.id || !profile) return;
+        try {
+            const data = await withRetry(async () => {
+                const { data, error } = await supabase
+                    .from('profiles')
+                    .update(updates)
+                    .eq('id', user.id)
+                    .select()
+                    .single();
+                
+                if (error) throw error;
+                return data;
+            });
+            
+            if (data) {
+                // Preserve the virtual fields (unlocked_tools, is_subscribed) that aren't in the DB table
+                setProfile({
+                    ...profile,
+                    ...data,
+                    unlocked_tools: profile.unlocked_tools,
+                    is_subscribed: profile.is_subscribed
+                });
+            }
+        } catch (err) {
+            console.error("Profile Update Failed:", err);
+            throw err;
+        }
+    };
+
+    const deleteAccount = async () => {
+        if (!user?.id) return;
+        try {
+            // In a real app, you'd call a server-side function to delete the auth user.
+            // For now, we'll delete the profile and sign out.
+            await withRetry(async () => {
+                const { error } = await supabase.from('profiles').delete().eq('id', user.id);
+                if (error) throw error;
+            });
+            await signOut();
+        } catch (err) {
+            console.error("Account Decommissioning Failed:", err);
+            throw err;
+        }
+    };
+
     return (
         <AuthContext.Provider value={{ 
             session, user, profile, freeTools, freeToolsData, loading, isAdmin, isWakingUp,
-            signOut, refreshProfile: () => user ? fetchProfile(user.id, user.email) : Promise.resolve(), 
+            signOut, updateProfile, deleteAccount,
+            refreshProfile: () => user ? fetchProfile(user.id, user.email) : Promise.resolve(), 
             refreshFreeTools: fetchFreeTools 
         }}>
             {children}

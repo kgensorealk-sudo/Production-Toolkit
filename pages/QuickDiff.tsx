@@ -284,17 +284,17 @@ const QuickDiff: React.FC = () => {
     }, [origText, changedText]);
 
     return (
-        <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-            <div className="mb-10 text-center animate-fade-in">
+        <div className="max-w-full mx-auto px-2 py-8 sm:px-4 lg:px-6 flex flex-col min-h-[calc(100vh-120px)]">
+            <div className="mb-10 text-center animate-fade-in shrink-0">
                 <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3">Quick Text Diff Checker</h1>
                 <p className="text-lg text-slate-500 max-w-2xl mx-auto">Compare text side-by-side with precision highlights.</p>
             </div>
 
             {!showResults ? (
-                <div className="relative grid grid-cols-1 lg:grid-cols-2 gap-8 h-[500px] animate-scale-in">
+                <div className="relative grid grid-cols-1 lg:grid-cols-2 gap-8 flex-grow min-h-[500px] animate-scale-in">
                     {isLoading && <LoadingOverlay message={isHardwareAccelerated ? "GPU-Accelerated Analysis..." : "Analyzing Differences..."} color={isHardwareAccelerated ? "amber" : "orange"} />}
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col focus-within:ring-2 focus-within:ring-orange-100 transition-all duration-300">
-                        <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center">
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col focus-within:ring-2 focus-within:ring-orange-100 transition-all duration-300 min-h-[500px]">
+                        <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center shrink-0">
                             <label className="font-bold text-slate-700 text-sm flex items-center gap-2">
                                 <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white border border-slate-200 text-xs text-slate-500 font-mono shadow-sm">A</span>
                                 Original Text
@@ -304,13 +304,13 @@ const QuickDiff: React.FC = () => {
                         <textarea 
                             value={origText}
                             onChange={(e) => setOrigText(e.target.value)}
-                            className="w-full h-full p-6 text-sm font-mono text-slate-800 bg-white border-0 focus:ring-0 outline-none resize-none transition-colors placeholder-slate-300" 
+                            className="w-full flex-grow p-6 text-sm font-mono text-slate-800 bg-white border-0 focus:ring-0 outline-none resize-none transition-colors placeholder-slate-300" 
                             placeholder="Paste original text here..."
                             spellCheck={false}
                         />
                     </div>
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col focus-within:ring-2 focus-within:ring-emerald-100 transition-all duration-300">
-                        <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center">
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col focus-within:ring-2 focus-within:ring-emerald-100 transition-all duration-300 min-h-[500px]">
+                        <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center shrink-0">
                             <label className="font-bold text-slate-700 text-sm flex items-center gap-2">
                                 <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white border border-slate-200 text-xs text-slate-500 font-mono shadow-sm">B</span>
                                 Modified Text
@@ -320,7 +320,7 @@ const QuickDiff: React.FC = () => {
                         <textarea 
                             value={changedText}
                             onChange={(e) => setChangedText(e.target.value)}
-                            className="w-full h-full p-6 text-sm font-mono text-slate-800 bg-white border-0 focus:ring-0 outline-none resize-none transition-colors placeholder-slate-300" 
+                            className="w-full flex-grow p-6 text-sm font-mono text-slate-800 bg-white border-0 focus:ring-0 outline-none resize-none transition-colors placeholder-slate-300" 
                             placeholder="Paste modified text here..."
                             spellCheck={false}
                         />

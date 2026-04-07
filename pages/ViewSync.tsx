@@ -1,14 +1,16 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { diffLines, diffWordsWithSpace, diffChars, Change } from 'diff';
-import { ChevronUp, ChevronDown, GitCompare } from 'lucide-react';
+import { ChevronUp, ChevronDown, GitCompare, Search, AlertCircle, CheckCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
+import useLocalStorage from '../hooks/useLocalStorage';
 
 interface DetectedRef {
-    refid: string;
+    tagName: string;
+    refid?: string;
     text: string;
     isRestored?: boolean;
 }
@@ -31,8 +33,9 @@ interface SyncLog {
 }
 
 const ViewSync: React.FC = () => {
-    const [input, setInput] = useState('');
-    const [output, setOutput] = useState('');
+    const [input, setInput] = useLocalStorage<string>('view_sync_input', '');
+    const [output, setOutput] = useLocalStorage<string>('view_sync_output', '');
+    const [lastProcessedInput, setLastProcessedInput] = useLocalStorage<string>('view_sync_last_input', '');
     const [logs, setLogs] = useState<SyncLog[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
@@ -40,7 +43,8 @@ const ViewSync: React.FC = () => {
     const [customStartId, setCustomStartId] = useState<string>('');
     
     // View State
-    const [activeTab, setActiveTab] = useState<'raw' | 'diff' | 'report'>('raw');
+    const [activeTab, setActiveTab] = useState<'raw' | 'diff' | 'report' | 'mismatches'>('raw');
+    const [mismatches, setMismatches] = useState<{paraId: string, compactText: string, extendedText: string, index: number}[]>([]);
     const [diffRows, setDiffRows] = useState<any[]>([]);
     const [currentChangeIndex, setCurrentChangeIndex] = useState(0);
     const [totalChanges, setTotalChanges] = useState(0);
@@ -193,6 +197,112 @@ const ViewSync: React.FC = () => {
         }
     }, [currentChangeIndex]);
 
+    const stripTags = (xml: string) => {
+        if (!xml) return '';
+        return xml.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+    };
+
+    const getValidRanges = (text: string) => {
+        const sectionsRegex = /<ce:sections\b[^>]*>([\s\S]*?)<\/ce:sections>/g;
+        const appendicesRegex = /<ce:appendices\b[^>]*>([\s\S]*?)<\/ce:appendices>/g;
+        
+        const ranges: {start: number, end: number}[] = [];
+        let sectionMatch;
+        while ((sectionMatch = sectionsRegex.exec(text)) !== null) {
+            const sectionStart = sectionMatch.index;
+            const sectionContent = sectionMatch[1];
+            const sectionContentStart = sectionStart + sectionMatch[0].indexOf(sectionContent);
+            
+            // Find appendices within this section
+            const appendices: {start: number, end: number}[] = [];
+            let appendixMatch;
+            while ((appendixMatch = appendicesRegex.exec(sectionContent)) !== null) {
+                const appStart = sectionContentStart + appendixMatch.index;
+                const appEnd = appStart + appendixMatch[0].length;
+                appendices.push({start: appStart, end: appEnd});
+            }
+            
+            // Split section range by appendices
+            let currentStart = sectionContentStart;
+            appendices.forEach(app => {
+                if (app.start > currentStart) {
+                    ranges.push({start: currentStart, end: app.start});
+                }
+                currentStart = app.end;
+            });
+            
+            const sectionContentEnd = sectionContentStart + sectionContent.length;
+            if (currentStart < sectionContentEnd) {
+                ranges.push({start: currentStart, end: sectionContentEnd});
+            }
+        }
+        return ranges;
+    };
+
+    const renderMismatchDiff = (text1: string, text2: string, side: 'compact' | 'extended') => {
+        const diff = diffWordsWithSpace(text1, text2);
+        return diff.map((part, i) => {
+            if (side === 'compact') {
+                if (part.removed) return <span key={i} className="bg-rose-100 text-rose-900 px-0.5 rounded">{part.value}</span>;
+                if (part.added) return null;
+                return <span key={i}>{part.value}</span>;
+            } else {
+                if (part.added) return <span key={i} className="bg-emerald-100 text-emerald-900 px-0.5 rounded font-medium">{part.value}</span>;
+                if (part.removed) return null;
+                return <span key={i}>{part.value}</span>;
+            }
+        });
+    };
+
+    const scanForMismatches = () => {
+        if (!input.trim()) {
+            setToast({ msg: "Please paste XML content first.", type: "warn" });
+            return;
+        }
+
+        setIsLoading(true);
+        setTimeout(() => {
+            const validRanges = getValidRanges(input);
+            const isInsideValidRange = (index: number) => validRanges.some(r => index >= r.start && index < r.end);
+
+            const compactRegex = /<ce:para\b([^>]*?)view="(compact|compact-standard)"([^>]*?)>([\s\S]*?)<\/ce:para>/g;
+            const extendedRegex = /<ce:para\b([^>]*?)view="extended"([^>]*?)>([\s\S]*?)<\/ce:para>/g;
+
+            const compactMatches = [...input.matchAll(compactRegex)].filter(m => isInsideValidRange(m.index!));
+            const extendedMatches = [...input.matchAll(extendedRegex)].filter(m => isInsideValidRange(m.index!));
+
+            const foundMismatches: {paraId: string, compactText: string, extendedText: string, index: number}[] = [];
+            const count = Math.min(compactMatches.length, extendedMatches.length);
+
+            for (let i = 0; i < count; i++) {
+                const compactContent = compactMatches[i][4] || '';
+                const extendedContent = extendedMatches[i][3] || '';
+
+                const compactText = stripTags(compactContent);
+                const extendedText = stripTags(extendedContent);
+
+                if (compactText !== extendedText) {
+                    const idMatch = compactMatches[i][0].match(/\bid="([^"]+)"/);
+                    foundMismatches.push({
+                        paraId: idMatch ? idMatch[1] : `Pair ${i + 1}`,
+                        compactText,
+                        extendedText,
+                        index: i
+                    });
+                }
+            }
+
+            setMismatches(foundMismatches);
+            setActiveTab('mismatches');
+            setIsLoading(false);
+            if (foundMismatches.length === 0) {
+                setToast({ msg: "No mismatches found! All pairs are synchronized.", type: "success" });
+            } else {
+                setToast({ msg: `Found ${foundMismatches.length} unsynchronized paragraph pairs.`, type: "warn" });
+            }
+        }, 500);
+    };
+
     const processSync = () => {
         if (!input.trim()) {
             setToast({ msg: "Please paste XML content first.", type: "warn" });
@@ -210,7 +320,8 @@ const ViewSync: React.FC = () => {
             } else {
                 // 1. Determine Global Max ID to ensure uniqueness
                 // Scans for any pattern like id="abc1234" to find the highest number used.
-                const allIdRegex = /\bid="([a-zA-Z]+)(\d+)"/g;
+                // We strictly match 1-4 digit IDs to avoid "self-infection" from long numbers
+                const allIdRegex = /\bid="([a-zA-Z]+)(\d{1,4})"/g;
                 let maxIdNum = 0;
                 let m;
                 while ((m = allIdRegex.exec(input)) !== null) {
@@ -223,12 +334,15 @@ const ViewSync: React.FC = () => {
                 nextIdNum = Math.max(4000, Math.ceil((maxIdNum + 10) / 5) * 5);
             }
 
-            // 2. Extract Paragraphs based on direction
+            // 2. Extract Paragraphs based on direction (Restricted to ce:sections and outside ce:appendices)
+            const validRanges = getValidRanges(input);
+            const isInsideValidRange = (index: number) => validRanges.some(r => index >= r.start && index < r.end);
+
             const compactRegex = /<ce:para\b([^>]*?)view="(compact|compact-standard)"([^>]*?)>([\s\S]*?)<\/ce:para>/g;
             const extendedRegex = /<ce:para\b([^>]*?)view="extended"([^>]*?)>([\s\S]*?)<\/ce:para>/g;
 
-            const compactMatches = [...input.matchAll(compactRegex)];
-            const extendedMatches = [...input.matchAll(extendedRegex)];
+            const compactMatches = [...input.matchAll(compactRegex)].filter(m => isInsideValidRange(m.index!));
+            const extendedMatches = [...input.matchAll(extendedRegex)].filter(m => isInsideValidRange(m.index!));
 
             if (compactMatches.length === 0) {
                  setToast({ msg: "No 'compact' paragraphs found.", type: "error" });
@@ -267,14 +381,14 @@ const ViewSync: React.FC = () => {
                 let targetIndex = 0;
 
                 if (syncDirection === 'compact-to-extended') {
-                    sourceContent = compactMatch[4]; 
-                    targetContent = extendedMatch[3]; 
-                    targetFullMatch = extendedMatch[0];
+                    sourceContent = compactMatch[4] || ''; 
+                    targetContent = extendedMatch[3] || ''; 
+                    targetFullMatch = extendedMatch[0] || '';
                     targetIndex = extendedMatch.index || 0;
                 } else {
-                    sourceContent = extendedMatch[3]; 
-                    targetContent = compactMatch[4];
-                    targetFullMatch = compactMatch[0];
+                    sourceContent = extendedMatch[3] || ''; 
+                    targetContent = compactMatch[4] || '';
+                    targetFullMatch = compactMatch[0] || '';
                     targetIndex = compactMatch.index || 0;
                 }
                 
@@ -295,28 +409,42 @@ const ViewSync: React.FC = () => {
                 const targetIdMatch = targetOpenTag.match(/\bid="([^"]+)"/);
                 const targetParaId = targetIdMatch ? targetIdMatch[1] : `Index ${i}`;
 
-                // 4A. Scan TARGET for existing Cross-Refs
-                const targetRefRegex = /<ce:cross-ref\b([^>]*)>([\s\S]*?)<\/ce:cross-ref>/g;
-                const targetRefs: {refid: string, text: string, originalId?: string}[] = [];
+                // 4A. Scan TARGET for existing Cross-Refs and e-components
+                const targetRefRegex = /<(ce:cross-refs?|e-component)\b([^>]*)>([\s\S]*?)<\/\1>/g;
+                const targetRefs: {tagName: string, attributes: string, text: string, refid?: string, originalId?: string}[] = [];
                 let tm;
                 while ((tm = targetRefRegex.exec(targetContent)) !== null) {
-                    const attrs = tm[1];
-                    const content = tm[2];
+                    const tagName = tm[1];
+                    const attrs = tm[2];
+                    const content = tm[3];
                     const refIdMatch = attrs.match(/refid="([^"]+)"/);
                     const idMatch = attrs.match(/\bid="([^"]+)"/);
                     
-                    if (refIdMatch) {
-                        targetRefs.push({ 
-                            refid: refIdMatch[1], 
-                            text: content,
-                            originalId: idMatch ? idMatch[1] : undefined
-                        });
-                    }
+                    targetRefs.push({ 
+                        tagName,
+                        attributes: attrs,
+                        text: content,
+                        refid: refIdMatch ? refIdMatch[1] : undefined,
+                        originalId: idMatch ? idMatch[1] : undefined
+                    });
                 }
 
-                // 4B. Content Renumbering (Source)
+                // 4B. Scan SOURCE for existing refs and STRIP them to avoid double-tagging and ID conflicts
+                const sourceRefs: {tagName: string, attributes: string, text: string}[] = [];
+                let sm;
+                const sourceRefRegex = /<(ce:cross-refs?|e-component)\b([^>]*)>([\s\S]*?)<\/\1>/g;
+                while ((sm = sourceRefRegex.exec(sourceContent)) !== null) {
+                    sourceRefs.push({
+                        tagName: sm[1],
+                        attributes: sm[2],
+                        text: sm[3]
+                    });
+                }
+                const cleanSource = sourceContent.replace(sourceRefRegex, '$3');
+
+                // 4C. Content Renumbering (Clean Source)
                 let remappedCount = 0;
-                let newContent = sourceContent.replace(/\bid="([a-zA-Z]+)(\d+)"/g, (match, prefix, oldNum) => {
+                let newContent = (cleanSource || '').replace(/\bid="([a-zA-Z]+)(\d+)"/g, (match, prefix, oldNum) => {
                      remappedCount++;
                      const currentVal = nextIdNum;
                      nextIdNum += 5;
@@ -324,75 +452,82 @@ const ViewSync: React.FC = () => {
                      return `id="${newId}"`;
                 });
 
-                // 4C. Restore References
+                // 4D. Restore References and e-components
                 let restoredCount = 0;
                 const restoredRefIds = new Set<string>();
-                const refsByText = new Map<string, typeof targetRefs>();
+                const restoredTagIds = new Set<string>();
+                
+                // Group refs by text. Target refs take priority for ID retention.
+                const refsByText = new Map<string, any[]>();
+                
                 targetRefs.forEach(ref => {
-                    const t = ref.text;
-                    if (!refsByText.has(t)) refsByText.set(t, []);
-                    refsByText.get(t)!.push(ref);
+                    if (!refsByText.has(ref.text)) refsByText.set(ref.text, []);
+                    refsByText.get(ref.text)!.push({...ref, priority: 1});
+                });
+                
+                sourceRefs.forEach(ref => {
+                    // Only add source refs if they aren't already covered by target refs for the same text
+                    // Actually, we add them all but mark them as lower priority
+                    if (!refsByText.has(ref.text)) refsByText.set(ref.text, []);
+                    refsByText.get(ref.text)!.push({...ref, priority: 2});
                 });
 
                 refsByText.forEach((refs, textKey) => {
-                    const escapedText = textKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                    const tokenRegex = new RegExp(`(<[^>]+>)|(${escapedText})`, 'g');
-                    let insideCrossRef = false;
-
-                    newContent = newContent.replace(tokenRegex, (match, tagGroup, textGroup) => {
-                        if (tagGroup) {
-                            if (tagGroup.startsWith('<ce:cross-ref')) {
-                                if (!/\/>$/.test(tagGroup)) insideCrossRef = true;
-                            } else if (tagGroup.startsWith('</ce:cross-ref>')) {
-                                insideCrossRef = false;
-                            }
-                            return tagGroup;
-                        }
-                        
-                        if (textGroup) {
-                            if (insideCrossRef) {
-                                refs.shift();
-                                return textGroup;
-                            }
-                            const nextRef = refs.shift(); 
-                            if (nextRef) {
-                                restoredRefIds.add(nextRef.refid);
-                                restoredCount++;
-                                let newTagIdAttr = '';
+                    const safeTextKey = textKey || '';
+                    const escapedText = safeTextKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    // We don't need to worry about insideRestorableTag anymore because we stripped them
+                    const tokenRegex = new RegExp(`(${escapedText})`, 'g');
+                    
+                    newContent = newContent.replace(tokenRegex, (match, textGroup) => {
+                        const nextRef = refs.shift(); 
+                        if (nextRef) {
+                            if (nextRef.refid) restoredRefIds.add(nextRef.refid);
+                            if (nextRef.originalId) restoredTagIds.add(nextRef.originalId);
+                            restoredCount++;
+                            
+                            let newTagIdAttr = '';
+                            if (nextRef.priority === 1 && nextRef.originalId) {
+                                // Retain target ID
+                                newTagIdAttr = ` id="${nextRef.originalId}"`;
+                            } else {
+                                // Generate new ID for source-only refs or target refs without IDs
                                 const currentVal = nextIdNum;
                                 nextIdNum += 5;
+                                const prefixMatch = nextRef.attributes.match(/\bid="([a-zA-Z]+)/);
+                                const prefix = prefixMatch ? prefixMatch[1] : (nextRef.tagName.startsWith('ce:cross-ref') ? 'cf' : 'ec');
+                                const newId = `${prefix}${currentVal.toString().padStart(4, '0')}`;
+                                newTagIdAttr = ` id="${newId}"`;
+                            }
 
-                                if (nextRef.originalId) {
-                                    const prefixMatch = nextRef.originalId.match(/^([a-zA-Z]+)/);
-                                    const prefix = prefixMatch ? prefixMatch[1] : 'cf'; 
-                                    const newId = `${prefix}${currentVal.toString().padStart(4, '0')}`;
-                                    newTagIdAttr = ` id="${newId}"`;
-                                } else {
-                                    const newId = `cf${currentVal.toString().padStart(4, '0')}`;
-                                    newTagIdAttr = ` id="${newId}"`;
-                                }
-                                return `<ce:cross-ref${newTagIdAttr} refid="${nextRef.refid}">${textGroup}</ce:cross-ref>`;
+                            if (nextRef.tagName.startsWith('ce:cross-ref')) {
+                                return `<${nextRef.tagName}${newTagIdAttr} refid="${nextRef.refid || ''}">${textGroup}</${nextRef.tagName}>`;
+                            } else {
+                                const otherAttrs = (nextRef.attributes || '').replace(/\bid="[^"]*"/, '').trim();
+                                const attrStr = otherAttrs ? ` ${otherAttrs}` : '';
+                                return `<${nextRef.tagName}${newTagIdAttr}${attrStr}>${textGroup}</${nextRef.tagName}>`;
                             }
                         }
-                        return textGroup || match;
+                        return textGroup;
                     });
                 });
 
-                // 5. Scan for FINAL Cross-Refs
+                // 5. Scan for FINAL Cross-Refs and e-components
                 const detectedRefs: DetectedRef[] = [];
-                const crossRefRegex = /<ce:cross-ref\b([^>]*)>([\s\S]*?)<\/ce:cross-ref>/g;
+                const crossRefRegex = /<(ce:cross-refs?|e-component)\b([^>]*)>([\s\S]*?)<\/\1>/g;
                 let crMatch;
                 while ((crMatch = crossRefRegex.exec(newContent)) !== null) {
-                    const attrs = crMatch[1];
-                    const text = crMatch[2];
+                    const tagName = crMatch[1];
+                    const attrs = crMatch[2];
+                    const text = crMatch[3];
                     const refIdMatch = attrs.match(/refid="([^"]+)"/);
-                    if (refIdMatch) {
-                        detectedRefs.push({
-                            refid: refIdMatch[1],
-                            text: text,
-                            isRestored: restoredRefIds.has(refIdMatch[1])
-                        });
-                    }
+                    const idMatch = attrs.match(/\bid="([^"]+)"/);
+                    
+                    detectedRefs.push({
+                        tagName,
+                        refid: refIdMatch ? refIdMatch[1] : undefined,
+                        text: text,
+                        isRestored: !!((refIdMatch && restoredRefIds.has(refIdMatch[1])) || (idMatch && restoredTagIds.has(idMatch[1])))
+                    });
                 }
 
                 const newBlock = `${targetOpenTag}${newContent}</ce:para>`;
@@ -437,6 +572,7 @@ const ViewSync: React.FC = () => {
             });
 
             setOutput(finalOutput);
+            setLastProcessedInput(input);
             setLogs(newLogs);
             generateDiff(input, finalOutput);
             setActiveTab('report');
@@ -454,9 +590,12 @@ const ViewSync: React.FC = () => {
     const clearAll = () => {
         setInput('');
         setOutput('');
+        setLastProcessedInput('');
         setLogs([]);
         setToast({ msg: "All fields cleared.", type: "warn" });
     };
+
+    const isStale = output && input !== lastProcessedInput;
 
     useKeyboardShortcuts({
         onPrimary: processSync,
@@ -465,7 +604,7 @@ const ViewSync: React.FC = () => {
     }, [input, output, syncDirection, customStartId]);
 
     return (
-        <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+        <div className="max-w-full mx-auto px-2 py-8 sm:px-4 lg:px-6">
             {/* Header */}
             <div className="mb-10 text-center animate-fade-in">
                 <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3">View Synchronizer</h1>
@@ -523,17 +662,30 @@ const ViewSync: React.FC = () => {
                     </div>
                 </div>
 
-                <button 
-                    onClick={processSync} 
-                    disabled={isLoading}
-                    title="Ctrl+Enter"
-                    className="flex-shrink-0 group bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 px-8 rounded-xl shadow-lg shadow-indigo-500/30 transform transition-all active:scale-95 disabled:opacity-70 disabled:cursor-wait hover:-translate-y-0.5"
-                >
-                    <span className="flex items-center gap-2">
-                        <span>Sync Paragraphs</span>
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                    </span>
-                </button>
+                <div className="flex flex-col md:flex-row gap-4 items-center w-full md:w-auto">
+                    <button 
+                        onClick={scanForMismatches} 
+                        disabled={isLoading}
+                        className="flex-shrink-0 group bg-slate-800 hover:bg-slate-900 text-white font-bold py-3.5 px-6 rounded-xl shadow-lg transform transition-all active:scale-95 disabled:opacity-70 disabled:cursor-wait hover:-translate-y-0.5"
+                    >
+                        <span className="flex items-center gap-2">
+                            <Search className="w-5 h-5" />
+                            <span>Scan Mismatches</span>
+                        </span>
+                    </button>
+
+                    <button 
+                        onClick={processSync} 
+                        disabled={isLoading}
+                        title="Ctrl+Enter"
+                        className="flex-shrink-0 group bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 px-8 rounded-xl shadow-lg shadow-indigo-500/30 transform transition-all active:scale-95 disabled:opacity-70 disabled:cursor-wait hover:-translate-y-0.5"
+                    >
+                        <span className="flex items-center gap-2">
+                            <span>Sync Paragraphs</span>
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                        </span>
+                    </button>
+                </div>
             </div>
 
             {/* Main Content Grid */}
@@ -563,17 +715,29 @@ const ViewSync: React.FC = () => {
                         <label className="font-bold text-slate-700 text-sm flex items-center gap-2">
                             <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white border border-slate-200 text-xs text-emerald-600 font-mono shadow-sm">2</span>
                             Results
+                            {isStale && (
+                                <span className="ml-2 px-2 py-0.5 bg-amber-100 text-amber-700 text-[9px] font-black rounded-md border border-amber-200 animate-pulse flex items-center gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                                    STALE
+                                </span>
+                            )}
                         </label>
                         {output && activeTab === 'raw' && (
-                            <button onClick={copyOutput} className="text-xs font-bold text-emerald-600 hover:bg-emerald-50 px-3 py-1.5 rounded border border-transparent hover:border-emerald-100 transition-colors flex items-center gap-1">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
-                                Copy XML
-                            </button>
+                            <div className="flex items-center gap-2">
+                                {isStale && <span className="text-[9px] font-bold text-amber-600 uppercase tracking-tighter hidden sm:block">Input changed - Re-sync required</span>}
+                                <button 
+                                    onClick={copyOutput} 
+                                    className={`text-xs font-bold px-3 py-1.5 rounded border transition-all flex items-center gap-1 active:scale-95 ${isStale ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100' : 'text-emerald-600 hover:bg-emerald-50 border-transparent hover:border-emerald-100'}`}
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
+                                    {isStale ? 'Copy Stale XML' : 'Copy XML'}
+                                </button>
+                            </div>
                         )}
                     </div>
 
                     <div className="bg-white px-2 pt-2 border-b border-slate-100 flex space-x-1">
-                         {['raw', 'diff', 'report'].map((tab) => (
+                         {['raw', 'diff', 'report', 'mismatches'].map((tab) => (
                              <button 
                                 key={tab}
                                 onClick={() => setActiveTab(tab as any)} 
@@ -584,6 +748,7 @@ const ViewSync: React.FC = () => {
                                 {tab === 'raw' && 'Raw XML'}
                                 {tab === 'diff' && 'Diff View'}
                                 {tab === 'report' && `Log (${logs.length})`}
+                                {tab === 'mismatches' && `Mismatches (${mismatches.length})`}
                              </button>
                          ))}
                     </div>
@@ -690,6 +855,54 @@ const ViewSync: React.FC = () => {
                              </div>
                          )}
 
+                         {activeTab === 'mismatches' && (
+                            <div className="h-full bg-white flex flex-col overflow-auto custom-scrollbar p-4">
+                                {mismatches.length > 0 ? (
+                                    <div className="space-y-4">
+                                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+                                            <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
+                                            <div>
+                                                <h4 className="text-sm font-bold text-amber-900">Unsynchronized Pairs Detected</h4>
+                                                <p className="text-xs text-amber-700 mt-1">
+                                                    The following paragraphs have differing text content between their Compact and Extended views.
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="grid gap-4">
+                                            {mismatches.map((m, i) => (
+                                                <div key={i} className="group border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm hover:shadow-md transition-all duration-300">
+                                                    <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex justify-between items-center group-hover:bg-indigo-50 transition-colors">
+                                                        <span className="text-xs font-bold text-slate-700 font-mono group-hover:text-indigo-700">ID: {m.paraId}</span>
+                                                        <span className="text-[10px] font-bold text-slate-400 uppercase">Pair Index: {m.index}</span>
+                                                    </div>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-100">
+                                                        <div className="p-4">
+                                                            <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Compact View Text</div>
+                                                            <div className="text-xs text-slate-600 leading-relaxed line-clamp-3 group-hover:line-clamp-none transition-all duration-500">
+                                                                {renderMismatchDiff(m.compactText, m.extendedText, 'compact')}
+                                                            </div>
+                                                        </div>
+                                                        <div className="p-4 bg-slate-50/30 group-hover:bg-white transition-colors">
+                                                            <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Extended View Text</div>
+                                                            <div className="text-xs text-slate-600 leading-relaxed line-clamp-3 group-hover:line-clamp-none transition-all duration-500">
+                                                                {renderMismatchDiff(m.compactText, m.extendedText, 'extended')}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60">
+                                        <CheckCircle size={48} strokeWidth={1} className="mb-3 text-emerald-400" />
+                                        <p className="text-sm font-medium uppercase tracking-widest">No mismatches found</p>
+                                        <p className="text-xs mt-2">All paragraph pairs are perfectly synchronized.</p>
+                                    </div>
+                                )}
+                            </div>
+                         )}
+
                          {activeTab === 'report' && (
                             <div className="h-full bg-white flex flex-col">
                                 <div className="overflow-auto custom-scrollbar p-0 flex-grow">
@@ -751,7 +964,7 @@ const ViewSync: React.FC = () => {
                                                                             : 'bg-slate-50 text-slate-600 border-slate-200'
                                                                         }`} 
                                                                     >
-                                                                        <span className="font-mono opacity-60">{ref.refid}</span>
+                                                                        <span className="font-mono opacity-60">{ref.refid || ref.tagName}</span>
                                                                         <span className={`font-semibold max-w-[100px] truncate ${ref.isRestored ? 'text-amber-700' : 'text-slate-700'}`}>
                                                                             {ref.text}
                                                                         </span>

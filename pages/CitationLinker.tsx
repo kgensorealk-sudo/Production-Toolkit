@@ -508,14 +508,18 @@ const CitationLinker: React.FC = () => {
             try {
                 let cfCounter = cfStart;
                 // Robust detection of existing cf IDs in the entire document (id, refid, or text)
-                const allExistingCf = input.match(/cf(\d+)/g);
+                // We strictly match 1-4 digit IDs to avoid "self-infection" from long numbers in DOIs or other text
+                const allExistingCf = input.match(/\bcf(\d{1,4})\b/g);
                 if (allExistingCf) {
                     const maxExisting = allExistingCf.reduce((m, c) => {
-                        const num = parseInt(c.match(/\d+/)![0]);
+                        const numMatch = c.match(/\d+/);
+                        const num = numMatch ? parseInt(numMatch[0]) : NaN;
                         return isNaN(num) ? m : Math.max(m, num);
                     }, 0);
                     // Ensure we start at least 5 units above the max existing, rounded to next 5
-                    cfCounter = Math.max(cfCounter, (Math.floor(maxExisting / 5) + 1) * 5);
+                    // But cap it at 9995 to keep it within 4 digits if possible
+                    const nextVal = (Math.floor(maxExisting / 5) + 1) * 5;
+                    cfCounter = Math.max(cfCounter, nextVal);
                 }
 
                 let result = input;
@@ -576,7 +580,7 @@ const CitationLinker: React.FC = () => {
     }, [input, step, resolutions, targetMissingId, targetMissingRefid, cfStart]);
 
     return (
-        <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+        <div className="max-w-full mx-auto px-2 py-8 sm:px-4 lg:px-6">
             <div className="mb-10 text-center animate-fade-in relative">
                 <h1 className="text-3xl font-black text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase tracking-tighter">Citation Linker Pro</h1>
                 <p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic leading-relaxed">

@@ -6,6 +6,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
+import useLocalStorage from '../hooks/useLocalStorage';
+import useSessionStorage from '../hooks/useSessionStorage';
 
 interface ReferenceChange {
     id: string;
@@ -16,16 +18,17 @@ interface ReferenceChange {
 }
 
 const XmlRenumber: React.FC = () => {
-    const [input, setInput] = useState('');
-    const [output, setOutput] = useState('');
+    const [input, setInput] = useSessionStorage<string>('xml_renumber_input', '');
+    const [output, setOutput] = useSessionStorage<string>('xml_renumber_output', '');
+    const [lastProcessedInput, setLastProcessedInput] = useSessionStorage<string>('xml_renumber_last_processed_input', '');
     const [prefix, setPrefix] = useState('[');
     const [suffix, setSuffix] = useState(']');
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     
-    const [activeTab, setActiveTab] = useState<'raw' | 'diff' | 'report' | 'extraction'>('raw');
-    const [reportData, setReportData] = useState<ReferenceChange[]>([]);
-    const [extractedRefs, setExtractedRefs] = useState<string[]>([]);
+    const [activeTab, setActiveTab] = useLocalStorage<'raw' | 'diff' | 'report' | 'extraction'>('xml_renumber_active_tab', 'raw');
+    const [reportData, setReportData] = useSessionStorage<ReferenceChange[]>('xml_renumber_report_data', []);
+    const [extractedRefs, setExtractedRefs] = useSessionStorage<string[]>('xml_renumber_extracted_refs', []);
     const [diffElements, setDiffElements] = useState<React.ReactNode>(null);
     const [currentChangeIndex, setCurrentChangeIndex] = useState(0);
     const [totalChanges, setTotalChanges] = useState(0);
@@ -34,6 +37,27 @@ const XmlRenumber: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [filterChangedOnly, setFilterChangedOnly] = useState(false);
     const [filterOtherRefOnly, setFilterOtherRefOnly] = useState(false);
+
+    useEffect(() => {
+        // Migration/Cleanup: Remove large items from localStorage to free up space
+        // since we moved them to sessionStorage
+        const keysToCleanup = [
+            'xml_renumber_input',
+            'xml_renumber_output',
+            'xml_renumber_last_processed_input',
+            'xml_renumber_report_data',
+            'xml_renumber_extracted_refs'
+        ];
+        keysToCleanup.forEach(key => {
+            try {
+                if (localStorage.getItem(key)) {
+                    localStorage.removeItem(key);
+                }
+            } catch (e) {
+                // Ignore errors
+            }
+        });
+    }, []);
 
     const isDesktop = (window as any).electron !== undefined;
 
@@ -122,7 +146,7 @@ const XmlRenumber: React.FC = () => {
         return lines;
     };
 
-    const generateDiff = (original: string, modified: string) => {
+    const generateDiff = React.useCallback((original: string, modified: string) => {
         const diff = diffLines(original, modified);
         let rows: React.ReactNode[] = [];
         let leftLineNum = 1;
@@ -216,7 +240,15 @@ const XmlRenumber: React.FC = () => {
                 <tbody>{rows}</tbody>
             </table>
         );
-    };
+    }, []);
+
+    useEffect(() => {
+        // Only generate diff if the user is actually looking at the diff tab
+        // and we have content to diff. This prevents UI freezes on large files.
+        if (activeTab === 'diff' && input && output && !diffElements) {
+            generateDiff(input, output);
+        }
+    }, [input, output, diffElements, generateDiff, activeTab]);
 
     const scrollToChange = (direction: 'next' | 'prev') => {
         if (!diffContainerRef.current || totalChanges === 0) return;
@@ -368,8 +400,9 @@ const XmlRenumber: React.FC = () => {
                 }
                 setExtractedRefs(extracted);
                 setOutput(renumberedText);
+                setLastProcessedInput(input);
                 setReportData(changes);
-                generateDiff(input, renumberedText);
+                setDiffElements(null); // Force regeneration when user switches to diff tab
                 setActiveTab('report');
                 setToast({ msg: `Successfully processed ${bibMatchCount} references.`, type: 'success' });
             } catch (e) {
@@ -379,6 +412,30 @@ const XmlRenumber: React.FC = () => {
             }
         }, 600);
     };
+
+    const clearAll = () => {
+        setInput('');
+        setOutput('');
+        setLastProcessedInput('');
+        setReportData([]);
+        setExtractedRefs([]);
+        setDiffElements(null);
+        setTotalChanges(0);
+        setCurrentChangeIndex(0);
+        
+        // Explicitly clear sessionStorage for these keys
+        try {
+            sessionStorage.removeItem('xml_renumber_input');
+            sessionStorage.removeItem('xml_renumber_output');
+            sessionStorage.removeItem('xml_renumber_last_processed_input');
+            sessionStorage.removeItem('xml_renumber_report_data');
+            sessionStorage.removeItem('xml_renumber_extracted_refs');
+        } catch (e) {}
+
+        setToast({ msg: 'All cleared', type: 'warn' });
+    };
+
+    const isStale = output && input !== lastProcessedInput;
 
     useKeyboardShortcuts({
         onPrimary: renumber,
@@ -390,11 +447,8 @@ const XmlRenumber: React.FC = () => {
                 copyRichText(extractedRefs.map(r => `<p>${r}</p>`).join('\n'), true);
             }
         },
-        onClear: () => {
-            setInput('');
-            setToast({msg: 'Input cleared', type:'warn'});
-        }
-    }, [input, output, activeTab, extractedRefs]);
+        onClear: clearAll
+    }, [input, output, activeTab, extractedRefs, lastProcessedInput]);
 
     const downloadCSV = () => {
         if (reportData.length === 0) return;
@@ -438,7 +492,7 @@ const XmlRenumber: React.FC = () => {
     };
 
     return (
-        <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+        <div className="max-w-full mx-auto px-2 py-8 sm:px-4 lg:px-6">
             <div className="mb-10 text-center animate-fade-in">
                 <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl mb-3">XML Reference Normalizer</h1>
                 <p className="text-lg text-slate-500 max-w-2xl mx-auto">Standardize citations and automatically update cross-references.</p>
@@ -456,9 +510,9 @@ const XmlRenumber: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-4 bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
                     <div className="flex items-center">
-                        <input type="text" value={prefix} onChange={(e) => setPrefix(e.target.value)} maxLength={5} className="w-12 text-center font-mono font-bold text-slate-700 outline-none border-b-2 border-transparent focus:border-indigo-500 transition-colors bg-transparent placeholder-slate-300" placeholder="[" />
+                        <input type="text" value={prefix} onChange={(e) => setPrefix(e.target.value)} maxLength={10} className="w-32 text-center font-mono font-bold text-slate-700 outline-none border-b-2 border-transparent focus:border-indigo-500 transition-colors bg-transparent placeholder-slate-300" placeholder="[" />
                         <span className="text-slate-400 font-mono px-2 text-sm">#</span>
-                        <input type="text" value={suffix} onChange={(e) => setSuffix(e.target.value)} maxLength={5} className="w-12 text-center font-mono font-bold text-slate-700 outline-none border-b-2 border-transparent focus:border-indigo-500 transition-colors bg-transparent placeholder-slate-300" placeholder="]" />
+                        <input type="text" value={suffix} onChange={(e) => setSuffix(e.target.value)} maxLength={10} className="w-32 text-center font-mono font-bold text-slate-700 outline-none border-b-2 border-transparent focus:border-indigo-500 transition-colors bg-transparent placeholder-slate-300" placeholder="]" />
                     </div>
                     <div className="h-8 w-px bg-slate-200 mx-2"></div>
                     <div className="text-xs text-slate-500 font-medium pr-2">
@@ -480,39 +534,55 @@ const XmlRenumber: React.FC = () => {
                 </button>
             </div>
 
-             <div className={`grid gap-8 h-[calc(100vh-280px)] min-h-[600px] transition-all duration-300 ${activeTab === 'diff' ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
-                <div className={`bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col group focus-within:ring-2 focus-within:ring-indigo-100 transition-all duration-300 ${activeTab === 'diff' ? 'hidden' : 'flex'}`}>
-                    <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center">
+             <div className={`grid gap-8 min-h-[calc(100vh-280px)] transition-all duration-300 ${activeTab === 'diff' ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
+                <div className={`bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col group focus-within:ring-2 focus-within:ring-indigo-100 transition-all duration-300 ${activeTab === 'diff' ? 'hidden' : 'flex'} min-h-[500px]`}>
+                    <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center shrink-0">
                          <label className="font-bold text-slate-700 text-sm flex items-center gap-2">
                             <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white border border-slate-200 text-xs text-slate-500 font-mono shadow-sm">IN</span>
                             Input XML
                         </label>
-                         <button onClick={() => setInput('')} title="Alt+Delete" className="text-xs font-semibold text-slate-400 hover:text-red-500 hover:bg-red-50 px-2 py-1 rounded transition-colors">Clear Input</button>
+                         <button onClick={clearAll} title="Alt+Delete" className="text-xs font-semibold text-slate-400 hover:text-red-500 hover:bg-red-50 px-2 py-1 rounded transition-colors">Clear All</button>
                     </div>
                     <textarea 
                         value={input} 
                         onChange={(e) => setInput(e.target.value)} 
-                        className="w-full h-full p-6 text-sm font-mono text-slate-800 bg-white border-0 focus:ring-0 outline-none resize-none leading-relaxed selection:bg-indigo-100 placeholder-slate-300" 
+                        className="w-full flex-grow p-6 text-sm font-mono text-slate-800 bg-white border-0 focus:ring-0 outline-none resize-none leading-relaxed selection:bg-indigo-100 placeholder-slate-300" 
                         placeholder="Paste your XML content here..." 
                         spellCheck={false}
                     />
                 </div>
                 
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-                     <div className="bg-slate-50 px-5 py-2 border-b border-slate-100 flex justify-between items-center">
+                     <div className="bg-slate-50 px-5 py-2 border-b border-slate-100 flex justify-between items-center shrink-0">
                          <label className="font-bold text-slate-700 text-sm flex items-center gap-2">
                             <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white border border-slate-200 text-xs text-emerald-600 font-mono shadow-sm">OUT</span>
                             Result
-                        </label>
-                         <div className="flex gap-2">
-                            {output && isDesktop && (
-                                <button onClick={handleSaveToFile} className="text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded border border-indigo-100 transition-colors">Save As File</button>
+                            {isStale && (
+                                <span className="ml-2 px-2 py-0.5 bg-amber-100 text-amber-700 text-[9px] font-black rounded-md border border-amber-200 animate-pulse flex items-center gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                                    STALE
+                                </span>
                             )}
-                            {activeTab === 'raw' && <button onClick={() => { navigator.clipboard.writeText(output); setToast({msg: 'Copied to clipboard!', type:'success'}); }} title="Ctrl+Shift+C" className="text-xs font-bold text-emerald-600 hover:bg-emerald-50 px-3 py-1.5 rounded border border-transparent hover:border-emerald-100 transition-colors">Copy XML</button>}
+                        </label>
+                         <div className="flex items-center gap-2">
+                            {isStale && <span className="text-[9px] font-bold text-amber-600 uppercase tracking-tighter hidden sm:block">Input changed - Re-process required</span>}
+                            {output && isDesktop && (
+                                <button onClick={handleSaveToFile} className={`text-xs font-bold px-3 py-1.5 rounded border transition-colors ${isStale ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100' : 'text-indigo-600 hover:bg-indigo-50 border-indigo-100'}`}>Save As File</button>
+                            )}
+                            {activeTab === 'raw' && (
+                                <button 
+                                    onClick={() => { navigator.clipboard.writeText(output); setToast({msg: 'Copied to clipboard!', type:'success'}); }} 
+                                    title="Ctrl+Shift+C" 
+                                    className={`text-xs font-bold px-3 py-1.5 rounded border transition-all flex items-center gap-1 active:scale-95 ${isStale ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100' : 'text-emerald-600 hover:bg-emerald-50 border-transparent hover:border-emerald-100'}`}
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
+                                    {isStale ? 'Copy Stale XML' : 'Copy XML'}
+                                </button>
+                            )}
                          </div>
                     </div>
                     
-                    <div className="bg-white px-2 pt-2 border-b border-slate-100 flex space-x-1">
+                    <div className="bg-white px-2 pt-2 border-b border-slate-100 flex space-x-1 shrink-0">
                          {['raw', 'diff', 'report', 'extraction'].map((tab) => (
                              <button 
                                 key={tab}
@@ -529,10 +599,10 @@ const XmlRenumber: React.FC = () => {
                          ))}
                     </div>
 
-                    <div className="flex-grow relative bg-slate-50 overflow-hidden">
+                    <div className="flex-grow relative bg-slate-50 overflow-hidden flex flex-col">
                         {isLoading && <LoadingOverlay message="Normalizing References..." color="indigo" />}
 
-                        <div className="absolute inset-0 overflow-auto custom-scrollbar">
+                        <div className="flex-grow overflow-auto custom-scrollbar">
                             {activeTab === 'raw' && (
                                 <textarea readOnly value={output} className="w-full h-full p-6 text-sm font-mono text-slate-800 bg-transparent border-0 focus:ring-0 outline-none resize-none leading-relaxed" placeholder="Processed output will appear here..." />
                             )}

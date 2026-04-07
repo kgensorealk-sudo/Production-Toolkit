@@ -3,15 +3,17 @@ import { useNavigate, useLocation } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
     LayoutDashboard, 
-    Settings, 
     LogOut, 
     Bell, 
     Wifi, 
     WifiOff, 
     ShieldCheck, 
+    Shield,
     Cloud, 
     Monitor,
-    FlaskConical
+    FlaskConical,
+    MessageCircle,
+    Mail
 } from 'lucide-react';
 import { ToolId } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -73,17 +75,31 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
             try {
                 const { data } = await supabase
                     .from('announcements')
-                    .select('id, content')
+                    .select('id, content, category')
                     .eq('is_active', true)
-                    .order('created_at', { ascending: false })
-                    .limit(1)
-                    .maybeSingle();
+                    .order('created_at', { ascending: false });
 
-                if (data) {
-                    setHasActiveAnnouncement(true);
-                    const contentHash = btoa(data.content.substring(0, 30)).substring(0, 8);
-                    const seenKey = `ann_seen_${data.id}_${contentHash}`;
-                    setIsAnnouncementUnread(!localStorage.getItem(seenKey));
+                if (data && data.length > 0) {
+                    // Filter based on user preferences
+                    const filtered = data.find(a => {
+                        if (!profile) return true; // Show all if profile not loaded
+                        const prefs = profile.notification_preferences || {
+                            system_alerts: true,
+                            security_updates: true,
+                            maintenance_windows: true
+                        };
+                        const category = (a.category || 'system_alerts') as keyof typeof prefs;
+                        return prefs[category] !== false;
+                    });
+
+                    if (filtered) {
+                        setHasActiveAnnouncement(true);
+                        const contentHash = btoa(filtered.content.substring(0, 30)).substring(0, 8);
+                        const seenKey = `ann_seen_${filtered.id}_${contentHash}`;
+                        setIsAnnouncementUnread(!localStorage.getItem(seenKey));
+                    } else {
+                        setHasActiveAnnouncement(false);
+                    }
                 } else {
                     setHasActiveAnnouncement(false);
                 }
@@ -98,7 +114,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
             window.removeEventListener('offline', handleOffline);
             clearInterval(interval);
         };
-    }, []);
+    }, [profile?.notification_preferences]);
 
     const triggerAnnouncement = () => {
         window.dispatchEvent(new CustomEvent('app:show-announcement'));
@@ -115,13 +131,14 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
         }
     };
 
+    const isMessaging = location.pathname === '/messaging';
     const isTrial = !!profile?.trial_end;
     const headerClass = isLanding 
-        ? "bg-transparent py-6" 
-        : "glass-header py-3 shadow-sm";
+    ? "bg-transparent py-6" 
+    : "glass-header py-3 shadow-sm";
 
     return (
-        <div className={`min-h-screen flex flex-col font-sans text-slate-900 bg-slate-50 selection:bg-indigo-100 overflow-x-hidden ${isExiting ? 'grayscale cursor-wait' : ''}`}>
+        <div className={`h-screen flex flex-col font-sans text-slate-900 bg-slate-50 selection:bg-indigo-100 overflow-hidden ${isExiting ? 'grayscale cursor-wait' : ''}`}>
             <ExpiryReminderModal />
 
             <AnimatePresence>
@@ -198,8 +215,20 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                                 <button 
                                     onClick={() => navigate('/dashboard')} 
                                     className={`p-2 rounded-xl transition-all ${location.pathname === '/dashboard' ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/50' : 'text-slate-400 hover:text-indigo-600'}`}
+                                    title="Dashboard"
                                 >
                                     <LayoutDashboard size={18} />
+                                </button>
+                            )}
+
+
+                            {!isLanding && !isExiting && (
+                                <button 
+                                    onClick={() => navigate('/messaging')} 
+                                    className={`p-2 rounded-xl transition-all ${location.pathname === '/messaging' ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/50' : 'text-slate-400 hover:text-indigo-600'}`}
+                                    title="Messaging"
+                                >
+                                    <MessageCircle size={18} />
                                 </button>
                             )}
 
@@ -217,19 +246,44 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                                 <button 
                                     onClick={() => navigate('/admin')} 
                                     className={`p-2 rounded-xl transition-all ${location.pathname === '/admin' ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/50' : 'text-slate-400 hover:text-indigo-600'}`}
+                                    title="Admin Control"
                                 >
-                                    <Settings size={18} />
+                                    <Shield size={18} />
                                 </button>
                             )}
 
+                            
+                            <div className="h-4 w-px bg-slate-200 mx-1"></div>
+
                             {!isExiting && (
-                                <button 
-                                    onClick={() => setIsFeedbackOpen(true)}
-                                    className="p-2 rounded-xl text-slate-400 hover:text-indigo-600 transition-all"
-                                    title="Send Feedback"
+                                <div 
+                                    onClick={() => navigate('/settings')}
+                                    className="flex items-center gap-2 px-2 py-1 rounded-xl hover:bg-slate-200/50 transition-all cursor-pointer group"
+                                    title="View Profile"
                                 >
-                                    <MessageSquare size={18} />
-                                </button>
+                                    <div className="w-8 h-8 rounded-full bg-slate-200 border-2 border-white shadow-sm overflow-hidden flex-shrink-0 group-hover:border-indigo-200 transition-all">
+                                        {profile?.avatar_url ? (
+                                            <img 
+                                                src={profile.avatar_url} 
+                                                alt="Avatar" 
+                                                className="w-full h-full object-cover"
+                                                referrerPolicy="no-referrer"
+                                            />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center bg-indigo-100 text-indigo-600 text-[10px] font-black uppercase">
+                                                {profile?.display_name?.substring(0, 2) || profile?.email?.substring(0, 2) || '??'}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="hidden lg:flex flex-col items-start">
+                                        <span className="text-[9px] font-black text-slate-900 uppercase tracking-tight truncate max-w-[80px]">
+                                            {profile?.display_name || 'User'}
+                                        </span>
+                                        <span className="text-[7px] font-bold text-slate-400 uppercase tracking-widest">
+                                            {profile?.role || 'Member'}
+                                        </span>
+                                    </div>
+                                </div>
                             )}
                             
                             <div className="h-4 w-px bg-slate-200 mx-1"></div>
@@ -247,7 +301,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                 </div>
             </header>
 
-            <main className={`flex-grow w-full relative z-10 overflow-y-auto custom-scrollbar ${isExiting ? 'pointer-events-none blur-[2px]' : ''}`}>
+            <main className={`flex-grow w-full relative z-10 ${isMessaging ? 'overflow-hidden' : 'overflow-y-auto'} min-h-0 custom-scrollbar ${isExiting ? 'pointer-events-none blur-[2px]' : ''}`}>
                 <AnimatePresence mode="wait">
                     <motion.div
                         key={location.pathname}
@@ -276,6 +330,15 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                 <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-4 text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em]">
                     <p>&copy; 2025 Editorial Systems Pro • Precision Engineering</p>
                     <div className="flex items-center gap-6">
+                        {!isExiting && (
+                            <button 
+                                onClick={() => setIsFeedbackOpen(true)}
+                                className="hover:text-indigo-600 transition-colors flex items-center gap-1.5 group"
+                            >
+                                <MessageSquare size={10} className="group-hover:scale-110 transition-transform" />
+                                <span>Feedback</span>
+                            </button>
+                        )}
                         <span className="flex items-center gap-1.5">
                             <div className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-amber-500'}`}></div>
                             Status: {isOnline ? 'Synchronized' : 'Offline Mode'}

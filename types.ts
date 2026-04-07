@@ -34,6 +34,8 @@ export enum SubscriptionTier {
 export interface UserProfile {
     id: string;
     email: string;
+    display_name?: string;
+    avatar_url?: string;
     role: string;
     is_subscribed: boolean;
     subscription_tier: SubscriptionTier;
@@ -42,6 +44,30 @@ export interface UserProfile {
     trial_end?: string;
     last_seen?: string;
     unlocked_tools: string[]; // List of tool IDs unlocked via keys
+    notification_preferences?: {
+        system_alerts: boolean;
+        security_updates: boolean;
+        maintenance_windows: boolean;
+    };
+    created_at?: string;
+}
+
+export interface Channel {
+    id: string;
+    name: string;
+    description?: string;
+    notes?: string;
+    is_private: boolean;
+    created_by: string;
+    created_at: string;
+}
+
+export interface ChannelMember {
+    id: string;
+    channel_id: string;
+    user_id: string;
+    role: 'member' | 'admin';
+    joined_at: string;
 }
 
 export enum ToolId {
@@ -66,5 +92,27 @@ export enum ToolId {
     AFFILIATION_SEQUENCER = 'affiliationSequencer',
     STRUCTURAL_ARCHITECT = 'structuralArchitect',
     DOCS = 'docs',
-    DASHBOARD = 'dashboard'
+    DASHBOARD = 'dashboard',
+    MESSAGING = 'messaging'
+}
+
+export interface Message {
+    id: string;
+    sender_id: string;
+    receiver_id: string | null;
+    channel_id?: string | null;
+    content: string;
+    file_url?: string | null;
+    file_name?: string | null;
+    is_read: boolean;
+    created_at: string;
+    sender?: UserProfile;
+    receiver?: UserProfile;
+}
+
+export interface DefaultAvatar {
+    id: string;
+    url: string;
+    name: string;
+    created_at: string;
 }

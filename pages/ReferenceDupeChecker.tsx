@@ -458,10 +458,12 @@ const ReferenceDupeChecker: React.FC = () => {
                 });
 
                 let cfCounter = 4500;
-                const existingCfMatches = input.match(/id="cf(\d+)"/g);
+                // Detect existing cf IDs to avoid collisions
+                // We strictly match 1-4 digit IDs to avoid "self-infection" from long numbers
+                const existingCfMatches = input.match(/id="cf(\d{1,4})"/g);
                 if (existingCfMatches) {
                     const maxId = existingCfMatches.reduce((max, curr) => {
-                        const m = curr.match(/id="cf(\d+)"/);
+                        const m = curr.match(/id="cf(\d{1,4})"/);
                         return m ? Math.max(max, parseInt(m[1])) : max;
                     }, 0);
                     cfCounter = Math.ceil((maxId + 10) / 10) * 10;
@@ -712,7 +714,7 @@ const ReferenceDupeChecker: React.FC = () => {
     }, [input]);
 
     return (
-        <div className="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8 font-sans">
+        <div className="max-w-full mx-auto px-2 py-12 sm:px-4 lg:px-6 font-sans">
             <motion.div 
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}

@@ -200,7 +200,7 @@ const Experimental: React.FC = () => {
     };
 
     return (
-        <div className="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
+        <div className="max-w-full mx-auto px-2 py-12 sm:px-4 lg:px-6">
             {activeTipTool && <ToolTipsModal toolId={activeTipTool.id} toolName={activeTipTool.name} isOpen={!!activeTipTool} onClose={() => setActiveTipTool(null)} />}
 
             <div className="mb-12">

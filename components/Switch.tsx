@@ -5,7 +5,7 @@ interface SwitchProps {
     onChange: (checked: boolean) => void;
     label: string;
     subLabel?: string;
-    color?: 'indigo' | 'blue' | 'emerald' | 'amber';
+    color?: 'indigo' | 'blue' | 'emerald' | 'amber' | 'purple';
     id: string;
 }
 
@@ -15,6 +15,7 @@ const Switch: React.FC<SwitchProps> = ({ checked, onChange, label, subLabel, col
         blue: { bg: 'bg-blue-600', ring: 'peer-focus:ring-blue-400/50', text: 'text-blue-500' },
         emerald: { bg: 'bg-emerald-600', ring: 'peer-focus:ring-emerald-400/50', text: 'text-emerald-500' },
         amber: { bg: 'bg-amber-500', ring: 'peer-focus:ring-amber-400/50', text: 'text-amber-500' },
+        purple: { bg: 'bg-purple-600', ring: 'peer-focus:ring-purple-400/50', text: 'text-purple-500' },
     };
 
     const theme = themes[color];
