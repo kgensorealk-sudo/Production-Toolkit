@@ -166,6 +166,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                 if (globalError) throw globalError;
 
                 if (globalCount && globalCount > 0) {
+                    console.log(`Unread Global Messages: ${globalCount} (after ${lastGlobalRead})`);
                     if (isMounted) setHasNewMessages(true);
                     return;
                 }
@@ -191,6 +192,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                         if (chanError) throw chanError;
 
                         if (chanCount && chanCount > 0) {
+                            console.log(`Unread Channel Messages in ${membership.channel_id}: ${chanCount} (after ${lastRead})`);
                             if (isMounted) setHasNewMessages(true);
                             return;
                         }
@@ -284,9 +286,17 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
         // Periodic check as a fallback
         const interval = setInterval(checkUnread, 30000);
 
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                checkUnread();
+            }
+        };
+        window.addEventListener('visibilitychange', handleVisibilityChange);
+
         return () => {
             isMounted = false;
             clearInterval(interval);
+            window.removeEventListener('visibilitychange', handleVisibilityChange);
             supabase.removeChannel(channel);
         };
     }, [user?.id, authLoading, profile?.last_global_read_at]);

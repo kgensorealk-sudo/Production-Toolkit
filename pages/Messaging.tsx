@@ -63,6 +63,8 @@ const Messaging: React.FC = () => {
     const [uploadingFile, setUploadingFile] = useState(false);
     const [isEditingDesc, setIsEditingDesc] = useState(false);
     const [editedDesc, setEditedDesc] = useState('');
+    const [readReceipts, setReadReceipts] = useState<Record<string, string>>({});
+    const [isReadReceiptsLoading, setIsReadReceiptsLoading] = useState(false);
     const [isEditingNotes, setIsEditingNotes] = useState(false);
     const [editedNotes, setEditedNotes] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -87,39 +89,126 @@ const Messaging: React.FC = () => {
         if (!user?.id) return;
 
         const markAsRead = async () => {
-            if (selectedUser) {
-                const { error } = await supabase
-                    .from('messages')
-                    .update({ is_read: true })
-                    .eq('sender_id', selectedUser.id)
-                    .eq('receiver_id', user.id)
-                    .eq('is_read', false);
+            try {
+                if (selectedUser) {
+                    const { error } = await supabase
+                        .from('messages')
+                        .update({ is_read: true })
+                        .eq('sender_id', selectedUser.id)
+                        .eq('receiver_id', user.id)
+                        .eq('is_read', false);
 
-                if (!error) {
-                    setUnreadCounts(prev => ({ ...prev, [selectedUser.id]: 0 }));
+                    if (!error) {
+                        setUnreadCounts(prev => ({ ...prev, [selectedUser.id]: 0 }));
+                    }
+                } else if (selectedChannel) {
+                    const latestMsg = messages.filter(m => m.sender_id !== user.id).pop();
+                    const timestamp = latestMsg ? latestMsg.created_at : new Date().toISOString();
+                    
+                    await supabase
+                        .from('channel_members')
+                        .update({ last_read_at: timestamp })
+                        .eq('channel_id', selectedChannel.id)
+                        .eq('user_id', user.id);
+                } else {
+                    // Global chat
+                    const latestMsg = messages.filter(m => m.sender_id !== user.id).pop();
+                    const timestamp = latestMsg ? latestMsg.created_at : new Date().toISOString();
+
+                    await updateProfile({ last_global_read_at: timestamp });
                 }
-            } else if (selectedChannel) {
-                // Update last_read_at for channel using a RPC or just a very recent timestamp
-                // To be safe against clock skew, we can use the latest message's timestamp if available
-                const latestMsg = messages[messages.length - 1];
-                const timestamp = latestMsg ? latestMsg.created_at : new Date().toISOString();
-                
-                await supabase
-                    .from('channel_members')
-                    .update({ last_read_at: timestamp })
-                    .eq('channel_id', selectedChannel.id)
-                    .eq('user_id', user.id);
-            } else {
-                // Global chat
-                const latestMsg = messages[messages.length - 1];
-                const timestamp = latestMsg ? latestMsg.created_at : new Date().toISOString();
-
-                await updateProfile({ last_global_read_at: timestamp });
+            } catch (err) {
+                console.error('Error marking as read:', err);
             }
         };
 
         markAsRead();
     }, [selectedUser, selectedChannel, messages.length, user?.id]);
+
+    // Fetch read receipts
+    useEffect(() => {
+        if (!user?.id) return;
+
+        const fetchReadReceipts = async () => {
+            setIsReadReceiptsLoading(true);
+            try {
+                if (selectedChannel) {
+                    const { data, error } = await supabase
+                        .from('channel_members')
+                        .select('user_id, last_read_at')
+                        .eq('channel_id', selectedChannel.id);
+                    
+                    if (!error && data) {
+                        const receipts: Record<string, string> = {};
+                        data.forEach(m => {
+                            if (m.last_read_at) receipts[m.user_id] = m.last_read_at;
+                        });
+                        setReadReceipts(receipts);
+                    }
+                } else if (!selectedUser) {
+                    // Global chat
+                    const { data, error } = await supabase
+                        .from('profiles')
+                        .select('id, last_global_read_at');
+                    
+                    if (!error && data) {
+                        const receipts: Record<string, string> = {};
+                        data.forEach(p => {
+                            if (p.last_global_read_at) receipts[p.id] = p.last_global_read_at;
+                        });
+                        setReadReceipts(receipts);
+                    }
+                } else {
+                    // Direct message - handled via is_read on messages
+                    setReadReceipts({});
+                }
+            } catch (err) {
+                console.error('Error fetching read receipts:', err);
+            } finally {
+                setIsReadReceiptsLoading(false);
+            }
+        };
+
+        fetchReadReceipts();
+
+        // Subscribe to read receipt changes
+        const channel = supabase.channel('read_receipts_sync');
+        
+        if (selectedChannel) {
+            channel.on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'channel_members',
+                    filter: `channel_id=eq.${selectedChannel.id}`
+                },
+                (payload) => {
+                    const { user_id, last_read_at } = payload.new;
+                    setReadReceipts(prev => ({ ...prev, [user_id]: last_read_at }));
+                }
+            ).subscribe();
+        } else if (!selectedUser) {
+            channel.on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'profiles'
+                },
+                (payload) => {
+                    const { id, last_global_read_at } = payload.new;
+                    if (last_global_read_at) {
+                        setReadReceipts(prev => ({ ...prev, [id]: last_global_read_at }));
+                    }
+                }
+            ).subscribe();
+        }
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [selectedChannel, selectedUser, user?.id]);
 
     useEffect(() => {
         const fetchUsers = async () => {
@@ -621,6 +710,22 @@ const Messaging: React.FC = () => {
         (u.display_name?.toLowerCase() || u.email.toLowerCase()).includes(searchQuery.toLowerCase())
     );
 
+    const getSeenBy = (message: any) => {
+        if (selectedUser) {
+            // For Direct Messages, if I sent it and it's read, the recipient has seen it
+            if (message.sender_id === user?.id && message.is_read) {
+                return [selectedUser];
+            }
+            return [];
+        }
+
+        if (!readReceipts) return [];
+        return Object.entries(readReceipts)
+            .filter(([uid, timestamp]) => uid !== message.sender_id && timestamp >= message.created_at)
+            .map(([uid]) => users.find(u => u.id === uid))
+            .filter(Boolean) as UserProfile[];
+    };
+
     if (loading) {
         return (
             <div className="h-full flex items-center justify-center bg-slate-50">
@@ -1049,8 +1154,28 @@ const Messaging: React.FC = () => {
                                                     {format(new Date(msg.created_at), 'HH:mm')}
                                                 </span>
                                                 {isMe && (
-                                                    <div className="text-slate-400">
+                                                    <div className="text-slate-400 flex items-center gap-1">
                                                         {msg.is_read ? <CheckCheck size={10} /> : <Check size={10} />}
+                                                        {getSeenBy(msg).length > 0 && (
+                                                            <div className="flex -space-x-1 ml-1">
+                                                                {getSeenBy(msg).slice(0, 3).map(u => (
+                                                                    <div key={u.id} className="w-3 h-3 rounded-full overflow-hidden border border-white shadow-sm" title={`Seen by ${u.display_name || u.email}`}>
+                                                                        {u.avatar_url ? (
+                                                                            <img src={u.avatar_url} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                                                        ) : (
+                                                                            <div className="w-full h-full flex items-center justify-center bg-slate-200 text-[5px] font-black text-slate-500">
+                                                                                {(u.display_name || u.email).substring(0, 1)}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                ))}
+                                                                {getSeenBy(msg).length > 3 && (
+                                                                    <div className="w-3 h-3 rounded-full bg-slate-100 border border-white flex items-center justify-center text-[5px] font-black text-slate-500">
+                                                                        +{getSeenBy(msg).length - 3}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 )}
                                             </div>
