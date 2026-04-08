@@ -84,23 +84,38 @@ const Messaging: React.FC = () => {
 
     // Mark messages as read when selectedUser changes or new messages arrive
     useEffect(() => {
-        if (!user?.id || !selectedUser) return;
+        if (!user?.id) return;
 
         const markAsRead = async () => {
-            const { error } = await supabase
-                .from('messages')
-                .update({ is_read: true })
-                .eq('sender_id', selectedUser.id)
-                .eq('receiver_id', user.id)
-                .eq('is_read', false);
+            if (selectedUser) {
+                const { error } = await supabase
+                    .from('messages')
+                    .update({ is_read: true })
+                    .eq('sender_id', selectedUser.id)
+                    .eq('receiver_id', user.id)
+                    .eq('is_read', false);
 
-            if (!error) {
-                setUnreadCounts(prev => ({ ...prev, [selectedUser.id]: 0 }));
+                if (!error) {
+                    setUnreadCounts(prev => ({ ...prev, [selectedUser.id]: 0 }));
+                }
+            } else if (selectedChannel) {
+                // Update last_read_at for channel
+                await supabase
+                    .from('channel_members')
+                    .update({ last_read_at: new Date().toISOString() })
+                    .eq('channel_id', selectedChannel.id)
+                    .eq('user_id', user.id);
+            } else {
+                // Global chat
+                await supabase
+                    .from('profiles')
+                    .update({ last_global_read_at: new Date().toISOString() })
+                    .eq('id', user.id);
             }
         };
 
         markAsRead();
-    }, [selectedUser, messages.length, user?.id]);
+    }, [selectedUser, selectedChannel, messages.length, user?.id]);
 
     useEffect(() => {
         const fetchUsers = async () => {
@@ -319,49 +334,68 @@ const Messaging: React.FC = () => {
     };
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file || !user?.id) return;
-
-        // Validate file type (XML, HTML, HTM)
-        const allowedExtensions = ['xml', 'html', 'htm'];
-        const extension = file.name.split('.').pop()?.toLowerCase();
-        if (!extension || !allowedExtensions.includes(extension)) {
-            alert('Only XML, HTML, and HTM files are allowed.');
-            return;
-        }
+        const files = e.target.files;
+        if (!files || files.length === 0 || !user?.id) return;
 
         setUploadingFile(true);
+        let successCount = 0;
+        let failCount = 0;
+
         try {
-            const fileExt = file.name.split('.').pop();
-            const fileName = `${Math.random()}.${fileExt}`;
-            const filePath = `${user.id}/${fileName}`;
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                
+                // Validate file type (XML, HTML, HTM, Images, PDFs)
+                const allowedExtensions = ['xml', 'html', 'htm', 'png', 'jpg', 'jpeg', 'gif', 'pdf', 'docx', 'txt'];
+                const extension = file.name.split('.').pop()?.toLowerCase();
+                
+                if (!extension || !allowedExtensions.includes(extension)) {
+                    console.warn(`Skipping file ${file.name}: Unsupported type.`);
+                    failCount++;
+                    continue;
+                }
 
-            const { error: uploadError } = await supabase.storage
-                .from('chat-attachments')
-                .upload(filePath, file);
+                try {
+                    const fileExt = file.name.split('.').pop();
+                    const fileName = `${Math.random()}.${fileExt}`;
+                    const filePath = `${user.id}/${fileName}`;
 
-            if (uploadError) throw uploadError;
+                    const { error: uploadError } = await supabase.storage
+                        .from('chat-attachments')
+                        .upload(filePath, file);
 
-            const { data: { publicUrl } } = supabase.storage
-                .from('chat-attachments')
-                .getPublicUrl(filePath);
+                    if (uploadError) throw uploadError;
 
-            // Send message with file
-            const { error: msgError } = await supabase
-                .from('messages')
-                .insert({
-                    sender_id: user.id,
-                    receiver_id: selectedChannel ? null : (selectedUser?.id || null),
-                    channel_id: selectedChannel?.id || null,
-                    content: `Sent a file: ${file.name}`,
-                    file_url: publicUrl,
-                    file_name: file.name
-                });
+                    const { data: { publicUrl } } = supabase.storage
+                        .from('chat-attachments')
+                        .getPublicUrl(filePath);
 
-            if (msgError) throw msgError;
+                    // Send message with file
+                    const { error: msgError } = await supabase
+                        .from('messages')
+                        .insert({
+                            sender_id: user.id,
+                            receiver_id: selectedChannel ? null : (selectedUser?.id || null),
+                            channel_id: selectedChannel?.id || null,
+                            content: `Sent a file: ${file.name}`,
+                            file_url: publicUrl,
+                            file_name: file.name
+                        });
+
+                    if (msgError) throw msgError;
+                    successCount++;
+                } catch (err) {
+                    console.error(`Error uploading ${file.name}:`, err);
+                    failCount++;
+                }
+            }
+
+            if (failCount > 0) {
+                alert(`Uploaded ${successCount} files. ${failCount} files failed.`);
+            }
         } catch (error) {
-            console.error('Error uploading file:', error);
-            alert('Failed to upload file.');
+            console.error('Error in multiple file upload:', error);
+            alert('An error occurred during file upload.');
         } finally {
             setUploadingFile(false);
             if (fileInputRef.current) fileInputRef.current.value = '';
@@ -497,8 +531,29 @@ const Messaging: React.FC = () => {
     };
 
     const handleClearChat = () => {
+        if (!selectedUser && !selectedChannel) {
+            alert('Global chat cannot be cleared. You can only clear direct messages or channel history.');
+            return;
+        }
         setIsClearChatModalOpen(true);
         setClearChatConfirmText('');
+    };
+
+    const handleDeleteMessage = async (messageId: string) => {
+        try {
+            const { error } = await supabase
+                .from('messages')
+                .delete()
+                .eq('id', messageId)
+                .eq('sender_id', user?.id); // Security: Only allow deleting own messages
+
+            if (error) throw error;
+
+            setMessages(prev => prev.filter(m => m.id !== messageId));
+        } catch (error) {
+            console.error('Error deleting message:', error);
+            alert('Failed to delete message.');
+        }
     };
 
     const executeClearChat = async () => {
@@ -508,8 +563,12 @@ const Messaging: React.FC = () => {
         
         if (selectedUser) {
             query = query.or(`and(sender_id.eq.${user.id},receiver_id.eq.${selectedUser.id}),and(sender_id.eq.${selectedUser.id},receiver_id.eq.${user.id})`);
+        } else if (selectedChannel) {
+            query = query.eq('channel_id', selectedChannel.id);
         } else {
-            query = query.is('receiver_id', null);
+            // This should not be reachable due to handleClearChat check, but for safety:
+            alert('Global chat cannot be cleared.');
+            return;
         }
 
         const { error } = await query;
@@ -891,11 +950,20 @@ const Messaging: React.FC = () => {
                                                     {msg.sender?.display_name || msg.sender?.email.split('@')[0]}
                                                 </span>
                                             )}
-                                            <div className={`px-4 py-3 rounded-2xl text-sm font-medium shadow-sm border ${
+                                            <div className={`px-4 py-3 rounded-2xl text-sm font-medium shadow-sm border relative group ${
                                                 isMe 
                                                 ? 'bg-indigo-600 text-white border-indigo-500 rounded-br-none' 
                                                 : 'bg-white text-slate-700 border-slate-100 rounded-bl-none'
                                             }`}>
+                                                {isMe && (
+                                                    <button 
+                                                        onClick={() => handleDeleteMessage(msg.id)}
+                                                        className="absolute -top-2 -right-2 p-1.5 bg-white text-rose-500 rounded-lg shadow-lg border border-slate-100 opacity-0 group-hover:opacity-100 transition-all hover:bg-rose-50"
+                                                        title="Delete Message"
+                                                    >
+                                                        <Trash2 size={12} />
+                                                    </button>
+                                                )}
                                                 {msg.file_url ? (
                                                     <div className="flex flex-col gap-2">
                                                         <div className="flex items-center gap-3 p-2 bg-black/5 rounded-xl border border-black/10">
@@ -1018,14 +1086,15 @@ const Messaging: React.FC = () => {
                                     ref={fileInputRef}
                                     onChange={handleFileUpload}
                                     className="hidden"
-                                    accept=".xml,.html,.htm"
+                                    accept=".xml,.html,.htm,.png,.jpg,.jpeg,.gif,.pdf,.docx,.txt"
+                                    multiple
                                 />
                                 <button 
                                     type="button"
                                     onClick={() => fileInputRef.current?.click()}
                                     disabled={uploadingFile}
                                     className={`p-2.5 rounded-xl transition-all ${uploadingFile ? 'bg-slate-50 text-slate-300' : 'hover:bg-indigo-50 text-indigo-600 active:scale-95'}`}
-                                    title="Upload XML, HTML, or HTM file"
+                                    title="Upload files"
                                 >
                                     {uploadingFile ? (
                                         <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>

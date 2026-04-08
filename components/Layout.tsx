@@ -40,6 +40,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
     const [isAnnouncementUnread, setIsAnnouncementUnread] = useState(false);
     const [isExiting, setIsExiting] = useState(false);
     const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+    const [hasNewMessages, setHasNewMessages] = useState(false);
     const [toast, setToast] = useState<{ msg: string, type: 'success' | 'warn' | 'error' | 'info' } | null>(null);
     
     const isVercel = window.location.hostname.includes('vercel.app');
@@ -130,6 +131,128 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
             window.location.reload();
         }
     };
+
+    useEffect(() => {
+        if (!user?.id) return;
+
+        const checkUnread = async () => {
+            try {
+                // 1. Check Direct Messages
+                const { count: dmCount } = await supabase
+                    .from('messages')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('receiver_id', user.id)
+                    .eq('is_read', false);
+
+                if (dmCount && dmCount > 0) {
+                    setHasNewMessages(true);
+                    return;
+                }
+
+                // 2. Check Global Chat
+                const { data: profileData } = await supabase
+                    .from('profiles')
+                    .select('last_global_read_at')
+                    .eq('id', user.id)
+                    .single();
+
+                if (profileData?.last_global_read_at) {
+                    const { count: globalCount } = await supabase
+                        .from('messages')
+                        .select('*', { count: 'exact', head: true })
+                        .is('receiver_id', null)
+                        .is('channel_id', null)
+                        .gt('created_at', profileData.last_global_read_at)
+                        .neq('sender_id', user.id);
+
+                    if (globalCount && globalCount > 0) {
+                        setHasNewMessages(true);
+                        return;
+                    }
+                }
+
+                // 3. Check Channel Messages
+                const { data: memberships } = await supabase
+                    .from('channel_members')
+                    .select('channel_id, last_read_at')
+                    .eq('user_id', user.id);
+
+                if (memberships && memberships.length > 0) {
+                    for (const membership of memberships) {
+                        const { count: chanCount } = await supabase
+                            .from('messages')
+                            .select('*', { count: 'exact', head: true })
+                            .eq('channel_id', membership.channel_id)
+                            .gt('created_at', membership.last_read_at)
+                            .neq('sender_id', user.id);
+
+                        if (chanCount && chanCount > 0) {
+                            setHasNewMessages(true);
+                            return;
+                        }
+                    }
+                }
+
+                setHasNewMessages(false);
+            } catch (e) {
+                console.error('Error checking unread messages:', e);
+            }
+        };
+
+        checkUnread();
+
+        const channel = supabase
+            .channel('unread-messages-monitor')
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'messages'
+                },
+                (payload) => {
+                    const msg = payload.new;
+                    if (msg.sender_id !== user.id) {
+                        checkUnread();
+                    }
+                }
+            )
+            .on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'messages',
+                    filter: `receiver_id=eq.${user.id}`
+                },
+                () => checkUnread()
+            )
+            .on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'channel_members',
+                    filter: `user_id=eq.${user.id}`
+                },
+                () => checkUnread()
+            )
+            .on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'profiles',
+                    filter: `id=eq.${user.id}`
+                },
+                () => checkUnread()
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [user?.id]);
 
     const isMessaging = location.pathname === '/messaging';
     const isTrial = !!profile?.trial_end;
@@ -225,10 +348,15 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                             {!isLanding && !isExiting && (
                                 <button 
                                     onClick={() => navigate('/messaging')} 
-                                    className={`p-2 rounded-xl transition-all ${location.pathname === '/messaging' ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/50' : 'text-slate-400 hover:text-indigo-600'}`}
+                                    className={`p-2 rounded-xl transition-all relative ${location.pathname === '/messaging' ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/50' : 'text-slate-400 hover:text-indigo-600'}`}
                                     title="Messaging"
                                 >
                                     <MessageCircle size={18} />
+                                    {hasNewMessages && (
+                                        <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[7px] font-black px-1 py-0.5 rounded-md shadow-lg shadow-rose-200 animate-bounce uppercase tracking-tighter">
+                                            New
+                                        </span>
+                                    )}
                                 </button>
                             )}
 

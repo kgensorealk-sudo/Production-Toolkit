@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   email TEXT,
   display_name TEXT,
   avatar_url TEXT,
+  last_global_read_at TIMESTAMPTZ DEFAULT now(),
   role TEXT DEFAULT 'user',
   is_subscribed BOOLEAN DEFAULT false,
   subscription_tier TEXT DEFAULT 'none',
@@ -38,6 +39,9 @@ BEGIN
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'avatar_url') THEN
         ALTER TABLE public.profiles ADD COLUMN avatar_url TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'last_global_read_at') THEN
+        ALTER TABLE public.profiles ADD COLUMN last_global_read_at TIMESTAMPTZ DEFAULT now();
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'notification_preferences') THEN
         ALTER TABLE public.profiles ADD COLUMN notification_preferences JSONB DEFAULT '{"system_alerts": true, "security_updates": true, "maintenance_windows": true}'::jsonb;
@@ -403,10 +407,19 @@ CREATE TABLE IF NOT EXISTS public.channel_members (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   channel_id UUID REFERENCES public.channels(id) ON DELETE CASCADE NOT NULL,
   user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  last_read_at TIMESTAMPTZ DEFAULT now(),
   role TEXT DEFAULT 'member', -- 'member', 'admin'
   joined_at TIMESTAMPTZ DEFAULT now(),
   UNIQUE(channel_id, user_id)
 );
+
+-- Ensure columns exist for channel_members (Migration)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'channel_members' AND column_name = 'last_read_at') THEN
+        ALTER TABLE public.channel_members ADD COLUMN last_read_at TIMESTAMPTZ DEFAULT now();
+    END IF;
+END $$;
 
 -- Add foreign key to messages for channel_id
 DO $$
