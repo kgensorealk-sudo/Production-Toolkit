@@ -36,7 +36,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 const Messaging: React.FC = () => {
-    const { user, profile, isAdmin } = useAuth();
+    const { user, profile, isAdmin, updateProfile } = useAuth();
     const [users, setUsers] = useState<UserProfile[]>([]);
     const [channels, setChannels] = useState<Channel[]>([]);
     const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
@@ -99,18 +99,22 @@ const Messaging: React.FC = () => {
                     setUnreadCounts(prev => ({ ...prev, [selectedUser.id]: 0 }));
                 }
             } else if (selectedChannel) {
-                // Update last_read_at for channel
+                // Update last_read_at for channel using a RPC or just a very recent timestamp
+                // To be safe against clock skew, we can use the latest message's timestamp if available
+                const latestMsg = messages[messages.length - 1];
+                const timestamp = latestMsg ? latestMsg.created_at : new Date().toISOString();
+                
                 await supabase
                     .from('channel_members')
-                    .update({ last_read_at: new Date().toISOString() })
+                    .update({ last_read_at: timestamp })
                     .eq('channel_id', selectedChannel.id)
                     .eq('user_id', user.id);
             } else {
                 // Global chat
-                await supabase
-                    .from('profiles')
-                    .update({ last_global_read_at: new Date().toISOString() })
-                    .eq('id', user.id);
+                const latestMsg = messages[messages.length - 1];
+                const timestamp = latestMsg ? latestMsg.created_at : new Date().toISOString();
+
+                await updateProfile({ last_global_read_at: timestamp });
             }
         };
 

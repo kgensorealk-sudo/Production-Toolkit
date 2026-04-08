@@ -133,76 +133,82 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
     };
 
     useEffect(() => {
-        if (!user?.id) return;
+        if (!user?.id || authLoading) return;
 
+        let isMounted = true;
         const checkUnread = async () => {
+            if (!isMounted) return;
             try {
                 // 1. Check Direct Messages
-                const { count: dmCount } = await supabase
+                const { count: dmCount, error: dmError } = await supabase
                     .from('messages')
                     .select('*', { count: 'exact', head: true })
                     .eq('receiver_id', user.id)
                     .eq('is_read', false);
 
+                if (dmError) throw dmError;
+
                 if (dmCount && dmCount > 0) {
-                    setHasNewMessages(true);
+                    if (isMounted) setHasNewMessages(true);
                     return;
                 }
 
                 // 2. Check Global Chat
-                const { data: profileData } = await supabase
-                    .from('profiles')
-                    .select('last_global_read_at')
-                    .eq('id', user.id)
-                    .single();
+                const lastGlobalRead = profile?.last_global_read_at || '1970-01-01T00:00:00Z';
+                const { count: globalCount, error: globalError } = await supabase
+                    .from('messages')
+                    .select('*', { count: 'exact', head: true })
+                    .is('receiver_id', null)
+                    .is('channel_id', null)
+                    .gt('created_at', lastGlobalRead)
+                    .neq('sender_id', user.id);
 
-                if (profileData?.last_global_read_at) {
-                    const { count: globalCount } = await supabase
-                        .from('messages')
-                        .select('*', { count: 'exact', head: true })
-                        .is('receiver_id', null)
-                        .is('channel_id', null)
-                        .gt('created_at', profileData.last_global_read_at)
-                        .neq('sender_id', user.id);
+                if (globalError) throw globalError;
 
-                    if (globalCount && globalCount > 0) {
-                        setHasNewMessages(true);
-                        return;
-                    }
+                if (globalCount && globalCount > 0) {
+                    if (isMounted) setHasNewMessages(true);
+                    return;
                 }
 
                 // 3. Check Channel Messages
-                const { data: memberships } = await supabase
+                const { data: memberships, error: memError } = await supabase
                     .from('channel_members')
                     .select('channel_id, last_read_at')
                     .eq('user_id', user.id);
 
+                if (memError) throw memError;
+
                 if (memberships && memberships.length > 0) {
                     for (const membership of memberships) {
-                        const { count: chanCount } = await supabase
+                        const lastRead = membership.last_read_at || '1970-01-01T00:00:00Z';
+                        const { count: chanCount, error: chanError } = await supabase
                             .from('messages')
                             .select('*', { count: 'exact', head: true })
                             .eq('channel_id', membership.channel_id)
-                            .gt('created_at', membership.last_read_at)
+                            .gt('created_at', lastRead)
                             .neq('sender_id', user.id);
 
+                        if (chanError) throw chanError;
+
                         if (chanCount && chanCount > 0) {
-                            setHasNewMessages(true);
+                            if (isMounted) setHasNewMessages(true);
                             return;
                         }
                     }
                 }
 
-                setHasNewMessages(false);
+                if (isMounted) setHasNewMessages(false);
             } catch (e) {
                 console.error('Error checking unread messages:', e);
             }
         };
 
+        // Initial check
         checkUnread();
 
+        // Set up real-time subscription
         const channel = supabase
-            .channel('unread-messages-monitor')
+            .channel(`unread-monitor-${user.id}`)
             .on(
                 'postgres_changes',
                 {
@@ -212,6 +218,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                 },
                 (payload) => {
                     const msg = payload.new;
+                    // Trigger check if message is for this user or in a channel they belong to
+                    // Or if it's a global message
                     if (msg.sender_id !== user.id) {
                         checkUnread();
                     }
@@ -240,6 +248,26 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
             .on(
                 'postgres_changes',
                 {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'channel_members',
+                    filter: `user_id=eq.${user.id}`
+                },
+                () => checkUnread()
+            )
+            .on(
+                'postgres_changes',
+                {
+                    event: 'DELETE',
+                    schema: 'public',
+                    table: 'channel_members',
+                    filter: `user_id=eq.${user.id}`
+                },
+                () => checkUnread()
+            )
+            .on(
+                'postgres_changes',
+                {
                     event: 'UPDATE',
                     schema: 'public',
                     table: 'profiles',
@@ -247,12 +275,21 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                 },
                 () => checkUnread()
             )
-            .subscribe();
+            .subscribe((status) => {
+                if (status === 'SUBSCRIBED') {
+                    checkUnread(); // Re-check once subscribed to be safe
+                }
+            });
+
+        // Periodic check as a fallback
+        const interval = setInterval(checkUnread, 30000);
 
         return () => {
+            isMounted = false;
+            clearInterval(interval);
             supabase.removeChannel(channel);
         };
-    }, [user?.id]);
+    }, [user?.id, authLoading, profile?.last_global_read_at]);
 
     const isMessaging = location.pathname === '/messaging';
     const isTrial = !!profile?.trial_end;

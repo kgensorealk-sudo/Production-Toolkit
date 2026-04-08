@@ -43,6 +43,7 @@ export interface UserProfile {
     trial_start?: string;
     trial_end?: string;
     last_seen?: string;
+    last_global_read_at?: string;
     unlocked_tools: string[]; // List of tool IDs unlocked via keys
     notification_preferences?: {
         system_alerts: boolean;
@@ -66,6 +67,7 @@ export interface ChannelMember {
     id: string;
     channel_id: string;
     user_id: string;
+    last_read_at?: string;
     role: 'member' | 'admin';
     joined_at: string;
 }
