@@ -135,6 +135,7 @@ const Messaging: React.FC = () => {
     const [editContent, setEditContent] = useState('');
     const [threadMessage, setThreadMessage] = useState('');
     const [threadMessages, setThreadMessages] = useState<Message[]>([]);
+    const [replyCounts, setReplyCounts] = useState<Record<string, number>>({});
     const [activeTab, setActiveTab] = useState<'details' | 'files' | 'pinned'>('details');
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const [activeReactionPicker, setActiveReactionPicker] = useState<string | null>(null);
@@ -220,6 +221,31 @@ const Messaging: React.FC = () => {
 
         markAsRead();
     }, [selectedUser, selectedChannel, messages.length, user?.id]);
+
+    // Fetch reply counts for all messages in the current view
+    useEffect(() => {
+        if (!messages.length) return;
+
+        const fetchReplyCounts = async () => {
+            const messageIds = messages.map(m => m.id);
+            const { data, error } = await supabase
+                .from('messages')
+                .select('parent_id')
+                .in('parent_id', messageIds);
+
+            if (!error && data) {
+                const counts: Record<string, number> = {};
+                data.forEach(reply => {
+                    if (reply.parent_id) {
+                        counts[reply.parent_id] = (counts[reply.parent_id] || 0) + 1;
+                    }
+                });
+                setReplyCounts(counts);
+            }
+        };
+
+        fetchReplyCounts();
+    }, [messages]);
 
     // Fetch read receipts
     useEffect(() => {
@@ -599,6 +625,14 @@ const Messaging: React.FC = () => {
                             setSelectedThreadParent(prev => prev ? { ...prev, ...updatedMsg } : null);
                         }
                         setThreadMessages(prev => prev.map(m => m.id === updatedMsg.id ? { ...m, ...updatedMsg } : m));
+                        
+                        // If it's a direct message being marked as read, update local unread counts
+                        if (updatedMsg.is_read && updatedMsg.receiver_id === user.id) {
+                            setUnreadCounts(prev => ({
+                                ...prev,
+                                [updatedMsg.sender_id]: Math.max(0, (prev[updatedMsg.sender_id] || 0) - 1)
+                            }));
+                        }
                     }
                 }
             )
@@ -1581,9 +1615,9 @@ const Messaging: React.FC = () => {
                                                 </div>
 
                                                 {activeReactionPicker === msg.id && (
-                                                    <div className={`absolute bottom-full ${isMe ? 'right-0' : 'left-0'} mb-2 z-50`}>
+                                                    <div className={`absolute top-full ${isMe ? 'right-0' : 'left-0'} mt-2 z-50`}>
                                                         <motion.div 
-                                                            initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                                                            initial={{ opacity: 0, scale: 0.9, y: -10 }}
                                                             animate={{ opacity: 1, scale: 1, y: 0 }}
                                                             className="flex items-center gap-1 p-1.5 bg-white rounded-2xl shadow-2xl border border-slate-100"
                                                         >
@@ -1758,11 +1792,16 @@ const Messaging: React.FC = () => {
                                                                 return acc;
                                                             }, {} as Record<string, number>)
                                                         ).map(([emoji, count]) => {
+                                                            const reactingUsers = msg.reactions
+                                                                ?.filter(r => r.emoji === emoji)
+                                                                .map(r => r.user?.display_name || r.user?.email.split('@')[0] || 'Unknown')
+                                                                .join(', ');
                                                             const hasReacted = msg.reactions?.some(r => r.user_id === user?.id && r.emoji === emoji);
                                                             return (
                                                                 <button 
                                                                     key={emoji}
                                                                     onClick={() => handleReaction(msg.id, emoji)}
+                                                                    title={reactingUsers}
                                                                     className={`flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[10px] font-bold border transition-all ${
                                                                         hasReacted
                                                                             ? 'bg-indigo-50 border-indigo-200 text-indigo-600'
@@ -1783,7 +1822,7 @@ const Messaging: React.FC = () => {
                                                     className={`mt-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest hover:underline ${isMe ? 'text-white/80' : 'text-indigo-600'}`}
                                                 >
                                                     <MessageCircle size={12} />
-                                                    View Thread
+                                                    {replyCounts[msg.id] ? `View ${replyCounts[msg.id]} ${replyCounts[msg.id] === 1 ? 'Reply' : 'Replies'}` : 'View Thread'}
                                                 </button>
                                             </>
                                         )}
@@ -2507,9 +2546,9 @@ const Messaging: React.FC = () => {
                                                         </div>
 
                                                         {activeReactionPicker === reply.id && (
-                                                            <div className="absolute bottom-full right-0 mb-2 z-50">
+                                                            <div className="absolute top-full right-0 mt-2 z-50">
                                                                 <motion.div 
-                                                                    initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                                                                    initial={{ opacity: 0, scale: 0.9, y: -10 }}
                                                                     animate={{ opacity: 1, scale: 1, y: 0 }}
                                                                     className="flex items-center gap-1 p-1 bg-white rounded-xl shadow-2xl border border-slate-100"
                                                                 >
@@ -2539,11 +2578,16 @@ const Messaging: React.FC = () => {
                                                                     return acc;
                                                                 }, {} as Record<string, number>)
                                                             ).map(([emoji, count]) => {
+                                                                const reactingUsers = reply.reactions
+                                                                    ?.filter(r => r.emoji === emoji)
+                                                                    .map(r => r.user?.display_name || r.user?.email.split('@')[0] || 'Unknown')
+                                                                    .join(', ');
                                                                 const hasReacted = reply.reactions?.some(r => r.user_id === user?.id && r.emoji === emoji);
                                                                 return (
                                                                     <button 
                                                                         key={emoji}
                                                                         onClick={() => handleReaction(reply.id, emoji)}
+                                                                        title={reactingUsers}
                                                                         className={`flex items-center gap-1 px-1 py-0.5 rounded-lg text-[8px] font-bold border transition-all ${
                                                                             hasReacted
                                                                                 ? 'bg-indigo-50 border-indigo-200 text-indigo-600'
