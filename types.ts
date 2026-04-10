@@ -103,13 +103,34 @@ export interface Message {
     sender_id: string;
     receiver_id: string | null;
     channel_id?: string | null;
+    parent_id?: string | null;
     content: string;
     file_url?: string | null;
     file_name?: string | null;
     is_read: boolean;
+    is_edited?: boolean;
+    is_pinned?: boolean;
     created_at: string;
     sender?: UserProfile;
     receiver?: UserProfile;
+    reactions?: Reaction[];
+    link_preview?: LinkPreview | null;
+}
+
+export interface Reaction {
+    id: string;
+    message_id: string;
+    user_id: string;
+    emoji: string;
+    created_at: string;
+    user?: UserProfile;
+}
+
+export interface LinkPreview {
+    title: string;
+    description: string;
+    image: string;
+    url: string;
 }
 
 export interface DefaultAvatar {

@@ -380,11 +380,23 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'messages' AND column_name = 'channel_id') THEN
         ALTER TABLE public.messages ADD COLUMN channel_id UUID;
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'messages' AND column_name = 'parent_id') THEN
+        ALTER TABLE public.messages ADD COLUMN parent_id UUID REFERENCES public.messages(id) ON DELETE CASCADE;
+    END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'messages' AND column_name = 'file_url') THEN
         ALTER TABLE public.messages ADD COLUMN file_url TEXT;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'messages' AND column_name = 'file_name') THEN
         ALTER TABLE public.messages ADD COLUMN file_name TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'messages' AND column_name = 'is_edited') THEN
+        ALTER TABLE public.messages ADD COLUMN is_edited BOOLEAN DEFAULT false;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'messages' AND column_name = 'is_pinned') THEN
+        ALTER TABLE public.messages ADD COLUMN is_pinned BOOLEAN DEFAULT false;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'messages' AND column_name = 'link_preview') THEN
+        ALTER TABLE public.messages ADD COLUMN link_preview JSONB;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'channels' AND column_name = 'notes') THEN
         ALTER TABLE public.channels ADD COLUMN notes TEXT;
@@ -496,6 +508,8 @@ CREATE POLICY "Admins can manage members" ON public.channel_members
   WITH CHECK ( is_admin() );
 
 -- Update messages policies for channels
+ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+
 DROP POLICY IF EXISTS "Users can view their own messages" ON public.messages;
 CREATE POLICY "Users can view their own messages" 
 ON public.messages FOR SELECT 
@@ -507,6 +521,24 @@ USING (
   (receiver_id IS NULL AND channel_id IS NULL) OR -- Global chat
   (channel_id IS NOT NULL AND (is_channel_public(channel_id) OR is_channel_member(channel_id)))
 );
+
+DROP POLICY IF EXISTS "Users can insert messages" ON public.messages;
+CREATE POLICY "Users can insert messages" 
+ON public.messages FOR INSERT 
+TO authenticated
+WITH CHECK ( auth.uid() = sender_id );
+
+DROP POLICY IF EXISTS "Users can update own messages" ON public.messages;
+CREATE POLICY "Users can update own messages" 
+ON public.messages FOR UPDATE 
+TO authenticated
+USING ( auth.uid() = sender_id OR is_admin() );
+
+DROP POLICY IF EXISTS "Users can delete own messages" ON public.messages;
+CREATE POLICY "Users can delete own messages" 
+ON public.messages FOR DELETE 
+TO authenticated
+USING ( auth.uid() = sender_id OR is_admin() );
 
 -- 25. STORAGE BUCKET FOR ATTACHMENTS
 INSERT INTO storage.buckets (id, name, public)
@@ -549,3 +581,43 @@ DROP POLICY IF EXISTS "Users can unblock others" ON public.blocked_users;
 CREATE POLICY "Users can unblock others" ON public.blocked_users
   FOR DELETE TO authenticated
   USING ( auth.uid() = blocker_id );
+
+-- 26. MESSAGE REACTIONS TABLE
+CREATE TABLE IF NOT EXISTS public.message_reactions (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  message_id UUID REFERENCES public.messages(id) ON DELETE CASCADE NOT NULL,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  emoji TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(message_id, user_id, emoji)
+);
+
+ALTER TABLE public.message_reactions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Reactions visible to everyone who can see the message" ON public.message_reactions;
+CREATE POLICY "Reactions visible to everyone who can see the message" ON public.message_reactions
+  FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.messages m
+      WHERE m.id = message_id
+    )
+  );
+
+DROP POLICY IF EXISTS "Users can add reactions" ON public.message_reactions;
+CREATE POLICY "Users can add reactions" ON public.message_reactions
+  FOR INSERT TO authenticated
+  WITH CHECK ( auth.uid() = user_id );
+
+DROP POLICY IF EXISTS "Users can remove their own reactions" ON public.message_reactions;
+CREATE POLICY "Users can remove their own reactions" ON public.message_reactions
+  FOR DELETE TO authenticated
+  USING ( auth.uid() = user_id );
+
+-- Enable Realtime for message_reactions
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'message_reactions') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.message_reactions;
+  END IF;
+END $$;

@@ -41,6 +41,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
     const [isExiting, setIsExiting] = useState(false);
     const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
     const [hasNewMessages, setHasNewMessages] = useState(false);
+    const [hasMentions, setHasMentions] = useState(false);
     const [toast, setToast] = useState<{ msg: string, type: 'success' | 'warn' | 'error' | 'info' } | null>(null);
     
     const isVercel = window.location.hostname.includes('vercel.app');
@@ -150,6 +151,20 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
 
                 if (dmCount && dmCount > 0) {
                     if (isMounted) setHasNewMessages(true);
+                    // Check for mentions in DMs (though DMs are already personal, we might still want to highlight mentions)
+                    const { data: dmMsgs } = await supabase
+                        .from('messages')
+                        .select('content')
+                        .eq('receiver_id', user.id)
+                        .eq('is_read', false);
+                    
+                    if (dmMsgs && profile) {
+                        const myName = profile.display_name || profile.email.split('@')[0];
+                        const mentionRegex = new RegExp(`@${myName}\\b|@Channel\\b`, 'i');
+                        if (dmMsgs.some(m => m.content && mentionRegex.test(m.content))) {
+                            if (isMounted) setHasMentions(true);
+                        }
+                    }
                     return;
                 }
 
@@ -168,6 +183,22 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                 if (globalCount && globalCount > 0) {
                     console.log(`Unread Global Messages: ${globalCount} (after ${lastGlobalRead})`);
                     if (isMounted) setHasNewMessages(true);
+                    
+                    const { data: globalMsgs } = await supabase
+                        .from('messages')
+                        .select('content')
+                        .is('receiver_id', null)
+                        .is('channel_id', null)
+                        .gt('created_at', lastGlobalRead)
+                        .neq('sender_id', user.id);
+                    
+                    if (globalMsgs && profile) {
+                        const myName = profile.display_name || profile.email.split('@')[0];
+                        const mentionRegex = new RegExp(`@${myName}\\b|@Channel\\b`, 'i');
+                        if (globalMsgs.some(m => m.content && mentionRegex.test(m.content))) {
+                            if (isMounted) setHasMentions(true);
+                        }
+                    }
                     return;
                 }
 
@@ -194,12 +225,30 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                         if (chanCount && chanCount > 0) {
                             console.log(`Unread Channel Messages in ${membership.channel_id}: ${chanCount} (after ${lastRead})`);
                             if (isMounted) setHasNewMessages(true);
+                            
+                            const { data: chanMsgs } = await supabase
+                                .from('messages')
+                                .select('content')
+                                .eq('channel_id', membership.channel_id)
+                                .gt('created_at', lastRead)
+                                .neq('sender_id', user.id);
+                            
+                            if (chanMsgs && profile) {
+                                const myName = profile.display_name || profile.email.split('@')[0];
+                                const mentionRegex = new RegExp(`@${myName}\\b|@Channel\\b`, 'i');
+                                if (chanMsgs.some(m => m.content && mentionRegex.test(m.content))) {
+                                    if (isMounted) setHasMentions(true);
+                                }
+                            }
                             return;
                         }
                     }
                 }
 
-                if (isMounted) setHasNewMessages(false);
+                if (isMounted) {
+                    setHasNewMessages(false);
+                    setHasMentions(false);
+                }
             } catch (e) {
                 console.error('Error checking unread messages:', e);
             }
@@ -399,7 +448,11 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                                     title="Messaging"
                                 >
                                     <MessageCircle size={18} />
-                                    {hasNewMessages && (
+                                    {hasMentions ? (
+                                        <span className="absolute -top-1 -right-1 bg-indigo-600 text-white text-[7px] font-black px-1 py-0.5 rounded-md shadow-lg shadow-indigo-200 animate-bounce uppercase tracking-tighter ring-2 ring-white">
+                                            Mention
+                                        </span>
+                                    ) : hasNewMessages && (
                                         <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[7px] font-black px-1 py-0.5 rounded-md shadow-lg shadow-rose-200 animate-bounce uppercase tracking-tighter">
                                             New
                                         </span>
