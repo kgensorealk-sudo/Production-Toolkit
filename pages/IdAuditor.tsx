@@ -15,6 +15,7 @@ interface AuditItem {
     isOtherRef: boolean;
     hasNameSpacingViolation: boolean;
     isLengthViolation: boolean;
+    isDuplicate: boolean;
     preview: string;
     fullTag: string;
 }
@@ -209,6 +210,7 @@ const IdAuditor: React.FC = () => {
         setTimeout(() => {
             try {
                 const results: AuditItem[] = [];
+                const idMap = new Map<string, number>(); // Track ID occurrences
                 
                 ID_CONFIG.forEach(({ tag, prefix }) => {
                     const tagRegex = new RegExp(`<${tag}\\b[^>]*?\\bid="([^"]+)"[^>]*>`, 'g');
@@ -218,6 +220,9 @@ const IdAuditor: React.FC = () => {
                         const originalId = match[1];
                         const fullOpeningTag = match[0];
                         
+                        // Track duplicates
+                        idMap.set(originalId, (idMap.get(originalId) || 0) + 1);
+
                         const elementEndIdx = input.indexOf(`</${tag}>`, match.index);
                         const elementContent = elementEndIdx !== -1 
                             ? input.substring(match.index, elementEndIdx + `</${tag}>`.length)
@@ -247,13 +252,25 @@ const IdAuditor: React.FC = () => {
                             originalId: originalId,
                             tagName: tag,
                             expectedPrefix: prefix,
-                            status: (isInvalidId || hasNameSpacingViolation) ? 'invalid' : 'valid',
+                            status: 'valid', // Will update below
                             isOtherRef,
                             hasNameSpacingViolation,
                             isLengthViolation,
+                            isDuplicate: false, // Will update below
                             preview: elementContent.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 100) + '...',
                             fullTag: fullOpeningTag
                         });
+                    }
+                });
+
+                // Post-process for duplicates and final status
+                results.forEach(item => {
+                    item.isDuplicate = (idMap.get(item.originalId) || 0) > 1;
+                    const strictIdRegex = new RegExp(`^${item.expectedPrefix}\\d{4}$`, 'i');
+                    const isValidId = strictIdRegex.test(item.originalId);
+                    
+                    if (!isValidId || item.hasNameSpacingViolation || item.isDuplicate) {
+                        item.status = 'invalid';
                     }
                 });
 
@@ -302,37 +319,40 @@ const IdAuditor: React.FC = () => {
                     return `${open}${fixed}${close}`;
                 });
 
-                // 2. ID Mapping Logic
+                // 2. ID Mapping & Replacement Logic
                 const mapping = new Map<string, string>();
                 const counters: Record<string, number> = { bb: 3000, rf: 3000, se: 3000, ir: 3000, ca: 3000, cf: 3000 };
-                
-                auditResults.forEach(item => {
-                    const strictIdRegex = new RegExp(`^${item.expectedPrefix}\\d{4}$`, 'i');
-                    if (!strictIdRegex.test(item.id)) {
-                        const prefix = item.expectedPrefix;
-                        const newIdNum = counters[prefix].toString().padStart(4, '0');
-                        const newId = `${prefix}${newIdNum}`;
-                        mapping.set(item.originalId, newId);
-                        counters[prefix] += 5;
-                    }
+                const seenIdsInOutput = new Set<string>();
+
+                // We iterate through each tag type and replace occurrences one by one
+                ID_CONFIG.forEach(({ tag, prefix }) => {
+                    const tagRegex = new RegExp(`(<${tag}\\b[^>]*?\\bid=")([^"]+)("[^>]*>)`, 'g');
+                    processedXml = processedXml.replace(tagRegex, (match, start, id, end) => {
+                        const strictIdRegex = new RegExp(`^${prefix}\\d{4}$`, 'i');
+                        const isInvalid = !strictIdRegex.test(id);
+                        const isDuplicate = seenIdsInOutput.has(id);
+
+                        if (isInvalid || isDuplicate) {
+                            const newIdNum = counters[prefix].toString().padStart(4, '0');
+                            const newId = `${prefix}${newIdNum}`;
+                            counters[prefix] += 5;
+                            mapping.set(id, newId); // Store mapping for refid updates (last one wins if duplicate)
+                            seenIdsInOutput.add(newId);
+                            return `${start}${newId}${end}`;
+                        } else {
+                            seenIdsInOutput.add(id);
+                            return match;
+                        }
+                    });
                 });
 
-                // 3. ID Attribute replacements with temporary placeholders
-                mapping.forEach((newId, oldId) => {
-                    const idPattern = new RegExp(`\\bid="${oldId}"`, 'g');
-                    processedXml = processedXml.replace(idPattern, `id="##TEMP_ID_${newId}##"`);
-                });
-
-                // 4. Remap cross-references (refid)
+                // 3. Remap cross-references (refid)
                 const refRegex = /\brefid="([^"]+)"/g;
                 processedXml = processedXml.replace(refRegex, (match, refidAttr) => {
                     const ids = refidAttr.split(/\s+/).filter((id: string) => id.trim() !== '');
                     const updatedIds = ids.map((id: string) => mapping.get(id) || id);
                     return `refid="${updatedIds.join(' ')}"`;
                 });
-
-                // 5. Finalize placeholders
-                processedXml = processedXml.replace(/id="##TEMP_ID_([^#]+)##"/g, 'id="$1"');
 
                 setOutput(processedXml);
                 generateDiff(input, processedXml);
@@ -465,6 +485,11 @@ const IdAuditor: React.FC = () => {
                                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 py-1 bg-slate-50 rounded border border-slate-100">
                                                     Tag: {res.tagName}
                                                 </span>
+                                                {res.isDuplicate && (
+                                                    <span className="text-[9px] font-black uppercase bg-rose-600 text-white px-2 py-1 rounded border border-rose-700 shadow-sm">
+                                                        Duplicate ID
+                                                    </span>
+                                                )}
                                                 {res.isLengthViolation && (
                                                     <span className="text-[9px] font-black uppercase bg-rose-500 text-white px-2 py-1 rounded border border-rose-600 shadow-sm">
                                                         ID Length Violation
