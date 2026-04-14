@@ -32,7 +32,7 @@ interface AuditItem {
     status: 'fixed' | 'warning' | 'skip';
     doi?: string;
     msg: string;
-    type?: 'doi' | 'name' | 'id-fix' | 'source-text';
+    type?: 'doi' | 'name' | 'id-fix' | 'source-text' | 'ir-fix';
 }
 
 const StructuralNodeArchitect: React.FC = () => {
@@ -44,60 +44,143 @@ const StructuralNodeArchitect: React.FC = () => {
     const [isProcessing, setIsProcessing] = useState(false);
     const [step, setStep] = useState<'input' | 'analyzing' | 'completed'>('input');
     const [activeTab, setActiveTab] = useState<'input' | 'analysis' | 'result'>('input');
+    const [resultMode, setResultMode] = useState<'full' | 'refs'>('full');
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
     const [currentChangeIndex, setCurrentChangeIndex] = useState(-1);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const analyzedDocRef = useRef<Document | null>(null);
     const diffContainerRef = useRef<HTMLDivElement>(null);
     const wasWrappedRef = useRef<boolean>(false);
 
     const NS_DECLS = `xmlns:ce="http://www.elsevier.com/xml/common/dtd" xmlns:sb="http://www.elsevier.com/xml/common/structbib/dtd" xmlns:xlink="http://www.w3.org/1999/xlink"`;
 
     const generateSourceText = (sbRef: Element): string => {
+        if (sbRef.tagName.includes('other-ref')) {
+            let text = sbRef.textContent?.trim() || "";
+            if (text && !text.endsWith(".")) text += ".";
+            return text;
+        }
+
         const authors: string[] = [];
-        const authorNodes = Array.from(sbRef.getElementsByTagName("sb:author"));
+        
+        // 1. Authors
+        const authorNodes = Array.from(sbRef.getElementsByTagName("sb:author")).concat(Array.from(sbRef.getElementsByTagName("ce:author")));
         authorNodes.forEach(author => {
-            const given = author.getElementsByTagName("ce:given-name")[0]?.textContent || "";
-            const surname = author.getElementsByTagName("ce:surname")[0]?.textContent || "";
+            const given = author.getElementsByTagName("ce:given-name")[0]?.textContent || author.getElementsByTagName("sb:given-name")[0]?.textContent || "";
+            const surname = author.getElementsByTagName("ce:surname")[0]?.textContent || author.getElementsByTagName("sb:surname")[0]?.textContent || "";
             if (given || surname) {
                 authors.push(`${given} ${surname}`.trim());
+            } else {
+                const indexed = author.getElementsByTagName("ce:indexed-name")[0]?.textContent || author.getElementsByTagName("sb:indexed-name")[0]?.textContent;
+                if (indexed) authors.push(indexed.trim());
             }
         });
 
-        const title = sbRef.getElementsByTagName("sb:maintitle")[0]?.textContent || "";
+        // 2. Collaboration
+        const collaborations = Array.from(sbRef.getElementsByTagName("ce:collaboration")).concat(Array.from(sbRef.getElementsByTagName("sb:collaboration")));
+        collaborations.forEach(collab => {
+            const text = collab.textContent?.trim();
+            if (text) authors.push(text);
+        });
+
+        // 3. Title (check contribution first)
+        let title = "";
+        const contribution = sbRef.getElementsByTagName("sb:contribution")[0] || sbRef.getElementsByTagName("ce:contribution")[0];
+        if (contribution) {
+            title = contribution.getElementsByTagName("sb:maintitle")[0]?.textContent || contribution.getElementsByTagName("ce:maintitle")[0]?.textContent || "";
+        }
+        if (!title) {
+            title = sbRef.getElementsByTagName("sb:maintitle")[0]?.textContent || sbRef.getElementsByTagName("ce:maintitle")[0]?.textContent || "";
+        }
         
-        const host = sbRef.getElementsByTagName("sb:host")[0];
+        // 4. Host (Journal/Book info)
+        const host = sbRef.getElementsByTagName("sb:host")[0] || sbRef.getElementsByTagName("ce:host")[0];
         let journal = "";
         let year = "";
-        let page = "";
+        let volume = "";
+        let issue = "";
+        let pages = "";
+        let articleNum = "";
+        let editors: string[] = [];
 
         if (host) {
-            const mainTitles = Array.from(host.getElementsByTagName("sb:maintitle"));
+            // Journal Title
+            const mainTitles = Array.from(host.getElementsByTagName("sb:maintitle")).concat(Array.from(host.getElementsByTagName("ce:maintitle")));
             if (mainTitles.length > 0) {
                 journal = mainTitles[0].textContent || "";
+            } else {
+                // Try series title
+                const seriesTitle = host.getElementsByTagName("sb:title")[0]?.textContent || host.getElementsByTagName("ce:title")[0]?.textContent;
+                if (seriesTitle) journal = seriesTitle;
             }
             
-            const dateNode = host.getElementsByTagName("sb:date")[0];
+            // Date
+            const dateNode = host.getElementsByTagName("sb:date")[0] || host.getElementsByTagName("ce:date")[0];
             if (dateNode) year = dateNode.textContent || "";
             
-            const pageNode = host.getElementsByTagName("sb:first-page")[0];
-            if (pageNode) page = pageNode.textContent || "";
+            // Volume
+            const volNode = host.getElementsByTagName("sb:volume-nr")[0] || host.getElementsByTagName("ce:volume-nr")[0];
+            if (volNode) volume = volNode.textContent || "";
+            
+            // Issue
+            const issueNode = host.getElementsByTagName("sb:issue-nr")[0] || host.getElementsByTagName("ce:issue-nr")[0];
+            if (issueNode) issue = issueNode.textContent || "";
+
+            // Pages
+            const firstPage = host.getElementsByTagName("sb:first-page")[0]?.textContent || host.getElementsByTagName("ce:first-page")[0]?.textContent || "";
+            const lastPage = host.getElementsByTagName("sb:last-page")[0]?.textContent || host.getElementsByTagName("ce:last-page")[0]?.textContent || "";
+            if (firstPage && lastPage) {
+                pages = `${firstPage}-${lastPage}`;
+            } else if (firstPage) {
+                pages = firstPage;
+            }
+
+            // Article Number
+            const artNode = host.getElementsByTagName("sb:article-number")[0] || host.getElementsByTagName("ce:article-number")[0];
+            if (artNode) articleNum = artNode.textContent || "";
+
+            // Editors
+            const editorNodes = Array.from(host.getElementsByTagName("sb:editor")).concat(Array.from(host.getElementsByTagName("ce:editor")));
+            editorNodes.forEach(ed => {
+                const given = ed.getElementsByTagName("ce:given-name")[0]?.textContent || ed.getElementsByTagName("sb:given-name")[0]?.textContent || "";
+                const surname = ed.getElementsByTagName("ce:surname")[0]?.textContent || ed.getElementsByTagName("sb:surname")[0]?.textContent || "";
+                if (given || surname) editors.push(`${given} ${surname}`.trim());
+            });
         }
 
         let parts: string[] = [];
         if (authors.length > 0) parts.push(authors.join(", "));
         if (title) parts.push(title);
+        
+        if (editors.length > 0) {
+            parts.push(`In: ${editors.join(", ")} (Eds.)`);
+        }
+
         if (journal) {
             let journalPart = journal;
             if (year) journalPart += ` (${year})`;
-            if (page) journalPart += ` ${page}`;
-            parts.push(journalPart);
+            if (volume) journalPart += ` ${volume}`;
+            if (issue) journalPart += ` (${issue})`;
+            if (pages) journalPart += ` ${pages}`;
+            if (articleNum) journalPart += ` ${articleNum}`;
+            parts.push(journalPart.trim());
         } else {
             if (year) parts.push(`(${year})`);
-            if (page) parts.push(page);
+            if (volume) parts.push(volume);
+            if (issue) parts.push(`(${issue})`);
+            if (pages) parts.push(pages);
+            if (articleNum) parts.push(articleNum);
+        }
+
+        // 5. DOI
+        const doiNode = sbRef.getElementsByTagName("ce:doi")[0] || sbRef.getElementsByTagName("sb:doi")[0];
+        const doi = doiNode?.textContent?.trim();
+        if (doi) {
+            parts.push(`https://doi.org/${doi.replace(/^doi:/i, '')}`);
         }
         
-        return parts.join(", ") + ".";
+        let result = parts.filter(p => p.trim()).join(", ");
+        if (result && !result.endsWith(".")) result += ".";
+        return result;
     };
 
     const fixGivenName = (name: string): string => {
@@ -123,40 +206,48 @@ const StructuralNodeArchitect: React.FC = () => {
             const parser = new DOMParser();
             const trimmedInput = input.trim();
             
-            // Only skip wrapping if it's a formal XML document with a declaration.
-            // Fragments (even with one tag) are safer to wrap to handle multiple top-level elements.
-            const isFullXml = trimmedInput.startsWith('<?xml');
-            wasWrappedRef.current = !isFullXml;
+            // Scanner Protocol: Extract bib-reference blocks via Regex to avoid parsing unrelated XML parts
+            const bibRegex = /<ce:bib-reference\b[^>]*>([\s\S]*?)<\/ce:bib-reference>/g;
+            const matches = Array.from(trimmedInput.matchAll(bibRegex));
             
-            const wrappedInput = isFullXml ? trimmedInput : `<root ${NS_DECLS}>${trimmedInput}</root>`;
-            
-            const xmlDoc = parser.parseFromString(wrappedInput, "text/xml");
-            
-            if (xmlDoc.getElementsByTagName("parsererror").length > 0) {
-                const errorMsg = xmlDoc.getElementsByTagName("parsererror")[0].textContent || "Malformed XML tags detected.";
-                throw new Error(`Structural Error: ${errorMsg}`);
-            }
-
-            const references = Array.from(xmlDoc.getElementsByTagName("ce:bib-reference"));
-            
-            if (references.length === 0) {
-                setToast({ msg: 'No <ce:bib-reference> tags found in source.', type: 'warn' });
+            if (matches.length === 0) {
+                setToast({ msg: 'No <ce:bib-reference> tags detected by scanner.', type: 'warn' });
                 setIsProcessing(false);
                 return;
             }
 
             let idCounter = startId;
-            references.forEach((ref, index) => {
+            matches.forEach((match, index) => {
+                const fullBlock = match[0];
+                const wrappedBlock = `<root ${NS_DECLS} xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:sa="http://www.elsevier.com/xml/common/struct-aff/dtd">${fullBlock}</root>`;
+                
+                const fragmentDoc = parser.parseFromString(wrappedBlock, "text/xml");
+                if (fragmentDoc.getElementsByTagName("parsererror").length > 0) {
+                    throw new Error(`Scanner Error in Reference ${index + 1}: Malformed block detected.`);
+                }
+
+                const ref = fragmentDoc.getElementsByTagName("ce:bib-reference")[0];
                 const refId = ref.getAttribute("id") || `REF_${index + 1}`;
-                const sbRef = ref.getElementsByTagName("sb:reference")[0];
+                const sbRef = ref.getElementsByTagName("sb:reference")[0] || ref.getElementsByTagName("ce:reference")[0] || ref.getElementsByTagName("ce:other-ref")[0];
+                
                 if (!sbRef) {
-                    currentAudit.push({ id: refId, status: 'skip', msg: 'MISSING: <sb:reference> not found.' });
+                    currentAudit.push({ id: refId, status: 'skip', msg: 'MISSING: <sb:reference> or <ce:other-ref> not found.' });
                     return;
                 }
 
                 // ID and Source Text Audit
                 const sbId = sbRef.getAttribute("id") || "";
-                if (sbId.startsWith("or")) {
+                if (sbRef.tagName.includes('other-ref')) {
+                    if (!sbId || !sbId.startsWith("or")) {
+                        currentAudit.push({ 
+                            id: refId, 
+                            status: 'fixed', 
+                            msg: `ID: Incorrect prefix for other-ref (${sbId || 'missing'} -> or${idCounter})`, 
+                            type: 'id-fix' 
+                        });
+                        idCounter += 5;
+                    }
+                } else if (sbId.startsWith("or")) {
                     currentAudit.push({ 
                         id: refId, 
                         status: 'fixed', 
@@ -166,8 +257,23 @@ const StructuralNodeArchitect: React.FC = () => {
                     idCounter += 5;
                 }
 
+                // Inter-ref ID Audit
+                const interRefs = Array.from(ref.getElementsByTagName("ce:inter-ref")).concat(Array.from(ref.getElementsByTagName("sb:inter-ref")));
+                interRefs.forEach(ir => {
+                    const irId = ir.getAttribute("id") || "";
+                    if (!irId || irId.startsWith("or")) {
+                        currentAudit.push({ 
+                            id: refId, 
+                            status: 'fixed', 
+                            msg: `INTER-REF: Incorrect ID detected (${irId || 'missing'} -> ir${idCounter})`, 
+                            type: 'ir-fix' 
+                        });
+                        idCounter += 5;
+                    }
+                });
+
                 const sourceText = ref.getElementsByTagName("ce:source-text")[0];
-                if (!sourceText) {
+                if (!sourceText && !sbRef.tagName.includes('other-ref')) {
                     currentAudit.push({ 
                         id: refId, 
                         status: 'fixed', 
@@ -223,11 +329,10 @@ const StructuralNodeArchitect: React.FC = () => {
                 }
             });
 
-            analyzedDocRef.current = xmlDoc;
             setAuditData(currentAudit);
             setStep('analyzing');
             setActiveTab('analysis');
-            setToast({ msg: `Analysis complete. Found ${references.length} references.`, type: 'success' });
+            setToast({ msg: `Scanner complete. Identified ${matches.length} bibliography blocks.`, type: 'success' });
         } catch (err: any) {
             setToast({ msg: err.message, type: 'error' });
         } finally {
@@ -236,32 +341,55 @@ const StructuralNodeArchitect: React.FC = () => {
     };
 
     const executeRepair = () => {
-        if (!analyzedDocRef.current) return;
         setIsProcessing(true);
 
         try {
-            const xmlDoc = analyzedDocRef.current;
-            const references = Array.from(xmlDoc.getElementsByTagName("ce:bib-reference"));
+            const parser = new DOMParser();
+            const serializer = new XMLSerializer();
             const finalAudit: AuditItem[] = [];
-
             let idCounter = startId;
-            references.forEach((ref, index) => {
-                const refId = ref.getAttribute("id") || `REF_${index + 1}`;
-                const sbRef = ref.getElementsByTagName("sb:reference")[0];
+            let refIndex = 0;
+
+            const bibRegex = /<ce:bib-reference\b[^>]*>([\s\S]*?)<\/ce:bib-reference>/g;
+            
+            const repairedXml = input.replace(bibRegex, (fullBlock) => {
+                const wrappedBlock = `<root ${NS_DECLS} xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:sa="http://www.elsevier.com/xml/common/struct-aff/dtd">${fullBlock}</root>`;
+                const fragmentDoc = parser.parseFromString(wrappedBlock, "text/xml");
+                const ref = fragmentDoc.getElementsByTagName("ce:bib-reference")[0];
+                const refId = ref.getAttribute("id") || `REF_${refIndex + 1}`;
+                const sbRef = ref.getElementsByTagName("sb:reference")[0] || ref.getElementsByTagName("ce:reference")[0] || ref.getElementsByTagName("ce:other-ref")[0];
                 
-                // ID and Source Text Repair
                 if (sbRef) {
                     const currentSbId = sbRef.getAttribute("id") || "";
-                    if (currentSbId.startsWith("or")) {
+                    if (sbRef.tagName.includes('other-ref')) {
+                        if (!currentSbId || !currentSbId.startsWith("or")) {
+                            const newId = `or${idCounter}`;
+                            sbRef.setAttribute("id", newId);
+                            finalAudit.push({ id: refId, status: 'fixed', msg: `REPAIRED: other-ref ID corrected to ${newId}.` });
+                            idCounter += 5;
+                        }
+                    } else if (currentSbId.startsWith("or")) {
                         const newId = `rf${idCounter}`;
                         sbRef.setAttribute("id", newId);
                         finalAudit.push({ id: refId, status: 'fixed', msg: `REPAIRED: ID prefix corrected to ${newId}.` });
                         idCounter += 5;
                     }
 
+                    // Inter-ref ID Repair
+                    const interRefs = Array.from(ref.getElementsByTagName("ce:inter-ref")).concat(Array.from(ref.getElementsByTagName("sb:inter-ref")));
+                    interRefs.forEach(ir => {
+                        const irId = ir.getAttribute("id") || "";
+                        if (!irId || irId.startsWith("or")) {
+                            const newIrId = `ir${idCounter}`;
+                            ir.setAttribute("id", newIrId);
+                            finalAudit.push({ id: refId, status: 'fixed', msg: `REPAIRED: Inter-ref ID corrected to ${newIrId}.` });
+                            idCounter += 5;
+                        }
+                    });
+
                     let sourceText = ref.getElementsByTagName("ce:source-text")[0];
-                    if (!sourceText) {
-                        const newSourceText = xmlDoc.createElement("ce:source-text");
+                    if (!sourceText && !sbRef.tagName.includes('other-ref')) {
+                        const newSourceText = fragmentDoc.createElement("ce:source-text");
                         const newSeId = `se${idCounter}`;
                         newSourceText.setAttribute("id", newSeId);
                         newSourceText.textContent = generateSourceText(sbRef);
@@ -269,79 +397,77 @@ const StructuralNodeArchitect: React.FC = () => {
                         finalAudit.push({ id: refId, status: 'fixed', msg: `REPAIRED: Generated source text (${newSeId}).` });
                         idCounter += 5;
                     }
-                }
 
-                // Name Repair
-                const givenNames = Array.from(ref.getElementsByTagName("ce:given-name"));
-                let nameRepaired = false;
-                givenNames.forEach(gn => {
-                    const original = gn.textContent || '';
-                    const fixed = fixGivenName(original);
-                    if (original !== fixed) {
-                        gn.textContent = fixed;
-                        nameRepaired = true;
+                    // Name Repair
+                    const givenNames = Array.from(ref.getElementsByTagName("ce:given-name"));
+                    let nameRepaired = false;
+                    givenNames.forEach(gn => {
+                        const original = gn.textContent || '';
+                        const fixed = fixGivenName(original);
+                        if (original !== fixed) {
+                            gn.textContent = fixed;
+                            nameRepaired = true;
+                        }
+                    });
+                    if (nameRepaired) {
+                        finalAudit.push({ id: refId, status: 'fixed', msg: 'REPAIRED: Initials standardized.' });
                     }
-                });
 
-                if (nameRepaired) {
-                    finalAudit.push({ id: refId, status: 'fixed', msg: 'REPAIRED: Initials standardized.' });
-                }
+                    // DOI Migration
+                    const hosts = Array.from(sbRef.getElementsByTagName("sb:host"));
+                    let doi: string | null = null;
+                    let badHost: Element | null = null;
+                    let targetHost: Element | null = null;
 
-                if (!sbRef) return;
+                    for (let host of hosts) {
+                        const content = host.innerHTML;
+                        const doiMatch = content.match(/10\.\d{4,9}\/[-._;()/:A-Z0-9]+/i);
+                        if (doiMatch && (host.getElementsByTagName("sb:e-host").length > 0 || host.textContent?.includes('doi.org'))) {
+                            doi = doiMatch[0];
+                            badHost = host;
+                            break;
+                        }
+                    }
 
-                const hosts = Array.from(sbRef.getElementsByTagName("sb:host"));
-                let doi: string | null = null;
-                let badHost: Element | null = null;
-                let targetHost: Element | null = null;
-
-                for (let host of hosts) {
-                    const content = host.innerHTML;
-                    const doiMatch = content.match(/10\.\d{4,9}\/[-._;()/:A-Z0-9]+/i);
-                    if (doiMatch && (host.getElementsByTagName("sb:e-host").length > 0 || host.textContent?.includes('doi.org'))) {
-                        doi = doiMatch[0];
-                        badHost = host;
-                        break;
+                    if (doi && badHost) {
+                        targetHost = hosts.find(h => h !== badHost && (h.getElementsByTagName("sb:issue").length > 0 || h.getElementsByTagName("sb:pages").length > 0)) || null;
+                        if (targetHost) {
+                            badHost.parentNode?.removeChild(badHost);
+                            const doiElem = fragmentDoc.createElement("ce:doi");
+                            doiElem.textContent = doi;
+                            targetHost.appendChild(doiElem);
+                            finalAudit.push({ id: refId, status: 'fixed', doi, msg: 'REPAIRED: DOI migrated successfully.' });
+                        }
                     }
                 }
 
-                if (doi && badHost) {
-                    targetHost = hosts.find(h => h !== badHost && (h.getElementsByTagName("sb:issue").length > 0 || h.getElementsByTagName("sb:pages").length > 0)) || null;
-                    
-                    if (targetHost) {
-                        badHost.parentNode?.removeChild(badHost);
-                        const doiElem = xmlDoc.createElement("ce:doi");
-                        doiElem.textContent = doi;
-                        targetHost.appendChild(doiElem);
-                        finalAudit.push({ id: refId, status: 'fixed', doi, msg: 'REPAIRED: DOI migrated successfully.' });
-                    } else if (!nameRepaired) {
-                        finalAudit.push({ id: refId, status: 'warning', doi, msg: 'SKIPPED: Target host missing.' });
-                    }
-                } else if (!nameRepaired) {
-                    finalAudit.push({ id: refId, status: 'skip', msg: 'VALID: No changes required.' });
-                }
+                refIndex++;
+                let serialized = serializer.serializeToString(ref);
+                // Strip redundant namespace declarations injected by the serializer
+                serialized = serialized.replace(/\sxmlns(?::[a-z0-9]+)?=['"][^'"]*['"]/gi, '');
+                return serialized;
             });
 
-            const serializer = new XMLSerializer();
-            let xmlOutput = serializer.serializeToString(xmlDoc);
-            
-            // If we wrapped it during analysis, unwrap it now
-            if (wasWrappedRef.current) {
-                xmlOutput = xmlOutput.replace(/^<root[^>]*>/, '').replace(/<\/root>$/, '');
+            let xmlOutput = "";
+            if (resultMode === 'full') {
+                xmlOutput = repairedXml;
+            } else {
+                const repairedMatches = repairedXml.match(bibRegex);
+                xmlOutput = repairedMatches ? repairedMatches.join('\n\n') : "";
             }
 
-            // Restore original form of <sb:et-al /> tags (user requirement: do not alter whatever its form is)
+            // Restore original form of <sb:et-al /> tags
             const originalEtAls = input.match(/<sb:et-al[^>]*?\/?>/g) || [];
             let etAlIndex = 0;
             xmlOutput = xmlOutput.replace(/<sb:et-al[^>]*?\/?>/g, (match) => {
                 return originalEtAls[etAlIndex++] || match;
             });
-            
+
             setOutput(xmlOutput);
             setAuditData(finalAudit);
             setStep('completed');
             setActiveTab('result');
-            setCurrentChangeIndex(-1);
-            setToast({ msg: 'Repair protocol executed successfully', type: 'success' });
+            setToast({ msg: 'Structural repair protocol complete.', type: 'success' });
         } catch (err: any) {
             setToast({ msg: err.message, type: 'error' });
         } finally {
@@ -381,7 +507,6 @@ const StructuralNodeArchitect: React.FC = () => {
         setAuditData([]);
         setStep('input');
         setActiveTab('input');
-        analyzedDocRef.current = null;
         setToast({ msg: 'Buffer cleared', type: 'warn' });
     };
 
@@ -662,7 +787,7 @@ const StructuralNodeArchitect: React.FC = () => {
                             <Cpu className="w-6 h-6 text-white" />
                         </div>
                         <div>
-                            <h1 className="text-xl font-bold tracking-tight text-slate-800">Structural Node Architect <span className="text-indigo-600">v2.5</span></h1>
+                            <h1 className="text-xl font-bold tracking-tight text-slate-800">Structural Node Architect <span className="text-indigo-600">v3.2</span></h1>
                             <p className="text-xs font-medium text-slate-400 uppercase tracking-widest">Elsevier Citation Repair Protocol</p>
                         </div>
                     </div>
@@ -760,6 +885,26 @@ const StructuralNodeArchitect: React.FC = () => {
                                             Upload File
                                         </button>
                                         <input type="file" ref={fileInputRef} className="hidden" accept=".xml,.txt" onChange={handleFileUpload} />
+                                    </div>
+                                </div>
+
+                                <div className="pt-6 border-t border-slate-100">
+                                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Output Protocol</h3>
+                                    <div className="flex flex-col gap-2">
+                                        <button 
+                                            onClick={() => setResultMode('full')}
+                                            className={`w-full py-2.5 px-4 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-3 ${resultMode === 'full' ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}
+                                        >
+                                            <Monitor className="w-4 h-4" />
+                                            Full Document
+                                        </button>
+                                        <button 
+                                            onClick={() => setResultMode('refs')}
+                                            className={`w-full py-2.5 px-4 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-3 ${resultMode === 'refs' ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}
+                                        >
+                                            <FileText className="w-4 h-4" />
+                                            References Only
+                                        </button>
                                     </div>
                                 </div>
 
