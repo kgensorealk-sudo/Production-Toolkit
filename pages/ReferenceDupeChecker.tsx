@@ -714,45 +714,48 @@ const ReferenceDupeChecker: React.FC = () => {
     }, [input]);
 
     return (
-        <div className="max-w-full mx-auto px-2 py-12 sm:px-4 lg:px-6 font-sans">
+        <div className="max-w-full mx-auto px-2 py-12 sm:px-4 lg:px-6 font-sans architect-grid">
             <motion.div 
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-slate-800 pb-8"
+                className="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-8 border-b border-zinc-800 pb-12"
             >
                 <div>
-                    <div className="flex items-center gap-3 mb-4">
-                        <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center shadow-[0_0_20px_rgba(16,185,129,0.1)] border border-emerald-500/20">
-                            <GitCompare className="h-5 w-5 text-emerald-400" />
+                    <div className="flex items-center gap-3 mb-6">
+                        <div className="w-12 h-12 rounded-none bg-zinc-900 flex items-center justify-center border border-zinc-800">
+                            <GitCompare className="h-6 w-6 text-zinc-100" />
                         </div>
-                        <span className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20 uppercase tracking-[0.2em]">System Tool v2.4</span>
+                        <div className="flex flex-col">
+                            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.3em]">Module_Ref_024</span>
+                            <span className="text-[10px] font-bold text-zinc-100 uppercase tracking-widest">Structural Node Architect v3.2</span>
+                        </div>
                     </div>
-                    <h1 className="text-3xl font-black text-white tracking-tighter uppercase leading-none">
-                        Reference <span className="text-emerald-500">Dupe Remover</span>
+                    <h1 className="text-5xl font-bold text-zinc-100 tracking-tighter uppercase leading-none">
+                        Reference <span className="text-zinc-500">Dupe Remover</span>
                     </h1>
-                    <p className="text-sm text-slate-400 mt-2 font-medium max-w-xl">
-                        High-precision XML citation re-linking engine. Automated duplicate detection with manual resolution matrix and full audit transparency.
+                    <p className="text-xs text-zinc-500 mt-4 font-mono uppercase tracking-widest max-w-2xl leading-relaxed">
+                        Precision-engineered XML citation re-linking engine. Automated duplicate detection with manual resolution matrix and full audit transparency.
                     </p>
                 </div>
 
-                <div className="flex items-center bg-slate-900 p-1.5 rounded-xl border border-slate-800 shadow-2xl">
+                <div className="flex items-center bg-zinc-900 p-1 border border-zinc-800">
                     {[
-                        { id: 'input', label: 'Data Input', icon: FileText },
-                        { id: 'resolve', label: 'Conflict Matrix', icon: Layers },
-                        { id: 'result', label: 'Audit Log', icon: ShieldCheck }
+                        { id: 'input', label: '01_Input', icon: FileText },
+                        { id: 'resolve', label: '02_Resolve', icon: Layers },
+                        { id: 'result', label: '03_Audit', icon: ShieldCheck }
                     ].map((s, idx) => (
                         <React.Fragment key={s.id}>
-                            <div className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-300 ${step === s.id ? 'bg-slate-800 text-emerald-400 shadow-lg border border-slate-700' : 'text-slate-500'}`}>
-                                <s.icon size={14} strokeWidth={step === s.id ? 3 : 2} />
-                                <span className="text-[9px] font-black uppercase tracking-widest">{s.label}</span>
+                            <div className={`flex items-center gap-3 px-6 py-3 transition-all duration-200 ${step === s.id ? 'bg-zinc-100 text-zinc-950' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                                <s.icon size={14} strokeWidth={2.5} />
+                                <span className="text-[10px] font-bold uppercase tracking-widest">{s.label}</span>
                             </div>
-                            {idx < 2 && <div className="mx-1 text-slate-700"><ChevronRight size={12} /></div>}
+                            {idx < 2 && <div className="w-px h-4 bg-zinc-800 mx-1"></div>}
                         </React.Fragment>
                     ))}
                 </div>
             </motion.div>
 
-            <div className="bg-slate-900 rounded-2xl shadow-2xl border border-slate-800 overflow-hidden h-[800px] flex flex-col relative">
+            <div className="bg-zinc-950 border border-zinc-800 min-h-[800px] flex flex-col relative shadow-[20px_20px_0px_rgba(0,0,0,0.3)]">
                 {/* Technical Grid Overlay */}
                 <div className="absolute inset-0 pointer-events-none opacity-[0.03] bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]"></div>
                 <AnimatePresence mode="wait">
@@ -789,29 +792,29 @@ const ReferenceDupeChecker: React.FC = () => {
                             exit={{ opacity: 0 }}
                             className="flex flex-col h-full flex-grow overflow-hidden relative z-10"
                         >
-                            <div className="bg-slate-900/50 backdrop-blur-md px-8 py-4 border-b border-slate-800 flex justify-between items-center">
+                            <div className="bg-zinc-900 px-8 py-4 border-b border-zinc-800 flex justify-between items-center">
                                 <div className="flex items-center gap-4">
                                     <div className="flex items-center gap-2">
-                                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Input Stream Active</span>
+                                        <div className="w-2 h-2 rounded-none bg-zinc-100"></div>
+                                        <span className="text-[11px] font-bold text-zinc-100 uppercase tracking-widest">Input_Stream_Active</span>
                                     </div>
-                                    <div className="h-4 w-px bg-slate-800"></div>
-                                    <div className="flex items-center gap-2 text-[10px] font-mono text-slate-500 uppercase">
-                                        <span className="text-emerald-500/50">Refs:</span> {inputStats.refCount}
+                                    <div className="h-4 w-px bg-zinc-800"></div>
+                                    <div className="flex items-center gap-2 text-[11px] font-mono text-zinc-500 uppercase">
+                                        <span className="text-zinc-100/50">Refs:</span> {inputStats.refCount}
                                     </div>
                                 </div>
                                 <div className="flex gap-2">
                                     <button 
                                         onClick={loadSample}
-                                        className="flex items-center gap-2 text-[9px] font-black text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 px-4 py-2 rounded-lg transition-all uppercase tracking-widest"
+                                        className="architect-button"
                                     >
-                                        <FileCode size={12} /> Load Sample
+                                        <FileCode size={12} /> Load_Sample
                                     </button>
                                     <button 
                                         onClick={() => fileInputRef.current?.click()}
-                                        className="flex items-center gap-2 text-[9px] font-black text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 px-4 py-2 rounded-lg transition-all uppercase tracking-widest"
+                                        className="architect-button"
                                     >
-                                        <UploadCloud size={12} /> Upload XML
+                                        <UploadCloud size={12} /> Upload_XML
                                     </button>
                                     <input 
                                         type="file" 
@@ -820,14 +823,14 @@ const ReferenceDupeChecker: React.FC = () => {
                                         accept=".xml,text/xml" 
                                         className="hidden" 
                                     />
-                                    <button onClick={handlePaste} className="flex items-center gap-2 text-[9px] font-black text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 px-4 py-2 rounded-lg transition-all uppercase tracking-widest">
-                                        <Clipboard size={12} /> Paste
+                                    <button onClick={handlePaste} className="architect-button">
+                                        <Clipboard size={12} /> Paste_Buffer
                                     </button>
                                     <button 
                                         onClick={() => setInput('')} 
-                                        className="flex items-center gap-2 text-[9px] font-black text-slate-500 hover:text-rose-400 bg-slate-800/50 hover:bg-rose-500/10 border border-slate-700 px-4 py-2 rounded-lg transition-all uppercase tracking-widest"
+                                        className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all border border-zinc-800 bg-zinc-900 text-zinc-500 hover:bg-rose-950 hover:text-rose-400"
                                     >
-                                        <Trash2 size={12} /> Reset
+                                        <Trash2 size={12} /> Reset_Module
                                     </button>
                                 </div>
                             </div>
@@ -879,24 +882,24 @@ const ReferenceDupeChecker: React.FC = () => {
                                     placeholder="<!-- Paste XML bibliography here -->"
                                 />
                             </div>
-                            <div className="p-8 border-t border-slate-800 bg-slate-900/80 backdrop-blur-md flex justify-between items-center relative z-10">
-                                <div className="flex gap-6">
+                            <div className="p-8 border-t border-zinc-800 bg-zinc-900 flex justify-between items-center relative z-10">
+                                <div className="flex gap-12">
                                     <div className="flex flex-col">
-                                        <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Payload Size</span>
-                                        <span className="text-[10px] font-mono text-emerald-400">{(new Blob([input]).size / 1024).toFixed(2)} KB</span>
+                                        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Payload_Size</span>
+                                        <span className="text-[11px] font-mono text-zinc-100">{(new Blob([input]).size / 1024).toFixed(2)} KB</span>
                                     </div>
                                     <div className="flex flex-col">
-                                        <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Ref Count</span>
-                                        <span className="text-[10px] font-mono text-emerald-400">{inputStats.refCount} detected</span>
+                                        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Ref_Count</span>
+                                        <span className="text-[11px] font-mono text-zinc-100">{inputStats.refCount} detected</span>
                                     </div>
                                 </div>
                                 <button 
                                     onClick={analyzeReferences} 
                                     disabled={!inputStats.isValid || inputStats.refCount === 0} 
-                                    className="group relative overflow-hidden bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-black py-4 px-12 rounded-xl shadow-[0_0_30px_rgba(16,185,129,0.2)] transition-all active:scale-95 uppercase tracking-[0.2em] text-[10px] flex items-center gap-3 border border-emerald-500/20"
+                                    className="architect-button px-12 py-4 text-xs"
                                 >
-                                    <Zap size={14} className={`${inputStats.isValid ? 'animate-pulse text-emerald-200' : ''}`} />
-                                    Initialize Similarity Scan
+                                    <Zap size={14} />
+                                    Initialize_Similarity_Scan
                                 </button>
                             </div>
                         </motion.div>
@@ -910,30 +913,30 @@ const ReferenceDupeChecker: React.FC = () => {
                             exit={{ opacity: 0, x: -20 }}
                             className="flex flex-col h-full bg-slate-900/50 relative z-10"
                         >
-                            <div className="relative px-8 py-6 border-b border-slate-800 bg-slate-900/80 backdrop-blur-md flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 z-10 shadow-2xl">
+                            <div className="relative px-8 py-6 border-b border-zinc-800 bg-zinc-900 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 z-10">
                                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-8 w-full lg:w-auto">
                                     <div>
                                         <div className="flex items-center gap-2 mb-1">
-                                            <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></div>
-                                            <h3 className="text-lg font-black text-white uppercase tracking-tight">Resolution Matrix</h3>
+                                            <div className="w-2 h-2 rounded-none bg-zinc-100"></div>
+                                            <h3 className="text-lg font-bold text-zinc-100 uppercase tracking-tight">Resolution_Matrix</h3>
                                         </div>
-                                        <p className="text-[9px] font-bold text-slate-500 uppercase tracking-[0.2em]">Select primary reference nodes for conflict resolution</p>
+                                        <p className="text-[11px] font-bold text-zinc-500 uppercase tracking-widest">Select primary reference nodes for conflict resolution</p>
                                     </div>
                                     <div className="relative group w-full sm:w-72">
-                                        <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-slate-500 group-focus-within:text-emerald-400 transition-colors">
+                                        <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-zinc-500 group-focus-within:text-zinc-100 transition-colors">
                                             <Search size={14} />
                                         </div>
                                         <input 
                                             type="text" 
-                                            placeholder="Filter conflict stream..." 
+                                            placeholder="Filter_Conflict_Stream..." 
                                             value={searchQuery}
                                             onChange={(e) => setSearchQuery(e.target.value)}
-                                            className="bg-slate-800/50 border border-slate-700 rounded-xl py-3 pl-11 pr-6 text-[11px] font-mono text-emerald-400 placeholder:text-slate-600 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none w-full transition-all"
+                                            className="bg-zinc-950 border border-zinc-800 py-3 pl-11 pr-6 text-[11px] font-mono text-zinc-100 placeholder:text-zinc-700 focus:border-zinc-100 outline-none w-full transition-all"
                                         />
                                         {searchQuery && (
                                             <button 
                                                 onClick={() => setSearchQuery('')}
-                                                className="absolute inset-y-0 right-4 flex items-center text-slate-500 hover:text-rose-400"
+                                                className="absolute inset-y-0 right-4 flex items-center text-zinc-500 hover:text-rose-400"
                                             >
                                                 <X size={14} />
                                             </button>
@@ -942,10 +945,10 @@ const ReferenceDupeChecker: React.FC = () => {
                                 </div>
                                 <button 
                                     onClick={processMerge} 
-                                    className="group w-full lg:w-auto bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 px-12 rounded-xl shadow-lg shadow-emerald-900/20 active:scale-95 transition-all uppercase text-[10px] tracking-[0.2em] flex items-center justify-center gap-3"
+                                    className="architect-button px-12 py-4 text-xs"
                                 >
-                                    <CheckCircle2 size={14} className="group-hover:scale-110 transition-transform" />
-                                    Execute System Relink
+                                    <CheckCircle2 size={14} />
+                                    Execute_System_Relink
                                 </button>
                             </div>
                             <div className="flex-grow overflow-auto p-8 space-y-6 custom-scrollbar-emerald">
@@ -961,57 +964,57 @@ const ReferenceDupeChecker: React.FC = () => {
                                         initial={{ opacity: 0, y: 10 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         transition={{ delay: gIdx * 0.05 }}
-                                        className="bg-slate-800/30 border border-slate-800 rounded-2xl overflow-hidden shadow-lg backdrop-blur-sm"
+                                        className="bg-zinc-900/50 border border-zinc-800 rounded-none overflow-hidden"
                                     >
-                                        <div className="bg-slate-800/50 px-8 py-3 border-b border-slate-700/50 flex justify-between items-center">
+                                        <div className="bg-zinc-900 px-8 py-3 border-b border-zinc-800 flex justify-between items-center">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-5 h-5 rounded bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-[9px] font-black text-amber-500 font-mono">
+                                                <div className="w-5 h-5 rounded-none bg-zinc-950 border border-zinc-800 flex items-center justify-center text-[10px] font-bold text-zinc-100 font-mono">
                                                     {group.id.toString().padStart(2, '0')}
                                                 </div>
-                                                <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em]">Conflict Cluster</span>
+                                                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Conflict_Cluster</span>
                                             </div>
                                             <div className="flex items-center gap-2">
-                                                <div className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></div>
-                                                <span className="text-[9px] font-black text-rose-400 uppercase tracking-widest">
-                                                    {group.items.length} Variants Detected
+                                                <div className="w-1.5 h-1.5 rounded-none bg-rose-600"></div>
+                                                <span className="text-[10px] font-bold text-rose-500/80 uppercase tracking-widest">
+                                                    {group.items.length} Variants_Detected
                                                 </span>
                                             </div>
                                         </div>
-                                        <div className="divide-y divide-slate-800/50">
+                                        <div className="divide-y divide-zinc-800/50">
                                             {group.items.map(item => {
                                                 const isSelected = item.id === group.selectedId;
                                                 return (
                                                     <div 
                                                         key={item.id} 
                                                         onClick={() => handleSelection(group.id, item.id)} 
-                                                        className={`p-8 cursor-pointer transition-all flex gap-8 border-l-4 ${isSelected ? 'bg-emerald-500/5 border-emerald-500' : 'hover:bg-slate-800/50 border-transparent'}`}
+                                                        className={`p-8 cursor-pointer transition-all flex gap-8 border-l-4 ${isSelected ? 'bg-zinc-100/5 border-zinc-100' : 'hover:bg-zinc-900/80 border-transparent'}`}
                                                     >
-                                                        <div className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-all shrink-0 ${isSelected ? 'border-emerald-500 bg-emerald-500 text-slate-900 shadow-[0_0_15px_rgba(16,185,129,0.3)]' : 'border-slate-700 bg-slate-900 text-slate-600'}`}>
-                                                            {isSelected ? <CheckCircle2 size={16} strokeWidth={3} /> : <div className="w-1.5 h-1.5 rounded-full bg-slate-700" />}
+                                                        <div className={`w-8 h-8 rounded-none border flex items-center justify-center transition-all shrink-0 ${isSelected ? 'border-zinc-100 bg-zinc-100 text-zinc-950' : 'border-zinc-800 bg-zinc-950 text-zinc-700'}`}>
+                                                            {isSelected ? <CheckCircle2 size={16} strokeWidth={3} /> : <div className="w-1.5 h-1.5 rounded-none bg-zinc-800" />}
                                                         </div>
                                                         <div className="flex-grow min-w-0">
                                                             <div className="flex items-center gap-4 mb-3">
-                                                                <span className={`text-[9px] font-mono font-bold px-3 py-1 rounded border transition-colors ${isSelected ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-slate-900 border-slate-700 text-slate-500'}`}>
+                                                                <span className={`text-[10px] font-mono font-bold px-3 py-1 rounded-none border transition-colors ${isSelected ? 'bg-zinc-100/5 border-zinc-100/20 text-zinc-100' : 'bg-zinc-950 border-zinc-800 text-zinc-600'}`}>
                                                                     UID: {item.id}
                                                                 </span>
                                                                 {item.author && (
-                                                                    <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">
+                                                                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
                                                                         {item.author} {item.year ? `(${item.year})` : ''}
                                                                     </span>
                                                                 )}
                                                                 {isSelected && (
-                                                                    <span className="flex items-center gap-2 text-[9px] font-black text-emerald-400 uppercase tracking-[0.2em] ml-auto">
-                                                                        <ShieldCheck size={12} /> Primary Node
+                                                                    <span className="flex items-center gap-2 text-[10px] font-bold text-zinc-100 uppercase tracking-widest ml-auto">
+                                                                        <ShieldCheck size={12} /> Primary_Node
                                                                     </span>
                                                                 )}
                                                             </div>
-                                                            <p className={`text-[13px] leading-relaxed font-mono break-words ${isSelected ? 'text-slate-200' : 'text-slate-500'}`}>
+                                                            <p className={`text-[11px] leading-relaxed font-mono break-words ${isSelected ? 'text-zinc-100' : 'text-zinc-600'}`}>
                                                                 {item.displayContent}
                                                             </p>
                                                             {item.title && isSelected && (
-                                                                <div className="mt-4 p-4 rounded-xl bg-slate-900/50 border border-slate-800/50">
-                                                                    <p className="text-[8px] font-black text-slate-600 uppercase tracking-widest mb-1">Metadata Extract</p>
-                                                                    <p className="text-[11px] text-slate-400 font-medium leading-relaxed italic">{item.title}</p>
+                                                                <div className="mt-4 p-4 rounded-none bg-zinc-950 border border-zinc-800">
+                                                                    <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Metadata_Extract</p>
+                                                                    <p className="text-[11px] text-zinc-400 font-medium leading-relaxed italic">{item.title}</p>
                                                                 </div>
                                                             )}
                                                         </div>
@@ -1036,62 +1039,62 @@ const ReferenceDupeChecker: React.FC = () => {
                             <div className="relative bg-slate-900/80 backdrop-blur-md px-8 py-6 border-b border-slate-800 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 z-10 shadow-2xl">
                                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-8">
                                     <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
-                                            <History className="h-5 w-5 text-emerald-400" />
+                                        <div className="w-10 h-10 rounded-none bg-zinc-900 flex items-center justify-center border border-zinc-800">
+                                            <History className="h-5 w-5 text-zinc-100" />
                                         </div>
                                         <div>
-                                            <label className="font-black text-white text-xs uppercase tracking-[0.25em] block mb-0.5">Audit Summary</label>
-                                            <p className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">System modification log & verification</p>
+                                            <label className="font-bold text-zinc-100 text-[11px] uppercase tracking-widest block mb-0.5">Audit_Summary</label>
+                                            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">System modification log & verification</p>
                                         </div>
                                     </div>
-                                    <div className="flex flex-wrap gap-4">
+                                    <div className="flex flex-wrap gap-8">
                                         <div className="flex flex-col">
-                                            <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Total Refs</span>
-                                            <span className="text-[10px] font-mono font-bold text-slate-300 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700 uppercase tracking-widest">{stats.totalRefs} ITEMS</span>
+                                            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Total_Refs</span>
+                                            <span className="text-[11px] font-mono font-bold text-zinc-100 bg-zinc-900 px-3 py-1.5 border border-zinc-800 uppercase tracking-widest">{stats.totalRefs} ITEMS</span>
                                         </div>
                                         <div className="flex flex-col">
-                                            <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Removed</span>
-                                            <span className="text-[10px] font-mono font-bold text-rose-400 bg-rose-500/10 px-3 py-1.5 rounded-lg border border-rose-500/20 uppercase tracking-widest">{stats.removed} PURGED</span>
+                                            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Removed</span>
+                                            <span className="text-[11px] font-mono font-bold text-rose-500 bg-rose-950/30 px-3 py-1.5 border border-rose-900 uppercase tracking-widest">{stats.removed} PURGED</span>
                                         </div>
                                         <div className="flex flex-col">
-                                            <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Remapped</span>
-                                            <span className="text-[10px] font-mono font-bold text-blue-400 bg-blue-500/10 px-3 py-1.5 rounded-lg border border-blue-500/20 uppercase tracking-widest">{stats.remapped} LINKS</span>
+                                            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Remapped</span>
+                                            <span className="text-[11px] font-mono font-bold text-blue-500 bg-blue-950/30 px-3 py-1.5 border border-blue-900 uppercase tracking-widest">{stats.remapped} LINKS</span>
                                         </div>
                                     </div>
                                 </div>
                                 <div className="flex gap-3 w-full lg:w-auto">
-                                    <button onClick={copyReport} className="flex-1 lg:flex-none flex items-center justify-center gap-3 text-[9px] font-black text-slate-300 bg-slate-800 hover:bg-slate-700 px-6 py-4 rounded-xl border border-slate-700 shadow-sm transition-all uppercase tracking-widest active:scale-95">
-                                        <Clipboard size={14} /> Copy Report
+                                    <button onClick={copyReport} className="architect-button px-6 py-4 text-[10px]">
+                                        <Clipboard size={14} /> Copy_Report
                                     </button>
-                                    <button onClick={copyOutput} className="flex-1 lg:flex-none flex items-center justify-center gap-3 text-[9px] font-black text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 px-8 py-4 rounded-xl border border-emerald-500/30 shadow-sm transition-all uppercase tracking-widest active:scale-95">
-                                        <Copy size={14} /> Copy Output
+                                    <button onClick={copyOutput} className="architect-button px-8 py-4 text-[10px]">
+                                        <Copy size={14} /> Copy_Output
                                     </button>
                                 </div>
                             </div>
-                            <div className="relative bg-slate-900 px-8 pt-4 border-b border-slate-800 flex space-x-2 overflow-x-auto no-scrollbar z-20">
+                            <div className="relative bg-zinc-950 px-8 pt-4 border-b border-zinc-800 flex space-x-2 overflow-x-auto no-scrollbar z-20">
                                 {[
-                                    { id: 'report', label: 'Audit Log', icon: History },
-                                    { id: 'xml', label: 'Resulting XML', icon: FileText },
-                                    { id: 'diff', label: 'Side-by-Side Diff', icon: GitCompare }
+                                    { id: 'report', label: '01_Audit_Log', icon: History },
+                                    { id: 'xml', label: '02_Resulting_XML', icon: FileText },
+                                    { id: 'diff', label: '03_Visual_Diff', icon: GitCompare }
                                 ].map(t => (
                                     <button 
                                         key={t.id} 
                                         onClick={() => setActiveTab(t.id as any)} 
-                                        className={`flex items-center gap-3 px-6 py-4 text-[9px] font-black uppercase tracking-[0.2em] rounded-t-xl transition-all border-t border-x whitespace-nowrap ${activeTab === t.id ? 'bg-slate-800 text-emerald-400 border-slate-700 translate-y-[1px]' : 'bg-transparent text-slate-500 border-transparent hover:text-slate-300'}`}
+                                        className={`flex items-center gap-3 px-6 py-4 text-[10px] font-bold uppercase tracking-widest rounded-none transition-all border-t border-x whitespace-nowrap ${activeTab === t.id ? 'bg-zinc-900 text-zinc-100 border-zinc-800 translate-y-[1px]' : 'bg-transparent text-zinc-500 border-transparent hover:text-zinc-300'}`}
                                     >
                                         <t.icon size={12} />
                                         {t.label}
                                     </button>
                                 ))}
                             </div>
-                            <div className="flex-grow bg-slate-900/50 overflow-hidden flex flex-col min-h-0 relative z-10">
+                            <div className="flex-grow bg-zinc-950 overflow-hidden flex flex-col min-h-0 relative z-10">
                                 {activeTab === 'xml' && (
                                     <motion.div 
                                         initial={{ opacity: 0 }}
                                         animate={{ opacity: 1 }}
                                         className="flex-grow flex flex-col min-h-0 p-8"
                                     >
-                                        <div className="flex-grow p-10 text-[12px] font-mono text-emerald-400/80 bg-slate-900 rounded-3xl border border-slate-800 shadow-inner overflow-auto custom-scrollbar-emerald whitespace-pre-wrap break-all leading-relaxed" dangerouslySetInnerHTML={{ __html: highlightXml(output) }} />
+                                        <div className="flex-grow p-10 text-[12px] font-mono text-zinc-100 bg-zinc-900 rounded-none border border-zinc-800 shadow-inner overflow-auto custom-scrollbar-emerald whitespace-pre-wrap break-all leading-relaxed" dangerouslySetInnerHTML={{ __html: highlightXml(output) }} />
                                     </motion.div>
                                 )}
                                 
@@ -1103,12 +1106,12 @@ const ReferenceDupeChecker: React.FC = () => {
                                     >
                                         <section>
                                             <div className="flex items-center gap-4 mb-6">
-                                                <div className="w-8 h-8 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
+                                                <div className="w-8 h-8 rounded-none bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-100">
                                                     <Trash2 size={16} />
                                                 </div>
                                                 <div>
-                                                    <h3 className="text-sm font-black text-white uppercase tracking-tight">Bibliography Purge List</h3>
-                                                    <p className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">Duplicate nodes removed from the bibliography stream</p>
+                                                    <h3 className="text-sm font-bold text-zinc-100 uppercase tracking-tight">Bibliography_Purge_List</h3>
+                                                    <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Duplicate nodes removed from the bibliography stream</p>
                                                 </div>
                                             </div>
                                             <div className="grid grid-cols-1 gap-3">
@@ -1118,31 +1121,31 @@ const ReferenceDupeChecker: React.FC = () => {
                                                         initial={{ opacity: 0, x: -10 }}
                                                         animate={{ opacity: 1, x: 0 }}
                                                         transition={{ delay: idx * 0.03 }}
-                                                        className="flex items-center gap-6 p-6 rounded-2xl bg-slate-800/40 border border-slate-800 shadow-sm transition-all hover:bg-slate-800/60 group"
+                                                        className="flex items-center gap-6 p-6 rounded-none bg-zinc-900/30 border border-zinc-800 transition-all hover:bg-zinc-900/60 group"
                                                     >
                                                         <div className="flex flex-col flex-grow min-w-0">
                                                             <div className="flex items-center gap-3 mb-1">
-                                                                <span className="text-rose-400 font-black text-xs line-through uppercase tracking-tight truncate">{rem.label}</span>
-                                                                <span className="text-[7px] font-mono font-bold bg-rose-500/20 text-rose-400 px-2 py-0.5 rounded border border-rose-500/30 uppercase tracking-widest">Purged</span>
+                                                                <span className="text-rose-500/80 font-bold text-xs line-through uppercase tracking-tight truncate">{rem.label}</span>
+                                                                <span className="text-[7px] font-mono font-bold bg-rose-950 text-rose-500/70 px-2 py-0.5 rounded-none border border-rose-900 uppercase tracking-widest">Purged</span>
                                                             </div>
-                                                            <span className="text-[8px] text-slate-500 font-mono italic">UID: {rem.id}</span>
+                                                            <span className="text-[8px] text-zinc-600 font-mono italic">UID: {rem.id}</span>
                                                         </div>
-                                                        <div className="flex items-center gap-4 text-slate-700">
+                                                        <div className="flex items-center gap-4 text-zinc-800">
                                                             <ArrowRight size={16} />
                                                         </div>
                                                         <div className="flex flex-col items-end shrink-0">
-                                                            <span className="text-[7px] font-black text-slate-600 uppercase mb-1.5 tracking-widest">Absorbed By</span>
-                                                            <div className="flex items-center gap-3 bg-slate-900 px-4 py-2 rounded-xl border border-slate-800 shadow-sm">
-                                                                <span className="font-black text-emerald-400 text-[10px] uppercase">{rem.replacedByLabel}</span>
-                                                                <span className="text-[8px] font-mono text-slate-600">({rem.replacedBy})</span>
+                                                            <span className="text-[7px] font-bold text-zinc-600 uppercase mb-1.5 tracking-widest">Absorbed_By</span>
+                                                            <div className="flex items-center gap-3 bg-zinc-950 px-4 py-2 rounded-none border border-zinc-800">
+                                                                <span className="font-bold text-zinc-100 text-[10px] uppercase">{rem.replacedByLabel}</span>
+                                                                <span className="text-[8px] font-mono text-zinc-600">({rem.replacedBy})</span>
                                                             </div>
                                                         </div>
                                                     </motion.div>
                                                 ))}
                                                 {mergeLog.bibRemovals.length === 0 && (
-                                                    <div className="text-center py-16 bg-slate-800/20 rounded-3xl border border-dashed border-slate-800">
-                                                        <Info className="mx-auto mb-3 text-slate-700" size={20} />
-                                                        <p className="text-slate-600 font-black uppercase tracking-widest text-[8px]">No bibliography items were removed.</p>
+                                                    <div className="text-center py-16 bg-zinc-900/20 rounded-none border border-dashed border-zinc-800">
+                                                        <Info className="mx-auto mb-3 text-zinc-700" size={20} />
+                                                        <p className="text-zinc-600 font-bold uppercase tracking-widest text-[8px]">No bibliography items were removed.</p>
                                                     </div>
                                                 )}
                                             </div>
@@ -1150,12 +1153,12 @@ const ReferenceDupeChecker: React.FC = () => {
 
                                         <section>
                                             <div className="flex items-center gap-4 mb-6">
-                                                <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+                                                <div className="w-8 h-8 rounded-none bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-100">
                                                     <RefreshCw size={16} />
                                                 </div>
                                                 <div>
-                                                    <h3 className="text-sm font-black text-white uppercase tracking-tight">Citation Delta Stream</h3>
-                                                    <p className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">In-text cross-references updated to primary nodes</p>
+                                                    <h3 className="text-sm font-bold text-zinc-100 uppercase tracking-tight">Citation_Delta_Stream</h3>
+                                                    <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">In-text cross-references updated to primary nodes</p>
                                                 </div>
                                             </div>
                                             <div className="space-y-4">
@@ -1165,36 +1168,36 @@ const ReferenceDupeChecker: React.FC = () => {
                                                         initial={{ opacity: 0, y: 10 }}
                                                         animate={{ opacity: 1, y: 0 }}
                                                         transition={{ delay: idx * 0.03 }}
-                                                        className="bg-slate-800/40 border border-slate-800 rounded-3xl overflow-hidden shadow-lg"
+                                                        className="bg-zinc-900/30 border border-zinc-800 rounded-none overflow-hidden"
                                                     >
-                                                        <div className="bg-slate-800/60 px-8 py-3 border-b border-slate-700/50 flex justify-between items-center">
+                                                        <div className="bg-zinc-900 px-8 py-3 border-b border-zinc-800 flex justify-between items-center">
                                                             <div className="flex items-center gap-3">
-                                                                <span className={`text-[8px] font-black px-3 py-1 rounded-full border uppercase tracking-widest ${
-                                                                    aud.type === 'split' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 
-                                                                    aud.type === 'collapsed' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 
-                                                                    aud.type === 'normalized' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
-                                                                    'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                                                <span className={`text-[8px] font-bold px-3 py-1 rounded-none border uppercase tracking-widest ${
+                                                                    aud.type === 'split' ? 'bg-amber-950 text-amber-500/70 border-amber-900' : 
+                                                                    aud.type === 'collapsed' ? 'bg-blue-950 text-blue-500/70 border-blue-900' : 
+                                                                    aud.type === 'normalized' ? 'bg-indigo-950 text-indigo-500/70 border-indigo-900' :
+                                                                    'bg-zinc-950 text-zinc-100 border-zinc-800'
                                                                 }`}>
                                                                     {aud.type}
                                                                 </span>
                                                             </div>
-                                                            <span className="text-[8px] text-slate-600 font-mono font-bold tracking-widest uppercase">Delta_{idx.toString().padStart(3, '0')}</span>
+                                                            <span className="text-[8px] text-zinc-600 font-mono font-bold tracking-widest uppercase">Delta_{idx.toString().padStart(3, '0')}</span>
                                                         </div>
                                                         <div className="p-8 grid grid-cols-1 lg:grid-cols-[1fr,auto,1fr] gap-6 items-center">
                                                             <div className="space-y-2">
-                                                                <span className="text-[7px] font-black text-slate-600 uppercase tracking-[0.2em] ml-2">Pre-Process</span>
-                                                                <div className="p-4 rounded-xl bg-slate-900/50 border border-slate-800 text-[10px] font-mono text-rose-400/60 whitespace-pre-wrap break-all line-through decoration-rose-400/30 leading-relaxed shadow-inner min-h-[50px] flex items-center">
+                                                                <span className="text-[7px] font-bold text-zinc-600 uppercase tracking-widest ml-2">Pre_Process</span>
+                                                                <div className="p-4 rounded-none bg-zinc-950 border border-zinc-800 text-[10px] font-mono text-rose-500/50 whitespace-pre-wrap break-all line-through decoration-rose-500/20 leading-relaxed shadow-inner min-h-[50px] flex items-center">
                                                                     {escapeHtml(aud.original)}
                                                                 </div>
                                                             </div>
-                                                            <div className="flex lg:flex-col items-center justify-center gap-2 text-slate-800">
-                                                                <div className="w-8 h-8 rounded-full bg-slate-900 border border-slate-800 shadow-sm flex items-center justify-center text-emerald-500">
+                                                            <div className="flex lg:flex-col items-center justify-center gap-2 text-zinc-800">
+                                                                <div className="w-8 h-8 rounded-none bg-zinc-950 border border-zinc-800 flex items-center justify-center text-zinc-100">
                                                                     <ArrowRight className="lg:rotate-0 rotate-90" size={16} />
                                                                 </div>
                                                             </div>
                                                             <div className="space-y-2">
-                                                                <span className="text-[7px] font-black text-slate-600 uppercase tracking-[0.2em] ml-2">Post-Process</span>
-                                                                <div className="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/20 text-[10px] font-mono text-emerald-400 whitespace-pre-wrap break-all leading-relaxed shadow-sm font-bold min-h-[50px] flex items-center">
+                                                                <span className="text-[7px] font-bold text-zinc-600 uppercase tracking-widest ml-2">Post_Process</span>
+                                                                <div className="p-4 rounded-none bg-zinc-950 border border-zinc-800 text-[10px] font-mono text-zinc-100 whitespace-pre-wrap break-all leading-relaxed shadow-sm font-bold min-h-[50px] flex items-center">
                                                                     {escapeHtml(aud.result)}
                                                                 </div>
                                                             </div>
@@ -1202,9 +1205,9 @@ const ReferenceDupeChecker: React.FC = () => {
                                                     </motion.div>
                                                 ))}
                                                 {mergeLog.citationAudits.length === 0 && (
-                                                    <div className="text-center py-16 bg-slate-800/20 rounded-3xl border border-dashed border-slate-800">
-                                                        <AlertCircle className="mx-auto mb-3 text-slate-700" size={20} />
-                                                        <p className="text-slate-600 font-black uppercase tracking-widest text-[8px]">No citations required remapping.</p>
+                                                    <div className="text-center py-16 bg-zinc-900/20 rounded-none border border-dashed border-zinc-800">
+                                                        <AlertCircle className="mx-auto mb-3 text-zinc-700" size={20} />
+                                                        <p className="text-zinc-600 font-bold uppercase tracking-widest text-[8px]">No citations required remapping.</p>
                                                     </div>
                                                 )}
                                             </div>
@@ -1216,38 +1219,38 @@ const ReferenceDupeChecker: React.FC = () => {
                                     <motion.div 
                                         initial={{ opacity: 0 }}
                                         animate={{ opacity: 1 }}
-                                        className="flex-grow flex flex-col min-h-0 overflow-hidden bg-slate-900 p-8 relative"
+                                        className="flex-grow flex flex-col min-h-0 overflow-hidden bg-zinc-950 p-8 relative"
                                     >
                                         {isDiffing ? (
-                                            <div className="h-full flex flex-col items-center justify-center text-slate-600">
-                                                <div className="w-10 h-10 border-2 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin mb-4"></div>
-                                                <p className="text-[9px] font-black uppercase tracking-[0.3em] animate-pulse">Generating Differential Stream...</p>
+                                            <div className="h-full flex flex-col items-center justify-center text-zinc-600">
+                                                <div className="w-10 h-10 border-2 border-zinc-800 border-t-zinc-100 rounded-none animate-spin mb-4"></div>
+                                                <p className="text-[9px] font-bold uppercase tracking-[0.3em] animate-pulse">Generating_Differential_Stream...</p>
                                             </div>
                                         ) : diffRows.length > 0 ? (
                                             <>
-                                                <div className="border border-slate-800 rounded-2xl overflow-hidden shadow-2xl bg-slate-900 ring-1 ring-white/5 flex-grow flex flex-col min-h-0">
-                                                    <div className="bg-slate-800/80 border-b border-slate-700 px-6 py-3 flex justify-between items-center sticky top-0 z-20 backdrop-blur-md">
+                                                <div className="border border-zinc-800 rounded-none overflow-hidden bg-zinc-950 flex-grow flex flex-col min-h-0">
+                                                    <div className="bg-zinc-900 border-b border-zinc-800 px-6 py-3 flex justify-between items-center sticky top-0 z-20">
                                                         <div className="flex items-center gap-3">
-                                                            <span className="text-[10px] font-black text-white uppercase tracking-widest">Comparison Matrix</span>
-                                                            <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                                                            <span className="text-[10px] font-bold text-zinc-100 uppercase tracking-widest">Comparison_Matrix</span>
+                                                            <span className="text-[9px] font-mono font-bold text-zinc-100 bg-zinc-950 px-2 py-0.5 border border-zinc-800">
                                                                 {diffRows.length} NODES ANALYZED
                                                             </span>
                                                         </div>
                                                     </div>
                                                     <div ref={diffContainerRef} className="overflow-auto custom-scrollbar-emerald flex-grow">
-                                                        <table className="w-full text-[11px] font-mono border-collapse table-fixed bg-slate-900">
+                                                        <table className="w-full text-[11px] font-mono border-collapse table-fixed bg-zinc-950">
                                                             <colgroup>
-                                                                <col className="w-10 border-r border-slate-800" />
+                                                                <col className="w-10 border-r border-zinc-800" />
                                                                 <col className="w-[calc(50%-2.5rem)]" />
-                                                                <col className="w-10 border-r border-slate-800 border-l border-slate-800" />
+                                                                <col className="w-10 border-r border-zinc-800 border-l border-zinc-800" />
                                                                 <col className="w-[calc(50%-2.5rem)]" />
                                                             </colgroup>
                                                             <tbody>
                                                                 {diffRows.map((row) => {
                                                                     let lClass = '';
                                                                     let rClass = '';
-                                                                    let lNumClass = 'bg-slate-900 text-slate-700'; 
-                                                                    let rNumClass = 'bg-slate-900 text-slate-700';
+                                                                    let lNumClass = 'bg-zinc-950 text-zinc-700'; 
+                                                                    let rNumClass = 'bg-zinc-950 text-zinc-700';
 
                                                                     if (row.type === 'delete') {
                                                                         lClass = 'bg-rose-500/10 text-rose-300/80';
@@ -1269,15 +1272,15 @@ const ReferenceDupeChecker: React.FC = () => {
                                                                     return (
                                                                         <tr 
                                                                             key={row.id} 
-                                                                            className="border-b border-slate-800/50 hover:bg-white/5 transition-colors"
+                                                                            className="border-b border-zinc-800/50 hover:bg-zinc-100/5 transition-colors"
                                                                             data-change-index={row.changeIndex}
                                                                             data-change-index-group={row.isFirstInGroup ? row.changeIndex : undefined}
                                                                             data-type={row.type}
                                                                         >
-                                                                            <td className={`w-10 text-right text-[9px] p-1 border-r border-slate-800 select-none font-mono ${lNumClass}`}>{row.leftNum || ''}</td>
-                                                                            <td className={`p-2 font-mono text-[11px] whitespace-pre-wrap break-words leading-relaxed ${lClass || 'text-slate-400'}`} dangerouslySetInnerHTML={{ __html: row.leftContent }}></td>
-                                                                            <td className={`w-10 text-right text-[9px] p-1 border-r border-slate-800 border-l border-slate-800 select-none font-mono ${rNumClass}`}>{row.rightNum || ''}</td>
-                                                                            <td className={`p-2 font-mono text-[11px] whitespace-pre-wrap break-words leading-relaxed ${rClass || 'text-slate-400'}`} dangerouslySetInnerHTML={{ __html: row.rightContent }}></td>
+                                                                            <td className={`w-10 text-right text-[9px] p-1 border-r border-zinc-800 select-none font-mono ${lNumClass}`}>{row.leftNum || ''}</td>
+                                                                            <td className={`p-2 font-mono text-[11px] whitespace-pre-wrap break-words leading-relaxed ${lClass || 'text-zinc-500'}`} dangerouslySetInnerHTML={{ __html: row.leftContent }}></td>
+                                                                            <td className={`w-10 text-right text-[9px] p-1 border-r border-zinc-800 border-l border-zinc-800 select-none font-mono ${rNumClass}`}>{row.rightNum || ''}</td>
+                                                                            <td className={`p-2 font-mono text-[11px] whitespace-pre-wrap break-words leading-relaxed ${rClass || 'text-zinc-500'}`} dangerouslySetInnerHTML={{ __html: row.rightContent }}></td>
                                                                         </tr>
                                                                     );
                                                                 })}
@@ -1293,30 +1296,30 @@ const ReferenceDupeChecker: React.FC = () => {
                                                             initial={{ opacity: 0, y: 20, scale: 0.95 }}
                                                             animate={{ opacity: 1, y: 0, scale: 1 }}
                                                             exit={{ opacity: 0, y: 20, scale: 0.95 }}
-                                                            className="absolute bottom-12 right-12 flex items-center gap-2 bg-white/90 backdrop-blur-xl border border-slate-200/50 rounded-2xl p-2 shadow-[0_20px_50px_rgba(0,0,0,0.15)] z-30 ring-1 ring-slate-900/5"
+                                                            className="absolute bottom-12 right-12 flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-none p-2 shadow-[20px_20px_0px_rgba(0,0,0,0.3)] z-30"
                                                         >
-                                                            <div className="flex items-center gap-1 pr-2 border-r border-slate-100">
-                                                                <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center">
-                                                                    <GitCompare className="w-4 h-4 text-indigo-600" strokeWidth={2.5} />
+                                                            <div className="flex items-center gap-1 pr-2 border-r border-zinc-800">
+                                                                <div className="w-8 h-8 rounded-none bg-zinc-100 flex items-center justify-center">
+                                                                    <GitCompare className="w-4 h-4 text-zinc-950" strokeWidth={2.5} />
                                                                 </div>
                                                                 <div className="flex flex-col px-2">
-                                                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter leading-none mb-0.5">Changes</span>
-                                                                    <span className="text-xs font-black text-slate-900 tabular-nums leading-none">
-                                                                        {currentChangeIndex} <span className="text-slate-300 mx-0.5">/</span> {totalChanges}
+                                                                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-tighter leading-none mb-0.5">Changes</span>
+                                                                    <span className="text-xs font-bold text-zinc-100 tabular-nums leading-none">
+                                                                        {currentChangeIndex} <span className="text-zinc-600 mx-0.5">/</span> {totalChanges}
                                                                     </span>
                                                                 </div>
                                                             </div>
                                                             <div className="flex items-center gap-1">
                                                                 <button 
                                                                     onClick={() => scrollToChange('prev')}
-                                                                    className="p-2.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition-all text-slate-600 hover:text-indigo-600 group"
+                                                                    className="p-2.5 hover:bg-zinc-800 active:bg-zinc-700 rounded-none transition-all text-zinc-500 hover:text-zinc-100 group"
                                                                     title="Previous Change (Shift+Tab)"
                                                                 >
                                                                     <ChevronUp className="w-5 h-5 group-active:-translate-y-0.5 transition-transform" strokeWidth={3} />
                                                                 </button>
                                                                 <button 
                                                                     onClick={() => scrollToChange('next')}
-                                                                    className="p-2.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition-all text-slate-600 hover:text-indigo-600 group"
+                                                                    className="p-2.5 hover:bg-zinc-800 active:bg-zinc-700 rounded-none transition-all text-zinc-500 hover:text-zinc-100 group"
                                                                     title="Next Change (Tab)"
                                                                 >
                                                                     <ChevronDown className="w-5 h-5 group-active:translate-y-0.5 transition-transform" strokeWidth={3} />
@@ -1327,22 +1330,22 @@ const ReferenceDupeChecker: React.FC = () => {
                                                 </AnimatePresence>
                                             </>
                                         ) : (
-                                            <div className="h-full flex flex-col items-center justify-center text-slate-700">
+                                            <div className="h-full flex flex-col items-center justify-center text-zinc-800">
                                                 <GitCompare size={40} className="mb-4 opacity-10" />
-                                                <p className="text-[9px] font-black uppercase tracking-[0.3em]">Differential Stream Unavailable</p>
+                                                <p className="text-[9px] font-bold uppercase tracking-[0.3em]">Differential_Stream_Unavailable</p>
                                                 <p className="text-[8px] mt-2 opacity-40">Run similarity scan and merge to generate diff data</p>
                                             </div>
                                         )}
                                     </motion.div>
                                 )}
                             </div>
-                            <div className="relative p-6 bg-slate-900 border-t border-slate-800 flex justify-center z-10 shadow-2xl">
+                            <div className="relative p-6 bg-zinc-950 border-t border-zinc-800 flex justify-center z-10">
                                 <button 
                                     onClick={() => { setStep('input'); setInput(''); setGroups([]); }} 
-                                    className="group flex items-center gap-4 text-slate-600 hover:text-emerald-400 font-black text-[9px] uppercase tracking-[0.35em] transition-all"
+                                    className="group flex items-center gap-4 text-zinc-500 hover:text-zinc-100 font-bold text-[10px] uppercase tracking-[0.35em] transition-all"
                                 >
                                     <RefreshCw size={14} className="group-hover:rotate-180 transition-transform duration-700" />
-                                    Reset System Workflow
+                                    Reset_System_Workflow
                                 </button>
                             </div>
                         </motion.div>

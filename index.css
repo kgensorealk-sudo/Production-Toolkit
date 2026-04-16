@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,46 +6,35 @@
 
 @layer base {
   body {
-    @apply bg-slate-50 text-slate-900 antialiased;
-    font-family: 'Inter', sans-serif;
+    @apply bg-zinc-950 text-zinc-400 font-sans selection:bg-zinc-100 selection:text-zinc-950 antialiased;
   }
 }
 
 @layer components {
-  .glass-panel {
-    @apply bg-white/80 backdrop-blur-xl border border-slate-200 shadow-xl;
+  .architect-border {
+    @apply border border-zinc-800;
   }
   
-  .glass-header {
-    @apply bg-white/70 backdrop-blur-md border-b border-slate-200 sticky top-0 z-50;
+  .architect-grid {
+    @apply bg-[linear-gradient(to_right,#18181b_1px,transparent_1px),linear-gradient(to_bottom,#18181b_1px,transparent_1px)] bg-[size:20px_20px];
   }
 
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
-  .no-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
+  .architect-button {
+    @apply px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all border border-zinc-800 bg-zinc-900 hover:bg-zinc-100 hover:text-zinc-950 disabled:opacity-30 disabled:hover:bg-zinc-900 disabled:hover:text-zinc-400;
   }
 
-  .custom-scrollbar::-webkit-scrollbar {
-    width: 8px;
-  }
-  .custom-scrollbar::-webkit-scrollbar-track {
-    @apply bg-slate-100;
-  }
-  .custom-scrollbar::-webkit-scrollbar-thumb {
-    @apply bg-slate-300 rounded-full border-2 border-slate-100 hover:bg-slate-400 transition-colors;
+  .architect-tab {
+    @apply flex items-center gap-3 px-6 py-4 text-[10px] font-bold uppercase tracking-widest transition-all border-r border-zinc-800 whitespace-nowrap;
   }
 
   .custom-scrollbar-emerald::-webkit-scrollbar {
     width: 6px;
   }
   .custom-scrollbar-emerald::-webkit-scrollbar-track {
-    @apply bg-slate-950;
+    @apply bg-zinc-950;
   }
   .custom-scrollbar-emerald::-webkit-scrollbar-thumb {
-    @apply bg-slate-800 rounded-full border-2 border-slate-950 hover:bg-emerald-500/50 transition-colors;
+    @apply bg-zinc-800 rounded-none border-2 border-zinc-950 hover:bg-zinc-700 transition-colors;
   }
 }
 

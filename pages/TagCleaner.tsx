@@ -1,5 +1,6 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
@@ -13,6 +14,8 @@ interface ReportItem {
 }
 
 const TagCleaner: React.FC = () => {
+    const location = useLocation();
+    const navigate = useNavigate();
     const [input, setInput] = useLocalStorage<string>('tag_cleaner_input', '');
     const [output, setOutput] = useLocalStorage<string>('tag_cleaner_output', '');
     const [lastProcessedInput, setLastProcessedInput] = useLocalStorage<string>('tag_cleaner_last_input', '');
@@ -20,6 +23,18 @@ const TagCleaner: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'output' | 'report'>('output');
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+
+    useEffect(() => {
+        if (location.state?.transferredXml) {
+            setInput(location.state.transferredXml);
+            setToast({ 
+                msg: `Data successfully imported from ${location.state.sourceTool || 'previous tool'}.`, 
+                type: 'success' 
+            });
+            // Clear the state so it doesn't re-trigger on refresh
+            navigate(location.pathname, { replace: true, state: {} });
+        }
+    }, [location, navigate, setInput]);
 
     const processTags = (action: 'accept' | 'reject') => {
         if (!input.trim()) {

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import { diffLines, diffWordsWithSpace, Change } from 'diff';
 import { 
@@ -43,11 +44,25 @@ interface AuditLine {
 }
 
 const AffiliationSequencer: React.FC = () => {
+    const location = useLocation();
+    const navigate = useNavigate();
     const [input, setInput] = useLocalStorage<string>('affiliation_sequencer_input', '');
     const [output, setOutput] = useLocalStorage<string>('affiliation_sequencer_output', '');
     const [lastProcessedInput, setLastProcessedInput] = useLocalStorage<string>('affiliation_sequencer_last_input', '');
     const [isProcessing, setIsProcessing] = useState(false);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
+
+    useEffect(() => {
+        if (location.state?.transferredXml) {
+            setInput(location.state.transferredXml);
+            setToast({ 
+                msg: `Data successfully imported from ${location.state.sourceTool || 'previous tool'}.`, 
+                type: 'success' 
+            });
+            // Clear the state so it doesn't re-trigger on refresh
+            navigate(location.pathname, { replace: true, state: {} });
+        }
+    }, [location, navigate, setInput]);
     const [activeTab, setActiveTab] = useState<'xml' | 'report' | 'diff'>('xml');
     const [report, setReport] = useState<AuditLine[]>([]);
     const [step, setStep] = useState(1); // 1: Input/Analysis, 2: Result

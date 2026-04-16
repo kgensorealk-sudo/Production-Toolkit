@@ -564,14 +564,14 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                                 className="hover:text-indigo-600 transition-colors flex items-center gap-1.5 group"
                             >
                                 <MessageSquare size={10} className="group-hover:scale-110 transition-transform" />
-                                <span>Feedback</span>
+                                <span>FEEDBACK</span>
                             </button>
                         )}
                         <span className="flex items-center gap-1.5">
                             <div className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-amber-500'}`}></div>
-                            Status: {isOnline ? 'Synchronized' : 'Offline Mode'}
+                            STATUS: {isOnline ? 'SYNCHRONIZED' : 'OFFLINE MODE'}
                         </span>
-                        <span>v1.8.0</span>
+                        <span>V1.8.0</span>
                     </div>
                 </div>
             </footer>

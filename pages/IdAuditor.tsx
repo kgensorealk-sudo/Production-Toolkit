@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { diffLines, diffWordsWithSpace, Change } from 'diff';
-import { ChevronUp, ChevronDown, GitCompare } from 'lucide-react';
+import { ChevronUp, ChevronDown, GitCompare, Lightbulb, ArrowRight, Link as LinkIcon, Eraser, Hash, Trash2, RefreshCw, Box } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useNavigate } from 'react-router';
+import { SmartSuggestion, ToolId } from '../types';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
@@ -34,7 +36,9 @@ const IdAuditor: React.FC = () => {
     const [input, setInput] = useState('');
     const [output, setOutput] = useState('');
     const [auditResults, setAuditResults] = useState<AuditItem[]>([]);
+    const [suggestions, setSuggestions] = useState<SmartSuggestion[]>([]);
     const [step, setStep] = useState<'input' | 'audit' | 'result'>('input');
+    const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState<'xml' | 'diff'>('xml');
     const [isLoading, setIsLoading] = useState(false);
     const [toast, setToast] = useState<{ msg: string, type: 'success' | 'warn' | 'error' | 'info' } | null>(null);
@@ -273,6 +277,116 @@ const IdAuditor: React.FC = () => {
                         item.status = 'invalid';
                     }
                 });
+
+                // Smart Suggestions Logic (Background Scanner)
+                const newSuggestions: SmartSuggestion[] = [];
+                
+                // 1. XML Normalizer (Renumber)
+                const labelRegex = /<ce:label>\[?(\d+)\]?<\/ce:label>/gi;
+                let lastLabel = 0;
+                let outOfSequence = false;
+                let labelMatch;
+                while ((labelMatch = labelRegex.exec(input)) !== null) {
+                    const currentLabel = parseInt(labelMatch[1]);
+                    if (currentLabel !== lastLabel + 1 && lastLabel !== 0) {
+                        outOfSequence = true;
+                        break;
+                    }
+                    lastLabel = currentLabel;
+                }
+                if (outOfSequence) {
+                    newSuggestions.push({
+                        id: 'xml-renumber',
+                        toolName: 'XML Normalizer',
+                        description: 'It is found that the XML contains out-of-sequence numbered references. Please use the XML Normalizer to re-sequence the bibliography.',
+                        path: '/xmlRenumber',
+                        icon: <Hash className="w-4 h-4" />,
+                        condition: 'Out-of-sequence references detected'
+                    });
+                }
+
+                // 2. Other-Refs Scanner
+                const otherRefCount = (input.match(/<ce:other-ref/g) || []).length;
+                if (otherRefCount > 0) {
+                    newSuggestions.push({
+                        id: 'other-ref',
+                        toolName: 'Other-Ref Scanner',
+                        description: `It is found that the XML contains ${otherRefCount} other-ref(s). Please use the Other-Refs Scanner.`,
+                        path: '/otherRefScanner',
+                        icon: <LinkIcon className="w-4 h-4" />,
+                        condition: 'Other-refs detected'
+                    });
+                }
+
+                // 3. XML Tag Cleaner
+                const tagMatches = input.match(/<(opt_DEL|opt_INS|opt_Comment)\b[^>]*>([\s\S]*?)<\/\1>/g) || [];
+                if (tagMatches.length > 0) {
+                    newSuggestions.push({
+                        id: 'tag-cleaner',
+                        toolName: 'XML Tag Cleaner',
+                        description: `It is found that the XML contains ${tagMatches.length} editorial tag(s) (DEL/INS/Comment). Please use the XML Tag Cleaner.`,
+                        path: '/tagCleaner',
+                        icon: <Trash2 className="w-4 h-4" />,
+                        condition: 'Editorial tags detected'
+                    });
+                }
+
+                // 4. Citation Linker Pro
+                const unlinkedCitations = (input.match(/<ce:cross-ref(?![^>]*\brefid=)[^>]*>/g) || []).length;
+                if (unlinkedCitations > 0) {
+                    newSuggestions.push({
+                        id: 'citation-linker',
+                        toolName: 'Citation Linker Pro',
+                        description: `It is found that the XML result contains ${unlinkedCitations} unlinked Cross-ref(s). Please use the Citation Linker Pro.`,
+                        path: '/citationLinker',
+                        icon: <LinkIcon className="w-4 h-4" />,
+                        condition: 'Unlinked citations detected'
+                    });
+                }
+
+                // 5. Uncited Ref Cleaner
+                const bibRefIds = Array.from(input.matchAll(/<ce:bib-reference\b[^>]*?\bid="([^"]+)"/g)).map(m => m[1]);
+                if (bibRefIds.length > 0) {
+                    const crossRefIds = new Set(Array.from(input.matchAll(/\brefid="([^"]+)"/g)).map(m => m[1]));
+                    const uncited = bibRefIds.filter(id => !crossRefIds.has(id));
+                    if (uncited.length > 0) {
+                        newSuggestions.push({
+                            id: 'uncited-cleaner',
+                            toolName: 'Uncited Ref Cleaner',
+                            description: `It is found that the XML contains ${uncited.length} reference(s) that are not cited in the text. Please use the Uncited Ref Cleaner to identify and remove them.`,
+                            path: '/uncitedCleaner',
+                            icon: <Eraser className="w-4 h-4" />,
+                            condition: 'Uncited references detected'
+                        });
+                    }
+                }
+
+                // 6. View Synchronizer
+                const complexNodeCount = (input.match(/<(ce:table|ce:figure|ce:display-formula|ce:list)\b/g) || []).length;
+                if (complexNodeCount > 0 && input.includes('<ce:para>')) {
+                    newSuggestions.push({
+                        id: 'view-sync',
+                        toolName: 'View Synchronizer',
+                        description: `It is found that the XML contains ${complexNodeCount} complex structural nodes. Please use the View Synchronizer to ensure visual consistency between XML source and rendered views.`,
+                        path: '/viewSync',
+                        icon: <RefreshCw className="w-4 h-4" />,
+                        condition: 'Complex structural nodes detected'
+                    });
+                }
+
+                // 7. Structural Node Architect
+                if (input.includes('<ce:source-text')) {
+                    newSuggestions.push({
+                        id: 'structural-architect',
+                        toolName: 'Structural Node Architect v3.2',
+                        description: 'It is found that the XML contains unstructured source text. Please use the Structural Node Architect to transform raw source text into valid structural bibliography nodes.',
+                        path: '/structuralArchitect',
+                        icon: <Box className="w-4 h-4" />,
+                        condition: 'Structural overhaul recommended'
+                    });
+                }
+
+                setSuggestions(newSuggestions);
 
                 if (results.length === 0) {
                     setToast({ msg: "No structural nodes detected for audit.", type: "warn" });
@@ -527,6 +641,36 @@ const IdAuditor: React.FC = () => {
 
                 {step === 'result' && (
                     <div className="flex flex-col h-full animate-fade-in overflow-hidden">
+                        {suggestions.length > 0 && (
+                            <div className="px-10 pt-6 bg-white border-b border-slate-100">
+                                <div className="p-6 bg-indigo-50/30 border-2 border-indigo-100 rounded-[2rem] border-dashed">
+                                    <div className="flex items-center gap-3 mb-4">
+                                        <Lightbulb className="w-5 h-5 text-indigo-600" />
+                                        <h4 className="text-xs font-black text-indigo-900 uppercase tracking-[0.2em]">Architectural Recommendations</h4>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {suggestions.map(sug => (
+                                            <button 
+                                                key={sug.id}
+                                                onClick={() => {
+                                                    navigate(sug.path, { state: { transferredXml: output, sourceTool: 'ID Prefix Auditor' } });
+                                                }}
+                                                className="flex items-center gap-4 p-4 bg-white border border-indigo-100 rounded-2xl hover:border-indigo-300 hover:shadow-md transition-all group text-left shadow-sm"
+                                            >
+                                                <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:scale-110 transition-transform">
+                                                    {sug.icon}
+                                                </div>
+                                                <div className="flex-grow">
+                                                    <div className="text-[10px] font-black text-indigo-900 uppercase tracking-widest mb-0.5">{sug.toolName}</div>
+                                                    <div className="text-[9px] text-indigo-500 font-medium leading-tight">{sug.description}</div>
+                                                </div>
+                                                <ArrowRight className="w-4 h-4 text-indigo-300 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                         <div className="bg-slate-50 px-10 py-5 border-b border-slate-200 flex justify-between items-center">
                             <h3 className="font-black text-slate-900 text-xs uppercase tracking-widest">Corrected Protocol Stream</h3>
                             <div className="flex gap-4">

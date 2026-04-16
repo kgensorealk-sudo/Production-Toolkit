@@ -1,8 +1,10 @@
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 import { diffLines, diffWordsWithSpace, diffChars, Change } from 'diff';
-import { ChevronUp, ChevronDown, GitCompare, Search, AlertCircle, CheckCircle } from 'lucide-react';
+import { ChevronUp, ChevronDown, GitCompare, Search, AlertCircle, CheckCircle, Lightbulb, ArrowRight, Link as LinkIcon, Eraser, Hash, Trash2, RefreshCw, Box } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { SmartSuggestion, ToolId } from '../types';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
@@ -33,12 +35,15 @@ interface SyncLog {
 }
 
 const ViewSync: React.FC = () => {
+    const location = useLocation();
+    const navigate = useNavigate();
     const [input, setInput] = useLocalStorage<string>('view_sync_input', '');
     const [output, setOutput] = useLocalStorage<string>('view_sync_output', '');
     const [lastProcessedInput, setLastProcessedInput] = useLocalStorage<string>('view_sync_last_input', '');
     const [logs, setLogs] = useState<SyncLog[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
+    const [suggestions, setSuggestions] = useState<SmartSuggestion[]>([]);
     const [syncDirection, setSyncDirection] = useState<'compact-to-extended' | 'extended-to-compact'>('compact-to-extended');
     const [customStartId, setCustomStartId] = useState<string>('');
     
@@ -48,6 +53,18 @@ const ViewSync: React.FC = () => {
     const [diffRows, setDiffRows] = useState<any[]>([]);
     const [currentChangeIndex, setCurrentChangeIndex] = useState(0);
     const [totalChanges, setTotalChanges] = useState(0);
+
+    useEffect(() => {
+        if (location.state?.transferredXml) {
+            setInput(location.state.transferredXml);
+            setToast({ 
+                msg: `Data successfully imported from ${location.state.sourceTool || 'previous tool'}.`, 
+                type: 'success' 
+            });
+            // Clear the state so it doesn't re-trigger on refresh
+            navigate(location.pathname, { replace: true, state: {} });
+        }
+    }, [location, navigate, setInput]);
 
     const diffContainerRef = useRef<HTMLDivElement>(null);
 
@@ -575,6 +592,86 @@ const ViewSync: React.FC = () => {
             setLastProcessedInput(input);
             setLogs(newLogs);
             generateDiff(input, finalOutput);
+            
+            // Background Scanner for Smart Suggestions
+            const newSuggestions: SmartSuggestion[] = [];
+            
+            // 1. XML Normalizer (Renumber)
+            if (finalOutput.includes('<ce:bib-reference')) {
+                newSuggestions.push({
+                    id: 'xml-renumber',
+                    toolName: 'XML Normalizer',
+                    description: 'Bibliography detected. Use this to ensure all references are correctly numbered and cross-references are updated.',
+                    path: '/xmlRenumber',
+                    icon: <Hash className="w-4 h-4" />,
+                    condition: 'Bibliography detected'
+                });
+            }
+
+            // 2. Other-Refs Scanner
+            const otherRefCount = (finalOutput.match(/<ce:other-ref/g) || []).length;
+            if (otherRefCount > 0) {
+                newSuggestions.push({
+                    id: 'other-ref',
+                    toolName: 'Other-Ref Scanner',
+                    description: `It is found that the XML contains ${otherRefCount} other-ref(s). Please use the Other-Refs Scanner.`,
+                    path: '/otherRefScanner',
+                    icon: <LinkIcon className="w-4 h-4" />,
+                    condition: 'Other-refs detected'
+                });
+            }
+
+            // 3. XML Tag Cleaner
+            const tagMatches = finalOutput.match(/<(opt_DEL|opt_INS|opt_Comment)\b[^>]*>([\s\S]*?)<\/\1>/g) || [];
+            if (tagMatches.length > 0) {
+                newSuggestions.push({
+                    id: 'tag-cleaner',
+                    toolName: 'XML Tag Cleaner',
+                    description: `It is found that the XML contains ${tagMatches.length} editorial tag(s) (DEL/INS/Comment). Please use the XML Tag Cleaner.`,
+                    path: '/tagCleaner',
+                    icon: <Trash2 className="w-4 h-4" />,
+                    condition: 'Editorial tags detected'
+                });
+            }
+
+            // 4. Citation Linker Pro
+            const unlinkedCitations = (finalOutput.match(/<ce:cross-ref(?![^>]*\brefid=)[^>]*>/g) || []).length;
+            if (unlinkedCitations > 0) {
+                newSuggestions.push({
+                    id: 'citation-linker',
+                    toolName: 'Citation Linker Pro',
+                    description: `It is found that the XML result contains ${unlinkedCitations} unlinked Cross-ref(s). Please use the Citation Linker Pro.`,
+                    path: '/citationLinker',
+                    icon: <LinkIcon className="w-4 h-4" />,
+                    condition: 'Unlinked citations detected'
+                });
+            }
+
+            // 5. Uncited Ref Cleaner
+            if (finalOutput.includes('<ce:bibliography')) {
+                newSuggestions.push({
+                    id: 'uncited-cleaner',
+                    toolName: 'Uncited Ref Cleaner',
+                    description: 'Bibliography detected. Use this tool to identify and remove references that are not cited in the text.',
+                    path: '/uncitedCleaner',
+                    icon: <Eraser className="w-4 h-4" />,
+                    condition: 'Bibliography detected'
+                });
+            }
+
+            // 6. Structural Node Architect
+            if (finalOutput.includes('<ce:source-text') || !finalOutput.includes('<sb:reference')) {
+                newSuggestions.push({
+                    id: 'structural-architect',
+                    toolName: 'Structural Node Architect v3.2',
+                    description: 'Structural overhaul recommended. Use this to transform raw source text into valid structural bibliography nodes.',
+                    path: '/structuralArchitect',
+                    icon: <Box className="w-4 h-4" />,
+                    condition: 'Structural overhaul recommended'
+                });
+            }
+
+            setSuggestions(newSuggestions);
             setActiveTab('report');
             setToast({ msg: `Successfully synced ${count} paragraph pairs.`, type: "success" });
             setIsLoading(false);
@@ -711,6 +808,37 @@ const ViewSync: React.FC = () => {
                 
                 {/* Output Section */}
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col relative">
+                    {/* Smart Suggestions Section */}
+                    {suggestions.length > 0 && (
+                        <div className="px-5 pt-4 bg-white border-b border-slate-100">
+                            <div className="p-4 bg-indigo-50/30 border-2 border-indigo-100 rounded-2xl border-dashed">
+                                <div className="flex items-center gap-3 mb-3">
+                                    <Lightbulb className="w-4 h-4 text-indigo-600" />
+                                    <h4 className="text-[10px] font-black text-indigo-900 uppercase tracking-[0.2em]">Architectural Recommendations</h4>
+                                </div>
+                                <div className="grid grid-cols-1 gap-3">
+                                    {suggestions.map(sug => (
+                                        <button 
+                                            key={sug.id}
+                                            onClick={() => {
+                                                navigate(sug.path, { state: { transferredXml: output, sourceTool: 'View Synchronizer' } });
+                                            }}
+                                            className="flex items-center gap-4 p-3 bg-white border border-indigo-100 rounded-xl hover:border-indigo-300 hover:shadow-md transition-all group text-left shadow-sm"
+                                        >
+                                            <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:scale-110 transition-transform">
+                                                {sug.icon}
+                                            </div>
+                                            <div className="flex-grow">
+                                                <div className="text-[9px] font-black text-indigo-900 uppercase tracking-widest mb-0.5">{sug.toolName}</div>
+                                                <div className="text-[8px] text-indigo-500 font-medium leading-tight">{sug.description}</div>
+                                            </div>
+                                            <ArrowRight className="w-3 h-3 text-indigo-300 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     <div className="bg-slate-50 px-5 py-2 border-b border-slate-100 flex justify-between items-center">
                         <label className="font-bold text-slate-700 text-sm flex items-center gap-2">
                             <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white border border-slate-200 text-xs text-emerald-600 font-mono shadow-sm">2</span>

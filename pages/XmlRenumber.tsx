@@ -1,8 +1,10 @@
 
 import React, { useState, useRef, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 import { diffLines, diffWordsWithSpace, Change } from 'diff';
-import { ChevronUp, ChevronDown, GitCompare } from 'lucide-react';
+import { ChevronUp, ChevronDown, GitCompare, Lightbulb, ArrowRight, Link as LinkIcon, Eraser, Hash, Trash2, RefreshCw, Box } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { SmartSuggestion, ToolId } from '../types';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
@@ -18,6 +20,8 @@ interface ReferenceChange {
 }
 
 const XmlRenumber: React.FC = () => {
+    const location = useLocation();
+    const navigate = useNavigate();
     const [input, setInput] = useSessionStorage<string>('xml_renumber_input', '');
     const [output, setOutput] = useSessionStorage<string>('xml_renumber_output', '');
     const [lastProcessedInput, setLastProcessedInput] = useSessionStorage<string>('xml_renumber_last_processed_input', '');
@@ -25,6 +29,7 @@ const XmlRenumber: React.FC = () => {
     const [suffix, setSuffix] = useState(']');
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [suggestions, setSuggestions] = useState<SmartSuggestion[]>([]);
     
     const [activeTab, setActiveTab] = useLocalStorage<'raw' | 'diff' | 'report' | 'extraction'>('xml_renumber_active_tab', 'raw');
     const [reportData, setReportData] = useSessionStorage<ReferenceChange[]>('xml_renumber_report_data', []);
@@ -37,6 +42,18 @@ const XmlRenumber: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [filterChangedOnly, setFilterChangedOnly] = useState(false);
     const [filterOtherRefOnly, setFilterOtherRefOnly] = useState(false);
+
+    useEffect(() => {
+        if (location.state?.transferredXml) {
+            setInput(location.state.transferredXml);
+            setToast({ 
+                msg: `Data successfully imported from ${location.state.sourceTool || 'previous tool'}.`, 
+                type: 'success' 
+            });
+            // Clear the state so it doesn't re-trigger on refresh
+            navigate(location.pathname, { replace: true, state: {} });
+        }
+    }, [location, navigate, setInput]);
 
     useEffect(() => {
         // Migration/Cleanup: Remove large items from localStorage to free up space
@@ -403,6 +420,92 @@ const XmlRenumber: React.FC = () => {
                 setLastProcessedInput(input);
                 setReportData(changes);
                 setDiffElements(null); // Force regeneration when user switches to diff tab
+                
+                // Background Scanner for Smart Suggestions
+                const newSuggestions: SmartSuggestion[] = [];
+                
+                // 1. Other-Refs Scanner
+                const otherRefCount = (renumberedText.match(/<ce:other-ref/g) || []).length;
+                if (otherRefCount > 0) {
+                    newSuggestions.push({
+                        id: 'other-ref',
+                        toolName: 'Other-Ref Scanner',
+                        description: `It is found that the XML contains ${otherRefCount} other-ref(s). Please use the Other-Refs Scanner.`,
+                        path: '/otherRefScanner',
+                        icon: <LinkIcon className="w-4 h-4" />,
+                        condition: 'Other-refs detected'
+                    });
+                }
+
+                // 2. XML Tag Cleaner
+                const tagMatches = renumberedText.match(/<(opt_DEL|opt_INS|opt_Comment)\b[^>]*>([\s\S]*?)<\/\1>/g) || [];
+                if (tagMatches.length > 0) {
+                    newSuggestions.push({
+                        id: 'tag-cleaner',
+                        toolName: 'XML Tag Cleaner',
+                        description: `It is found that the XML contains ${tagMatches.length} editorial tag(s) (DEL/INS/Comment). Please use the XML Tag Cleaner.`,
+                        path: '/tagCleaner',
+                        icon: <Trash2 className="w-4 h-4" />,
+                        condition: 'Editorial tags detected'
+                    });
+                }
+
+                // 3. Citation Linker Pro
+                const unlinkedCitations = (renumberedText.match(/<ce:cross-ref(?![^>]*\brefid=)[^>]*>/g) || []).length;
+                if (unlinkedCitations > 0) {
+                    newSuggestions.push({
+                        id: 'citation-linker',
+                        toolName: 'Citation Linker Pro',
+                        description: `It is found that the XML result contains ${unlinkedCitations} unlinked Cross-ref(s). Please use the Citation Linker Pro.`,
+                        path: '/citationLinker',
+                        icon: <LinkIcon className="w-4 h-4" />,
+                        condition: 'Unlinked citations detected'
+                    });
+                }
+
+                // 4. Uncited Ref Cleaner
+                const bibRefIds = Array.from(renumberedText.matchAll(/<ce:bib-reference\b[^>]*?\bid="([^"]+)"/g)).map(m => m[1]);
+                if (bibRefIds.length > 0) {
+                    const crossRefIds = new Set(Array.from(renumberedText.matchAll(/\brefid="([^"]+)"/g)).map(m => m[1]));
+                    const uncited = bibRefIds.filter(id => !crossRefIds.has(id));
+                    if (uncited.length > 0) {
+                        newSuggestions.push({
+                            id: 'uncited-cleaner',
+                            toolName: 'Uncited Ref Cleaner',
+                            description: `It is found that the XML contains ${uncited.length} reference(s) that are not cited in the text. Please use the Uncited Ref Cleaner to identify and remove them.`,
+                            path: '/uncitedCleaner',
+                            icon: <Eraser className="w-4 h-4" />,
+                            condition: 'Uncited references detected'
+                        });
+                    }
+                }
+
+                // 5. View Synchronizer
+                const complexNodeCount = (renumberedText.match(/<(ce:table|ce:figure|ce:display-formula|ce:list)\b/g) || []).length;
+                if (complexNodeCount > 0 && renumberedText.includes('<ce:para>')) {
+                    newSuggestions.push({
+                        id: 'view-sync',
+                        toolName: 'View Synchronizer',
+                        description: `It is found that the XML contains ${complexNodeCount} complex structural nodes. Please use the View Synchronizer to ensure visual consistency between XML source and rendered views.`,
+                        path: '/viewSync',
+                        icon: <RefreshCw className="w-4 h-4" />,
+                        condition: 'Complex structural nodes detected'
+                    });
+                }
+
+                // 6. Structural Node Architect
+                if (renumberedText.includes('<ce:source-text')) {
+                    newSuggestions.push({
+                        id: 'structural-architect',
+                        toolName: 'Structural Node Architect v3.2',
+                        description: 'It is found that the XML contains unstructured source text. Please use the Structural Node Architect to transform raw source text into valid structural bibliography nodes.',
+                        path: '/structuralArchitect',
+                        icon: <Box className="w-4 h-4" />,
+                        condition: 'Structural overhaul recommended'
+                    });
+                }
+
+                setSuggestions(newSuggestions);
                 setActiveTab('report');
                 setToast({ msg: `Successfully processed ${bibMatchCount} references.`, type: 'success' });
             } catch (e) {
@@ -553,6 +656,37 @@ const XmlRenumber: React.FC = () => {
                 </div>
                 
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+                    {/* Smart Suggestions Section */}
+                    {suggestions.length > 0 && (
+                        <div className="px-5 pt-4 bg-white border-b border-slate-100">
+                            <div className="p-4 bg-indigo-50/30 border-2 border-indigo-100 rounded-2xl border-dashed">
+                                <div className="flex items-center gap-3 mb-3">
+                                    <Lightbulb className="w-4 h-4 text-indigo-600" />
+                                    <h4 className="text-[10px] font-black text-indigo-900 uppercase tracking-[0.2em]">Architectural Recommendations</h4>
+                                </div>
+                                <div className="grid grid-cols-1 gap-3">
+                                    {suggestions.map(sug => (
+                                        <button 
+                                            key={sug.id}
+                                            onClick={() => {
+                                                navigate(sug.path, { state: { transferredXml: output, sourceTool: 'XML Normalizer' } });
+                                            }}
+                                            className="flex items-center gap-4 p-3 bg-white border border-indigo-100 rounded-xl hover:border-indigo-300 hover:shadow-md transition-all group text-left shadow-sm"
+                                        >
+                                            <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:scale-110 transition-transform">
+                                                {sug.icon}
+                                            </div>
+                                            <div className="flex-grow">
+                                                <div className="text-[9px] font-black text-indigo-900 uppercase tracking-widest mb-0.5">{sug.toolName}</div>
+                                                <div className="text-[8px] text-indigo-500 font-medium leading-tight">{sug.description}</div>
+                                            </div>
+                                            <ArrowRight className="w-3 h-3 text-indigo-300 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
                      <div className="bg-slate-50 px-5 py-2 border-b border-slate-100 flex justify-between items-center shrink-0">
                          <label className="font-bold text-slate-700 text-sm flex items-center gap-2">
                             <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white border border-slate-200 text-xs text-emerald-600 font-mono shadow-sm">OUT</span>

@@ -26,7 +26,8 @@ import {
     UserCheck,
     Highlighter,
     Trash2,
-    ShieldAlert
+    ShieldAlert,
+    SortAsc
 } from 'lucide-react';
 import { ToolId } from '../types';
 import { useAuth, withRetry } from '../contexts/AuthContext';
@@ -251,7 +252,7 @@ const Dashboard: React.FC = () => {
 
     const sections = useMemo(() => {
         const filtered = filteredTools;
-        const featured = filtered.filter(t => !pinnedTools.includes(t.id) && freeTools.includes(t.id) && (t.id === ToolId.TABLE_BEAUTIFIER || t.id === ToolId.CITATION_LINKER));
+        const featured = filtered.filter(t => !pinnedTools.includes(t.id) && (freeTools.includes(t.id) && (t.id === ToolId.TABLE_BEAUTIFIER || t.id === ToolId.CITATION_LINKER)));
         const pinned = filteredTools.filter(t => pinnedTools.includes(t.id));
         const active = filtered.filter(t => !pinnedTools.includes(t.id) && !featured.some(f => f.id === t.id) && (freeTools.includes(t.id) || getLockType(t.id) === 'none'));
         const locked = filtered.filter(t => !pinnedTools.includes(t.id) && !featured.some(f => f.id === t.id) && !freeTools.includes(t.id) && getLockType(t.id) !== 'none');
@@ -289,6 +290,7 @@ const Dashboard: React.FC = () => {
                 <motion.div 
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 }}
                     className="flex flex-col md:flex-row md:items-end justify-between gap-8"
                 >
                     <div className="max-w-2xl">

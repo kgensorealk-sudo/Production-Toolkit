@@ -1,4 +1,5 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import * as Diff from 'diff';
 import { 
@@ -23,9 +24,16 @@ import {
     Database,
     RefreshCw,
     ChevronDown,
-    ChevronUp
+    ChevronUp,
+    Lightbulb,
+    Link as LinkIcon,
+    Eraser,
+    Hash,
+    Trash2,
+    Box
 } from 'lucide-react';
 import Toast from '../components/Toast';
+import { SmartSuggestion, ToolId } from '../types';
 
 interface AuditItem {
     id: string;
@@ -36,6 +44,8 @@ interface AuditItem {
 }
 
 const StructuralNodeArchitect: React.FC = () => {
+    const location = useLocation();
+    const navigate = useNavigate();
     const [input, setInput] = useState('');
     const [output, setOutput] = useState('');
     const [startId, setStartId] = useState(4000);
@@ -43,10 +53,23 @@ const StructuralNodeArchitect: React.FC = () => {
     const [auditData, setAuditData] = useState<AuditItem[]>([]);
     const [isProcessing, setIsProcessing] = useState(false);
     const [step, setStep] = useState<'input' | 'analyzing' | 'completed'>('input');
+    const [suggestions, setSuggestions] = useState<SmartSuggestion[]>([]);
     const [activeTab, setActiveTab] = useState<'input' | 'analysis' | 'result'>('input');
     const [resultMode, setResultMode] = useState<'full' | 'refs'>('full');
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
     const [currentChangeIndex, setCurrentChangeIndex] = useState(-1);
+
+    useEffect(() => {
+        if (location.state?.transferredXml) {
+            setInput(location.state.transferredXml);
+            setToast({ 
+                msg: `Data successfully imported from ${location.state.sourceTool || 'previous tool'}.`, 
+                type: 'success' 
+            });
+            // Clear the state so it doesn't re-trigger on refresh
+            navigate(location.pathname, { replace: true, state: {} });
+        }
+    }, [location, navigate]);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const diffContainerRef = useRef<HTMLDivElement>(null);
     const wasWrappedRef = useRef<boolean>(false);
@@ -467,6 +490,86 @@ const StructuralNodeArchitect: React.FC = () => {
             setAuditData(finalAudit);
             setStep('completed');
             setActiveTab('result');
+            
+            // Background Scanner for Smart Suggestions
+            const newSuggestions: SmartSuggestion[] = [];
+            
+            // 1. XML Normalizer (Renumber)
+            if (xmlOutput.includes('<ce:bib-reference')) {
+                newSuggestions.push({
+                    id: 'xml-renumber',
+                    toolName: 'XML Normalizer',
+                    description: 'Bibliography detected. Use this to ensure all references are correctly numbered and cross-references are updated.',
+                    path: '/xmlRenumber',
+                    icon: <Hash className="w-4 h-4" />,
+                    condition: 'Bibliography detected'
+                });
+            }
+
+            // 2. Other-Refs Scanner
+            const otherRefCount = (xmlOutput.match(/<ce:other-ref/g) || []).length;
+            if (otherRefCount > 0) {
+                newSuggestions.push({
+                    id: 'other-ref',
+                    toolName: 'Other-Ref Scanner',
+                    description: `It is found that the XML contains ${otherRefCount} other-ref(s). Please use the Other-Refs Scanner.`,
+                    path: '/otherRefScanner',
+                    icon: <LinkIcon className="w-4 h-4" />,
+                    condition: 'Other-refs detected'
+                });
+            }
+
+            // 3. XML Tag Cleaner
+            const tagMatches = xmlOutput.match(/<(opt_DEL|opt_INS|opt_Comment)\b[^>]*>([\s\S]*?)<\/\1>/g) || [];
+            if (tagMatches.length > 0) {
+                newSuggestions.push({
+                    id: 'tag-cleaner',
+                    toolName: 'XML Tag Cleaner',
+                    description: `It is found that the XML contains ${tagMatches.length} editorial tag(s) (DEL/INS/Comment). Please use the XML Tag Cleaner.`,
+                    path: '/tagCleaner',
+                    icon: <Trash2 className="w-4 h-4" />,
+                    condition: 'Editorial tags detected'
+                });
+            }
+
+            // 4. Citation Linker Pro
+            const unlinkedCitations = (xmlOutput.match(/<ce:cross-ref(?![^>]*\brefid=)[^>]*>/g) || []).length;
+            if (unlinkedCitations > 0) {
+                newSuggestions.push({
+                    id: 'citation-linker',
+                    toolName: 'Citation Linker Pro',
+                    description: `It is found that the XML result contains ${unlinkedCitations} unlinked Cross-ref(s). Please use the Citation Linker Pro.`,
+                    path: '/citationLinker',
+                    icon: <LinkIcon className="w-4 h-4" />,
+                    condition: 'Unlinked citations detected'
+                });
+            }
+
+            // 5. Uncited Ref Cleaner
+            if (xmlOutput.includes('<ce:bibliography')) {
+                newSuggestions.push({
+                    id: 'uncited-cleaner',
+                    toolName: 'Uncited Ref Cleaner',
+                    description: 'Bibliography detected. Use this tool to identify and remove references that are not cited in the text.',
+                    path: '/uncitedCleaner',
+                    icon: <Eraser className="w-4 h-4" />,
+                    condition: 'Bibliography detected'
+                });
+            }
+
+            // 6. View Synchronizer
+            if (xmlOutput.includes('<ce:para>') && (xmlOutput.includes('<ce:cross-ref') || xmlOutput.includes('<ce:float-anchor'))) {
+                newSuggestions.push({
+                    id: 'view-sync',
+                    toolName: 'View Synchronizer',
+                    description: 'Complex structural nodes detected. Use this to ensure visual consistency between XML source and rendered views.',
+                    path: '/viewSync',
+                    icon: <RefreshCw className="w-4 h-4" />,
+                    condition: 'Complex structural nodes detected'
+                });
+            }
+
+            setSuggestions(newSuggestions);
             setToast({ msg: 'Structural repair protocol complete.', type: 'success' });
         } catch (err: any) {
             setToast({ msg: err.message, type: 'error' });
@@ -1130,6 +1233,37 @@ const StructuralNodeArchitect: React.FC = () => {
                                             </div>
                                         </div>
                                         <div className="flex-grow flex flex-col overflow-hidden">
+                                            {/* Smart Suggestions Section */}
+                                            {suggestions.length > 0 && viewMode === 'output' && (
+                                                <div className="px-6 pt-4 bg-white border-b border-slate-100">
+                                                    <div className="p-4 bg-indigo-50/30 border-2 border-indigo-100 rounded-2xl border-dashed">
+                                                        <div className="flex items-center gap-3 mb-3">
+                                                            <Lightbulb className="w-4 h-4 text-indigo-600" />
+                                                            <h4 className="text-[10px] font-black text-indigo-900 uppercase tracking-[0.2em]">Architectural Recommendations</h4>
+                                                        </div>
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                                            {suggestions.map(sug => (
+                                                                <button 
+                                                                    key={sug.id}
+                                                                    onClick={() => {
+                                                                        navigate(sug.path, { state: { transferredXml: output, sourceTool: 'Structural Node Architect v3.2' } });
+                                                                    }}
+                                                                    className="flex items-center gap-4 p-3 bg-white border border-indigo-100 rounded-xl hover:border-indigo-300 hover:shadow-md transition-all group text-left shadow-sm"
+                                                                >
+                                                                    <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:scale-110 transition-transform">
+                                                                        {sug.icon}
+                                                                    </div>
+                                                                    <div className="flex-grow">
+                                                                        <div className="text-[9px] font-black text-indigo-900 uppercase tracking-widest mb-0.5">{sug.toolName}</div>
+                                                                        <div className="text-[8px] text-indigo-500 font-medium leading-tight">{sug.description}</div>
+                                                                    </div>
+                                                                    <ArrowRight className="w-3 h-3 text-indigo-300 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
                                             {viewMode === 'output' ? (
                                                 <textarea
                                                     readOnly

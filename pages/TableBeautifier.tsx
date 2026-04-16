@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 import { diffLines, diffWordsWithSpace, Change } from 'diff';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
@@ -10,6 +11,8 @@ import { motion, AnimatePresence } from 'motion/react';
 type AlignType = 'left' | 'center' | 'right' | 'char' | 'none' | 'strip';
 
 const TableBeautifier: React.FC = () => {
+    const location = useLocation();
+    const navigate = useNavigate();
     const [input, setInput] = useLocalStorage<string>('table_beautifier_input', '');
     const [output, setOutput] = useState('');
     const [lastProcessedInput, setLastProcessedInput] = useState('');
@@ -20,6 +23,18 @@ const TableBeautifier: React.FC = () => {
     const [totalChanges, setTotalChanges] = useState(0);
     const diffContainerRef = useRef<HTMLDivElement>(null);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
+
+    useEffect(() => {
+        if (location.state?.transferredXml) {
+            setInput(location.state.transferredXml);
+            setToast({ 
+                msg: `Data successfully imported from ${location.state.sourceTool || 'previous tool'}.`, 
+                type: 'success' 
+            });
+            // Clear the state so it doesn't re-trigger on refresh
+            navigate(location.pathname, { replace: true, state: {} });
+        }
+    }, [location, navigate, setInput]);
 
     // Alignment States
     const [alignType, setAlignType] = useState<AlignType>('none');

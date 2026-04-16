@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 import { diffLines, Change, diffWordsWithSpace } from 'diff';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import Switch from '../components/Switch';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
-import { ChevronUp, ChevronDown, GitCompare } from 'lucide-react';
+import { ChevronUp, ChevronDown, GitCompare, Lightbulb, ArrowRight, Link as LinkIcon, Eraser, Hash, Trash2, RefreshCw, Box } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { SmartSuggestion, ToolId } from '../types';
 
 interface ResolutionItem {
     id: string;
@@ -32,6 +34,8 @@ interface BibIndex {
 }
 
 const CitationLinker: React.FC = () => {
+    const location = useLocation();
+    const navigate = useNavigate();
     const [input, setInput] = useState('');
     const [output, setOutput] = useState('');
     const [resolutions, setResolutions] = useState<ResolutionItem[]>([]);
@@ -39,6 +43,7 @@ const CitationLinker: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [processLabel, setProcessLabel] = useState('');
     const [toast, setToast] = useState<{ msg: string, type: 'success' | 'warn' | 'error' | 'info' } | null>(null);
+    const [suggestions, setSuggestions] = useState<SmartSuggestion[]>([]);
     const [activeTab, setActiveTab] = useState<'xml' | 'diff'>('xml');
     const [diffElements, setDiffElements] = useState<React.ReactNode>(null);
     const [currentChangeIndex, setCurrentChangeIndex] = useState(-1);
@@ -53,6 +58,18 @@ const CitationLinker: React.FC = () => {
     const [cfStart, setCfStart] = useState<number>(3000);
     const [doiCount, setDoiCount] = useState(0);
     const [affectedDoiLabels, setAffectedDoiLabels] = useState<string[]>([]);
+
+    useEffect(() => {
+        if (location.state?.transferredXml) {
+            setInput(location.state.transferredXml);
+            setToast({ 
+                msg: `Data successfully imported from ${location.state.sourceTool || 'previous tool'}.`, 
+                type: 'success' 
+            });
+            // Clear the state so it doesn't re-trigger on refresh
+            navigate(location.pathname, { replace: true, state: {} });
+        }
+    }, [location, navigate]);
 
     const escapeHtml = (unsafe: string) => unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -564,6 +581,85 @@ const CitationLinker: React.FC = () => {
 
                 setOutput(result);
                 generateDiff(input, result);
+                
+                // Background Scanner for Smart Suggestions
+                const newSuggestions: SmartSuggestion[] = [];
+                
+                // 1. XML Normalizer (Renumber)
+                if (result.includes('<ce:bib-reference')) {
+                    newSuggestions.push({
+                        id: 'xml-renumber',
+                        toolName: 'XML Normalizer',
+                        description: 'Bibliography detected. Use this to ensure all references are correctly numbered and cross-references are updated.',
+                        path: '/xmlRenumber',
+                        icon: <Hash className="w-4 h-4" />,
+                        condition: 'Bibliography detected'
+                    });
+                }
+
+                // 2. Other-Refs Scanner
+                const otherRefCount = (result.match(/<ce:other-ref/g) || []).length;
+                if (otherRefCount > 0) {
+                    newSuggestions.push({
+                        id: 'other-ref',
+                        toolName: 'Other-Ref Scanner',
+                        description: `It is found that the XML contains ${otherRefCount} other-ref(s). Please use the Other-Refs Scanner.`,
+                        path: '/otherRefScanner',
+                        icon: <LinkIcon className="w-4 h-4" />,
+                        condition: 'Other-refs detected'
+                    });
+                }
+
+                // 3. XML Tag Cleaner
+                const tagMatches = result.match(/<(opt_DEL|opt_INS|opt_Comment)\b[^>]*>([\s\S]*?)<\/\1>/g) || [];
+                if (tagMatches.length > 0) {
+                    newSuggestions.push({
+                        id: 'tag-cleaner',
+                        toolName: 'XML Tag Cleaner',
+                        description: `It is found that the XML contains ${tagMatches.length} editorial tag(s) (DEL/INS/Comment). Please use the XML Tag Cleaner.`,
+                        path: '/tagCleaner',
+                        icon: <Trash2 className="w-4 h-4" />,
+                        condition: 'Editorial tags detected'
+                    });
+                }
+
+                // 4. Uncited Ref Cleaner
+                if (result.includes('<ce:bibliography')) {
+                    newSuggestions.push({
+                        id: 'uncited-cleaner',
+                        toolName: 'Uncited Ref Cleaner',
+                        description: 'Bibliography detected. Use this tool to identify and remove references that are not cited in the text.',
+                        path: '/uncitedCleaner',
+                        icon: <Eraser className="w-4 h-4" />,
+                        condition: 'Bibliography detected'
+                    });
+                }
+
+                // 5. View Synchronizer
+                if (result.includes('<ce:para>') && (result.includes('<ce:cross-ref') || result.includes('<ce:float-anchor'))) {
+                    newSuggestions.push({
+                        id: 'view-sync',
+                        toolName: 'View Synchronizer',
+                        description: 'Complex structural nodes detected. Use this to ensure visual consistency between XML source and rendered views.',
+                        path: '/viewSync',
+                        icon: <RefreshCw className="w-4 h-4" />,
+                        condition: 'Complex structural nodes detected'
+                    });
+                }
+
+                // 6. Structural Node Architect
+                if (result.includes('<ce:source-text') || !result.includes('<sb:reference')) {
+                    newSuggestions.push({
+                        id: 'structural-architect',
+                        toolName: 'Structural Node Architect v3.2',
+                        description: 'Structural overhaul recommended. Use this to transform raw source text into valid structural bibliography nodes.',
+                        path: '/structuralArchitect',
+                        icon: <Box className="w-4 h-4" />,
+                        condition: 'Structural overhaul recommended'
+                    });
+                }
+
+                setSuggestions(newSuggestions);
                 setStep('result');
                 setToast({ msg: "Protocol successfully applied.", type: "success" });
             } catch (e) {
@@ -758,6 +854,37 @@ const CitationLinker: React.FC = () => {
 
                 {step === 'result' && (
                     <div className="flex flex-col h-full animate-fade-in overflow-hidden">
+                        {/* Smart Suggestions Section */}
+                        {suggestions.length > 0 && (
+                            <div className="px-10 pt-6 bg-white border-b border-slate-100">
+                                <div className="p-6 bg-indigo-50/30 border-2 border-indigo-100 rounded-[2rem] border-dashed">
+                                    <div className="flex items-center gap-3 mb-4">
+                                        <Lightbulb className="w-5 h-5 text-indigo-600" />
+                                        <h4 className="text-xs font-black text-indigo-900 uppercase tracking-[0.2em]">Architectural Recommendations</h4>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        {suggestions.map(sug => (
+                                            <button 
+                                                key={sug.id}
+                                                onClick={() => {
+                                                    navigate(sug.path, { state: { transferredXml: output, sourceTool: 'Citation Linker Pro' } });
+                                                }}
+                                                className="flex items-center gap-4 p-4 bg-white border border-indigo-100 rounded-2xl hover:border-indigo-300 hover:shadow-md transition-all group text-left shadow-sm"
+                                            >
+                                                <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:scale-110 transition-transform">
+                                                    {sug.icon}
+                                                </div>
+                                                <div className="flex-grow">
+                                                    <div className="text-[10px] font-black text-indigo-900 uppercase tracking-widest mb-0.5">{sug.toolName}</div>
+                                                    <div className="text-[9px] text-indigo-500 font-medium leading-tight">{sug.description}</div>
+                                                </div>
+                                                <ArrowRight className="w-4 h-4 text-indigo-300 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                         <div className="bg-slate-50 px-10 py-5 border-b border-slate-200 flex justify-between items-center">
                             <h3 className="font-black text-slate-900 text-xs uppercase tracking-widest">Validated Protocol Stream</h3>
                             <div className="flex items-center gap-6">

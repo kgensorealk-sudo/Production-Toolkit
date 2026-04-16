@@ -63,6 +63,15 @@ export interface Channel {
     created_at: string;
 }
 
+export interface SmartSuggestion {
+    id: string;
+    toolName: string;
+    description: string;
+    path: string;
+    icon: React.ReactNode;
+    condition: string;
+}
+
 export interface ChannelMember {
     id: string;
     channel_id: string;
@@ -93,6 +102,7 @@ export enum ToolId {
     SECTION_AUDITOR = 'sectionAuditor',
     AFFILIATION_SEQUENCER = 'affiliationSequencer',
     STRUCTURAL_ARCHITECT = 'structuralArchitect',
+    REF_SORTER = 'refSorter',
     DOCS = 'docs',
     DASHBOARD = 'dashboard',
     MESSAGING = 'messaging'

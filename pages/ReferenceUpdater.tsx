@@ -17,9 +17,12 @@ import {
     ArrowRight,
     RefreshCw,
     Search,
-    FileText
+    FileText,
+    Lightbulb
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useNavigate } from 'react-router';
+import { SmartSuggestion, ToolId } from '../types';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import Switch from '../components/Switch';
@@ -36,14 +39,27 @@ interface RefBlock {
     fingerprint: string; 
     contentHash: string; 
     sortKey: string;
+    author?: string;
+    year?: string;
+    title?: string;
+    doi?: string;
+}
+
+interface ScanCandidate {
+    index: number;
+    score: number;
+    matchType: string;
+    label: string;
+    preview: string;
 }
 
 interface ScanItem {
+    uid: string;
     label: string;
     id: string;
-    status: 'update' | 'unchanged' | 'orphan' | 'smart_match' | 'add';
+    status: 'update' | 'unchanged' | 'orphan' | 'smart_match' | 'add' | 'conflict';
     preview: string;
-    matchType?: 'ID' | 'Label' | 'Content' | 'Fuzzy';
+    matchType?: 'ID' | 'Label' | 'Content' | 'Fuzzy' | 'DOI';
     matchScore?: number;
     isSynthetic?: boolean;
     selected: boolean;
@@ -51,9 +67,11 @@ interface ScanItem {
     sortKey: string;
     originalIndex: number | null; 
     updatedIndex: number | null;
+    candidates?: ScanCandidate[];
 }
 
 const ReferenceUpdater: React.FC = () => {
+    const navigate = useNavigate();
     const [originalXml, setOriginalXml] = useLocalStorage<string>('ref_updater_original_xml', '');
     const [updatedXml, setUpdatedXml] = useLocalStorage<string>('ref_updater_updated_xml', '');
     const [output, setOutput] = useLocalStorage<string>('ref_updater_output', '');
@@ -70,6 +88,8 @@ const ReferenceUpdater: React.FC = () => {
     const [reviewingItem, setReviewingItem] = useState<ScanItem | null>(null);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'|'info'} | null>(null);
     const [scanResults, setScanResults] = useLocalStorage<ScanItem[]>('ref_updater_scan_results', []);
+    const [filterStatus, setFilterStatus] = useState<'all' | 'review' | 'conflict' | 'add'>('all');
+    const [suggestions, setSuggestions] = useState<SmartSuggestion[]>([]);
     const [diffElements, setDiffElements] = useState<React.ReactNode>(null);
     const [draggedItemIndex, setDraggedItemIndex] = useState<number | null>(null);
     const [currentChangeIndex, setCurrentChangeIndex] = useState(0);
@@ -258,27 +278,93 @@ const ReferenceUpdater: React.FC = () => {
             const labelMatch = content.match(/<ce:label>(.*?)<\/ce:label>/);
             let label = labelMatch ? labelMatch[1].trim() : '', isSynthetic = false;
             
-            const surnameMatch = content.match(/<(?:ce|sb):surname>(.*?)<\/(?:ce|sb):surname>/i);
+            const surnameMatch = content.match(/<(?:ce|sb):surname\b[^>]*>([\s\S]*?)<\/(?:ce|sb):surname>/i);
             const author = surnameMatch ? surnameMatch[1].toLowerCase().replace(/[^a-z]/g, '') : '';
             
-            const dateMatch = content.match(/<(?:ce|sb):year>(.*?)<\/(?:ce|sb):year>/i) || content.match(/<(?:ce|sb):date>(.*?)<\/(?:ce|sb):date>/i);
+            const dateMatch = content.match(/<(?:ce|sb):year\b[^>]*>([\s\S]*?)<\/(?:ce|sb):year>/i) || 
+                              content.match(/<(?:ce|sb):date\b[^>]*>([\s\S]*?)<\/(?:ce|sb):date>/i);
             const year = dateMatch ? dateMatch[1].replace(/\D/g, '') : '';
             
-            const titleMatch = content.match(/<(?:ce|sb):title>(.*?)<\/(?:ce|sb):title>/i);
-            const title = titleMatch ? titleMatch[1].toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+            const titleMatch = content.match(/<(?:ce|sb):title\b[^>]*>([\s\S]*?)<\/(?:ce|sb):title>/i);
+            const titleRaw = titleMatch ? titleMatch[1] : '';
+            let title = titleRaw.replace(/<[^>]+>/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+            const doiMatch = content.match(/<(?:ce|sb):doi\b[^>]*>([\s\S]*?)<\/(?:ce|sb):doi>/i);
+            const doi = doiMatch ? doiMatch[1].replace(/<[^>]+>/g, '').trim().toLowerCase() : '';
             
             const cleanContent = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
             const contentHash = cleanContent.replace(/[^a-z0-9]/g, '');
+
+            // Enhanced metadata extraction for unstructured references (ce:other-ref)
+            let finalAuthor = author;
+            let finalYear = year;
+            let finalTitle = title;
+
+            if (!finalAuthor || !finalYear || !finalTitle) {
+                const textOnly = content.replace(/<[^>]+>/g, ' ');
+                if (!finalYear) {
+                    const yMatch = textOnly.match(/\b(19|20)\d{2}\b/) || label.match(/\b(19|20)\d{2}\b/);
+                    if (yMatch) finalYear = yMatch[0];
+                }
+                if (!finalAuthor) {
+                    const aMatch = label.match(/^([A-Za-z'’\u00C0-\u017F]+)/) || textOnly.trim().match(/^([A-Za-z'’\u00C0-\u017F]+)/);
+                    if (aMatch) finalAuthor = aMatch[1].toLowerCase().replace(/[^a-z]/g, '');
+                }
+                if (!finalTitle && textOnly.length > 20) {
+                    // Try to remove author/year from the start to get a better title proxy
+                    let titleProxy = textOnly.trim();
+                    const yearInParens = textOnly.match(/\((19|20)\d{2}[^)]*\)/);
+                    if (yearInParens) {
+                        const index = textOnly.indexOf(yearInParens[0]);
+                        titleProxy = textOnly.substring(index + yearInParens[0].length).replace(/^[.,\s]+/, '').trim();
+                        
+                        // Heuristic: titles in unstructured refs often end before "In ", "Journal", etc.
+                        const hostIndicators = [/\bIn\b/i, /\bJournal\b/i, /\bProc\b/i, /\bConference\b/i, /\bVol\b/i];
+                        let earliestIndicator = -1;
+                        hostIndicators.forEach(regex => {
+                            const m = titleProxy.match(regex);
+                            if (m && m.index !== undefined) {
+                                if (earliestIndicator === -1 || m.index < earliestIndicator) {
+                                    earliestIndicator = m.index;
+                                }
+                            }
+                        });
+                        if (earliestIndicator !== -1 && earliestIndicator > 10) {
+                            titleProxy = titleProxy.substring(0, earliestIndicator).replace(/[.,\s]+$/, '').trim();
+                        }
+                    } else {
+                        // Fallback: remove label if it's at the start
+                        if (label && titleProxy.startsWith(label)) {
+                            titleProxy = titleProxy.substring(label.length).trim();
+                        }
+                    }
+                    finalTitle = titleProxy.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 100);
+                }
+            }
             
-            let fingerprint = author || year || title 
-                ? `meta|${author}|${year}|${title.substring(0, 100)}` 
+            let fingerprint = finalAuthor || finalYear || finalTitle || doi
+                ? `meta|${finalAuthor}|${finalYear}|${doi}|${finalTitle.substring(0, 100)}` 
                 : `text|${contentHash.substring(0, 150)}`;
             
-            if (!label && author && year) { label = `${author}, ${year}`; isSynthetic = true; }
+            if (!label && finalAuthor && finalYear) { label = `${finalAuthor}, ${finalYear}`; isSynthetic = true; }
             let sortKey = label || content.replace(/<[^>]+>/g, '').trim().substring(0, 60);
             
-            if (label || author || cleanContent.length > 5) {
-                refs.push({ fullTag: match[0], id, label, content, isSynthetic, cleanContent, fingerprint, contentHash, sortKey });
+            if (label || finalAuthor || cleanContent.length > 5) {
+                refs.push({ 
+                    fullTag: match[0], 
+                    id, 
+                    label, 
+                    content, 
+                    isSynthetic, 
+                    cleanContent, 
+                    fingerprint, 
+                    contentHash, 
+                    sortKey,
+                    author: finalAuthor,
+                    year: finalYear,
+                    title: finalTitle,
+                    doi
+                });
             }
         }
         return refs;
@@ -287,6 +373,7 @@ const ReferenceUpdater: React.FC = () => {
     const runAnalysis = () => {
         if (!originalXml.trim() || !updatedXml.trim()) { setToast({ msg: "Paste both Original and Updated XML.", type: "warn" }); return; }
         setIsLoading(true);
+        setSuggestions([]);
         
         setTimeout(() => {
             try {
@@ -296,57 +383,92 @@ const ReferenceUpdater: React.FC = () => {
                 const usedUpdateIdx = new Set<number>();
                 
                 origRefs.forEach((origRef, oIdx) => {
-                    let matchIdx = -1;
-                    let matchType: 'ID' | 'Label' | 'Content' | 'Fuzzy' | undefined;
-                    let matchScore = 0;
+                    const candidates: ScanCandidate[] = [];
+                    
+                    // 1. Content Hash Match
+                    updatedRefs.forEach((u, idx) => {
+                        if (u.contentHash === origRef.contentHash) {
+                            candidates.push({ index: idx, score: 100, matchType: 'Content', label: u.label, preview: u.content.substring(0, 60) });
+                        }
+                    });
 
-                    matchIdx = updatedRefs.findIndex((u, idx) => !usedUpdateIdx.has(idx) && u.contentHash === origRef.contentHash);
-                    if (matchIdx !== -1) { matchType = 'Content'; matchScore = 100; }
-
-                    if (matchIdx === -1 && origRef.label) {
-                        matchIdx = updatedRefs.findIndex((u, idx) => !usedUpdateIdx.has(idx) && u.label === origRef.label && u.label !== '');
-                        if (matchIdx !== -1) { matchType = 'Label'; matchScore = 100; }
-                    }
-
-                    if (matchIdx === -1 && origRef.id) {
-                        matchIdx = updatedRefs.findIndex((u, idx) => {
-                            if (usedUpdateIdx.has(idx) || u.id !== origRef.id) return false;
-                            const labelConflict = origRef.label && u.label && origRef.label !== u.label;
-                            return !labelConflict;
-                        });
-                        if (matchIdx !== -1) { matchType = 'ID'; matchScore = 100; }
-                    }
-
-                    if (matchIdx === -1) {
-                        let bestFuzzyIdx = -1;
-                        let bestFuzzyScore = 0;
+                    // 2. DOI Match
+                    if (candidates.length === 0 && origRef.doi) {
                         updatedRefs.forEach((u, idx) => {
-                            if (!usedUpdateIdx.has(idx)) {
-                                const score = getSimilarity(u.fingerprint, origRef.fingerprint);
-                                if (score > bestFuzzyScore) { bestFuzzyScore = score; bestFuzzyIdx = idx; }
+                            if (u.doi === origRef.doi && u.doi !== '') {
+                                candidates.push({ index: idx, score: 100, matchType: 'DOI', label: u.label, preview: u.content.substring(0, 60) });
                             }
                         });
-                        if (bestFuzzyScore > 0.82) { matchIdx = bestFuzzyIdx; matchType = 'Fuzzy'; matchScore = Math.round(bestFuzzyScore * 100); }
                     }
 
-                    if (matchIdx !== -1) {
-                        usedUpdateIdx.add(matchIdx);
-                        analysis.push({ 
-                            label: formatLabel(origRef.label || updatedRefs[matchIdx].label), 
-                            id: origRef.id, 
-                            status: matchType === 'Fuzzy' ? 'smart_match' : 'update', 
-                            reviewed: false,
-                            matchType, 
-                            matchScore, 
-                            preview: updatedRefs[matchIdx].content.substring(0, 100).replace(/<[^>]+>/g, '').trim() + '...', 
-                            isSynthetic: origRef.isSynthetic, 
-                            selected: true, 
-                            sortKey: updatedRefs[matchIdx].sortKey, 
-                            originalIndex: oIdx, 
-                            updatedIndex: matchIdx 
+                    // 3. Label Match
+                    if (candidates.length === 0 && origRef.label) {
+                        const normOrigLabel = origRef.label.toLowerCase().replace(/['’]/g, "'");
+                        updatedRefs.forEach((u, idx) => {
+                            if (u.label && u.label.toLowerCase().replace(/['’]/g, "'") === normOrigLabel) {
+                                candidates.push({ index: idx, score: 100, matchType: 'Label', label: u.label, preview: u.content.substring(0, 60) });
+                            }
                         });
+                    }
+
+                    // 4. Fingerprint Match
+                    if (candidates.length === 0) {
+                        updatedRefs.forEach((u, idx) => {
+                            if (u.fingerprint === origRef.fingerprint) {
+                                candidates.push({ index: idx, score: 100, matchType: 'Content', label: u.label, preview: u.content.substring(0, 60) });
+                            }
+                        });
+                    }
+
+                    // 5. Fuzzy Match
+                    if (candidates.length === 0) {
+                        updatedRefs.forEach((u, idx) => {
+                            // Hard mismatch if years exist and are significantly different
+                            if (u.year && origRef.year && u.year !== origRef.year) {
+                                const yearSim = getSimilarity(u.year, origRef.year);
+                                if (yearSim < 0.75) return; 
+                            }
+
+                            // Hard mismatch if first authors exist and are significantly different
+                            if (u.author && origRef.author && u.author !== origRef.author) {
+                                const authSim = getSimilarity(u.author, origRef.author);
+                                if (authSim < 0.6) return;
+                            }
+
+                            const score = getSimilarity(u.fingerprint, origRef.fingerprint);
+                            if (score > 0.82) {
+                                candidates.push({ index: idx, score: Math.round(score * 100), matchType: 'Fuzzy', label: u.label, preview: u.content.substring(0, 60) });
+                            }
+                        });
+                    }
+
+                    if (candidates.length > 0) {
+                        // Sort candidates by score
+                        candidates.sort((a, b) => b.score - a.score);
+                        
+                        const best = candidates[0];
+                        const isConflict = candidates.length > 1 && candidates[1].score > 90;
+
+                        analysis.push({ 
+                            uid: Math.random().toString(36).substring(2, 15),
+                            label: formatLabel(origRef.label || updatedRefs[best.index].label), 
+                            id: origRef.id, 
+                            status: isConflict ? 'conflict' : (best.matchType === 'Fuzzy' ? 'smart_match' : 'update'), 
+                            reviewed: false,
+                            matchType: best.matchType as any, 
+                            matchScore: best.score, 
+                            preview: updatedRefs[best.index].content.substring(0, 100).replace(/<[^>]+>/g, '').trim() + '...', 
+                            isSynthetic: origRef.isSynthetic, 
+                            selected: !isConflict, 
+                            sortKey: updatedRefs[best.index].sortKey, 
+                            originalIndex: oIdx, 
+                            updatedIndex: best.index,
+                            candidates: candidates.length > 1 ? candidates : undefined
+                        });
+                        usedUpdateIdx.add(best.index);
                     } else {
                         analysis.push({ 
+                            uid: Math.random().toString(36).substring(2, 15),
                             label: formatLabel(origRef.label), 
                             id: origRef.id, 
                             status: 'unchanged', 
@@ -360,9 +482,29 @@ const ReferenceUpdater: React.FC = () => {
                     }
                 });
 
+                // Post-process to detect shared updates (multiple originals claiming same update)
+                const updateToOrigMap = new Map<number, number[]>();
+                analysis.forEach((item, aIdx) => {
+                    if (item.updatedIndex !== null && (item.status === 'update' || item.status === 'smart_match' || item.status === 'conflict')) {
+                        const list = updateToOrigMap.get(item.updatedIndex) || [];
+                        list.push(aIdx);
+                        updateToOrigMap.set(item.updatedIndex, list);
+                    }
+                });
+
+                updateToOrigMap.forEach((origIndices) => {
+                    if (origIndices.length > 1) {
+                        origIndices.forEach(aIdx => {
+                            analysis[aIdx].status = 'conflict';
+                            analysis[aIdx].selected = false;
+                        });
+                    }
+                });
+
                 updatedRefs.forEach((val, idx) => {
                     if (!usedUpdateIdx.has(idx)) {
                         analysis.push({ 
+                            uid: Math.random().toString(36).substring(2, 15),
                             label: formatLabel(val.label || 'Unlabeled'), 
                             id: val.id || 'N/A', 
                             status: addOrphans ? 'add' : 'orphan', 
@@ -473,6 +615,66 @@ const ReferenceUpdater: React.FC = () => {
 
             const joinedResult = finalBlocks.join('\n');
             setOutput(joinedResult);
+
+            // Post-execution check for alphabetical order (Name-date format)
+            const resultRefs = parseReferences(joinedResult);
+            const newSuggestions: SmartSuggestion[] = [];
+            
+            // Refined Name-date detection: Matches "Name, Year" or "Name (Year)"
+            const nameDateRefs = resultRefs.filter(r => r.label && r.label.match(/^[A-Za-z\u00C0-\u017F]+.*[ ,]\(?\d{4}\)?[a-z]?$/));
+            const isNameDate = nameDateRefs.length > resultRefs.length / 2 && resultRefs.length > 1;
+
+            if (isNameDate && !sortAlphabetically) {
+                let isSorted = true;
+                const cleanForSort = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+
+                for (let i = 0; i < resultRefs.length - 1; i++) {
+                    const a = resultRefs[i];
+                    const b = resultRefs[i+1];
+                    
+                    // 1. Primary Sort: Author Surname (or content fallback)
+                    const authorA = cleanForSort(a.author || a.cleanContent || '');
+                    const authorB = cleanForSort(b.author || b.cleanContent || '');
+                    const authorCompare = authorA.localeCompare(authorB, undefined, { sensitivity: 'base', numeric: true });
+                    
+                    if (authorCompare > 0) {
+                        isSorted = false;
+                        break;
+                    }
+                    if (authorCompare < 0) continue;
+
+                    // 2. Secondary Sort: Year (Oldest to Newest)
+                    const yearA = parseInt((a.year || '').replace(/\D/g, '') || '0') || 0;
+                    const yearB = parseInt((b.year || '').replace(/\D/g, '') || '0') || 0;
+                    
+                    if (yearA > yearB) {
+                        isSorted = false;
+                        break;
+                    }
+                    if (yearA < yearB) continue;
+
+                    // 3. Tertiary Sort: Title
+                    const titleA = cleanForSort(a.title || '');
+                    const titleB = cleanForSort(b.title || '');
+                    if (titleA.localeCompare(titleB, undefined, { sensitivity: 'base', numeric: true }) > 0) {
+                        isSorted = false;
+                        break;
+                    }
+                }
+                
+                if (!isSorted) {
+                    newSuggestions.push({
+                        id: 'ref-sorter-suggest',
+                        toolName: 'Reference Sorter',
+                        description: 'Sequence looks unsorted. Organize alphabetically with Reference Sorter.',
+                        path: '/refSorter',
+                        icon: <Lightbulb size={14} />,
+                        condition: 'Unsorted output detected'
+                    });
+                }
+            }
+            setSuggestions(newSuggestions);
+
             setLastProcessedOriginal(originalXml);
             setLastProcessedUpdated(updatedXml);
             setActiveTab('result');
@@ -481,7 +683,19 @@ const ReferenceUpdater: React.FC = () => {
         } catch (e) { setToast({ msg: "Merge Protocol Failure.", type: "error" }); } finally { setIsLoading(false); }
     };
 
-    const bulkSelect = (selected: boolean) => setScanResults((prev: ScanItem[]) => prev.map((item: ScanItem) => ({ ...item, selected })));
+    const bulkSelect = (selected: boolean) => {
+        setScanResults((prev: ScanItem[]) => prev.map((item: ScanItem) => {
+            const matchesFilter = filterStatus === 'all' || 
+                (filterStatus === 'review' && (item.status === 'smart_match' || item.status === 'conflict') && !item.reviewed) ||
+                (filterStatus === 'conflict' && item.status === 'conflict') ||
+                (filterStatus === 'add' && (item.status === 'add' || item.status === 'orphan'));
+            
+            return matchesFilter ? { ...item, selected } : item;
+        }));
+    };
+
+    const parsedOriginalRefs = useMemo(() => parseReferences(originalXml), [originalXml]);
+    const parsedUpdatedRefs = useMemo(() => parseReferences(updatedXml), [updatedXml]);
 
     const projectedSequence = useMemo(() => {
         if (scanResults.length === 0) return [];
@@ -526,6 +740,7 @@ const ReferenceUpdater: React.FC = () => {
         setLastProcessedOriginal('');
         setLastProcessedUpdated('');
         setScanResults([]);
+        setSuggestions([]);
         setToast({ msg: "All data cleared", type: "warn" });
     };
 
@@ -593,13 +808,34 @@ const ReferenceUpdater: React.FC = () => {
                         
                         {activeTab === 'scan' && (
                             <div className="h-full overflow-hidden flex flex-col bg-white">
-                                <div className="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                                <div className="p-3 bg-slate-50 border-b border-slate-200 flex flex-wrap justify-between items-center gap-4">
                                     <div className="flex items-center gap-3 pl-2">
-                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">System Reconciler</span>
-                                        {scanResults.filter(r => r.status === 'smart_match' && !r.reviewed && !autoUpdateSmartMatch).length > 0 && (
+                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Filter:</span>
+                                        <div className="flex bg-white rounded-lg border border-slate-200 p-0.5 shadow-sm">
+                                            {(['all', 'review', 'conflict', 'add'] as const).map(f => {
+                                                const count = scanResults.filter(item => {
+                                                    if (f === 'review') return (item.status === 'smart_match' || item.status === 'conflict') && !item.reviewed;
+                                                    if (f === 'conflict') return item.status === 'conflict';
+                                                    if (f === 'add') return item.status === 'add' || item.status === 'orphan';
+                                                    return true;
+                                                }).length;
+                                                
+                                                return (
+                                                    <button 
+                                                        key={f}
+                                                        onClick={() => setFilterStatus(f)}
+                                                        className={`px-3 py-1 text-[9px] font-black uppercase tracking-widest rounded-md transition-all flex items-center gap-1.5 ${filterStatus === f ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                                    >
+                                                        {f}
+                                                        {count > 0 && <span className={`px-1 rounded-sm ${filterStatus === f ? 'bg-white/20' : 'bg-slate-100 text-slate-500'}`}>{count}</span>}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                        {scanResults.filter(r => (r.status === 'smart_match' || r.status === 'conflict') && !r.reviewed && !autoUpdateSmartMatch).length > 0 && (
                                             <span className="flex items-center gap-1.5 px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-[9px] font-black uppercase animate-pulse">
                                                 <AlertCircle size={10} />
-                                                {scanResults.filter(r => r.status === 'smart_match' && !r.reviewed && !autoUpdateSmartMatch).length} Pending Review
+                                                {scanResults.filter(r => (r.status === 'smart_match' || r.status === 'conflict') && !r.reviewed && !autoUpdateSmartMatch).length} Pending Review
                                             </span>
                                         )}
                                     </div>
@@ -616,20 +852,28 @@ const ReferenceUpdater: React.FC = () => {
                                             {scanResults.length === 0 ? (
                                                 <tr><td colSpan={4} className="p-20 text-center text-slate-300 uppercase tracking-[0.2em] font-black italic">Awaiting Set Scan...</td></tr>
                                             ) : (
-                                                scanResults.map((item, idx) => {
-                                                    const isSmartMatch = item.status === 'smart_match';
+                                                scanResults
+                                                .filter(item => {
+                                                    if (filterStatus === 'review') return (item.status === 'smart_match' || item.status === 'conflict') && !item.reviewed;
+                                                    if (filterStatus === 'conflict') return item.status === 'conflict';
+                                                    if (filterStatus === 'add') return item.status === 'add' || item.status === 'orphan';
+                                                    return true;
+                                                })
+                                                .map((item) => {
+                                                    const isSmartMatch = item.status === 'smart_match' || item.status === 'conflict';
                                                     const needsReview = isSmartMatch && !item.reviewed && !autoUpdateSmartMatch;
+                                                    const isConflict = item.status === 'conflict';
                                                     
                                                     return (
                                                         <tr 
-                                                            key={idx} 
+                                                            key={item.uid} 
                                                             className={`transition-all duration-300 ${needsReview ? 'bg-purple-50/80 border-l-4 border-purple-600 shadow-sm relative z-10' : 'hover:bg-slate-50/50'} ${!item.selected ? 'opacity-30 grayscale' : ''}`}
                                                         >
                                                             <td className="p-4 text-center">
                                                                 <input 
                                                                     type="checkbox" 
                                                                     checked={item.selected} 
-                                                                    onChange={() => setScanResults((prev: ScanItem[]) => prev.map((it: ScanItem, i: number) => i === idx ? { ...it, selected: !it.selected } : it))} 
+                                                                    onChange={() => setScanResults((prev: ScanItem[]) => prev.map((it: ScanItem) => it.uid === item.uid ? { ...it, selected: !it.selected } : it))} 
                                                                     className="rounded border-slate-300 text-indigo-600 h-4 w-4" 
                                                                 />
                                                             </td>
@@ -643,6 +887,7 @@ const ReferenceUpdater: React.FC = () => {
                                                                         <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase border block text-center ${
                                                                             item.status === 'smart_match' 
                                                                             ? (item.reviewed || autoUpdateSmartMatch ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-purple-600 text-white border-purple-600 shadow-sm') 
+                                                                            : item.status === 'conflict' ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
                                                                             : item.status === 'update' ? 'bg-amber-50 text-amber-600 border-amber-200' 
                                                                             : item.status === 'add' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' 
                                                                             : item.status === 'orphan' ? 'bg-rose-50 text-rose-600 border-rose-200' 
@@ -650,7 +895,7 @@ const ReferenceUpdater: React.FC = () => {
                                                                         }`}>
                                                                             {item.status.replace('_', ' ')}
                                                                         </span>
-                                                                        {needsReview && <AlertCircle size={12} className="text-purple-600 animate-pulse" />}
+                                                                        {(needsReview || isConflict) && <AlertCircle size={12} className={isConflict ? "text-rose-600 animate-pulse" : "text-purple-600 animate-pulse"} />}
                                                                         {item.reviewed && !autoUpdateSmartMatch && <CheckCircle2 size={12} className="text-emerald-500" />}
                                                                     </div>
                                                                     {item.matchType && (
@@ -669,17 +914,17 @@ const ReferenceUpdater: React.FC = () => {
                                                                         <div className="flex items-center gap-2">
                                                                             <button 
                                                                                 onClick={() => setReviewingItem(item)}
-                                                                                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                                                                                title="Compare Details"
+                                                                                className={`p-1.5 rounded-lg transition-all ${isConflict ? 'text-rose-600 bg-rose-50 hover:bg-rose-100' : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'}`}
+                                                                                title={isConflict ? "Resolve Conflict" : "Compare Details"}
                                                                             >
-                                                                                <Eye size={16} />
+                                                                                {isConflict ? <AlertTriangle size={16} /> : <Eye size={16} />}
                                                                             </button>
                                                                             <button 
-                                                                                onClick={() => setScanResults((prev: ScanItem[]) => prev.map((it: ScanItem, i: number) => i === idx ? { ...it, reviewed: !it.reviewed } : it))}
+                                                                                onClick={() => setScanResults((prev: ScanItem[]) => prev.map((it: ScanItem) => it.uid === item.uid ? { ...it, reviewed: !it.reviewed, status: it.status === 'conflict' ? 'smart_match' : it.status } : it))}
                                                                                 className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm ${
                                                                                     item.reviewed 
                                                                                     ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' 
-                                                                                    : 'bg-purple-600 text-white hover:bg-purple-700 shadow-purple-200'
+                                                                                    : (isConflict ? 'bg-rose-600 text-white hover:bg-rose-700 shadow-rose-200' : 'bg-purple-600 text-white hover:bg-purple-700 shadow-purple-200')
                                                                                 }`}
                                                                             >
                                                                                 {item.reviewed ? (
@@ -687,7 +932,7 @@ const ReferenceUpdater: React.FC = () => {
                                                                                         <Check size={10} strokeWidth={3} />
                                                                                         Confirmed
                                                                                     </span>
-                                                                                ) : 'Confirm Match'}
+                                                                                ) : (isConflict ? 'Resolve' : 'Confirm Match')}
                                                                             </button>
                                                                         </div>
                                                                     )}
@@ -708,7 +953,7 @@ const ReferenceUpdater: React.FC = () => {
                                 <div className="p-5 bg-slate-50 border-b border-slate-200 flex justify-between items-center"><div className="flex flex-col"><div className="text-xs font-black text-slate-800 uppercase tracking-widest leading-none">Output Queue Preview</div><div className="text-[9px] font-bold text-slate-400 mt-1.5 uppercase tracking-wider">Drag nodes to override system sorting logic</div></div><span className="text-[10px] font-black bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl border border-indigo-100 shadow-sm">{projectedSequence.length} Nodes Queued</span></div>
                                 <div className="flex-grow overflow-auto custom-scrollbar p-8 space-y-3 bg-slate-50/30">
                                     {projectedSequence.length === 0 ? (<div className="h-full flex flex-col items-center justify-center opacity-30 grayscale"><p className="text-sm font-black uppercase tracking-[0.2em] text-slate-400">Queue Ready for Input</p></div>) : (projectedSequence.map((ref, idx) => (
-                                        <div key={`${ref.id}-${idx}`} draggable onDragStart={() => setDraggedItemIndex(idx)} onDragOver={(e) => e.preventDefault()} onDrop={() => handleDrop(idx)} className={`flex items-center gap-6 p-5 bg-white border border-slate-200 rounded-[1.5rem] shadow-sm hover:border-indigo-400 transition-all group cursor-grab active:cursor-grabbing ${draggedItemIndex === idx ? 'opacity-40 scale-95' : ''}`}>
+                                                                <div key={`${ref.uid}`} draggable onDragStart={() => setDraggedItemIndex(idx)} onDragOver={(e) => e.preventDefault()} onDrop={() => handleDrop(idx)} className={`flex items-center gap-6 p-5 bg-white border border-slate-200 rounded-[1.5rem] shadow-sm hover:border-indigo-400 transition-all group cursor-grab active:cursor-grabbing ${draggedItemIndex === idx ? 'opacity-40 scale-95' : ''}`}>
                                             <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-[10px] font-black text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors border border-slate-100 shadow-inner">{idx + 1}</div>
                                             <div className="flex-grow min-w-0"><div className="text-sm font-bold text-slate-800 truncate tracking-tight">{ref.label}</div><div className="text-[10px] font-mono text-slate-400 uppercase tracking-widest mt-0.5">TARGET_ID: {ref.id}</div></div>
                                             <span className={`text-[8px] font-black px-3 py-1.5 rounded-lg border uppercase tracking-[0.15em] ${ref.status === 'smart_match' ? 'bg-purple-50 text-purple-600 border-purple-100' : (ref.status === 'add' || ref.status === 'orphan') ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : (ref.status === 'update') ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>{ref.status === 'add' ? 'NEW' : ref.status === 'smart_match' ? 'SMART' : (ref.status === 'unchanged' ? 'UNTOUCHED' : 'PINNED')}</span>
@@ -720,6 +965,37 @@ const ReferenceUpdater: React.FC = () => {
 
                         {activeTab === 'result' && (
                              <div className="h-full relative flex flex-col bg-white">
+                                 {suggestions.length > 0 && (
+                                     <div className="p-4 bg-indigo-50/30 border-b border-indigo-100">
+                                         <div className="flex items-center gap-2 mb-3">
+                                             <Lightbulb className="w-3 h-3 text-indigo-600" />
+                                             <h4 className="text-[9px] font-black text-indigo-900 uppercase tracking-widest">Post-Execution Recommendations</h4>
+                                         </div>
+                                         <div className="grid grid-cols-1 gap-2">
+                                             {suggestions.map(sug => (
+                                                 <button 
+                                                     key={sug.id}
+                                                     onClick={() => {
+                                                         setToast({ msg: `Transferring Merged XML to ${sug.toolName}...`, type: 'success' });
+                                                         setTimeout(() => {
+                                                             navigate(sug.path, { state: { transferredXml: output, sourceTool: 'Reference Updater' } });
+                                                         }, 600);
+                                                     }}
+                                                     className="flex items-center gap-3 p-3 bg-white border border-indigo-100 rounded-xl hover:border-indigo-300 hover:shadow-md transition-all group text-left shadow-sm"
+                                                 >
+                                                     <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:scale-110 transition-transform">
+                                                         {sug.icon}
+                                                     </div>
+                                                     <div className="flex-grow">
+                                                         <div className="text-[10px] font-black text-indigo-900 uppercase tracking-widest mb-0.5">{sug.toolName}</div>
+                                                         <div className="text-[9px] text-indigo-500 font-medium leading-tight">{sug.description}</div>
+                                                     </div>
+                                                     <ArrowRight className="w-4 h-4 text-indigo-300 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
+                                                 </button>
+                                             ))}
+                                         </div>
+                                     </div>
+                                 )}
                                  <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                                      <div className="flex items-center gap-3">
                                          <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600">
@@ -805,20 +1081,63 @@ const ReferenceUpdater: React.FC = () => {
                                             <span className="text-[10px] font-mono text-slate-400">ID: {reviewingItem.id}</span>
                                         </div>
                                         <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 font-serif italic text-slate-600 leading-relaxed text-sm">
-                                            {parseReferences(originalXml)[reviewingItem.originalIndex!]?.content.replace(/<[^>]+>/g, ' ')}
+                                            {parsedOriginalRefs[reviewingItem.originalIndex!]?.content?.replace(/<[^>]+>/g, ' ') || 'No content available'}
                                         </div>
                                     </div>
 
                                     <div className="space-y-4">
                                         <div className="flex items-center justify-between">
-                                            <span className="text-[10px] font-black text-purple-600 uppercase tracking-[0.2em]">Smart Match Suggestion</span>
-                                            <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-[9px] font-black uppercase">
+                                            <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${reviewingItem.status === 'conflict' ? 'text-rose-600' : 'text-purple-600'}`}>
+                                                {reviewingItem.status === 'conflict' ? 'Conflict Resolution' : 'Smart Match Suggestion'}
+                                            </span>
+                                            <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${reviewingItem.status === 'conflict' ? 'bg-rose-100 text-rose-700' : 'bg-purple-100 text-purple-700'}`}>
                                                 {reviewingItem.matchScore}% Match
                                             </span>
                                         </div>
-                                        <div className="p-6 bg-purple-50/50 rounded-3xl border border-purple-100 font-serif italic text-slate-700 leading-relaxed text-sm ring-2 ring-purple-500/10">
-                                            {parseReferences(updatedXml)[reviewingItem.updatedIndex!]?.content.replace(/<[^>]+>/g, ' ')}
+                                        <div className={`p-6 rounded-3xl border font-serif italic text-slate-700 leading-relaxed text-sm ring-2 ${reviewingItem.status === 'conflict' ? 'bg-rose-50/50 border-rose-100 ring-rose-500/10' : 'bg-purple-50/50 border-purple-100 ring-purple-500/10'}`}>
+                                            {parsedUpdatedRefs[reviewingItem.updatedIndex!]?.content?.replace(/<[^>]+>/g, ' ') || 'No content available'}
                                         </div>
+
+                                        {reviewingItem.candidates && reviewingItem.candidates.length > 1 && (
+                                            <div className="mt-4 space-y-2">
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-2">Alternative Candidates</span>
+                                                <div className="space-y-1">
+                                                    {reviewingItem.candidates.map((cand, cIdx) => (
+                                                        <button 
+                                                            key={cIdx}
+                                                            onClick={() => {
+                                                                setReviewingItem({
+                                                                    ...reviewingItem,
+                                                                    updatedIndex: cand.index,
+                                                                    matchScore: cand.score,
+                                                                    matchType: cand.matchType as any,
+                                                                    label: formatLabel(cand.label),
+                                                                    preview: cand.preview + '...'
+                                                                });
+                                                                setScanResults(prev => prev.map(it => it.uid === reviewingItem.uid ? {
+                                                                    ...it,
+                                                                    updatedIndex: cand.index,
+                                                                    matchScore: cand.score,
+                                                                    matchType: cand.matchType as any,
+                                                                    label: formatLabel(cand.label),
+                                                                    preview: cand.preview + '...'
+                                                                } : it));
+                                                            }}
+                                                            className={`w-full p-3 rounded-xl border text-left transition-all flex items-center justify-between group ${reviewingItem.updatedIndex === cand.index ? 'bg-indigo-50 border-indigo-200 ring-1 ring-indigo-200' : 'bg-white border-slate-100 hover:border-slate-200'}`}
+                                                        >
+                                                            <div className="flex flex-col">
+                                                                <span className="text-[10px] font-bold text-slate-700">{cand.label}</span>
+                                                                <span className="text-[9px] text-slate-400 font-mono italic line-clamp-1">{cand.preview}</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-[9px] font-black text-slate-400 uppercase">{cand.score}%</span>
+                                                                {reviewingItem.updatedIndex === cand.index && <Check size={12} className="text-indigo-600" />}
+                                                            </div>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
@@ -848,13 +1167,13 @@ const ReferenceUpdater: React.FC = () => {
                                 </button>
                                 <button 
                                     onClick={() => {
-                                        setScanResults((prev: ScanItem[]) => prev.map((it: ScanItem) => it.originalIndex === reviewingItem.originalIndex ? { ...it, reviewed: true } : it));
+                                        setScanResults((prev: ScanItem[]) => prev.map((it: ScanItem) => it.uid === reviewingItem.uid ? { ...it, reviewed: true, status: it.status === 'conflict' ? 'smart_match' : it.status } : it));
                                         setReviewingItem(null);
                                     }}
-                                    className="px-8 py-3 bg-purple-600 hover:bg-purple-700 text-white text-xs font-black uppercase tracking-widest rounded-2xl shadow-lg shadow-purple-500/20 transition-all active:scale-95 flex items-center gap-2"
+                                    className={`px-8 py-3 text-white text-xs font-black uppercase tracking-widest rounded-2xl shadow-lg transition-all active:scale-95 flex items-center gap-2 ${reviewingItem.status === 'conflict' ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-500/20' : 'bg-purple-600 hover:bg-purple-700 shadow-purple-500/20'}`}
                                 >
                                     <Check size={16} strokeWidth={3} />
-                                    Confirm Match
+                                    {reviewingItem.status === 'conflict' ? 'Resolve & Confirm' : 'Confirm Match'}
                                 </button>
                             </div>
                         </motion.div>
@@ -917,22 +1236,30 @@ const ReferenceUpdater: React.FC = () => {
                                         </div>
                                     </div>
 
-                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
                                         <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
                                             <div className="text-lg font-black text-amber-600 leading-none">{scanResults.filter(r => r.status === 'update').length}</div>
-                                            <div className="text-[9px] font-black text-amber-400 uppercase tracking-widest mt-1">Exact Updates</div>
+                                            <div className="text-[9px] font-black text-amber-400 uppercase tracking-widest mt-1">Updates</div>
                                         </div>
                                         <div className="p-4 bg-purple-50 rounded-2xl border border-purple-100">
                                             <div className="text-lg font-black text-purple-600 leading-none">{scanResults.filter(r => r.status === 'smart_match').length}</div>
-                                            <div className="text-[9px] font-black text-purple-400 uppercase tracking-widest mt-1">Smart Matches</div>
+                                            <div className="text-[9px] font-black text-purple-400 uppercase tracking-widest mt-1">Smart</div>
+                                        </div>
+                                        <div className="p-4 bg-rose-50 rounded-2xl border border-rose-100">
+                                            <div className="text-lg font-black text-rose-600 leading-none">{scanResults.filter(r => r.status === 'conflict').length}</div>
+                                            <div className="text-[9px] font-black text-rose-400 uppercase tracking-widest mt-1">Conflicts</div>
                                         </div>
                                         <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
                                             <div className="text-lg font-black text-emerald-600 leading-none">{scanResults.filter(r => r.status === 'add').length}</div>
-                                            <div className="text-[9px] font-black text-emerald-400 uppercase tracking-widest mt-1">New Nodes</div>
+                                            <div className="text-[9px] font-black text-emerald-400 uppercase tracking-widest mt-1">New</div>
+                                        </div>
+                                        <div className="p-4 bg-rose-50 rounded-2xl border border-rose-100">
+                                            <div className="text-lg font-black text-rose-600 leading-none">{scanResults.filter(r => r.status === 'orphan').length}</div>
+                                            <div className="text-[9px] font-black text-rose-400 uppercase tracking-widest mt-1">Orphans</div>
                                         </div>
                                         <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
                                             <div className="text-lg font-black text-slate-600 leading-none">{scanResults.filter(r => r.status === 'unchanged').length}</div>
-                                            <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Unchanged</div>
+                                            <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Static</div>
                                         </div>
                                     </div>
 
@@ -942,14 +1269,26 @@ const ReferenceUpdater: React.FC = () => {
                                             {scanResults.filter(r => r.status !== 'unchanged').map((r, i) => (
                                                 <div key={i} className="flex items-center justify-between p-4 bg-slate-50/50 rounded-xl border border-slate-100 group hover:border-indigo-200 transition-all">
                                                     <div className="flex items-center gap-4">
-                                                        <div className={`w-2 h-2 rounded-full ${r.status === 'update' ? 'bg-amber-400' : r.status === 'smart_match' ? 'bg-purple-400' : 'bg-emerald-400'}`}></div>
+                                                        <div className={`w-2 h-2 rounded-full ${
+                                                            r.status === 'update' ? 'bg-amber-400' : 
+                                                            r.status === 'smart_match' ? 'bg-purple-400' : 
+                                                            r.status === 'conflict' ? 'bg-rose-500' :
+                                                            r.status === 'add' ? 'bg-emerald-400' :
+                                                            'bg-rose-400'
+                                                        }`}></div>
                                                         <div>
                                                             <div className="text-xs font-bold text-slate-800">{r.label}</div>
                                                             <div className="text-[9px] text-slate-400 font-mono uppercase">ID: {r.id}</div>
                                                         </div>
                                                     </div>
                                                     <div className="text-right">
-                                                        <div className={`text-[9px] font-black uppercase tracking-widest ${r.status === 'update' ? 'text-amber-600' : r.status === 'smart_match' ? 'text-purple-600' : 'text-emerald-600'}`}>
+                                                        <div className={`text-[9px] font-black uppercase tracking-widest ${
+                                                            r.status === 'update' ? 'text-amber-600' : 
+                                                            r.status === 'smart_match' ? 'text-purple-600' : 
+                                                            r.status === 'conflict' ? 'text-rose-600' :
+                                                            r.status === 'add' ? 'text-emerald-600' :
+                                                            'text-rose-600'
+                                                        }`}>
                                                             {r.status.replace('_', ' ')}
                                                         </div>
                                                         {r.matchScore && <div className="text-[8px] font-bold text-slate-300 uppercase tracking-tighter">{r.matchType} {r.matchScore}%</div>}
