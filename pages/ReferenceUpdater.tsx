@@ -428,16 +428,26 @@ const ReferenceUpdater: React.FC = () => {
                         });
                     }
 
-                    // 5. Fuzzy Match
+                    // 5. Fuzzy Match & Surname-Year Heuristic
                     if (candidates.length === 0) {
                         updatedRefs.forEach((u, idx) => {
-                            // Hard mismatch if years exist and are significantly different
+                            const authMatch = (origRef.author && u.author && origRef.author === u.author);
+                            const yearMatch = (origRef.year && u.year && origRef.year === u.year);
+                            
+                            if (authMatch && yearMatch) {
+                                let score = 75;
+                                const titleSim = getSimilarity(origRef.title || '', u.title || '');
+                                score += (titleSim * 25);
+                                candidates.push({ index: idx, score: Math.round(score), matchType: 'Surname-Year', label: u.label, preview: u.content.substring(0, 60) });
+                                return;
+                            }
+
+                            // Regular Fuzzy logic for Smart Matches
                             if (u.year && origRef.year && u.year !== origRef.year) {
                                 const yearSim = getSimilarity(u.year, origRef.year);
                                 if (yearSim < 0.75) return; 
                             }
 
-                            // Hard mismatch if first authors exist and are significantly different
                             if (u.author && origRef.author && u.author !== origRef.author) {
                                 const authSim = getSimilarity(u.author, origRef.author);
                                 if (authSim < 0.6) return;
@@ -461,7 +471,7 @@ const ReferenceUpdater: React.FC = () => {
                             uid: Math.random().toString(36).substring(2, 15),
                             label: formatLabel(origRef.label || updatedRefs[best.index].label), 
                             id: origRef.id, 
-                            status: isConflict ? 'conflict' : (best.matchType === 'Fuzzy' ? 'smart_match' : 'update'), 
+                            status: isConflict ? 'conflict' : (best.matchType === 'Surname-Year' ? 'potential_duplicate' : (best.matchType === 'Fuzzy' ? 'smart_match' : 'update')), 
                             reviewed: false,
                             matchType: best.matchType as any, 
                             matchScore: best.score, 
@@ -471,7 +481,14 @@ const ReferenceUpdater: React.FC = () => {
                             sortKey: updatedRefs[best.index].sortKey, 
                             originalIndex: oIdx, 
                             updatedIndex: best.index,
-                            candidates: candidates.length > 1 ? candidates : undefined
+                            candidates: candidates.length > 1 ? candidates : undefined,
+                            potentialMatches: best.matchType === 'Surname-Year' ? candidates.map(c => ({
+                                index: c.index,
+                                score: c.score,
+                                matchType: c.matchType,
+                                label: origRefs[oIdx].label,
+                                preview: origRefs[oIdx].content.substring(0, 60).replace(/<[^>]+>/g, '')
+                            })) : undefined
                         });
                         usedUpdateIdx.add(best.index);
                     } else {
@@ -593,27 +610,39 @@ const ReferenceUpdater: React.FC = () => {
         const addItem = scanResults.find(r => r.uid === addUid);
         if (!addItem || addItem.updatedIndex === null) return;
         
-        // Find the original reference node. We look for items that correspond to this original index.
-        const originalTarget = scanResults.find(r => r.originalIndex === originalIndex && (r.status === 'unchanged' || r.status === 'update' || r.status === 'conflict' || r.status === 'orphan'));
+        // Find the original reference node. 
+        // In primary scan matches (Surname-Year), the status is 'potential_duplicate'.
+        // In secondary scan matches (orphan detection), the target is usually 'unchanged'.
+        const originalTarget = scanResults.find(r => r.originalIndex === originalIndex && (r.status === 'unchanged' || r.status === 'update' || r.status === 'conflict' || r.status === 'potential_duplicate' || r.status === 'orphan'));
         
         if (!originalTarget) {
              setToast({ msg: "Target original reference not found in scan set.", type: "error" });
              return;
         }
 
-        setScanResults((prev: ScanItem[]) => {
-            // Remove the added item and update the original target
-            return prev
-                .filter(r => r.uid !== addUid)
-                .map(r => r.uid === originalTarget.uid ? {
-                    ...r,
-                    status: 'update' as const,
-                    updatedIndex: addItem.updatedIndex,
-                    preview: addItem.preview,
-                    reviewed: true,
-                    selected: true
-                } : r);
-        });
+        if (addItem.uid === originalTarget.uid) {
+            // Single item merge (Primary Scan)
+            setScanResults((prev: ScanItem[]) => prev.map(r => r.uid === addItem.uid ? {
+                ...r,
+                status: 'update' as const,
+                reviewed: true,
+                selected: true
+            } : r));
+        } else {
+            // Dual item merge (Secondary Scan)
+            setScanResults((prev: ScanItem[]) => {
+                return prev
+                    .filter(r => r.uid !== addUid)
+                    .map(r => r.uid === originalTarget.uid ? {
+                        ...r,
+                        status: 'update' as const,
+                        updatedIndex: addItem.updatedIndex,
+                        preview: addItem.preview,
+                        reviewed: true,
+                        selected: true
+                    } : r);
+            });
+        }
 
         setReviewingItem(null);
         setToast({ msg: "References merged into update cycle.", type: "success" });
@@ -669,7 +698,15 @@ const ReferenceUpdater: React.FC = () => {
     };
 
     const executeMergeAsync = async (origRefs: RefBlock[], updatedRefs: RefBlock[]) => {
-        const unreviewed = scanResults.filter(r => (r.status === 'smart_match' || r.status === 'potential_duplicate' || r.status === 'conflict') && !r.reviewed && !autoUpdateSmartMatch);
+        const unreviewed = scanResults.filter(r => {
+            if (r.reviewed) return false;
+            // Potential duplicates and conflicts ALWAYS require manual review
+            if (r.status === 'conflict' || r.status === 'potential_duplicate') return true;
+            // Smart matches only require review if auto-confirm is OFF
+            if (r.status === 'smart_match') return !autoUpdateSmartMatch;
+            return false;
+        });
+
         if (unreviewed.length > 0) {
             setToast({ msg: `Review required for ${unreviewed.length} pending items before merging.`, type: "warn" });
             setActiveTab('scan');
