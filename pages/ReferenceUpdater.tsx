@@ -619,6 +619,48 @@ const ReferenceUpdater: React.FC = () => {
         setToast({ msg: "References merged into update cycle.", type: "success" });
     };
 
+    const splitMatch = (item: ScanItem) => {
+        setScanResults((prev: ScanItem[]) => {
+            if (item.status === 'potential_duplicate') {
+                return prev.map(it => it.uid === item.uid ? {
+                    ...it,
+                    status: 'add' as const,
+                    originalIndex: null,
+                    reviewed: true,
+                    selected: true
+                } : it);
+            }
+
+            if (item.originalIndex !== null) {
+                const originalRef = parsedOriginalRefs[item.originalIndex!];
+                const originalEntry: ScanItem = {
+                    uid: Math.random().toString(36).substring(2, 15),
+                    label: originalRef.label || item.label,
+                    id: originalRef.id,
+                    status: 'unchanged',
+                    preview: originalRef.content.substring(0, 100).replace(/<[^>]+>/g, '').trim() + '...',
+                    isSynthetic: originalRef.isSynthetic,
+                    selected: true,
+                    sortKey: originalRef.sortKey,
+                    originalIndex: item.originalIndex,
+                    updatedIndex: null
+                };
+                
+                return [...prev.map(it => it.uid === item.uid ? {
+                    ...it,
+                    status: 'add' as const,
+                    originalIndex: null,
+                    reviewed: true,
+                    selected: true
+                } : it), originalEntry];
+            }
+            return prev;
+        });
+
+        setReviewingItem(null);
+        setToast({ msg: "Match rejected: Split into two distinct references.", type: "success" });
+    };
+
     const initiateUpdate = async () => {
         if (!originalXml.trim() || !updatedXml.trim()) { setToast({ msg: "Paste XML.", type: "warn" }); return; }
         if (scanResults.length === 0) { runAnalysis(); return; }
@@ -1464,17 +1506,14 @@ const ReferenceUpdater: React.FC = () => {
                                 >
                                     Dismiss
                                 </button>
-                                {reviewingItem.status === 'potential_duplicate' && reviewingItem.originalIndex !== null ? (
-                                    <div className="flex gap-4">
-                                        <button 
-                                            onClick={() => {
-                                                setScanResults((prev: ScanItem[]) => prev.map((it: ScanItem) => it.uid === reviewingItem.uid ? { ...it, reviewed: true, status: 'add' } : it));
-                                                setReviewingItem(null);
-                                            }}
-                                            className="px-8 py-3 bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-sm hover:bg-slate-50 transition-all"
-                                        >
-                                            Keep as Split
-                                        </button>
+                                <div className="flex gap-4">
+                                    <button 
+                                        onClick={() => splitMatch(reviewingItem)}
+                                        className="px-8 py-3 bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-sm hover:bg-slate-50 transition-all"
+                                    >
+                                        Keep as Split
+                                    </button>
+                                    {reviewingItem.status === 'potential_duplicate' && reviewingItem.originalIndex !== null ? (
                                         <button 
                                             onClick={() => mergeDuplicate(reviewingItem.uid, reviewingItem.originalIndex!)}
                                             className="px-8 py-3 bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-lg shadow-amber-500/20 transition-all active:scale-95 flex items-center gap-2"
@@ -1482,23 +1521,19 @@ const ReferenceUpdater: React.FC = () => {
                                             <GitMerge size={16} strokeWidth={3} />
                                             Merge into Original
                                         </button>
-                                    </div>
-                                ) : (
-                                    <button 
-                                        onClick={() => {
-                                            if (reviewingItem.status === 'potential_duplicate') {
-                                                setScanResults((prev: ScanItem[]) => prev.map((it: ScanItem) => it.uid === reviewingItem.uid ? { ...it, reviewed: true, status: 'add' } : it));
-                                            } else {
+                                    ) : (
+                                        <button 
+                                            onClick={() => {
                                                 setScanResults((prev: ScanItem[]) => prev.map((it: ScanItem) => it.uid === reviewingItem.uid ? { ...it, reviewed: true, status: it.status === 'conflict' ? 'smart_match' : it.status } : it));
-                                            }
-                                            setReviewingItem(null);
-                                        }}
-                                        className={`px-8 py-3 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-lg transition-all active:scale-95 flex items-center gap-2 ${reviewingItem.status === 'conflict' ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-500/20' : 'bg-purple-600 hover:bg-purple-700 shadow-purple-500/20'}`}
-                                    >
-                                        <Check size={16} strokeWidth={3} />
-                                        {reviewingItem.status === 'conflict' ? 'Resolve & Confirm' : 'Confirm Match'}
-                                    </button>
-                                )}
+                                                setReviewingItem(null);
+                                            }}
+                                            className={`px-8 py-3 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-lg transition-all active:scale-95 flex items-center gap-2 ${reviewingItem.status === 'conflict' ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-500/20' : 'bg-purple-600 hover:bg-purple-700 shadow-purple-500/20'}`}
+                                        >
+                                            <Check size={16} strokeWidth={3} />
+                                            {reviewingItem.status === 'conflict' ? 'Resolve & Confirm' : 'Confirm Match'}
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                         </motion.div>
                     </div>
