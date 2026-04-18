@@ -5,7 +5,7 @@ import { diffLines, diffWordsWithSpace, Change } from 'diff';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
-import { ChevronUp, ChevronDown, GitCompare, Trash2, ArrowRight, Check, Shield, Lightbulb, Link as LinkIcon, Eraser, Hash, RefreshCw, Box } from 'lucide-react';
+import { ChevronUp, ChevronDown, GitCompare, Trash2, ArrowRight, Check, Shield, Lightbulb, Link as LinkIcon, Eraser, Hash, RefreshCw, Box, SortAsc } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SmartSuggestion, ToolId } from '../types';
 
@@ -24,7 +24,7 @@ const UncitedRefCleaner: React.FC = () => {
     const [output, setOutput] = useState('');
     const [uncitedRefs, setUncitedRefs] = useState<RefItem[]>([]);
     const [step, setStep] = useState<'input' | 'review' | 'result'>('input');
-    const [activeTab, setActiveTab] = useState<'xml' | 'report' | 'diff'>('xml');
+    const [activeTab, setActiveTab] = useState<'xml' | 'report' | 'diff' | 'queries'>('xml');
     const [isLoading, setIsLoading] = useState(false);
     const [toast, setToast] = useState<{ msg: string, type: 'success' | 'warn' | 'error' } | null>(null);
     const [suggestions, setSuggestions] = useState<SmartSuggestion[]>([]);
@@ -385,6 +385,16 @@ const UncitedRefCleaner: React.FC = () => {
                 });
             }
 
+            // 7. Reference Sorter
+            newSuggestions.push({
+                id: 'ref-sorter',
+                toolName: 'Reference Sorter',
+                description: 'Bibliography out of sequence? Align them alphabetically using the Reference Sorter.',
+                path: '/refSorter',
+                icon: <SortAsc className="w-4 h-4" />,
+                condition: 'Bibliography detected'
+            });
+
             setSuggestions(newSuggestions);
             setStep('result');
             setActiveTab('xml');
@@ -538,17 +548,17 @@ const UncitedRefCleaner: React.FC = () => {
                             <h3 className="font-black text-slate-900 text-xs uppercase tracking-widest">Post-Processing Audit</h3>
                             <button onClick={() => { setStep('input'); setUncitedRefs([]); }} className="text-xs font-bold text-indigo-600 hover:underline uppercase tracking-widest">New Session</button>
                         </div>
-                        <div className="bg-white px-10 pt-4 border-b border-slate-100 flex space-x-4">
-                            {['xml', 'report', 'diff'].map(t => (
-                                <button 
-                                    key={t} 
-                                    onClick={() => setActiveTab(t as any)} 
-                                    className={`px-8 py-4 text-[11px] font-black uppercase tracking-widest rounded-t-2xl transition-all border-t border-x ${activeTab === t ? 'bg-slate-50 text-rose-600 border-slate-200 translate-y-[1px]' : 'bg-white text-slate-400 border-transparent'}`}
-                                >
-                                    {t === 'xml' ? 'Final XML Result' : (t === 'report' ? 'Action Summary' : 'Side-by-Side Diff')}
-                                </button>
-                            ))}
-                        </div>
+                                <div className="bg-white px-10 pt-4 border-b border-slate-100 flex space-x-4">
+                                    {['xml', 'report', 'diff', 'queries'].map(t => (
+                                        <button 
+                                            key={t} 
+                                            onClick={() => setActiveTab(t as any)} 
+                                            className={`px-8 py-4 text-[11px] font-black uppercase tracking-widest rounded-t-2xl transition-all border-t border-x ${activeTab === t ? 'bg-slate-50 text-rose-600 border-slate-200 translate-y-[1px]' : 'bg-white text-slate-400 border-transparent'}`}
+                                        >
+                                            {t === 'xml' ? 'Final XML Result' : (t === 'report' ? 'Action Summary' : (t === 'diff' ? 'Side-by-Side Diff' : 'JM Queries'))}
+                                        </button>
+                                    ))}
+                                </div>
                         <div className="flex-grow relative bg-slate-50 overflow-hidden flex flex-col">
                             {activeTab === 'xml' && (
                                 <div className="h-full relative p-8">
@@ -666,6 +676,89 @@ const UncitedRefCleaner: React.FC = () => {
                                             </motion.div>
                                         )}
                                     </AnimatePresence>
+                                </div>
+                            )}
+                            {activeTab === 'queries' && (
+                                <div className="h-full overflow-auto p-12 custom-scrollbar">
+                                    <div className="max-w-4xl mx-auto space-y-8">
+                                        <div className="flex items-center gap-4 mb-6">
+                                            <div className="w-12 h-12 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-200">
+                                                <Box className="w-6 h-6 text-white" />
+                                            </div>
+                                            <div>
+                                                <h4 className="text-xl font-black text-slate-900 uppercase">JM Query Suggestions</h4>
+                                                <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Templated communication for uncited references</p>
+                                            </div>
+                                        </div>
+
+                                        {uncitedRefs.length > 0 ? (
+                                            <div className="grid grid-cols-1 gap-6">
+                                                {[
+                                                    {
+                                                        title: "1. Request for Citation Insertion",
+                                                        description: "Use when the reference seems valid but is missing a match in the text.",
+                                                        generate: (refs: RefItem[]) => {
+                                                            const refText = refs.length === 1 ? `Reference [${refs[0].label || refs[0].id}] remains` : `The following references remain`;
+                                                            const list = refs.length > 1 ? ` [${refs.map(r => r.label || r.id).join(', ')}]` : ` [${refs[0].label || refs[0].id}]`;
+                                                            return `TO THE JM:\n${refText} uncited in the text body${refs.length > 1 ? list : list.trim()}.\nKindly ask the author to provide an appropriate citation for this reference in the text.\n\nFile is on pending status until matter is resolved. Thank you.`;
+                                                        }
+                                                    },
+                                                    {
+                                                        title: "2. Multiple Uncited References",
+                                                        description: "Standard verification for multiple orphans.",
+                                                        generate: (refs: RefItem[]) => {
+                                                            const list = refs.map(r => r.label || r.id).join(', ');
+                                                            return `TO THE JM:\nThe following references remain uncited in the text body: [${list}].\nKindly confirm if these may be deleted or advise if citations should be inserted in the text.\n\nFile is on pending status until matter is resolved. Thank you.`;
+                                                        }
+                                                    },
+                                                    {
+                                                        title: "3. Citation Discrepancy / Missing Match",
+                                                        description: "Use if the citation might have been accidentally removed during revisions.",
+                                                        generate: (refs: RefItem[]) => {
+                                                            const refText = refs.length === 1 ? `Reference [${refs[0].label || refs[0].id}] remains` : `The following references remain`;
+                                                            const list = refs.length > 1 ? ` [${refs.map(r => r.label || r.id).join(', ')}]` : ` [${refs[0].label || refs[0].id}]`;
+                                                            return `TO THE JM:\n${refText} uncited in the text body${refs.length > 1 ? list : list.trim()}, possibly due to changes in the citation.\nKindly confirm whether the citation should be reinstated or the reference removed.\n\nFile is on pending status until matter is resolved. Thank you.`;
+                                                        }
+                                                    },
+                                                    {
+                                                        title: "4. Relevance Verification",
+                                                        description: "Use when unsure if the reference is still meant to be part of the article.",
+                                                        generate: (refs: RefItem[]) => {
+                                                            const refText = refs.length === 1 ? `Reference [${refs[0].label || refs[0].id}] remains` : `The following references remain`;
+                                                            const list = refs.length > 1 ? ` [${refs.map(r => r.label || r.id).join(', ')}]` : ` [${refs[0].label || refs[0].id}]`;
+                                                            return `TO THE JM:\n${refText} uncited in the text body${refs.length > 1 ? list : list.trim()}.\nKindly confirm if this reference is still relevant to the article. If not, please advise if it may be deleted.\n\nFile is on pending status until matter is resolved. Thank you.`;
+                                                        }
+                                                    }
+                                                ].map((query, idx) => (
+                                                    <div key={idx} className="bg-white border border-slate-200 rounded-3xl p-8 hover:border-indigo-300 transition-all group">
+                                                        <div className="flex justify-between items-start mb-4">
+                                                            <div>
+                                                                <h5 className="text-sm font-black text-slate-800 uppercase tracking-tight">{query.title}</h5>
+                                                                <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">{query.description}</p>
+                                                            </div>
+                                                            <button 
+                                                                onClick={() => {
+                                                                    navigator.clipboard.writeText(query.generate(uncitedRefs));
+                                                                    setToast({ msg: 'Query copied to clipboard!', type: 'success' });
+                                                                }}
+                                                                className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black hover:bg-indigo-100 transition-all uppercase tracking-widest border border-indigo-100/50"
+                                                            >
+                                                                Copy Query
+                                                            </button>
+                                                        </div>
+                                                        <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 font-mono text-xs text-slate-600 whitespace-pre-wrap leading-relaxed relative">
+                                                            <div className="absolute top-2 right-4 text-[10px] font-black text-slate-300 uppercase opacity-40">Preview</div>
+                                                            {query.generate(uncitedRefs)}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center text-slate-400">
+                                                <p className="text-sm font-bold uppercase tracking-widest">No uncited references detected to generate queries.</p>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             )}
                         </div>

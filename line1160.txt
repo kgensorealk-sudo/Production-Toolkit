@@ -1,0 +1,2 @@
+                                                {scanResults.filter(r => (r.status === 'smart_match' || r.status === 'conflict' || r.status === 'potential_duplicate') && !r.reviewed && !autoUpdateSmartMatch).length} Pending Review
+                                    {diffElements || <div className="h-full flex items-center justify-center text-slate-400 uppercase tracking-widest text-[10px] font-black">Differential Audit Pendin                                 </div>

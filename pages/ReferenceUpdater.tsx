@@ -4,6 +4,9 @@ import {
     ChevronUp, 
     ChevronDown, 
     GitCompare, 
+    GitMerge,
+    ShieldCheck,
+    Info,
     AlertCircle, 
     CheckCircle2, 
     Eye, 
@@ -43,6 +46,9 @@ interface RefBlock {
     year?: string;
     title?: string;
     doi?: string;
+    rawAuthor?: string;
+    rawYear?: string;
+    rawTitle?: string;
 }
 
 interface ScanCandidate {
@@ -57,9 +63,9 @@ interface ScanItem {
     uid: string;
     label: string;
     id: string;
-    status: 'update' | 'unchanged' | 'orphan' | 'smart_match' | 'add' | 'conflict';
+    status: 'update' | 'unchanged' | 'orphan' | 'smart_match' | 'add' | 'conflict' | 'potential_duplicate';
     preview: string;
-    matchType?: 'ID' | 'Label' | 'Content' | 'Fuzzy' | 'DOI';
+    matchType?: 'ID' | 'Label' | 'Content' | 'Fuzzy' | 'DOI' | 'Surname-Year';
     matchScore?: number;
     isSynthetic?: boolean;
     selected: boolean;
@@ -68,6 +74,7 @@ interface ScanItem {
     originalIndex: number | null; 
     updatedIndex: number | null;
     candidates?: ScanCandidate[];
+    potentialMatches?: ScanCandidate[];
 }
 
 const ReferenceUpdater: React.FC = () => {
@@ -88,7 +95,7 @@ const ReferenceUpdater: React.FC = () => {
     const [reviewingItem, setReviewingItem] = useState<ScanItem | null>(null);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'|'info'} | null>(null);
     const [scanResults, setScanResults] = useLocalStorage<ScanItem[]>('ref_updater_scan_results', []);
-    const [filterStatus, setFilterStatus] = useState<'all' | 'review' | 'conflict' | 'add'>('all');
+    const [filterStatus, setFilterStatus] = useState<'all' | 'review' | 'conflict' | 'add' | 'duplicate'>('all');
     const [suggestions, setSuggestions] = useState<SmartSuggestion[]>([]);
     const [diffElements, setDiffElements] = useState<React.ReactNode>(null);
     const [draggedItemIndex, setDraggedItemIndex] = useState<number | null>(null);
@@ -341,6 +348,11 @@ const ReferenceUpdater: React.FC = () => {
                     finalTitle = titleProxy.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 100);
                 }
             }
+
+            // Capture raw segments for comparative UI
+            const rawAuthor = surnameMatch ? surnameMatch[1] : (label.match(/^[A-Za-z'’\u00C0-\u017F]+/) ? label.match(/^[A-Za-z'’\u00C0-\u017F]+/)?.[0] : undefined);
+            const rawYear = finalYear;
+            const rawTitle = titleRaw || undefined;
             
             let fingerprint = finalAuthor || finalYear || finalTitle || doi
                 ? `meta|${finalAuthor}|${finalYear}|${doi}|${finalTitle.substring(0, 100)}` 
@@ -352,18 +364,14 @@ const ReferenceUpdater: React.FC = () => {
             if (label || finalAuthor || cleanContent.length > 5) {
                 refs.push({ 
                     fullTag: match[0], 
-                    id, 
-                    label, 
-                    content, 
-                    isSynthetic, 
-                    cleanContent, 
-                    fingerprint, 
-                    contentHash, 
-                    sortKey,
+                    id, label, content, isSynthetic, cleanContent, fingerprint, contentHash, sortKey,
                     author: finalAuthor,
                     year: finalYear,
                     title: finalTitle,
-                    doi
+                    doi,
+                    rawAuthor,
+                    rawYear,
+                    rawTitle
                 });
             }
         }
@@ -518,11 +526,97 @@ const ReferenceUpdater: React.FC = () => {
                     }
                 });
 
+                // Secondary Scan: Detect potential duplicates for 'add' items
+                analysis.forEach((item, aIdx) => {
+                    if (item.status === 'add' && item.updatedIndex !== null) {
+                        const u = updatedRefs[item.updatedIndex];
+                        const potentials: ScanCandidate[] = [];
+
+                        origRefs.forEach((o, oIdx) => {
+                            // Enhanced Duplicate Detection: Surname-Year Heuristic
+                            let score = 0;
+                            let matchType = '';
+
+                            if (o.doi && u.doi && o.doi === u.doi) {
+                                score = 100; matchType = 'DOI';
+                            } else {
+                                const authMatch = (o.author && u.author && o.author === u.author);
+                                const yearMatch = (o.year && u.year && o.year === u.year);
+                                
+                                if (authMatch && yearMatch) {
+                                    // FIRST AUTHOR SURNAME & YEAR IDENTICAL -> 75% Base Score
+                                    score = 75; 
+                                    matchType = 'Surname-Year';
+                                    
+                                    // Add weight if titles show partial overlaps
+                                    const titleSim = getSimilarity(o.title || '', u.title || '');
+                                    score += (titleSim * 25);
+                                } else if (authMatch || yearMatch) {
+                                    const sim = getSimilarity(o.fingerprint, u.fingerprint);
+                                    score = Math.round(sim * 100);
+                                    matchType = 'Fuzzy';
+                                }
+                            }
+
+                            if (score > 60) {
+                                potentials.push({
+                                    index: oIdx,
+                                    score: Math.round(score),
+                                    matchType: matchType,
+                                    label: o.label,
+                                    preview: (o.cleanContent || o.content.replace(/<[^>]+>/g, '')).substring(0, 60)
+                                });
+                            }
+                        });
+
+                        if (potentials.length > 0) {
+                            potentials.sort((a, b) => b.score - a.score);
+                            item.potentialMatches = potentials;
+                            item.status = 'potential_duplicate';
+                            item.reviewed = false;
+                            item.originalIndex = potentials[0].index;
+                        }
+                    }
+                });
+
                 setScanResults(analysis); 
                 setActiveTab('scan'); 
                 setToast({ msg: `Analysis complete. Found ${analysis.filter(a => a.updatedIndex !== null).length} potential updates.`, type: "success" });
-            } catch (e) { setToast({ msg: "Analysis failed.", type: "error" }); } finally { setIsLoading(false); }
+            } catch (e) { 
+                console.error(e);
+                setToast({ msg: "Analysis failed.", type: "error" }); 
+            } finally { setIsLoading(false); }
         }, 300);
+    };
+
+    const mergeDuplicate = (addUid: string, originalIndex: number) => {
+        const addItem = scanResults.find(r => r.uid === addUid);
+        if (!addItem || addItem.updatedIndex === null) return;
+        
+        // Find the original reference node. We look for items that correspond to this original index.
+        const originalTarget = scanResults.find(r => r.originalIndex === originalIndex && (r.status === 'unchanged' || r.status === 'update' || r.status === 'conflict' || r.status === 'orphan'));
+        
+        if (!originalTarget) {
+             setToast({ msg: "Target original reference not found in scan set.", type: "error" });
+             return;
+        }
+
+        setScanResults((prev: ScanItem[]) => {
+            // Remove the added item and update the original target
+            return prev
+                .filter(r => r.uid !== addUid)
+                .map(r => r.uid === originalTarget.uid ? {
+                    ...r,
+                    status: 'update' as const,
+                    updatedIndex: addItem.updatedIndex,
+                    preview: addItem.preview,
+                    reviewed: true,
+                    selected: true
+                } : r);
+        });
+
+        setReviewingItem(null);
+        setToast({ msg: "References merged into update cycle.", type: "success" });
     };
 
     const initiateUpdate = async () => {
@@ -533,9 +627,9 @@ const ReferenceUpdater: React.FC = () => {
     };
 
     const executeMergeAsync = async (origRefs: RefBlock[], updatedRefs: RefBlock[]) => {
-        const unreviewed = scanResults.filter(r => r.status === 'smart_match' && !r.reviewed && !autoUpdateSmartMatch);
+        const unreviewed = scanResults.filter(r => (r.status === 'smart_match' || r.status === 'potential_duplicate' || r.status === 'conflict') && !r.reviewed && !autoUpdateSmartMatch);
         if (unreviewed.length > 0) {
-            setToast({ msg: `Review required for ${unreviewed.length} Smart Matches before merging.`, type: "warn" });
+            setToast({ msg: `Review required for ${unreviewed.length} pending items before merging.`, type: "warn" });
             setActiveTab('scan');
             setIsLoading(false);
             return;
@@ -653,20 +747,23 @@ const ReferenceUpdater: React.FC = () => {
                     }
                     if (yearA < yearB) continue;
 
-                    // 3. Tertiary Sort: Title
-                    const titleA = cleanForSort(a.title || '');
-                    const titleB = cleanForSort(b.title || '');
-                    if (titleA.localeCompare(titleB, undefined, { sensitivity: 'base', numeric: true }) > 0) {
+                // 3. Tertiary Sort: Title (Relaxed to only trigger if clearly different and out of order)
+                const titleA = cleanForSort(a.title || '');
+                const titleB = cleanForSort(b.title || '');
+                if (titleA && titleB && titleA.localeCompare(titleB, undefined, { sensitivity: 'base', numeric: true }) > 0) {
+                    // Only flag if authors and years are exactly the same
+                    if (authorA === authorB && yearA === yearB) {
                         isSorted = false;
                         break;
                     }
                 }
+            }
                 
                 if (!isSorted) {
                     newSuggestions.push({
                         id: 'ref-sorter-suggest',
                         toolName: 'Reference Sorter',
-                        description: 'Sequence looks unsorted. Organize alphabetically with Reference Sorter.',
+                        description: 'Result not in alphabetical order? Fix it with Reference Sorter.',
                         path: '/refSorter',
                         icon: <Lightbulb size={14} />,
                         condition: 'Unsorted output detected'
@@ -764,18 +861,21 @@ const ReferenceUpdater: React.FC = () => {
                         <button onClick={runAnalysis} className="bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold py-2.5 px-6 rounded-xl border border-slate-200 transition-all active:scale-95 shadow-sm">Analyze Set</button>
                         <button 
                             onClick={initiateUpdate} 
-                            className={`relative font-black py-2.5 px-8 rounded-xl shadow-lg active:scale-95 transition-all uppercase text-xs tracking-widest ${
-                                scanResults.some(r => r.status === 'smart_match' && !r.reviewed && !autoUpdateSmartMatch)
-                                ? 'bg-purple-600 hover:bg-purple-700 text-white shadow-purple-500/20 ring-2 ring-purple-500 ring-offset-2'
+                            className={`relative font-black py-2.5 px-8 rounded-xl shadow-lg active:scale-95 transition-all uppercase text-xs tracking-widest flex items-center gap-2 ${
+                                scanResults.some(r => (r.status === 'smart_match' || r.status === 'potential_duplicate' || r.status === 'conflict') && !r.reviewed && !autoUpdateSmartMatch)
+                                ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-500/20 ring-2 ring-amber-500 ring-offset-2'
                                 : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-500/20'
                             }`}
                         >
-                            {scanResults.some(r => r.status === 'smart_match' && !r.reviewed && !autoUpdateSmartMatch) ? (
-                                <span className="flex items-center gap-2">
-                                    <AlertTriangle size={14} className="animate-pulse" />
-                                    Review Required
+                            {scanResults.some(r => (r.status === 'smart_match' || r.status === 'potential_duplicate' || r.status === 'conflict') && !r.reviewed && !autoUpdateSmartMatch) && (
+                                <AlertTriangle size={14} className="animate-pulse" />
+                            )}
+                            Execute Merge
+                            {scanResults.some(r => (r.status === 'smart_match' || r.status === 'potential_duplicate' || r.status === 'conflict') && !r.reviewed && !autoUpdateSmartMatch) && (
+                                <span className="absolute -top-2 -right-2 bg-rose-600 text-white text-[8px] px-1.5 py-0.5 rounded-full ring-2 ring-white">
+                                    {scanResults.filter(r => (r.status === 'smart_match' || r.status === 'potential_duplicate' || r.status === 'conflict') && !r.reviewed && !autoUpdateSmartMatch).length}
                                 </span>
-                            ) : 'Execute Merge'}
+                            )}
                         </button>
                     </div>
                 </div>
@@ -812,9 +912,10 @@ const ReferenceUpdater: React.FC = () => {
                                     <div className="flex items-center gap-3 pl-2">
                                         <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Filter:</span>
                                         <div className="flex bg-white rounded-lg border border-slate-200 p-0.5 shadow-sm">
-                                            {(['all', 'review', 'conflict', 'add'] as const).map(f => {
+                                            {(['all', 'review', 'duplicate', 'conflict', 'add'] as const).map(f => {
                                                 const count = scanResults.filter(item => {
-                                                    if (f === 'review') return (item.status === 'smart_match' || item.status === 'conflict') && !item.reviewed;
+                                                    if (f === 'review') return (item.status === 'smart_match' || item.status === 'conflict' || item.status === 'potential_duplicate') && !item.reviewed;
+                                                    if (f === 'duplicate') return item.status === 'potential_duplicate';
                                                     if (f === 'conflict') return item.status === 'conflict';
                                                     if (f === 'add') return item.status === 'add' || item.status === 'orphan';
                                                     return true;
@@ -832,10 +933,10 @@ const ReferenceUpdater: React.FC = () => {
                                                 );
                                             })}
                                         </div>
-                                        {scanResults.filter(r => (r.status === 'smart_match' || r.status === 'conflict') && !r.reviewed && !autoUpdateSmartMatch).length > 0 && (
+                                        {scanResults.filter(r => (r.status === 'smart_match' || r.status === 'conflict' || r.status === 'potential_duplicate') && !r.reviewed && !autoUpdateSmartMatch).length > 0 && (
                                             <span className="flex items-center gap-1.5 px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-[9px] font-black uppercase animate-pulse">
                                                 <AlertCircle size={10} />
-                                                {scanResults.filter(r => (r.status === 'smart_match' || r.status === 'conflict') && !r.reviewed && !autoUpdateSmartMatch).length} Pending Review
+                                                {scanResults.filter(r => (r.status === 'smart_match' || r.status === 'conflict' || r.status === 'potential_duplicate') && !r.reviewed && !autoUpdateSmartMatch).length} Pending Review
                                             </span>
                                         )}
                                     </div>
@@ -854,15 +955,17 @@ const ReferenceUpdater: React.FC = () => {
                                             ) : (
                                                 scanResults
                                                 .filter(item => {
-                                                    if (filterStatus === 'review') return (item.status === 'smart_match' || item.status === 'conflict') && !item.reviewed;
+                                                    if (filterStatus === 'review') return (item.status === 'smart_match' || item.status === 'conflict' || item.status === 'potential_duplicate') && !item.reviewed;
+                                                    if (filterStatus === 'duplicate') return item.status === 'potential_duplicate';
                                                     if (filterStatus === 'conflict') return item.status === 'conflict';
                                                     if (filterStatus === 'add') return item.status === 'add' || item.status === 'orphan';
                                                     return true;
                                                 })
                                                 .map((item) => {
-                                                    const isSmartMatch = item.status === 'smart_match' || item.status === 'conflict';
+                                                    const isSmartMatch = item.status === 'smart_match' || item.status === 'conflict' || item.status === 'potential_duplicate';
                                                     const needsReview = isSmartMatch && !item.reviewed && !autoUpdateSmartMatch;
                                                     const isConflict = item.status === 'conflict';
+                                                    const isPotentialDupe = item.status === 'potential_duplicate';
                                                     
                                                     return (
                                                         <tr 
@@ -888,14 +991,15 @@ const ReferenceUpdater: React.FC = () => {
                                                                             item.status === 'smart_match' 
                                                                             ? (item.reviewed || autoUpdateSmartMatch ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-purple-600 text-white border-purple-600 shadow-sm') 
                                                                             : item.status === 'conflict' ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
+                                                                            : item.status === 'potential_duplicate' ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
                                                                             : item.status === 'update' ? 'bg-amber-50 text-amber-600 border-amber-200' 
                                                                             : item.status === 'add' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' 
                                                                             : item.status === 'orphan' ? 'bg-rose-50 text-rose-600 border-rose-200' 
                                                                             : 'bg-slate-50 text-slate-500 border-slate-200'
                                                                         }`}>
-                                                                            {item.status.replace('_', ' ')}
+                                                                            {item.status === 'potential_duplicate' && !item.reviewed ? "Action Needed" : item.status.replace('_', ' ')}
                                                                         </span>
-                                                                        {(needsReview || isConflict) && <AlertCircle size={12} className={isConflict ? "text-rose-600 animate-pulse" : "text-purple-600 animate-pulse"} />}
+                                                                        {(needsReview || isConflict || isPotentialDupe) && <AlertCircle size={12} className={isConflict || isPotentialDupe ? "text-rose-600 animate-pulse" : "text-purple-600 animate-pulse"} />}
                                                                         {item.reviewed && !autoUpdateSmartMatch && <CheckCircle2 size={12} className="text-emerald-500" />}
                                                                     </div>
                                                                     {item.matchType && (
@@ -914,17 +1018,23 @@ const ReferenceUpdater: React.FC = () => {
                                                                         <div className="flex items-center gap-2">
                                                                             <button 
                                                                                 onClick={() => setReviewingItem(item)}
-                                                                                className={`p-1.5 rounded-lg transition-all ${isConflict ? 'text-rose-600 bg-rose-50 hover:bg-rose-100' : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'}`}
-                                                                                title={isConflict ? "Resolve Conflict" : "Compare Details"}
+                                                                                className={`p-1.5 rounded-lg transition-all ${isConflict || isPotentialDupe ? 'text-rose-600 bg-rose-50 hover:bg-rose-100' : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'}`}
+                                                                                title={isConflict ? "Resolve Conflict" : isPotentialDupe ? "Analyze Similarity" : "Compare Details"}
                                                                             >
-                                                                                {isConflict ? <AlertTriangle size={16} /> : <Eye size={16} />}
+                                                                                {isConflict || isPotentialDupe ? <AlertTriangle size={16} /> : <Eye size={16} />}
                                                                             </button>
                                                                             <button 
-                                                                                onClick={() => setScanResults((prev: ScanItem[]) => prev.map((it: ScanItem) => it.uid === item.uid ? { ...it, reviewed: !it.reviewed, status: it.status === 'conflict' ? 'smart_match' : it.status } : it))}
+                                                                                onClick={() => {
+                                                                                    if (isConflict || isPotentialDupe || !item.reviewed) {
+                                                                                        setReviewingItem(item);
+                                                                                    } else {
+                                                                                        setScanResults((prev: ScanItem[]) => prev.map((it: ScanItem) => it.uid === item.uid ? { ...it, reviewed: !it.reviewed } : it));
+                                                                                    }
+                                                                                }}
                                                                                 className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm ${
                                                                                     item.reviewed 
                                                                                     ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' 
-                                                                                    : (isConflict ? 'bg-rose-600 text-white hover:bg-rose-700 shadow-rose-200' : 'bg-purple-600 text-white hover:bg-purple-700 shadow-purple-200')
+                                                                                    : (isConflict || isPotentialDupe ? 'bg-rose-600 text-white hover:bg-rose-700 shadow-rose-200' : 'bg-purple-600 text-white hover:bg-purple-700 shadow-purple-200')
                                                                                 }`}
                                                                             >
                                                                                 {item.reviewed ? (
@@ -932,7 +1042,7 @@ const ReferenceUpdater: React.FC = () => {
                                                                                         <Check size={10} strokeWidth={3} />
                                                                                         Confirmed
                                                                                     </span>
-                                                                                ) : (isConflict ? 'Resolve' : 'Confirm Match')}
+                                                                                ) : (isConflict ? 'Resolve' : 'Review Similarity')}
                                                                             </button>
                                                                         </div>
                                                                     )}
@@ -1026,7 +1136,18 @@ const ReferenceUpdater: React.FC = () => {
                                          {isStale ? 'Copy Stale XML' : 'Copy XML'}
                                      </button>
                                  </div>
-                                 <textarea value={output} readOnly className="w-full flex-grow p-8 text-[11px] font-mono text-slate-700 bg-white border-0 focus:ring-0 resize-none leading-loose custom-scrollbar" placeholder="Merged XML stream will be emitted here..." />
+                                 <div className="flex-grow relative flex flex-col min-h-0 bg-white">
+                                     {output ? (
+                                         <textarea value={output} readOnly className="w-full h-full p-8 text-[11px] font-mono text-slate-700 bg-white border-0 focus:ring-0 resize-none leading-loose custom-scrollbar" placeholder="Merged XML stream will be emitted here..." />
+                                     ) : (
+                                         <div className="flex-grow flex flex-col items-center justify-center p-12 text-center">
+                                             <div className="w-16 h-16 bg-slate-50 rounded-3xl flex items-center justify-center text-slate-200 mb-6 font-mono text-xl font-black shadow-inner">?</div>
+                                             <h5 className="text-sm font-bold text-slate-800 uppercase tracking-widest mb-2">No Output Generated</h5>
+                                             <p className="text-[11px] text-slate-400 max-w-xs leading-relaxed italic">The merge protocol has not been executed or the resulting set is empty.</p>
+                                             <button onClick={runAnalysis} className="mt-8 px-8 py-3 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 active:scale-95">Start Setup Scan</button>
+                                         </div>
+                                     )}
+                                 </div>
                              </div>
                         )}
 
@@ -1036,152 +1157,10 @@ const ReferenceUpdater: React.FC = () => {
                                     ref={diffContainerRef}
                                     className="absolute inset-0 overflow-auto bg-white custom-scrollbar"
                                  >
-                                    {diffElements || <div className="h-full flex items-center justify-center text-slate-400 uppercase tracking-widest text-[10px] font-black">Differential Audit Pending...</div>}
+                                     {diffElements || <div className="h-full flex items-center justify-center text-slate-400 uppercase tracking-widest text-[10px] font-black">Differential Audit Pending...</div>}
                                  </div>
 
                                  <AnimatePresence>
-                {reviewingItem && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
-                        <motion.div 
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            onClick={() => setReviewingItem(null)}
-                            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-                        />
-                        <motion.div 
-                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="relative w-full max-w-5xl bg-white rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
-                        >
-                            <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 bg-purple-100 rounded-2xl flex items-center justify-center">
-                                        <GitCompare className="text-purple-600" size={24} />
-                                    </div>
-                                    <div>
-                                        <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Smart Match Review</h3>
-                                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Verify fuzzy logic connection</p>
-                                    </div>
-                                </div>
-                                <button 
-                                    onClick={() => setReviewingItem(null)}
-                                    className="p-3 hover:bg-slate-200 rounded-2xl transition-all text-slate-400 hover:text-slate-600"
-                                >
-                                    <X size={24} />
-                                </button>
-                            </div>
-
-                            <div className="flex-grow overflow-auto p-8 custom-scrollbar">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    <div className="space-y-4">
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Original Record</span>
-                                            <span className="text-[10px] font-mono text-slate-400">ID: {reviewingItem.id}</span>
-                                        </div>
-                                        <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 font-serif italic text-slate-600 leading-relaxed text-sm">
-                                            {parsedOriginalRefs[reviewingItem.originalIndex!]?.content?.replace(/<[^>]+>/g, ' ') || 'No content available'}
-                                        </div>
-                                    </div>
-
-                                    <div className="space-y-4">
-                                        <div className="flex items-center justify-between">
-                                            <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${reviewingItem.status === 'conflict' ? 'text-rose-600' : 'text-purple-600'}`}>
-                                                {reviewingItem.status === 'conflict' ? 'Conflict Resolution' : 'Smart Match Suggestion'}
-                                            </span>
-                                            <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${reviewingItem.status === 'conflict' ? 'bg-rose-100 text-rose-700' : 'bg-purple-100 text-purple-700'}`}>
-                                                {reviewingItem.matchScore}% Match
-                                            </span>
-                                        </div>
-                                        <div className={`p-6 rounded-3xl border font-serif italic text-slate-700 leading-relaxed text-sm ring-2 ${reviewingItem.status === 'conflict' ? 'bg-rose-50/50 border-rose-100 ring-rose-500/10' : 'bg-purple-50/50 border-purple-100 ring-purple-500/10'}`}>
-                                            {parsedUpdatedRefs[reviewingItem.updatedIndex!]?.content?.replace(/<[^>]+>/g, ' ') || 'No content available'}
-                                        </div>
-
-                                        {reviewingItem.candidates && reviewingItem.candidates.length > 1 && (
-                                            <div className="mt-4 space-y-2">
-                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-2">Alternative Candidates</span>
-                                                <div className="space-y-1">
-                                                    {reviewingItem.candidates.map((cand, cIdx) => (
-                                                        <button 
-                                                            key={cIdx}
-                                                            onClick={() => {
-                                                                setReviewingItem({
-                                                                    ...reviewingItem,
-                                                                    updatedIndex: cand.index,
-                                                                    matchScore: cand.score,
-                                                                    matchType: cand.matchType as any,
-                                                                    label: formatLabel(cand.label),
-                                                                    preview: cand.preview + '...'
-                                                                });
-                                                                setScanResults(prev => prev.map(it => it.uid === reviewingItem.uid ? {
-                                                                    ...it,
-                                                                    updatedIndex: cand.index,
-                                                                    matchScore: cand.score,
-                                                                    matchType: cand.matchType as any,
-                                                                    label: formatLabel(cand.label),
-                                                                    preview: cand.preview + '...'
-                                                                } : it));
-                                                            }}
-                                                            className={`w-full p-3 rounded-xl border text-left transition-all flex items-center justify-between group ${reviewingItem.updatedIndex === cand.index ? 'bg-indigo-50 border-indigo-200 ring-1 ring-indigo-200' : 'bg-white border-slate-100 hover:border-slate-200'}`}
-                                                        >
-                                                            <div className="flex flex-col">
-                                                                <span className="text-[10px] font-bold text-slate-700">{cand.label}</span>
-                                                                <span className="text-[9px] text-slate-400 font-mono italic line-clamp-1">{cand.preview}</span>
-                                                            </div>
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="text-[9px] font-black text-slate-400 uppercase">{cand.score}%</span>
-                                                                {reviewingItem.updatedIndex === cand.index && <Check size={12} className="text-indigo-600" />}
-                                                            </div>
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                <div className="mt-8 p-6 bg-indigo-50/50 rounded-3xl border border-indigo-100">
-                                    <div className="flex items-start gap-4">
-                                        <div className="p-2 bg-white rounded-xl shadow-sm">
-                                            <AlertCircle size={20} className="text-indigo-600" />
-                                        </div>
-                                        <div>
-                                            <h4 className="text-sm font-black text-indigo-900 uppercase tracking-tight">Technical Reasoning</h4>
-                                            <p className="text-xs text-indigo-700/70 mt-1 leading-relaxed">
-                                                The system identified this match using <strong>{reviewingItem.matchType}</strong> analysis. 
-                                                The fingerprint similarity score is {reviewingItem.matchScore}%. 
-                                                Review the metadata and content carefully to ensure these are the same entity.
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="px-8 py-6 bg-slate-50 border-t border-slate-100 flex justify-end gap-4">
-                                <button 
-                                    onClick={() => setReviewingItem(null)}
-                                    className="px-6 py-3 text-xs font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-all"
-                                >
-                                    Dismiss
-                                </button>
-                                <button 
-                                    onClick={() => {
-                                        setScanResults((prev: ScanItem[]) => prev.map((it: ScanItem) => it.uid === reviewingItem.uid ? { ...it, reviewed: true, status: it.status === 'conflict' ? 'smart_match' : it.status } : it));
-                                        setReviewingItem(null);
-                                    }}
-                                    className={`px-8 py-3 text-white text-xs font-black uppercase tracking-widest rounded-2xl shadow-lg transition-all active:scale-95 flex items-center gap-2 ${reviewingItem.status === 'conflict' ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-500/20' : 'bg-purple-600 hover:bg-purple-700 shadow-purple-500/20'}`}
-                                >
-                                    <Check size={16} strokeWidth={3} />
-                                    {reviewingItem.status === 'conflict' ? 'Resolve & Confirm' : 'Confirm Match'}
-                                </button>
-                            </div>
-                        </motion.div>
-                    </div>
-                )}
-            </AnimatePresence>
-
-            <AnimatePresence>
                                      {totalChanges > 0 && (
                                          <motion.div 
                                              initial={{ opacity: 0, y: 20, scale: 0.95 }}
@@ -1242,8 +1221,8 @@ const ReferenceUpdater: React.FC = () => {
                                             <div className="text-[9px] font-black text-amber-400 uppercase tracking-widest mt-1">Updates</div>
                                         </div>
                                         <div className="p-4 bg-purple-50 rounded-2xl border border-purple-100">
-                                            <div className="text-lg font-black text-purple-600 leading-none">{scanResults.filter(r => r.status === 'smart_match').length}</div>
-                                            <div className="text-[9px] font-black text-purple-400 uppercase tracking-widest mt-1">Smart</div>
+                                            <div className="text-lg font-black text-purple-600 leading-none">{scanResults.filter(r => r.status === 'smart_match' || r.status === 'potential_duplicate').length}</div>
+                                            <div className="text-[9px] font-black text-purple-400 uppercase tracking-widest mt-1">Smart/Dupe</div>
                                         </div>
                                         <div className="p-4 bg-rose-50 rounded-2xl border border-rose-100">
                                             <div className="text-lg font-black text-rose-600 leading-none">{scanResults.filter(r => r.status === 'conflict').length}</div>
@@ -1306,6 +1285,225 @@ const ReferenceUpdater: React.FC = () => {
                     </div>
                 </div>
             </div>
+            <AnimatePresence>
+                {reviewingItem && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+                        <motion.div 
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setReviewingItem(null)}
+                            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+                        />
+                        <motion.div 
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="relative w-full max-w-5xl bg-white rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+                        >
+                            <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 bg-purple-100 rounded-2xl flex items-center justify-center">
+                                        <GitCompare className="text-purple-600" size={24} />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">
+                                            {reviewingItem.status === 'potential_duplicate' ? 'Duplicate Detection Review' : 'Smart Match Review'}
+                                        </h3>
+                                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">
+                                            {reviewingItem.status === 'potential_duplicate' ? 'Investigate potential redundancy' : 'Verify fuzzy logic connection'}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={() => setReviewingItem(null)}
+                                    className="p-3 hover:bg-slate-200 rounded-2xl transition-all text-slate-400 hover:text-slate-600"
+                                >
+                                    <X size={24} />
+                                </button>
+                            </div>
+
+                            <div className="flex-grow overflow-auto p-8 custom-scrollbar">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    {/* Column 1: Original */}
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Original Record</span>
+                                            <span className="text-[10px] font-mono text-slate-400">ID: {reviewingItem.id}</span>
+                                        </div>
+                                        <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 font-serif italic text-slate-600 leading-relaxed text-sm">
+                                            {parsedOriginalRefs[reviewingItem.originalIndex!]?.content?.replace(/<[^>]+>/g, ' ') || 'No content available'}
+                                        </div>
+
+                                        <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm space-y-3">
+                                            <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50 pb-2 mb-2">Metadata Comparison</h4>
+                                            
+                                            <div className="space-y-4">
+                                                <div className="flex flex-col gap-1">
+                                                    <span className="text-[9px] font-black text-slate-300 uppercase">Primary Authors</span>
+                                                    <div className="grid grid-cols-2 gap-4">
+                                                        <div className={`text-[11px] leading-tight ${parsedOriginalRefs[reviewingItem.originalIndex!]?.rawAuthor !== parsedUpdatedRefs[reviewingItem.updatedIndex!]?.rawAuthor ? 'text-slate-400 italic' : 'text-slate-600'}`}>
+                                                            {parsedOriginalRefs[reviewingItem.originalIndex!]?.rawAuthor || '—'}
+                                                        </div>
+                                                        <div className={`text-[11px] leading-tight font-bold ${parsedOriginalRefs[reviewingItem.originalIndex!]?.rawAuthor !== parsedUpdatedRefs[reviewingItem.updatedIndex!]?.rawAuthor ? 'text-amber-700' : 'text-slate-900'}`}>
+                                                            {parsedUpdatedRefs[reviewingItem.updatedIndex!]?.rawAuthor || '—'}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex flex-col gap-1">
+                                                    <span className="text-[9px] font-black text-slate-300 uppercase">Publication Year</span>
+                                                    <div className="grid grid-cols-2 gap-4">
+                                                        <div className={`text-[11px] leading-tight ${parsedOriginalRefs[reviewingItem.originalIndex!]?.rawYear !== parsedUpdatedRefs[reviewingItem.updatedIndex!]?.rawYear ? 'text-slate-400 italic' : 'text-slate-600'}`}>
+                                                            {parsedOriginalRefs[reviewingItem.originalIndex!]?.rawYear || '—'}
+                                                        </div>
+                                                        <div className={`text-[11px] leading-tight font-bold ${parsedOriginalRefs[reviewingItem.originalIndex!]?.rawYear !== parsedUpdatedRefs[reviewingItem.updatedIndex!]?.rawYear ? 'text-amber-700' : 'text-slate-900'}`}>
+                                                            {parsedUpdatedRefs[reviewingItem.updatedIndex!]?.rawYear || '—'}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex flex-col gap-1">
+                                                    <span className="text-[9px] font-black text-slate-300 uppercase">Article Title</span>
+                                                    <div className="grid grid-cols-2 gap-4">
+                                                        <div className={`text-[11px] leading-tight line-clamp-2 ${parsedOriginalRefs[reviewingItem.originalIndex!]?.rawTitle !== parsedUpdatedRefs[reviewingItem.updatedIndex!]?.rawTitle ? 'text-slate-400 italic' : 'text-slate-600'}`}>
+                                                            {parsedOriginalRefs[reviewingItem.originalIndex!]?.rawTitle?.replace(/<[^>]+>/g, ' ') || '—'}
+                                                        </div>
+                                                        <div className={`text-[11px] leading-tight font-bold line-clamp-2 ${parsedOriginalRefs[reviewingItem.originalIndex!]?.rawTitle !== parsedUpdatedRefs[reviewingItem.updatedIndex!]?.rawTitle ? 'text-amber-700' : 'text-slate-900'}`}>
+                                                            {parsedUpdatedRefs[reviewingItem.updatedIndex!]?.rawTitle?.replace(/<[^>]+>/g, ' ') || '—'}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Column 2: Revised/Added */}
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between">
+                                            <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${reviewingItem.status === 'conflict' ? 'text-rose-600' : (reviewingItem.status === 'potential_duplicate' ? 'text-amber-600' : 'text-purple-600')}`}>
+                                                {reviewingItem.status === 'conflict' ? 'Conflict Detected' : (reviewingItem.status === 'potential_duplicate' ? 'Candidate Duplicate' : 'Smart Suggestion')}
+                                            </span>
+                                            <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${reviewingItem.status === 'conflict' ? 'bg-rose-100 text-rose-700' : (reviewingItem.status === 'potential_duplicate' ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-purple-700')}`}>
+                                                {reviewingItem.matchScore}% Score
+                                            </span>
+                                        </div>
+                                        <div className={`p-6 rounded-3xl border font-serif italic text-slate-700 leading-relaxed text-sm ring-1 ${reviewingItem.status === 'conflict' ? 'bg-rose-50/50 border-rose-200 ring-rose-500/5 shadow-inner' : (reviewingItem.status === 'potential_duplicate' ? 'bg-amber-50/50 border-amber-200 ring-amber-500/5 shadow-inner' : 'bg-purple-50/50 border-purple-200 ring-purple-500/5 shadow-inner')}`}>
+                                            {parsedUpdatedRefs[reviewingItem.updatedIndex!]?.content?.replace(/<[^>]+>/g, ' ') || 'No revised content available'}
+                                        </div>
+
+                                        {(reviewingItem.candidates || (reviewingItem.status === 'potential_duplicate' ? reviewingItem.potentialMatches : undefined)) && (
+                                            <div className="mt-6 space-y-3">
+                                                <div className="flex items-center gap-2 px-2">
+                                                    < GitMerge size={12} className="text-slate-400" />
+                                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest ">
+                                                        {reviewingItem.status === 'potential_duplicate' ? 'Merge Search Results' : 'System Candidates'}
+                                                    </span>
+                                                </div>
+                                                <div className="space-y-1">
+                                                    {(reviewingItem.candidates || (reviewingItem.status === 'potential_duplicate' ? reviewingItem.potentialMatches : undefined))!.map((cand: ScanCandidate, cIdx: number) => (
+                                                        <button 
+                                                            key={cIdx}
+                                                            onClick={() => {
+                                                                if (reviewingItem.status === 'potential_duplicate') {
+                                                                    setReviewingItem(prev => prev ? { ...prev, originalIndex: cand.index, matchScore: cand.score, matchType: cand.matchType as any } : null);
+                                                                    setScanResults(prev => prev.map(it => it.uid === reviewingItem.uid ? { ...it, originalIndex: cand.index, matchScore: cand.score, matchType: cand.matchType as any } : it));
+                                                                } else {
+                                                                    setReviewingItem(prev => prev ? { ...prev, updatedIndex: cand.index, matchScore: cand.score, matchType: cand.matchType as any, label: formatLabel(cand.label), preview: cand.preview + '...' } : null);
+                                                                    setScanResults(prev => prev.map(it => it.uid === reviewingItem.uid ? { ...it, updatedIndex: cand.index, matchScore: cand.score, matchType: cand.matchType as any, label: formatLabel(cand.label), preview: cand.preview + '...' } : it));
+                                                                }
+                                                            }}
+                                                            className={`w-full p-4 rounded-2xl border text-left transition-all flex items-center justify-between group ${(reviewingItem.status === 'potential_duplicate' ? reviewingItem.originalIndex === cand.index : reviewingItem.updatedIndex === cand.index) ? 'bg-white border-indigo-400 shadow-md ring-1 ring-indigo-50' : 'bg-slate-50 border-transparent hover:border-slate-200 hover:bg-white'}`}
+                                                        >
+                                                            <div className="flex flex-col gap-1">
+                                                                <span className="text-[10px] font-black text-slate-700 uppercase tracking-tight">{cand.label}</span>
+                                                                <span className="text-[9px] text-slate-400 font-serif italic line-clamp-1">{cand.preview}</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="flex flex-col items-end">
+                                                                    <span className="text-[10px] font-black text-indigo-600">{cand.score}%</span>
+                                                                    <span className="text-[7px] font-bold text-slate-300 uppercase tracking-tighter">{cand.matchType}</span>
+                                                                </div>
+                                                                {(reviewingItem.status === 'potential_duplicate' ? reviewingItem.originalIndex === cand.index : reviewingItem.updatedIndex === cand.index) && <div className="w-5 h-5 rounded-full bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-200"><Check size={10} className="text-white" strokeWidth={4} /></div>}
+                                                            </div>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="mt-8 p-6 bg-slate-900 rounded-[2rem] shadow-2xl shadow-indigo-500/10 active:scale-[0.99] transition-transform">
+                                    <div className="flex items-start gap-4">
+                                        <div className="p-2.5 bg-indigo-500 rounded-2xl">
+                                            <ShieldCheck size={20} className="text-white" />
+                                        </div>
+                                        <div className="flex-grow">
+                                            <div className="flex items-center justify-between">
+                                                <h4 className="text-sm font-black text-white uppercase tracking-tight">Merge Intelligence Report</h4>
+                                                <span className="px-2 py-0.5 bg-indigo-400/20 text-indigo-300 rounded text-[8px] font-black uppercase tracking-widest border border-indigo-500/30">Similarity Breakdown</span>
+                                            </div>
+                                            <p className="text-[11px] text-slate-300 mt-2 leading-relaxed font-medium">
+                                                Algorithm: <strong>{reviewingItem.matchType || 'Heuristic'} Validation</strong> ({reviewingItem.matchScore}%). 
+                                                {reviewingItem.status === 'potential_duplicate' 
+                                                    ? (reviewingItem.matchType === 'Surname-Year' 
+                                                        ? "Flagged via First Author & Year Match. While author lists or titles may vary in detail, the core metadata points to identical registration." 
+                                                        : "This entry was flagged because it significantly overlaps with a record in your original XML set. Merging prevents bibliography inflation.") 
+                                                    : "Compare metadata above to verify mapping accuracy. Once confirmed, this update will be committed to the XML output pipe."}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="px-8 py-6 bg-slate-50 border-t border-slate-100 flex justify-end gap-4">
+                                <button 
+                                    onClick={() => setReviewingItem(null)}
+                                    className="px-6 py-3 text-xs font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-all"
+                                >
+                                    Dismiss
+                                </button>
+                                {reviewingItem.status === 'potential_duplicate' && reviewingItem.originalIndex !== null ? (
+                                    <div className="flex gap-4">
+                                        <button 
+                                            onClick={() => {
+                                                setScanResults((prev: ScanItem[]) => prev.map((it: ScanItem) => it.uid === reviewingItem.uid ? { ...it, reviewed: true, status: 'add' } : it));
+                                                setReviewingItem(null);
+                                            }}
+                                            className="px-8 py-3 bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-sm hover:bg-slate-50 transition-all"
+                                        >
+                                            Keep as Split
+                                        </button>
+                                        <button 
+                                            onClick={() => mergeDuplicate(reviewingItem.uid, reviewingItem.originalIndex!)}
+                                            className="px-8 py-3 bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-lg shadow-amber-500/20 transition-all active:scale-95 flex items-center gap-2"
+                                        >
+                                            <GitMerge size={16} strokeWidth={3} />
+                                            Merge into Original
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <button 
+                                        onClick={() => {
+                                            if (reviewingItem.status === 'potential_duplicate') {
+                                                setScanResults((prev: ScanItem[]) => prev.map((it: ScanItem) => it.uid === reviewingItem.uid ? { ...it, reviewed: true, status: 'add' } : it));
+                                            } else {
+                                                setScanResults((prev: ScanItem[]) => prev.map((it: ScanItem) => it.uid === reviewingItem.uid ? { ...it, reviewed: true, status: it.status === 'conflict' ? 'smart_match' : it.status } : it));
+                                            }
+                                            setReviewingItem(null);
+                                        }}
+                                        className={`px-8 py-3 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-lg transition-all active:scale-95 flex items-center gap-2 ${reviewingItem.status === 'conflict' ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-500/20' : 'bg-purple-600 hover:bg-purple-700 shadow-purple-500/20'}`}
+                                    >
+                                        <Check size={16} strokeWidth={3} />
+                                        {reviewingItem.status === 'conflict' ? 'Resolve & Confirm' : 'Confirm Match'}
+                                    </button>
+                                )}
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
             {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
         </div>
     );

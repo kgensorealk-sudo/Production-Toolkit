@@ -30,7 +30,8 @@ import {
     Eraser,
     Hash,
     Trash2,
-    Box
+    Box,
+    SortAsc
 } from 'lucide-react';
 import Toast from '../components/Toast';
 import { SmartSuggestion, ToolId } from '../types';
@@ -229,6 +230,19 @@ const StructuralNodeArchitect: React.FC = () => {
             const parser = new DOMParser();
             const trimmedInput = input.trim();
             
+            // ID Awareness: Pre-scan for all existing IDs to detect duplicates
+            const allUsedIds = new Set<string>();
+            const duplicates = new Set<string>();
+            const idRegex = /\bid=["']([^"']+)["']/g;
+            let m;
+            while ((m = idRegex.exec(trimmedInput)) !== null) {
+                const idValue = m[1];
+                if (allUsedIds.has(idValue)) {
+                    duplicates.add(idValue);
+                }
+                allUsedIds.add(idValue);
+            }
+
             // Scanner Protocol: Extract bib-reference blocks via Regex to avoid parsing unrelated XML parts
             const bibRegex = /<ce:bib-reference\b[^>]*>([\s\S]*?)<\/ce:bib-reference>/g;
             const matches = Array.from(trimmedInput.matchAll(bibRegex));
@@ -240,6 +254,25 @@ const StructuralNodeArchitect: React.FC = () => {
             }
 
             let idCounter = startId;
+            
+            // Helper to get next unique ID
+            const getNextId = (prefix: string) => {
+                // Ensure idCounter is a multiple of 5 as per user requirement (ir4006 was incorrect, ir4005/4010 expected)
+                if (idCounter % 5 !== 0) {
+                    idCounter += (5 - (idCounter % 5));
+                }
+                
+                let candidate = `${prefix}${idCounter}`;
+                while (allUsedIds.has(candidate)) {
+                    idCounter += 5;
+                    candidate = `${prefix}${idCounter}`;
+                }
+                allUsedIds.add(candidate);
+                const result = candidate;
+                idCounter += 5;
+                return result;
+            };
+
             matches.forEach((match, index) => {
                 const fullBlock = match[0];
                 const wrappedBlock = `<root ${NS_DECLS} xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:sa="http://www.elsevier.com/xml/common/struct-aff/dtd">${fullBlock}</root>`;
@@ -251,6 +284,17 @@ const StructuralNodeArchitect: React.FC = () => {
 
                 const ref = fragmentDoc.getElementsByTagName("ce:bib-reference")[0];
                 const refId = ref.getAttribute("id") || `REF_${index + 1}`;
+                
+                // Duplicate ID Warning
+                if (duplicates.has(refId)) {
+                    currentAudit.push({ 
+                        id: refId, 
+                        status: 'warning', 
+                        msg: `DUPLICATE ID: This ID is used multiple times in the document.`,
+                        type: 'id-fix'
+                    });
+                }
+
                 const sbRef = ref.getElementsByTagName("sb:reference")[0] || ref.getElementsByTagName("ce:reference")[0] || ref.getElementsByTagName("ce:other-ref")[0];
                 
                 if (!sbRef) {
@@ -260,38 +304,53 @@ const StructuralNodeArchitect: React.FC = () => {
 
                 // ID and Source Text Audit
                 const sbId = sbRef.getAttribute("id") || "";
+                
+                if (duplicates.has(sbId) && sbId) {
+                    currentAudit.push({ 
+                        id: refId, 
+                        status: 'fixed', 
+                        msg: `DUPLICATE ID: Sub-element ID collision (${sbId}). Regeneration required.`,
+                        type: 'id-fix'
+                    });
+                }
+
                 if (sbRef.tagName.includes('other-ref')) {
                     if (!sbId || !sbId.startsWith("or")) {
                         currentAudit.push({ 
                             id: refId, 
                             status: 'fixed', 
-                            msg: `ID: Incorrect prefix for other-ref (${sbId || 'missing'} -> or${idCounter})`, 
+                            msg: `ID: Incorrect prefix for other-ref (${sbId || 'missing'} -> unique OR ID)`, 
                             type: 'id-fix' 
                         });
-                        idCounter += 5;
                     }
                 } else if (sbId.startsWith("or")) {
                     currentAudit.push({ 
                         id: refId, 
                         status: 'fixed', 
-                        msg: `ID: Incorrect prefix detected (${sbId} -> rf${idCounter})`, 
+                        msg: `ID: Incorrect prefix detected (${sbId} -> unique RF ID)`, 
                         type: 'id-fix' 
                     });
-                    idCounter += 5;
                 }
 
                 // Inter-ref ID Audit
                 const interRefs = Array.from(ref.getElementsByTagName("ce:inter-ref")).concat(Array.from(ref.getElementsByTagName("sb:inter-ref")));
                 interRefs.forEach(ir => {
                     const irId = ir.getAttribute("id") || "";
+                    if (duplicates.has(irId) && irId) {
+                        currentAudit.push({ 
+                            id: refId, 
+                            status: 'fixed', 
+                            msg: `DUPLICATE ID: Inter-ref collision (${irId}).`,
+                            type: 'ir-fix' 
+                        });
+                    }
                     if (!irId || irId.startsWith("or")) {
                         currentAudit.push({ 
                             id: refId, 
                             status: 'fixed', 
-                            msg: `INTER-REF: Incorrect ID detected (${irId || 'missing'} -> ir${idCounter})`, 
+                            msg: `INTER-REF: Incorrect ID detected (${irId || 'missing'} -> unique IR ID)`, 
                             type: 'ir-fix' 
                         });
-                        idCounter += 5;
                     }
                 });
 
@@ -300,10 +359,9 @@ const StructuralNodeArchitect: React.FC = () => {
                     currentAudit.push({ 
                         id: refId, 
                         status: 'fixed', 
-                        msg: `SOURCE: Missing <ce:source-text> element. (se${idCounter})`, 
+                        msg: `SOURCE: Missing <ce:source-text> element. (unique SE ID)`, 
                         type: 'source-text' 
                     });
-                    idCounter += 5;
                 }
 
                 const hosts = Array.from(sbRef.getElementsByTagName("sb:host"));
@@ -370,8 +428,41 @@ const StructuralNodeArchitect: React.FC = () => {
             const parser = new DOMParser();
             const serializer = new XMLSerializer();
             const finalAudit: AuditItem[] = [];
+            const trimmedInput = input.trim();
+
+            // ID Awareness: Pre-scan for all used IDs to maintain uniqueness
+            const allUsedIds = new Set<string>();
+            const duplicatesFoundInInput = new Set<string>();
+            const idRegex = /\bid=["']([^"']+)["']/g;
+            let m;
+            while ((m = idRegex.exec(trimmedInput)) !== null) {
+                const idValue = m[1];
+                if (allUsedIds.has(idValue)) {
+                    duplicatesFoundInInput.add(idValue);
+                }
+                allUsedIds.add(idValue);
+            }
+
             let idCounter = startId;
             let refIndex = 0;
+
+            // Helper to get next unique ID
+            const getNextId = (prefix: string) => {
+                // Ensure idCounter is a multiple of 5 as per user requirement
+                if (idCounter % 5 !== 0) {
+                    idCounter += (5 - (idCounter % 5));
+                }
+
+                let candidate = `${prefix}${idCounter}`;
+                while (allUsedIds.has(candidate)) {
+                    idCounter += 5;
+                    candidate = `${prefix}${idCounter}`;
+                }
+                allUsedIds.add(candidate);
+                const result = candidate;
+                idCounter += 5;
+                return result;
+            };
 
             const bibRegex = /<ce:bib-reference\b[^>]*>([\s\S]*?)<\/ce:bib-reference>/g;
             
@@ -380,45 +471,58 @@ const StructuralNodeArchitect: React.FC = () => {
                 const fragmentDoc = parser.parseFromString(wrappedBlock, "text/xml");
                 const ref = fragmentDoc.getElementsByTagName("ce:bib-reference")[0];
                 const refId = ref.getAttribute("id") || `REF_${refIndex + 1}`;
+                
+                // Track current refId to know if we need to fix it if it's a known duplicate
+                // But generally bib-reference IDs are handled by Renumber tool,
+                // however if it's a known duplicate we could log a warning.
+
                 const sbRef = ref.getElementsByTagName("sb:reference")[0] || ref.getElementsByTagName("ce:reference")[0] || ref.getElementsByTagName("ce:other-ref")[0];
                 
                 if (sbRef) {
-                    const currentSbId = sbRef.getAttribute("id") || "";
+                    let currentSbId = sbRef.getAttribute("id") || "";
+                    let needsIdFix = false;
+
+                    // Check for duplicate or malformed prefix
+                    if (duplicatesFoundInInput.has(currentSbId)) {
+                        needsIdFix = true;
+                    }
+
                     if (sbRef.tagName.includes('other-ref')) {
                         if (!currentSbId || !currentSbId.startsWith("or")) {
-                            const newId = `or${idCounter}`;
-                            sbRef.setAttribute("id", newId);
-                            finalAudit.push({ id: refId, status: 'fixed', msg: `REPAIRED: other-ref ID corrected to ${newId}.` });
-                            idCounter += 5;
+                            needsIdFix = true;
                         }
-                    } else if (currentSbId.startsWith("or")) {
-                        const newId = `rf${idCounter}`;
-                        sbRef.setAttribute("id", newId);
-                        finalAudit.push({ id: refId, status: 'fixed', msg: `REPAIRED: ID prefix corrected to ${newId}.` });
-                        idCounter += 5;
+                        if (needsIdFix) {
+                            const newId = getNextId('or');
+                            sbRef.setAttribute("id", newId);
+                            finalAudit.push({ id: refId, status: 'fixed', msg: `REPAIRED: other-ref ID corrected/duplicated and fixed to ${newId}.` });
+                        }
+                    } else {
+                        if (currentSbId.startsWith("or") || !currentSbId || needsIdFix) {
+                            const newId = getNextId('rf');
+                            sbRef.setAttribute("id", newId);
+                            finalAudit.push({ id: refId, status: 'fixed', msg: `REPAIRED: ID prefix/duplicate corrected to ${newId}.` });
+                        }
                     }
 
                     // Inter-ref ID Repair
                     const interRefs = Array.from(ref.getElementsByTagName("ce:inter-ref")).concat(Array.from(ref.getElementsByTagName("sb:inter-ref")));
                     interRefs.forEach(ir => {
                         const irId = ir.getAttribute("id") || "";
-                        if (!irId || irId.startsWith("or")) {
-                            const newIrId = `ir${idCounter}`;
+                        if (!irId || irId.startsWith("or") || duplicatesFoundInInput.has(irId)) {
+                            const newIrId = getNextId('ir');
                             ir.setAttribute("id", newIrId);
-                            finalAudit.push({ id: refId, status: 'fixed', msg: `REPAIRED: Inter-ref ID corrected to ${newIrId}.` });
-                            idCounter += 5;
+                            finalAudit.push({ id: refId, status: 'fixed', msg: `REPAIRED: Inter-ref ID corrected/duplicated to ${newIrId}.` });
                         }
                     });
 
                     let sourceText = ref.getElementsByTagName("ce:source-text")[0];
                     if (!sourceText && !sbRef.tagName.includes('other-ref')) {
                         const newSourceText = fragmentDoc.createElement("ce:source-text");
-                        const newSeId = `se${idCounter}`;
+                        const newSeId = getNextId('se');
                         newSourceText.setAttribute("id", newSeId);
                         newSourceText.textContent = generateSourceText(sbRef);
                         ref.appendChild(newSourceText);
                         finalAudit.push({ id: refId, status: 'fixed', msg: `REPAIRED: Generated source text (${newSeId}).` });
-                        idCounter += 5;
                     }
 
                     // Name Repair
@@ -568,6 +672,16 @@ const StructuralNodeArchitect: React.FC = () => {
                     condition: 'Complex structural nodes detected'
                 });
             }
+
+            // 2. Reference Sorter
+            newSuggestions.push({
+                id: 'ref-sorter',
+                toolName: 'Reference Sorter',
+                description: 'Bibliography out of sequence? Align them alphabetically using the Reference Sorter.',
+                path: '/refSorter',
+                icon: <SortAsc className="w-4 h-4" />,
+                condition: 'Bibliography detected'
+            });
 
             setSuggestions(newSuggestions);
             setToast({ msg: 'Structural repair protocol complete.', type: 'success' });

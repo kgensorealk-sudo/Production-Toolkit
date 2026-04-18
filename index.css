@@ -6,35 +6,35 @@
 
 @layer base {
   body {
-    @apply bg-zinc-950 text-zinc-400 font-sans selection:bg-zinc-100 selection:text-zinc-950 antialiased;
+    @apply bg-slate-50 text-slate-800 font-sans selection:bg-indigo-100 selection:text-indigo-900 antialiased;
   }
 }
 
 @layer components {
   .architect-border {
-    @apply border border-zinc-800;
+    @apply border border-slate-200;
   }
   
   .architect-grid {
-    @apply bg-[linear-gradient(to_right,#18181b_1px,transparent_1px),linear-gradient(to_bottom,#18181b_1px,transparent_1px)] bg-[size:20px_20px];
+    @apply bg-[linear-gradient(to_right,#f1f5f9_1px,transparent_1px),linear-gradient(to_bottom,#f1f5f9_1px,transparent_1px)] bg-[size:20px_20px];
   }
 
   .architect-button {
-    @apply px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all border border-zinc-800 bg-zinc-900 hover:bg-zinc-100 hover:text-zinc-950 disabled:opacity-30 disabled:hover:bg-zinc-900 disabled:hover:text-zinc-400;
+    @apply px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all border border-slate-200 bg-white hover:bg-slate-900 hover:text-white disabled:opacity-30 disabled:hover:bg-white disabled:hover:text-slate-400;
   }
 
   .architect-tab {
-    @apply flex items-center gap-3 px-6 py-4 text-[10px] font-bold uppercase tracking-widest transition-all border-r border-zinc-800 whitespace-nowrap;
+    @apply flex items-center gap-3 px-6 py-4 text-[10px] font-bold uppercase tracking-widest transition-all border-r border-slate-200 whitespace-nowrap;
   }
 
   .custom-scrollbar-emerald::-webkit-scrollbar {
     width: 6px;
   }
   .custom-scrollbar-emerald::-webkit-scrollbar-track {
-    @apply bg-zinc-950;
+    @apply bg-slate-50;
   }
   .custom-scrollbar-emerald::-webkit-scrollbar-thumb {
-    @apply bg-zinc-800 rounded-none border-2 border-zinc-950 hover:bg-zinc-700 transition-colors;
+    @apply bg-slate-300 rounded-full border-2 border-slate-50 hover:bg-slate-400 transition-colors;
   }
 }
 

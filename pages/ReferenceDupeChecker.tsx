@@ -25,7 +25,8 @@ import {
     UploadCloud,
     FileCode,
     ChevronUp,
-    ChevronDown
+    ChevronDown,
+    Lightbulb
 } from 'lucide-react';
 import * as Diff from 'diff';
 import Toast from '../components/Toast';
@@ -714,50 +715,48 @@ const ReferenceDupeChecker: React.FC = () => {
     }, [input]);
 
     return (
-        <div className="max-w-full mx-auto px-2 py-12 sm:px-4 lg:px-6 font-sans architect-grid">
+        <div className="max-w-full mx-auto px-4 py-12 sm:px-6 lg:px-8 font-sans bg-slate-50/50 min-h-screen">
             <motion.div 
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-8 border-b border-zinc-800 pb-12"
+                className="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-8 border-b border-slate-200 pb-12"
             >
                 <div>
-                    <div className="flex items-center gap-3 mb-6">
-                        <div className="w-12 h-12 rounded-none bg-zinc-900 flex items-center justify-center border border-zinc-800">
-                            <GitCompare className="h-6 w-6 text-zinc-100" />
+                    <div className="flex items-center gap-4 mb-6">
+                        <div className="w-14 h-14 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-xl shadow-indigo-200 ring-4 ring-white">
+                            <GitCompare className="h-7 w-7 text-white" />
                         </div>
                         <div className="flex flex-col">
-                            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.3em]">Module_Ref_024</span>
-                            <span className="text-[10px] font-bold text-zinc-100 uppercase tracking-widest">Structural Node Architect v3.2</span>
+                            <span className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Module_Ref_024</span>
+                            <span className="text-[11px] font-serif italic text-slate-400 capitalize">Precision editorial workflows</span>
                         </div>
                     </div>
-                    <h1 className="text-5xl font-bold text-zinc-100 tracking-tighter uppercase leading-none">
-                        Reference <span className="text-zinc-500">Dupe Remover</span>
+                    <h1 className="text-6xl font-black text-slate-900 tracking-tight uppercase leading-none">
+                        Reference <span className="text-indigo-600/40">Dupe</span> <span className="text-slate-900">Relinker</span>
                     </h1>
-                    <p className="text-xs text-zinc-500 mt-4 font-mono uppercase tracking-widest max-w-2xl leading-relaxed">
-                        Precision-engineered XML citation re-linking engine. Automated duplicate detection with manual resolution matrix and full audit transparency.
+                    <p className="text-sm text-slate-500 mt-6 font-medium max-w-2xl leading-relaxed">
+                        Identify and consolidate duplicate bibliography nodes. This engine automatically detects similarities and re-links your in-text citations to a primary reference.
                     </p>
                 </div>
 
-                <div className="flex items-center bg-zinc-900 p-1 border border-zinc-800">
+                <div className="flex items-center bg-white p-2 rounded-2xl shadow-sm border border-slate-200">
                     {[
-                        { id: 'input', label: '01_Input', icon: FileText },
-                        { id: 'resolve', label: '02_Resolve', icon: Layers },
-                        { id: 'result', label: '03_Audit', icon: ShieldCheck }
+                        { id: 'input', label: 'Upload', icon: FileText },
+                        { id: 'resolve', label: 'Consolidate', icon: Layers },
+                        { id: 'result', label: 'Verify', icon: ShieldCheck }
                     ].map((s, idx) => (
                         <React.Fragment key={s.id}>
-                            <div className={`flex items-center gap-3 px-6 py-3 transition-all duration-200 ${step === s.id ? 'bg-zinc-100 text-zinc-950' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                            <div className={`flex items-center gap-3 px-6 py-3 rounded-xl transition-all duration-300 ${step === s.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}>
                                 <s.icon size={14} strokeWidth={2.5} />
-                                <span className="text-[10px] font-bold uppercase tracking-widest">{s.label}</span>
+                                <span className="text-[11px] font-bold uppercase tracking-widest">{s.label}</span>
                             </div>
-                            {idx < 2 && <div className="w-px h-4 bg-zinc-800 mx-1"></div>}
+                            {idx < 2 && <div className="w-px h-6 bg-slate-100 mx-2"></div>}
                         </React.Fragment>
                     ))}
                 </div>
             </motion.div>
 
-            <div className="bg-zinc-950 border border-zinc-800 min-h-[800px] flex flex-col relative shadow-[20px_20px_0px_rgba(0,0,0,0.3)]">
-                {/* Technical Grid Overlay */}
-                <div className="absolute inset-0 pointer-events-none opacity-[0.03] bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]"></div>
+            <div className="bg-white rounded-[2rem] border border-slate-200 min-h-[700px] flex flex-col relative shadow-[0_32px_64px_-16px_rgba(0,0,0,0.08)] overflow-hidden">
                 <AnimatePresence mode="wait">
                     {isLoading && (
                         <motion.div 
@@ -792,29 +791,29 @@ const ReferenceDupeChecker: React.FC = () => {
                             exit={{ opacity: 0 }}
                             className="flex flex-col h-full flex-grow overflow-hidden relative z-10"
                         >
-                            <div className="bg-zinc-900 px-8 py-4 border-b border-zinc-800 flex justify-between items-center">
+                            <div className="bg-slate-50 px-8 py-5 border-b border-slate-100 flex justify-between items-center sm:flex-row flex-col gap-4">
                                 <div className="flex items-center gap-4">
                                     <div className="flex items-center gap-2">
-                                        <div className="w-2 h-2 rounded-none bg-zinc-100"></div>
-                                        <span className="text-[11px] font-bold text-zinc-100 uppercase tracking-widest">Input_Stream_Active</span>
+                                        <div className="w-2.5 h-2.5 rounded-full bg-indigo-500"></div>
+                                        <span className="text-[11px] font-bold text-slate-900 uppercase tracking-widest">Source Document</span>
                                     </div>
-                                    <div className="h-4 w-px bg-zinc-800"></div>
-                                    <div className="flex items-center gap-2 text-[11px] font-mono text-zinc-500 uppercase">
-                                        <span className="text-zinc-100/50">Refs:</span> {inputStats.refCount}
+                                    <div className="h-4 w-px bg-slate-200"></div>
+                                    <div className="flex items-center gap-2 text-[11px] font-mono text-slate-400 uppercase">
+                                        <span className="text-slate-900/60">Parsed Nodes:</span> {inputStats.refCount}
                                     </div>
                                 </div>
-                                <div className="flex gap-2">
+                                <div className="flex gap-2 flex-wrap justify-center">
                                     <button 
                                         onClick={loadSample}
-                                        className="architect-button"
+                                        className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all rounded-xl border border-slate-200 bg-white hover:bg-slate-50 flex items-center gap-2 text-slate-600"
                                     >
-                                        <FileCode size={12} /> Load_Sample
+                                        <FileCode size={12} className="text-indigo-500" /> Sample
                                     </button>
                                     <button 
                                         onClick={() => fileInputRef.current?.click()}
-                                        className="architect-button"
+                                        className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all rounded-xl border border-indigo-100 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 flex items-center gap-2"
                                     >
-                                        <UploadCloud size={12} /> Upload_XML
+                                        <UploadCloud size={12} /> Upload XML
                                     </button>
                                     <input 
                                         type="file" 
@@ -823,19 +822,19 @@ const ReferenceDupeChecker: React.FC = () => {
                                         accept=".xml,text/xml" 
                                         className="hidden" 
                                     />
-                                    <button onClick={handlePaste} className="architect-button">
-                                        <Clipboard size={12} /> Paste_Buffer
+                                    <button onClick={handlePaste} className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all rounded-xl border border-slate-200 bg-white hover:bg-slate-50 flex items-center gap-2 text-slate-600">
+                                        <Clipboard size={12} className="text-indigo-500" /> Paste
                                     </button>
                                     <button 
                                         onClick={() => setInput('')} 
-                                        className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all border border-zinc-800 bg-zinc-900 text-zinc-500 hover:bg-rose-950 hover:text-rose-400"
+                                        className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center gap-2"
                                     >
-                                        <Trash2 size={12} /> Reset_Module
+                                        <Trash2 size={12} /> Reset
                                     </button>
                                 </div>
                             </div>
                             <div 
-                                className={`flex-grow flex flex-col relative overflow-hidden transition-all duration-500 ${isDragging ? 'bg-emerald-500/5' : 'bg-transparent'}`}
+                                className={`flex-grow flex flex-col relative overflow-hidden transition-all duration-500 ${isDragging ? 'bg-indigo-500/5' : 'bg-transparent'}`}
                                 onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
                                 onDragLeave={() => setIsDragging(false)}
                                 onDrop={handleDrop}
@@ -846,15 +845,15 @@ const ReferenceDupeChecker: React.FC = () => {
                                             initial={{ opacity: 0 }}
                                             animate={{ opacity: 1 }}
                                             exit={{ opacity: 0 }}
-                                            className="absolute inset-0 z-20 bg-emerald-500/10 backdrop-blur-sm flex flex-col items-center justify-center pointer-events-none border-4 border-dashed border-emerald-500/30 m-4 rounded-xl"
+                                            className="absolute inset-0 z-20 bg-indigo-600/10 backdrop-blur-sm flex flex-col items-center justify-center pointer-events-none p-12"
                                         >
-                                            <div className="bg-slate-900 p-8 rounded-2xl shadow-2xl border border-emerald-500/20 flex flex-col items-center gap-4">
-                                                <div className="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 shadow-[0_0_30px_rgba(16,185,129,0.2)]">
+                                            <div className="bg-white p-12 rounded-[2rem] shadow-2xl shadow-indigo-200 border border-indigo-100 flex flex-col items-center gap-6">
+                                                <div className="w-20 h-20 rounded-full bg-indigo-600 flex items-center justify-center text-white shadow-xl shadow-indigo-300">
                                                     <UploadCloud size={32} />
                                                 </div>
                                                 <div className="text-center">
-                                                    <p className="text-sm font-black text-white uppercase tracking-widest">Ingest XML Stream</p>
-                                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Release to begin similarity analysis</p>
+                                                    <p className="text-lg font-black text-slate-900 uppercase tracking-widest">Ingest XML Stream</p>
+                                                    <p className="text-xs font-bold text-indigo-400 uppercase tracking-widest mt-2">Release to begin similarity analysis</p>
                                                 </div>
                                             </div>
                                         </motion.div>
@@ -862,44 +861,55 @@ const ReferenceDupeChecker: React.FC = () => {
                                 </AnimatePresence>
                                 
                                 {!input && !isDragging && (
-                                    <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-700 pointer-events-none">
-                                        <div className="w-20 h-20 rounded-2xl flex items-center justify-center mb-6 border border-slate-800 bg-slate-900/50 text-slate-600 shadow-inner">
-                                            <FileCode size={32} strokeWidth={1.5} />
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300 pointer-events-none">
+                                        <div className="w-24 h-24 rounded-3xl flex items-center justify-center mb-8 border-2 border-dashed border-slate-100 bg-slate-50/50 text-slate-200 group">
+                                            <FileCode size={40} strokeWidth={1} />
                                         </div>
-                                        <p className="font-black text-[10px] uppercase tracking-[0.4em] mb-2 text-slate-500">
-                                            Awaiting Data Payload
+                                        <p className="font-black text-[11px] uppercase tracking-[0.4em] mb-2 text-slate-400">
+                                            Awaiting Source Data
                                         </p>
-                                        <p className="text-[9px] font-bold text-slate-600 uppercase tracking-widest">
-                                            Drop XML file or paste content to initialize
+                                        <p className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">
+                                            Drop XML file or paste bibliography content
                                         </p>
                                     </div>
                                 )}
                                 <textarea 
                                     value={input} 
                                     onChange={(e) => setInput(e.target.value)} 
-                                    className={`w-full h-full p-10 text-[12px] font-mono text-emerald-400/90 border-0 focus:ring-0 outline-none resize-none bg-transparent leading-relaxed custom-scrollbar-emerald overflow-y-auto transition-opacity placeholder:text-slate-700 ${isDragging ? 'opacity-10' : 'opacity-100'}`} 
+                                    className={`w-full h-full p-12 text-[13px] font-mono text-slate-600 border-0 focus:ring-0 outline-none resize-none bg-transparent leading-relaxed custom-scrollbar overflow-y-auto transition-opacity placeholder:text-slate-200 ${isDragging ? 'opacity-10' : 'opacity-100'}`} 
                                     spellCheck={false} 
-                                    placeholder="<!-- Paste XML bibliography here -->"
+                                    placeholder="<!-- Paste XML <ce:bib-reference> nodes here... -->"
                                 />
                             </div>
-                            <div className="p-8 border-t border-zinc-800 bg-zinc-900 flex justify-between items-center relative z-10">
+                            <div className="p-8 border-t border-slate-100 bg-slate-50/50 flex justify-between items-center sm:flex-row flex-col gap-6 relative z-10">
                                 <div className="flex gap-12">
-                                    <div className="flex flex-col">
-                                        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Payload_Size</span>
-                                        <span className="text-[11px] font-mono text-zinc-100">{(new Blob([input]).size / 1024).toFixed(2)} KB</span>
+                                    <div className="hidden lg:flex flex-col max-w-sm">
+                                        <span className="text-[9px] font-black text-indigo-600 uppercase tracking-widest mb-1 items-center gap-2 flex">
+                                            <Lightbulb size={10} /> Pro Tip
+                                        </span>
+                                        <p className="text-[10px] text-slate-400 font-medium leading-relaxed uppercase">
+                                            For best results, paste the entire <code className="text-indigo-500 font-bold">&lt;ce:bibliography&gt;</code> block including all citation nodes.
+                                        </p>
                                     </div>
-                                    <div className="flex flex-col">
-                                        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Ref_Count</span>
-                                        <span className="text-[11px] font-mono text-zinc-100">{inputStats.refCount} detected</span>
+                                    <div className="h-10 w-px bg-slate-200 hidden lg:block"></div>
+                                    <div className="flex gap-16">
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Stream Complexity</span>
+                                            <span className="text-sm font-bold text-slate-900">{(new Blob([input]).size / 1024).toFixed(2)} KB</span>
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Node Density</span>
+                                            <span className="text-sm font-bold text-slate-900">{inputStats.refCount} references</span>
+                                        </div>
                                     </div>
                                 </div>
                                 <button 
                                     onClick={analyzeReferences} 
                                     disabled={!inputStats.isValid || inputStats.refCount === 0} 
-                                    className="architect-button px-12 py-4 text-xs"
+                                    className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 text-white font-black uppercase tracking-[0.2em] px-12 py-5 rounded-2xl text-[11px] shadow-xl shadow-indigo-100 transition-all active:scale-[0.98] flex items-center gap-3 group"
                                 >
-                                    <Zap size={14} />
-                                    Initialize_Similarity_Scan
+                                    <Zap size={16} className="group-hover:scale-110 transition-transform" />
+                                    Initialize Scan
                                 </button>
                             </div>
                         </motion.div>
@@ -911,110 +921,111 @@ const ReferenceDupeChecker: React.FC = () => {
                             initial={{ opacity: 0, x: 20 }}
                             animate={{ opacity: 1, x: 0 }}
                             exit={{ opacity: 0, x: -20 }}
-                            className="flex flex-col h-full bg-slate-900/50 relative z-10"
+                            className="flex flex-col h-full bg-slate-50/30 relative z-10"
                         >
-                            <div className="relative px-8 py-6 border-b border-zinc-800 bg-zinc-900 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 z-10">
-                                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-8 w-full lg:w-auto">
+                            <div className="relative px-10 py-8 border-b border-slate-200 bg-white flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 z-10">
+                                <div className="flex flex-col sm:flex-row items-center gap-10 w-full lg:w-auto">
                                     <div>
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <div className="w-2 h-2 rounded-none bg-zinc-100"></div>
-                                            <h3 className="text-lg font-bold text-zinc-100 uppercase tracking-tight">Resolution_Matrix</h3>
+                                        <div className="flex items-center gap-3 mb-1.5">
+                                            <div className="w-2.5 h-2.5 rounded-full bg-indigo-500"></div>
+                                            <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Resolution Matrix</h3>
                                         </div>
-                                        <p className="text-[11px] font-bold text-zinc-500 uppercase tracking-widest">Select primary reference nodes for conflict resolution</p>
+                                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.15em]">Select primary nodes for citation re-linking</p>
                                     </div>
-                                    <div className="relative group w-full sm:w-72">
-                                        <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-zinc-500 group-focus-within:text-zinc-100 transition-colors">
-                                            <Search size={14} />
+                                    <div className="relative group w-full sm:w-80">
+                                        <div className="absolute inset-y-0 left-5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-indigo-600 transition-colors">
+                                            <Search size={16} />
                                         </div>
                                         <input 
                                             type="text" 
-                                            placeholder="Filter_Conflict_Stream..." 
+                                            placeholder="Search conflict clusters..." 
                                             value={searchQuery}
                                             onChange={(e) => setSearchQuery(e.target.value)}
-                                            className="bg-zinc-950 border border-zinc-800 py-3 pl-11 pr-6 text-[11px] font-mono text-zinc-100 placeholder:text-zinc-700 focus:border-zinc-100 outline-none w-full transition-all"
+                                            className="bg-slate-50 border border-slate-200 py-4 pl-12 pr-6 text-sm font-medium text-slate-700 placeholder:text-slate-400 rounded-2xl focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-500/5 outline-none w-full transition-all"
                                         />
                                         {searchQuery && (
                                             <button 
                                                 onClick={() => setSearchQuery('')}
-                                                className="absolute inset-y-0 right-4 flex items-center text-zinc-500 hover:text-rose-400"
+                                                className="absolute inset-y-0 right-5 flex items-center text-slate-300 hover:text-rose-500"
                                             >
-                                                <X size={14} />
+                                                <X size={16} />
                                             </button>
                                         )}
                                     </div>
                                 </div>
                                 <button 
                                     onClick={processMerge} 
-                                    className="architect-button px-12 py-4 text-xs"
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase tracking-[0.2em] px-12 py-5 rounded-2xl text-[11px] shadow-xl shadow-emerald-100 transition-all active:scale-[0.98] flex items-center gap-3"
                                 >
-                                    <CheckCircle2 size={14} />
-                                    Execute_System_Relink
+                                    <CheckCircle2 size={16} />
+                                    Commit Merges
                                 </button>
                             </div>
-                            <div className="flex-grow overflow-auto p-8 space-y-6 custom-scrollbar-emerald">
+                            <div className="flex-grow overflow-auto p-10 space-y-8 custom-scrollbar">
                                 {filteredGroups.length === 0 && searchQuery && (
-                                    <div className="h-64 flex flex-col items-center justify-center text-slate-600 bg-slate-800/20 rounded-3xl border border-dashed border-slate-800">
-                                        <Filter size={32} className="mb-4 opacity-10" />
-                                        <p className="text-[10px] font-black uppercase tracking-[0.3em]">No matching conflict nodes detected</p>
+                                    <div className="h-64 flex flex-col items-center justify-center text-slate-300 bg-white rounded-3xl border-2 border-dashed border-slate-100 mt-12">
+                                        <Filter size={40} className="mb-4 opacity-50" />
+                                        <p className="text-[11px] font-black uppercase tracking-[0.3em]">No matching conflict clusters</p>
                                     </div>
                                 )}
                                 {filteredGroups.map((group, gIdx) => (
                                     <motion.div 
                                         key={group.id}
-                                        initial={{ opacity: 0, y: 10 }}
-                                        animate={{ opacity: 1, y: 0 }}
+                                        initial={{ opacity: 0, scale: 0.98 }}
+                                        animate={{ opacity: 1, scale: 1 }}
                                         transition={{ delay: gIdx * 0.05 }}
-                                        className="bg-zinc-900/50 border border-zinc-800 rounded-none overflow-hidden"
+                                        className="bg-white border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden"
                                     >
-                                        <div className="bg-zinc-900 px-8 py-3 border-b border-zinc-800 flex justify-between items-center">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-5 h-5 rounded-none bg-zinc-950 border border-zinc-800 flex items-center justify-center text-[10px] font-bold text-zinc-100 font-mono">
-                                                    {group.id.toString().padStart(2, '0')}
+                                        <div className="bg-slate-50/80 px-10 py-5 border-b border-slate-100 flex justify-between items-center sm:flex-row flex-col gap-4">
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-8 h-8 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-[11px] font-black text-indigo-600 shadow-sm">
+                                                    {group.id}
                                                 </div>
-                                                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Conflict_Cluster</span>
+                                                <span className="text-[11px] font-bold text-slate-900 uppercase tracking-widest">Similarity Group</span>
                                             </div>
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-1.5 h-1.5 rounded-none bg-rose-600"></div>
-                                                <span className="text-[10px] font-bold text-rose-500/80 uppercase tracking-widest">
-                                                    {group.items.length} Variants_Detected
+                                            <div className="flex items-center gap-3 bg-rose-50 px-4 py-2 rounded-xl border border-rose-100/50">
+                                                <div className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></div>
+                                                <span className="text-[11px] font-black text-rose-600 uppercase tracking-widest">
+                                                    {group.items.length} Variants
                                                 </span>
                                             </div>
                                         </div>
-                                        <div className="divide-y divide-zinc-800/50">
+                                        <div className="divide-y divide-slate-100">
                                             {group.items.map(item => {
                                                 const isSelected = item.id === group.selectedId;
                                                 return (
                                                     <div 
                                                         key={item.id} 
                                                         onClick={() => handleSelection(group.id, item.id)} 
-                                                        className={`p-8 cursor-pointer transition-all flex gap-8 border-l-4 ${isSelected ? 'bg-zinc-100/5 border-zinc-100' : 'hover:bg-zinc-900/80 border-transparent'}`}
+                                                        className={`p-10 cursor-pointer transition-all flex gap-10 group relative ${isSelected ? 'bg-indigo-50/30' : 'hover:bg-slate-50/50'}`}
                                                     >
-                                                        <div className={`w-8 h-8 rounded-none border flex items-center justify-center transition-all shrink-0 ${isSelected ? 'border-zinc-100 bg-zinc-100 text-zinc-950' : 'border-zinc-800 bg-zinc-950 text-zinc-700'}`}>
-                                                            {isSelected ? <CheckCircle2 size={16} strokeWidth={3} /> : <div className="w-1.5 h-1.5 rounded-none bg-zinc-800" />}
+                                                        {isSelected && <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-indigo-600" />}
+                                                        <div className={`w-10 h-10 rounded-2xl border flex items-center justify-center transition-all shrink-0 ${isSelected ? 'border-indigo-600 bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'border-slate-200 bg-white text-slate-300 group-hover:border-slate-300'}`}>
+                                                            {isSelected ? <CheckCircle2 size={18} strokeWidth={3} /> : <div className="w-2 h-2 rounded-full bg-slate-100 group-hover:bg-slate-200" />}
                                                         </div>
                                                         <div className="flex-grow min-w-0">
-                                                            <div className="flex items-center gap-4 mb-3">
-                                                                <span className={`text-[10px] font-mono font-bold px-3 py-1 rounded-none border transition-colors ${isSelected ? 'bg-zinc-100/5 border-zinc-100/20 text-zinc-100' : 'bg-zinc-950 border-zinc-800 text-zinc-600'}`}>
+                                                            <div className="flex items-center gap-4 mb-4">
+                                                                <span className={`text-[10px] font-mono font-black px-3 py-1.5 rounded-lg border transition-all ${isSelected ? 'bg-white border-indigo-200 text-indigo-600' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>
                                                                     UID: {item.id}
                                                                 </span>
                                                                 {item.author && (
-                                                                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
-                                                                        {item.author} {item.year ? `(${item.year})` : ''}
+                                                                    <span className="text-[11px] font-serif italic text-slate-500">
+                                                                        {item.author} {item.year ? `· ${item.year}` : ''}
                                                                     </span>
                                                                 )}
                                                                 {isSelected && (
-                                                                    <span className="flex items-center gap-2 text-[10px] font-bold text-zinc-100 uppercase tracking-widest ml-auto">
-                                                                        <ShieldCheck size={12} /> Primary_Node
+                                                                    <span className="flex items-center gap-2 text-[10px] font-black text-indigo-600 uppercase tracking-[0.15em] ml-auto">
+                                                                        <ShieldCheck size={14} /> Designated Master
                                                                     </span>
                                                                 )}
                                                             </div>
-                                                            <p className={`text-[11px] leading-relaxed font-mono break-words ${isSelected ? 'text-zinc-100' : 'text-zinc-600'}`}>
+                                                            <p className={`text-[13px] leading-relaxed font-serif italic ${isSelected ? 'text-slate-900 font-medium' : 'text-slate-400 font-normal'}`}>
                                                                 {item.displayContent}
                                                             </p>
                                                             {item.title && isSelected && (
-                                                                <div className="mt-4 p-4 rounded-none bg-zinc-950 border border-zinc-800">
-                                                                    <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Metadata_Extract</p>
-                                                                    <p className="text-[11px] text-zinc-400 font-medium leading-relaxed italic">{item.title}</p>
+                                                                <div className="mt-6 p-6 rounded-3xl bg-white border border-indigo-100 shadow-sm">
+                                                                    <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-2">Canonical Title</p>
+                                                                    <p className="text-sm text-slate-700 font-semibold leading-relaxed">{item.title}</p>
                                                                 </div>
                                                             )}
                                                         </div>
@@ -1036,65 +1047,65 @@ const ReferenceDupeChecker: React.FC = () => {
                             exit={{ opacity: 0, x: -20 }}
                             className="flex flex-col flex-grow min-h-0 relative z-10"
                         >
-                            <div className="relative bg-slate-900/80 backdrop-blur-md px-8 py-6 border-b border-slate-800 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 z-10 shadow-2xl">
-                                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-8">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-none bg-zinc-900 flex items-center justify-center border border-zinc-800">
-                                            <History className="h-5 w-5 text-zinc-100" />
+                            <div className="relative bg-white px-10 py-8 border-b border-slate-200 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-10 z-10">
+                                <div className="flex flex-col sm:flex-row items-center gap-12">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-12 h-12 rounded-2xl bg-slate-900 flex items-center justify-center shadow-xl shadow-slate-200">
+                                            <History className="h-6 w-6 text-white" />
                                         </div>
                                         <div>
-                                            <label className="font-bold text-zinc-100 text-[11px] uppercase tracking-widest block mb-0.5">Audit_Summary</label>
-                                            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">System modification log & verification</p>
+                                            <label className="font-black text-slate-900 text-[13px] uppercase tracking-tight block mb-0.5">Audit Workspace</label>
+                                            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.15em]">System verification and verification log</p>
                                         </div>
                                     </div>
-                                    <div className="flex flex-wrap gap-8">
+                                    <div className="flex flex-wrap gap-12">
                                         <div className="flex flex-col">
-                                            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Total_Refs</span>
-                                            <span className="text-[11px] font-mono font-bold text-zinc-100 bg-zinc-900 px-3 py-1.5 border border-zinc-800 uppercase tracking-widest">{stats.totalRefs} ITEMS</span>
+                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Nodes Analyzed</span>
+                                            <span className="text-sm font-bold text-slate-900">{stats.totalRefs}</span>
                                         </div>
                                         <div className="flex flex-col">
-                                            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Removed</span>
-                                            <span className="text-[11px] font-mono font-bold text-rose-500 bg-rose-950/30 px-3 py-1.5 border border-rose-900 uppercase tracking-widest">{stats.removed} PURGED</span>
+                                            <span className="text-[10px] font-black text-rose-400 uppercase tracking-widest mb-1.5">Purged Variants</span>
+                                            <span className="text-sm font-bold text-rose-600">{stats.removed}</span>
                                         </div>
                                         <div className="flex flex-col">
-                                            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Remapped</span>
-                                            <span className="text-[11px] font-mono font-bold text-blue-500 bg-blue-950/30 px-3 py-1.5 border border-blue-900 uppercase tracking-widest">{stats.remapped} LINKS</span>
+                                            <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1.5">Re-linked Citations</span>
+                                            <span className="text-sm font-bold text-indigo-600">{stats.remapped}</span>
                                         </div>
                                     </div>
                                 </div>
                                 <div className="flex gap-3 w-full lg:w-auto">
-                                    <button onClick={copyReport} className="architect-button px-6 py-4 text-[10px]">
-                                        <Clipboard size={14} /> Copy_Report
+                                    <button onClick={copyReport} className="px-6 py-4 rounded-xl border border-slate-200 font-bold text-[11px] uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-all flex items-center gap-2">
+                                        <Clipboard size={14} className="text-indigo-500" /> Copy Report
                                     </button>
-                                    <button onClick={copyOutput} className="architect-button px-8 py-4 text-[10px]">
-                                        <Copy size={14} /> Copy_Output
+                                    <button onClick={copyOutput} className="px-8 py-4 rounded-xl bg-slate-900 text-white font-bold text-[11px] uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 flex items-center gap-2">
+                                        <Copy size={14} /> Copy XML Output
                                     </button>
                                 </div>
                             </div>
-                            <div className="relative bg-zinc-950 px-8 pt-4 border-b border-zinc-800 flex space-x-2 overflow-x-auto no-scrollbar z-20">
+                            <div className="relative bg-white px-10 pt-4 border-b border-slate-200 flex space-x-2 overflow-x-auto no-scrollbar z-20">
                                 {[
-                                    { id: 'report', label: '01_Audit_Log', icon: History },
-                                    { id: 'xml', label: '02_Resulting_XML', icon: FileText },
-                                    { id: 'diff', label: '03_Visual_Diff', icon: GitCompare }
+                                    { id: 'report', label: 'Modification Log', icon: History },
+                                    { id: 'xml', label: 'Resulting XML', icon: FileText },
+                                    { id: 'diff', label: 'Visual Differential', icon: GitCompare }
                                 ].map(t => (
                                     <button 
                                         key={t.id} 
                                         onClick={() => setActiveTab(t.id as any)} 
-                                        className={`flex items-center gap-3 px-6 py-4 text-[10px] font-bold uppercase tracking-widest rounded-none transition-all border-t border-x whitespace-nowrap ${activeTab === t.id ? 'bg-zinc-900 text-zinc-100 border-zinc-800 translate-y-[1px]' : 'bg-transparent text-zinc-500 border-transparent hover:text-zinc-300'}`}
+                                        className={`flex items-center gap-3 px-8 py-5 text-[11px] font-black uppercase tracking-widest rounded-t-2xl transition-all border-t border-x whitespace-nowrap ${activeTab === t.id ? 'bg-slate-50 text-indigo-600 border-slate-200 translate-y-[1px]' : 'bg-white text-slate-400 border-transparent hover:text-slate-600'}`}
                                     >
-                                        <t.icon size={12} />
+                                        <t.icon size={13} />
                                         {t.label}
                                     </button>
                                 ))}
                             </div>
-                            <div className="flex-grow bg-zinc-950 overflow-hidden flex flex-col min-h-0 relative z-10">
+                            <div className="flex-grow bg-slate-50 overflow-hidden flex flex-col min-h-0 relative z-10">
                                 {activeTab === 'xml' && (
                                     <motion.div 
                                         initial={{ opacity: 0 }}
                                         animate={{ opacity: 1 }}
-                                        className="flex-grow flex flex-col min-h-0 p-8"
+                                        className="flex-grow flex flex-col min-h-0 p-10"
                                     >
-                                        <div className="flex-grow p-10 text-[12px] font-mono text-zinc-100 bg-zinc-900 rounded-none border border-zinc-800 shadow-inner overflow-auto custom-scrollbar-emerald whitespace-pre-wrap break-all leading-relaxed" dangerouslySetInnerHTML={{ __html: highlightXml(output) }} />
+                                        <div className="flex-grow p-12 text-[13px] font-mono text-slate-600 bg-white rounded-3xl border border-slate-200 shadow-inner overflow-auto custom-scrollbar whitespace-pre-wrap break-all leading-relaxed" dangerouslySetInnerHTML={{ __html: highlightXml(output) }} />
                                     </motion.div>
                                 )}
                                 
@@ -1102,102 +1113,102 @@ const ReferenceDupeChecker: React.FC = () => {
                                     <motion.div 
                                         initial={{ opacity: 0 }}
                                         animate={{ opacity: 1 }}
-                                        className="flex-grow overflow-auto p-10 space-y-12 max-w-5xl mx-auto custom-scrollbar-emerald"
+                                        className="flex-grow overflow-auto p-12 space-y-16 max-w-6xl mx-auto custom-scrollbar"
                                     >
                                         <section>
-                                            <div className="flex items-center gap-4 mb-6">
-                                                <div className="w-8 h-8 rounded-none bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-100">
-                                                    <Trash2 size={16} />
+                                            <div className="flex items-center gap-5 mb-10">
+                                                <div className="w-10 h-10 rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600">
+                                                    <Trash2 size={18} />
                                                 </div>
                                                 <div>
-                                                    <h3 className="text-sm font-bold text-zinc-100 uppercase tracking-tight">Bibliography_Purge_List</h3>
-                                                    <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Duplicate nodes removed from the bibliography stream</p>
+                                                    <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Consolidated Bibliography Nodes</h3>
+                                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Duplicates successfully purged from document stream</p>
                                                 </div>
                                             </div>
-                                            <div className="grid grid-cols-1 gap-3">
+                                            <div className="grid grid-cols-1 gap-4">
                                                 {mergeLog.bibRemovals.map((rem, idx) => (
                                                     <motion.div 
                                                         key={idx} 
                                                         initial={{ opacity: 0, x: -10 }}
                                                         animate={{ opacity: 1, x: 0 }}
                                                         transition={{ delay: idx * 0.03 }}
-                                                        className="flex items-center gap-6 p-6 rounded-none bg-zinc-900/30 border border-zinc-800 transition-all hover:bg-zinc-900/60 group"
+                                                        className="flex items-center gap-10 p-8 rounded-3xl bg-white border border-slate-200 transition-all hover:bg-slate-50 group hover:shadow-lg hover:shadow-slate-100"
                                                     >
                                                         <div className="flex flex-col flex-grow min-w-0">
-                                                            <div className="flex items-center gap-3 mb-1">
-                                                                <span className="text-rose-500/80 font-bold text-xs line-through uppercase tracking-tight truncate">{rem.label}</span>
-                                                                <span className="text-[7px] font-mono font-bold bg-rose-950 text-rose-500/70 px-2 py-0.5 rounded-none border border-rose-900 uppercase tracking-widest">Purged</span>
+                                                            <div className="flex items-center gap-4 mb-2">
+                                                                <span className="text-rose-600 font-bold text-sm line-through uppercase tracking-tight truncate">{rem.label}</span>
+                                                                <span className="text-[8px] font-black bg-rose-100 text-rose-600 px-2.5 py-1 rounded-lg border border-rose-200 uppercase tracking-[0.1em]">Eliminated</span>
                                                             </div>
-                                                            <span className="text-[8px] text-zinc-600 font-mono italic">UID: {rem.id}</span>
+                                                            <span className="text-[9px] text-slate-400 font-mono italic">Source ID: {rem.id}</span>
                                                         </div>
-                                                        <div className="flex items-center gap-4 text-zinc-800">
-                                                            <ArrowRight size={16} />
+                                                        <div className="flex items-center text-slate-200">
+                                                            <ArrowRight size={20} />
                                                         </div>
                                                         <div className="flex flex-col items-end shrink-0">
-                                                            <span className="text-[7px] font-bold text-zinc-600 uppercase mb-1.5 tracking-widest">Absorbed_By</span>
-                                                            <div className="flex items-center gap-3 bg-zinc-950 px-4 py-2 rounded-none border border-zinc-800">
-                                                                <span className="font-bold text-zinc-100 text-[10px] uppercase">{rem.replacedByLabel}</span>
-                                                                <span className="text-[8px] font-mono text-zinc-600">({rem.replacedBy})</span>
+                                                            <span className="text-[9px] font-black text-slate-400 uppercase mb-2 tracking-widest">Absorbed By</span>
+                                                            <div className="flex items-center gap-4 bg-indigo-50 px-5 py-3 rounded-2xl border border-indigo-100">
+                                                                <span className="font-black text-indigo-600 text-[11px] uppercase tracking-tight">{rem.replacedByLabel}</span>
+                                                                <span className="text-[9px] font-mono text-indigo-400">({rem.replacedBy})</span>
                                                             </div>
                                                         </div>
                                                     </motion.div>
                                                 ))}
                                                 {mergeLog.bibRemovals.length === 0 && (
-                                                    <div className="text-center py-16 bg-zinc-900/20 rounded-none border border-dashed border-zinc-800">
-                                                        <Info className="mx-auto mb-3 text-zinc-700" size={20} />
-                                                        <p className="text-zinc-600 font-bold uppercase tracking-widest text-[8px]">No bibliography items were removed.</p>
+                                                    <div className="text-center py-20 bg-white rounded-[2rem] border-2 border-dashed border-slate-100">
+                                                        <Info className="mx-auto mb-4 text-slate-200" size={32} />
+                                                        <p className="text-slate-400 font-black uppercase tracking-[0.2em] text-[10px]">No bibliography consolidation required.</p>
                                                     </div>
                                                 )}
                                             </div>
                                         </section>
 
                                         <section>
-                                            <div className="flex items-center gap-4 mb-6">
-                                                <div className="w-8 h-8 rounded-none bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-100">
-                                                    <RefreshCw size={16} />
+                                            <div className="flex items-center gap-5 mb-10">
+                                                <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+                                                    <RefreshCw size={18} />
                                                 </div>
                                                 <div>
-                                                    <h3 className="text-sm font-bold text-zinc-100 uppercase tracking-tight">Citation_Delta_Stream</h3>
-                                                    <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">In-text cross-references updated to primary nodes</p>
+                                                    <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Active Citation Re-Linkings</h3>
+                                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Cross-references mapped to canonical master nodes</p>
                                                 </div>
                                             </div>
-                                            <div className="space-y-4">
+                                            <div className="space-y-6">
                                                 {mergeLog.citationAudits.map((aud, idx) => (
                                                     <motion.div 
                                                         key={idx} 
                                                         initial={{ opacity: 0, y: 10 }}
                                                         animate={{ opacity: 1, y: 0 }}
                                                         transition={{ delay: idx * 0.03 }}
-                                                        className="bg-zinc-900/30 border border-zinc-800 rounded-none overflow-hidden"
+                                                        className="bg-white border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden"
                                                     >
-                                                        <div className="bg-zinc-900 px-8 py-3 border-b border-zinc-800 flex justify-between items-center">
+                                                        <div className="bg-slate-50 px-10 py-4 border-b border-slate-100 flex justify-between items-center">
                                                             <div className="flex items-center gap-3">
-                                                                <span className={`text-[8px] font-bold px-3 py-1 rounded-none border uppercase tracking-widest ${
-                                                                    aud.type === 'split' ? 'bg-amber-950 text-amber-500/70 border-amber-900' : 
-                                                                    aud.type === 'collapsed' ? 'bg-blue-950 text-blue-500/70 border-blue-900' : 
-                                                                    aud.type === 'normalized' ? 'bg-indigo-950 text-indigo-500/70 border-indigo-900' :
-                                                                    'bg-zinc-950 text-zinc-100 border-zinc-800'
+                                                                <span className={`text-[9px] font-black px-4 py-1.5 rounded-xl border uppercase tracking-widest ${
+                                                                    aud.type === 'split' ? 'bg-amber-100 text-amber-600 border-amber-200' : 
+                                                                    aud.type === 'collapsed' ? 'bg-indigo-100 text-indigo-600 border-indigo-200' : 
+                                                                    aud.type === 'normalized' ? 'bg-sky-100 text-sky-600 border-sky-200' :
+                                                                    'bg-slate-100 text-slate-600 border-slate-200'
                                                                 }`}>
-                                                                    {aud.type}
+                                                                    Action: {aud.type}
                                                                 </span>
                                                             </div>
-                                                            <span className="text-[8px] text-zinc-600 font-mono font-bold tracking-widest uppercase">Delta_{idx.toString().padStart(3, '0')}</span>
+                                                            <span className="text-[9px] text-slate-300 font-mono font-bold tracking-[0.2em] uppercase overflow-hidden">ENTRY_SEQ_{idx.toString().padStart(3, '0')}</span>
                                                         </div>
-                                                        <div className="p-8 grid grid-cols-1 lg:grid-cols-[1fr,auto,1fr] gap-6 items-center">
-                                                            <div className="space-y-2">
-                                                                <span className="text-[7px] font-bold text-zinc-600 uppercase tracking-widest ml-2">Pre_Process</span>
-                                                                <div className="p-4 rounded-none bg-zinc-950 border border-zinc-800 text-[10px] font-mono text-rose-500/50 whitespace-pre-wrap break-all line-through decoration-rose-500/20 leading-relaxed shadow-inner min-h-[50px] flex items-center">
+                                                        <div className="p-10 grid grid-cols-1 lg:grid-cols-[1fr,auto,1fr] gap-10 items-center">
+                                                            <div className="space-y-3">
+                                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Legacy Source</span>
+                                                                <div className="p-6 rounded-3xl bg-slate-50 border border-slate-100 text-[11px] font-mono text-rose-400 whitespace-pre-wrap break-all line-through decoration-rose-300/30 leading-relaxed min-h-[60px] flex items-center">
                                                                     {escapeHtml(aud.original)}
                                                                 </div>
                                                             </div>
-                                                            <div className="flex lg:flex-col items-center justify-center gap-2 text-zinc-800">
-                                                                <div className="w-8 h-8 rounded-none bg-zinc-950 border border-zinc-800 flex items-center justify-center text-zinc-100">
-                                                                    <ArrowRight className="lg:rotate-0 rotate-90" size={16} />
+                                                            <div className="flex lg:flex-col items-center justify-center gap-3 text-slate-200">
+                                                                <div className="w-10 h-10 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-900 shadow-sm">
+                                                                    <ArrowRight className="lg:rotate-0 rotate-90" size={18} />
                                                                 </div>
                                                             </div>
-                                                            <div className="space-y-2">
-                                                                <span className="text-[7px] font-bold text-zinc-600 uppercase tracking-widest ml-2">Post_Process</span>
-                                                                <div className="p-4 rounded-none bg-zinc-950 border border-zinc-800 text-[10px] font-mono text-zinc-100 whitespace-pre-wrap break-all leading-relaxed shadow-sm font-bold min-h-[50px] flex items-center">
+                                                            <div className="space-y-3">
+                                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Updated Reference</span>
+                                                                <div className="p-6 rounded-3xl bg-indigo-50 border border-indigo-100 text-[11px] font-mono text-indigo-600 whitespace-pre-wrap break-all leading-relaxed shadow-sm font-bold min-h-[60px] flex items-center">
                                                                     {escapeHtml(aud.result)}
                                                                 </div>
                                                             </div>
@@ -1205,9 +1216,9 @@ const ReferenceDupeChecker: React.FC = () => {
                                                     </motion.div>
                                                 ))}
                                                 {mergeLog.citationAudits.length === 0 && (
-                                                    <div className="text-center py-16 bg-zinc-900/20 rounded-none border border-dashed border-zinc-800">
-                                                        <AlertCircle className="mx-auto mb-3 text-zinc-700" size={20} />
-                                                        <p className="text-zinc-600 font-bold uppercase tracking-widest text-[8px]">No citations required remapping.</p>
+                                                    <div className="text-center py-20 bg-white rounded-[2rem] border-2 border-dashed border-slate-100">
+                                                        <AlertCircle className="mx-auto mb-4 text-slate-200" size={32} />
+                                                        <p className="text-slate-400 font-black uppercase tracking-[0.2em] text-[10px]">No citation re-mapping detected.</p>
                                                     </div>
                                                 )}
                                             </div>
@@ -1219,68 +1230,70 @@ const ReferenceDupeChecker: React.FC = () => {
                                     <motion.div 
                                         initial={{ opacity: 0 }}
                                         animate={{ opacity: 1 }}
-                                        className="flex-grow flex flex-col min-h-0 overflow-hidden bg-zinc-950 p-8 relative"
+                                        className="flex-grow flex flex-col min-h-0 overflow-hidden bg-slate-50 p-10 relative"
                                     >
                                         {isDiffing ? (
-                                            <div className="h-full flex flex-col items-center justify-center text-zinc-600">
-                                                <div className="w-10 h-10 border-2 border-zinc-800 border-t-zinc-100 rounded-none animate-spin mb-4"></div>
-                                                <p className="text-[9px] font-bold uppercase tracking-[0.3em] animate-pulse">Generating_Differential_Stream...</p>
+                                            <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                                                <div className="mb-6">
+                                                   <RefreshCw className="w-12 h-12 animate-spin text-indigo-600" />
+                                                </div>
+                                                <p className="text-[11px] font-black uppercase tracking-[0.3em] animate-pulse">Generating Matrix Comparison...</p>
                                             </div>
                                         ) : diffRows.length > 0 ? (
                                             <>
-                                                <div className="border border-zinc-800 rounded-none overflow-hidden bg-zinc-950 flex-grow flex flex-col min-h-0">
-                                                    <div className="bg-zinc-900 border-b border-zinc-800 px-6 py-3 flex justify-between items-center sticky top-0 z-20">
-                                                        <div className="flex items-center gap-3">
-                                                            <span className="text-[10px] font-bold text-zinc-100 uppercase tracking-widest">Comparison_Matrix</span>
-                                                            <span className="text-[9px] font-mono font-bold text-zinc-100 bg-zinc-950 px-2 py-0.5 border border-zinc-800">
+                                                <div className="border border-slate-200 rounded-[2rem] overflow-hidden bg-white flex-grow flex flex-col min-h-0 shadow-sm">
+                                                    <div className="bg-slate-50 border-b border-slate-100 px-8 py-4 flex justify-between items-center sticky top-0 z-20">
+                                                        <div className="flex items-center gap-4">
+                                                            <span className="text-[11px] font-black text-slate-900 uppercase tracking-widest">Structural Differential</span>
+                                                            <span className="text-[10px] font-mono font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-lg border border-indigo-100">
                                                                 {diffRows.length} NODES ANALYZED
                                                             </span>
                                                         </div>
                                                     </div>
-                                                    <div ref={diffContainerRef} className="overflow-auto custom-scrollbar-emerald flex-grow">
-                                                        <table className="w-full text-[11px] font-mono border-collapse table-fixed bg-zinc-950">
+                                                    <div ref={diffContainerRef} className="overflow-auto custom-scrollbar flex-grow">
+                                                        <table className="w-full text-[12px] font-mono border-collapse table-fixed bg-white">
                                                             <colgroup>
-                                                                <col className="w-10 border-r border-zinc-800" />
-                                                                <col className="w-[calc(50%-2.5rem)]" />
-                                                                <col className="w-10 border-r border-zinc-800 border-l border-zinc-800" />
-                                                                <col className="w-[calc(50%-2.5rem)]" />
+                                                                <col className="w-12 border-r border-slate-100" />
+                                                                <col className="w-[calc(50%-3rem)]" />
+                                                                <col className="w-12 border-r border-slate-100 border-l border-slate-100" />
+                                                                <col className="w-[calc(50%-3rem)]" />
                                                             </colgroup>
                                                             <tbody>
                                                                 {diffRows.map((row) => {
                                                                     let lClass = '';
                                                                     let rClass = '';
-                                                                    let lNumClass = 'bg-zinc-950 text-zinc-700'; 
-                                                                    let rNumClass = 'bg-zinc-950 text-zinc-700';
+                                                                    let lNumClass = 'bg-white text-slate-300'; 
+                                                                    let rNumClass = 'bg-white text-slate-300';
 
                                                                     if (row.type === 'delete') {
-                                                                        lClass = 'bg-rose-500/10 text-rose-300/80';
-                                                                        lNumClass = 'bg-rose-500/20 text-rose-400';
+                                                                        lClass = 'bg-rose-50 text-rose-600';
+                                                                        lNumClass = 'bg-rose-100 text-rose-400';
                                                                     } else if (row.type === 'insert') {
-                                                                        rClass = 'bg-emerald-500/10 text-emerald-300/80';
-                                                                        rNumClass = 'bg-emerald-500/20 text-emerald-400';
+                                                                        rClass = 'bg-indigo-50 text-indigo-600';
+                                                                        rNumClass = 'bg-indigo-100 text-indigo-400';
                                                                     } else if (row.type === 'replace') {
                                                                         if (row.leftNum !== null) {
-                                                                            lClass = 'bg-rose-500/10 text-rose-300/80';
-                                                                            lNumClass = 'bg-rose-500/20 text-rose-400';
+                                                                            lClass = 'bg-rose-50 text-rose-600';
+                                                                            lNumClass = 'bg-rose-100 text-rose-400';
                                                                         }
                                                                         if (row.rightNum !== null) {
-                                                                            rClass = 'bg-emerald-500/10 text-emerald-300/80';
-                                                                            rNumClass = 'bg-emerald-500/20 text-emerald-400';
+                                                                            rClass = 'bg-indigo-50 text-indigo-600';
+                                                                            rNumClass = 'bg-indigo-100 text-indigo-400';
                                                                         }
                                                                     }
 
                                                                     return (
                                                                         <tr 
                                                                             key={row.id} 
-                                                                            className="border-b border-zinc-800/50 hover:bg-zinc-100/5 transition-colors"
+                                                                            className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors"
                                                                             data-change-index={row.changeIndex}
                                                                             data-change-index-group={row.isFirstInGroup ? row.changeIndex : undefined}
                                                                             data-type={row.type}
                                                                         >
-                                                                            <td className={`w-10 text-right text-[9px] p-1 border-r border-zinc-800 select-none font-mono ${lNumClass}`}>{row.leftNum || ''}</td>
-                                                                            <td className={`p-2 font-mono text-[11px] whitespace-pre-wrap break-words leading-relaxed ${lClass || 'text-zinc-500'}`} dangerouslySetInnerHTML={{ __html: row.leftContent }}></td>
-                                                                            <td className={`w-10 text-right text-[9px] p-1 border-r border-zinc-800 border-l border-zinc-800 select-none font-mono ${rNumClass}`}>{row.rightNum || ''}</td>
-                                                                            <td className={`p-2 font-mono text-[11px] whitespace-pre-wrap break-words leading-relaxed ${rClass || 'text-zinc-500'}`} dangerouslySetInnerHTML={{ __html: row.rightContent }}></td>
+                                                                            <td className={`w-12 text-right text-[10px] p-2 border-r border-slate-100 select-none font-mono ${lNumClass}`}>{row.leftNum || ''}</td>
+                                                                            <td className={`p-4 font-mono text-[11px] whitespace-pre-wrap break-words leading-relaxed ${lClass || 'text-slate-400 opacity-50'}`} dangerouslySetInnerHTML={{ __html: row.leftContent }}></td>
+                                                                            <td className={`w-12 text-right text-[10px] p-2 border-r border-slate-100 border-l border-slate-100 select-none font-mono ${rNumClass}`}>{row.rightNum || ''}</td>
+                                                                            <td className={`p-4 font-mono text-[11px] whitespace-pre-wrap break-words leading-relaxed ${rClass || 'text-slate-400 opacity-50'}`} dangerouslySetInnerHTML={{ __html: row.rightContent }}></td>
                                                                         </tr>
                                                                     );
                                                                 })}
@@ -1289,38 +1302,37 @@ const ReferenceDupeChecker: React.FC = () => {
                                                     </div>
                                                 </div>
 
-                                                {/* Floating Diff Navigation */}
                                                 <AnimatePresence>
                                                     {totalChanges > 0 && (
                                                         <motion.div 
                                                             initial={{ opacity: 0, y: 20, scale: 0.95 }}
                                                             animate={{ opacity: 1, y: 0, scale: 1 }}
                                                             exit={{ opacity: 0, y: 20, scale: 0.95 }}
-                                                            className="absolute bottom-12 right-12 flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-none p-2 shadow-[20px_20px_0px_rgba(0,0,0,0.3)] z-30"
+                                                            className="absolute bottom-16 right-16 flex items-center gap-2 bg-white/90 backdrop-blur-xl border border-slate-200/50 rounded-2xl p-2 shadow-[0_20px_50px_rgba(0,0,0,0.15)] z-30 ring-1 ring-slate-900/5"
                                                         >
-                                                            <div className="flex items-center gap-1 pr-2 border-r border-zinc-800">
-                                                                <div className="w-8 h-8 rounded-none bg-zinc-100 flex items-center justify-center">
-                                                                    <GitCompare className="w-4 h-4 text-zinc-950" strokeWidth={2.5} />
+                                                            <div className="flex items-center gap-1 pr-2 border-r border-slate-100">
+                                                                <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center">
+                                                                    <GitCompare className="w-4 h-4 text-indigo-600" strokeWidth={2.5} />
                                                                 </div>
                                                                 <div className="flex flex-col px-2">
-                                                                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-tighter leading-none mb-0.5">Changes</span>
-                                                                    <span className="text-xs font-bold text-zinc-100 tabular-nums leading-none">
-                                                                        {currentChangeIndex} <span className="text-zinc-600 mx-0.5">/</span> {totalChanges}
+                                                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter leading-none mb-0.5">Changes</span>
+                                                                    <span className="text-xs font-black text-slate-900 tabular-nums leading-none">
+                                                                        {currentChangeIndex} <span className="text-slate-300 mx-0.5">/</span> {totalChanges}
                                                                     </span>
                                                                 </div>
                                                             </div>
                                                             <div className="flex items-center gap-1">
                                                                 <button 
                                                                     onClick={() => scrollToChange('prev')}
-                                                                    className="p-2.5 hover:bg-zinc-800 active:bg-zinc-700 rounded-none transition-all text-zinc-500 hover:text-zinc-100 group"
-                                                                    title="Previous Change (Shift+Tab)"
+                                                                    className="p-2.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition-all text-slate-600 hover:text-indigo-600 group"
+                                                                    title="Previous Change"
                                                                 >
                                                                     <ChevronUp className="w-5 h-5 group-active:-translate-y-0.5 transition-transform" strokeWidth={3} />
                                                                 </button>
                                                                 <button 
                                                                     onClick={() => scrollToChange('next')}
-                                                                    className="p-2.5 hover:bg-zinc-800 active:bg-zinc-700 rounded-none transition-all text-zinc-500 hover:text-zinc-100 group"
-                                                                    title="Next Change (Tab)"
+                                                                    className="p-2.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition-all text-slate-600 hover:text-indigo-600 group"
+                                                                    title="Next Change"
                                                                 >
                                                                     <ChevronDown className="w-5 h-5 group-active:translate-y-0.5 transition-transform" strokeWidth={3} />
                                                                 </button>
@@ -1330,22 +1342,22 @@ const ReferenceDupeChecker: React.FC = () => {
                                                 </AnimatePresence>
                                             </>
                                         ) : (
-                                            <div className="h-full flex flex-col items-center justify-center text-zinc-800">
-                                                <GitCompare size={40} className="mb-4 opacity-10" />
-                                                <p className="text-[9px] font-bold uppercase tracking-[0.3em]">Differential_Stream_Unavailable</p>
-                                                <p className="text-[8px] mt-2 opacity-40">Run similarity scan and merge to generate diff data</p>
+                                            <div className="h-full flex flex-col items-center justify-center text-slate-300">
+                                                <GitCompare size={48} className="mb-6 opacity-20" />
+                                                <p className="text-[11px] font-black uppercase tracking-[0.3em]">No adjustments required</p>
+                                                <p className="text-[10px] mt-2 font-bold opacity-50">Similarity scan showed no redundancies</p>
                                             </div>
                                         )}
                                     </motion.div>
                                 )}
                             </div>
-                            <div className="relative p-6 bg-zinc-950 border-t border-zinc-800 flex justify-center z-10">
+                            <div className="relative p-10 bg-white border-t border-slate-100 flex justify-center z-10">
                                 <button 
                                     onClick={() => { setStep('input'); setInput(''); setGroups([]); }} 
-                                    className="group flex items-center gap-4 text-zinc-500 hover:text-zinc-100 font-bold text-[10px] uppercase tracking-[0.35em] transition-all"
+                                    className="group flex items-center gap-4 text-slate-400 hover:text-indigo-600 font-black text-[11px] uppercase tracking-[0.4em] transition-all"
                                 >
-                                    <RefreshCw size={14} className="group-hover:rotate-180 transition-transform duration-700" />
-                                    Reset_System_Workflow
+                                    <RefreshCw size={16} className="group-hover:rotate-180 transition-transform duration-700 text-indigo-400" />
+                                    Purge Data & Reset
                                 </button>
                             </div>
                         </motion.div>
