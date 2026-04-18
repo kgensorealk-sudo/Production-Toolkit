@@ -21,7 +21,8 @@ import {
     RefreshCw,
     Search,
     FileText,
-    Lightbulb
+    Lightbulb,
+    Scissors
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router';
@@ -650,44 +651,43 @@ const ReferenceUpdater: React.FC = () => {
 
     const splitMatch = (item: ScanItem) => {
         setScanResults((prev: ScanItem[]) => {
-            if (item.status === 'potential_duplicate') {
-                return prev.map(it => it.uid === item.uid ? {
+            if (item.originalIndex !== null && item.updatedIndex !== null) {
+                // Check if the original index is already represented by another item
+                const isOrigRepresented = prev.some(it => it.uid !== item.uid && it.originalIndex === item.originalIndex);
+                
+                let nextResults = prev.map(it => it.uid === item.uid ? {
                     ...it,
                     status: 'add' as const,
                     originalIndex: null,
                     reviewed: true,
                     selected: true
                 } : it);
+
+                if (!isOrigRepresented) {
+                    const originalRef = parsedOriginalRefs[item.originalIndex!];
+                    const originalEntry: ScanItem = {
+                        uid: Math.random().toString(36).substring(2, 15),
+                        label: originalRef.label || item.label,
+                        id: originalRef.id,
+                        status: 'unchanged',
+                        preview: originalRef.content.substring(0, 100).replace(/<[^>]+>/g, '').trim() + '...',
+                        isSynthetic: originalRef.isSynthetic,
+                        selected: true,
+                        sortKey: originalRef.sortKey,
+                        originalIndex: item.originalIndex,
+                        updatedIndex: null
+                    };
+                    nextResults = [...nextResults, originalEntry];
+                }
+                return nextResults;
             }
 
-            if (item.originalIndex !== null) {
-                const originalRef = parsedOriginalRefs[item.originalIndex!];
-                const originalEntry: ScanItem = {
-                    uid: Math.random().toString(36).substring(2, 15),
-                    label: originalRef.label || item.label,
-                    id: originalRef.id,
-                    status: 'unchanged',
-                    preview: originalRef.content.substring(0, 100).replace(/<[^>]+>/g, '').trim() + '...',
-                    isSynthetic: originalRef.isSynthetic,
-                    selected: true,
-                    sortKey: originalRef.sortKey,
-                    originalIndex: item.originalIndex,
-                    updatedIndex: null
-                };
-                
-                return [...prev.map(it => it.uid === item.uid ? {
-                    ...it,
-                    status: 'add' as const,
-                    originalIndex: null,
-                    reviewed: true,
-                    selected: true
-                } : it), originalEntry];
-            }
-            return prev;
+            // Fallback for already split items or other statuses
+            return prev.map(it => it.uid === item.uid ? { ...it, reviewed: true, status: it.status === 'potential_duplicate' ? 'add' : it.status } : it);
         });
 
         setReviewingItem(null);
-        setToast({ msg: "Match rejected: Split into two distinct references.", type: "success" });
+        setToast({ msg: "References split: Keeping both original and update.", type: "success" });
     };
 
     const initiateUpdate = async () => {
@@ -1546,9 +1546,10 @@ const ReferenceUpdater: React.FC = () => {
                                 <div className="flex gap-4">
                                     <button 
                                         onClick={() => splitMatch(reviewingItem)}
-                                        className="px-8 py-3 bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-sm hover:bg-slate-50 transition-all"
+                                        className="px-8 py-3 bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-sm hover:bg-slate-50 transition-all flex items-center gap-2"
                                     >
-                                        Keep as Split
+                                        <Scissors size={14} className="text-slate-400" />
+                                        Split Reference
                                     </button>
                                     {reviewingItem.status === 'potential_duplicate' && reviewingItem.originalIndex !== null ? (
                                         <button 
@@ -1556,7 +1557,7 @@ const ReferenceUpdater: React.FC = () => {
                                             className="px-8 py-3 bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-lg shadow-amber-500/20 transition-all active:scale-95 flex items-center gap-2"
                                         >
                                             <GitMerge size={16} strokeWidth={3} />
-                                            Merge into Original
+                                            Keep as Merge
                                         </button>
                                     ) : (
                                         <button 
@@ -1567,7 +1568,7 @@ const ReferenceUpdater: React.FC = () => {
                                             className={`px-8 py-3 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-lg transition-all active:scale-95 flex items-center gap-2 ${reviewingItem.status === 'conflict' ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-500/20' : 'bg-purple-600 hover:bg-purple-700 shadow-purple-500/20'}`}
                                         >
                                             <Check size={16} strokeWidth={3} />
-                                            {reviewingItem.status === 'conflict' ? 'Resolve & Confirm' : 'Confirm Match'}
+                                            {reviewingItem.status === 'conflict' ? 'Resolve & Merge' : 'Keep as Merge'}
                                         </button>
                                     )}
                                 </div>
