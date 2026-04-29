@@ -117,6 +117,8 @@ const AdminDashboard: React.FC = () => {
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState<'users' | 'keys' | 'announcements' | 'config' | 'intelligence' | 'feedback' | 'avatars'>('users');
     const [isLoading, setIsLoading] = useState(false);
+    const [actionError, setActionError] = useState<string | null>(null);
+    const [actionSuccess, setActionSuccess] = useState<string | null>(null);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
     const { freeToolsData, refreshFreeTools, refreshProfile } = useAuth();
     const [suggestions, setSuggestions] = useState<SmartSuggestion[]>([]);
@@ -1199,12 +1201,48 @@ const AdminDashboard: React.FC = () => {
                                 <div>
                                     <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight leading-none">System Access Controller</h3>
                                     <div className="flex items-center gap-2 mt-2">
-                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Global Protocol Management</span>
+                                        <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200">
+                                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Global Protocol Management</span>
+                                            <button 
+                                                disabled={true}
+                                                className="w-6 h-3 rounded-full bg-slate-300 relative cursor-not-allowed"
+                                                title="Protocol fixed: Manual override restricted"
+                                            >
+                                                <div className="absolute left-0.5 top-0.5 w-2 h-2 bg-white rounded-full shadow-sm" />
+                                            </button>
+                                        </div>
                                         <div className="w-1 h-1 rounded-full bg-slate-200"></div>
-                                        <span className="text-[10px] font-bold text-indigo-600 uppercase">Live Database Sync</span>
+                                        <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-indigo-50 border border-indigo-100">
+                                            <span className="text-[10px] font-bold text-indigo-600 uppercase">Live Database Sync</span>
+                                            <button 
+                                                disabled={true}
+                                                className="w-6 h-3 rounded-full bg-emerald-500 relative cursor-not-allowed opacity-80"
+                                                title="Protocol restriction active: Sync is forced for administrators"
+                                            >
+                                                <div className="absolute right-0.5 top-0.5 w-2 h-2 bg-white rounded-full shadow-sm" />
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
+
+                            {actionError && (
+                                <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3 animate-shake">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span className="text-sm font-bold text-red-600 uppercase tracking-tight">{actionError}</span>
+                                </div>
+                            )}
+
+                            {actionSuccess && (
+                                <div className="mb-6 p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-center gap-3 animate-fade-in">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    <span className="text-sm font-bold text-emerald-600 uppercase tracking-tight">{actionSuccess}</span>
+                                </div>
+                            )}
 
                             <div className="flex flex-col gap-2">
                                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Temporary Protocol Offset (Days)</label>

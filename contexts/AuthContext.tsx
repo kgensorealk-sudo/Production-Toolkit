@@ -25,6 +25,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const SUPER_ADMIN_EMAIL = 'generalkevin53@gmail.com';
+const SECONDARY_ADMIN_EMAIL = 'kgenso.realK@gmail.com';
 const HEARTBEAT_INTERVAL = 60 * 1000; 
 const MAX_SESSION_AGE = 24 * 60 * 60 * 1000; // 24 Hours Hard Cutoff
 
@@ -108,6 +109,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const isAdmin = (
         user?.email === SUPER_ADMIN_EMAIL ||
+        user?.email === SECONDARY_ADMIN_EMAIL ||
         user?.app_metadata?.role?.toLowerCase() === 'admin' ||
         profile?.role?.toLowerCase() === 'admin'
     );
@@ -306,6 +308,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
                     heartbeatTimerRef.current = setInterval(() => updateLastSeen(currentSession.user.id), HEARTBEAT_INTERVAL);
                     await Promise.allSettled([fetchProfile(currentSession.user.id, currentSession.user.email), fetchFreeTools()]);
+
+                    // Real-time synchronization for system settings
+                    const settingsChannel = supabase
+                        .channel('system_settings_sync')
+                        .on('postgres_changes', { 
+                            event: '*', 
+                            schema: 'public', 
+                            table: 'system_settings',
+                            filter: 'id=eq.global'
+                        }, (payload) => {
+                            if (payload.new) processFreeToolsPayload(payload.new);
+                        })
+                        .subscribe();
+                    
+                    return () => {
+                        supabase.removeChannel(settingsChannel);
+                    };
                 }
             } catch (err) {
                 console.error("INIT_FAILED:", err);
