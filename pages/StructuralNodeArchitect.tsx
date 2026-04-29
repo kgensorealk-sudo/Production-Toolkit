@@ -1060,6 +1060,40 @@ const StructuralNodeArchitect: React.FC = () => {
                         </button>
                     </nav>
 
+            {/* Smart Suggestions Section outside the main grid */}
+            {suggestions.length > 0 && activeTab === 'result' && (
+                <div className="mb-8 animate-in fade-in slide-in-from-top-4 duration-700">
+                    <div className="p-6 bg-indigo-50/30 border-2 border-indigo-100 rounded-[2rem] border-dashed">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-10 h-10 rounded-2xl bg-indigo-100 flex items-center justify-center">
+                                <Lightbulb className="w-5 h-5 text-indigo-600" />
+                            </div>
+                            <h4 className="text-[10px] font-black text-indigo-900 uppercase tracking-[0.2em]">Architectural Recommendations</h4>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {suggestions.map(sug => (
+                                <button 
+                                    key={sug.id}
+                                    onClick={() => {
+                                        navigate(sug.path, { state: { transferredXml: output, sourceTool: 'Structural Node Architect v3.2' } });
+                                    }}
+                                    className="flex items-center gap-4 p-4 bg-white border border-indigo-100 rounded-2xl hover:border-indigo-300 hover:shadow-md transition-all group text-left shadow-sm"
+                                >
+                                    <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:scale-110 transition-transform">
+                                        {sug.icon}
+                                    </div>
+                                    <div className="flex-grow">
+                                        <div className="text-[9px] font-black text-indigo-900 uppercase tracking-widest mb-0.5">{sug.toolName}</div>
+                                        <div className="text-[8px] text-indigo-500 font-medium leading-tight">{sug.description}</div>
+                                    </div>
+                                    <ArrowRight className="w-4 h-4 text-indigo-300 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
                     <div className="flex-grow grid grid-cols-1 xl:grid-cols-12 gap-6 overflow-hidden">
                         {/* Left Sidebar: Stats & Actions */}
                         <aside className="xl:col-span-3 flex flex-col gap-6 overflow-y-auto custom-scrollbar pr-2">
@@ -1347,37 +1381,6 @@ const StructuralNodeArchitect: React.FC = () => {
                                             </div>
                                         </div>
                                         <div className="flex-grow flex flex-col overflow-hidden">
-                                            {/* Smart Suggestions Section */}
-                                            {suggestions.length > 0 && viewMode === 'output' && (
-                                                <div className="px-6 pt-4 bg-white border-b border-slate-100">
-                                                    <div className="p-4 bg-indigo-50/30 border-2 border-indigo-100 rounded-2xl border-dashed">
-                                                        <div className="flex items-center gap-3 mb-3">
-                                                            <Lightbulb className="w-4 h-4 text-indigo-600" />
-                                                            <h4 className="text-[10px] font-black text-indigo-900 uppercase tracking-[0.2em]">Architectural Recommendations</h4>
-                                                        </div>
-                                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                                            {suggestions.map(sug => (
-                                                                <button 
-                                                                    key={sug.id}
-                                                                    onClick={() => {
-                                                                        navigate(sug.path, { state: { transferredXml: output, sourceTool: 'Structural Node Architect v3.2' } });
-                                                                    }}
-                                                                    className="flex items-center gap-4 p-3 bg-white border border-indigo-100 rounded-xl hover:border-indigo-300 hover:shadow-md transition-all group text-left shadow-sm"
-                                                                >
-                                                                    <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:scale-110 transition-transform">
-                                                                        {sug.icon}
-                                                                    </div>
-                                                                    <div className="flex-grow">
-                                                                        <div className="text-[9px] font-black text-indigo-900 uppercase tracking-widest mb-0.5">{sug.toolName}</div>
-                                                                        <div className="text-[8px] text-indigo-500 font-medium leading-tight">{sug.description}</div>
-                                                                    </div>
-                                                                    <ArrowRight className="w-3 h-3 text-indigo-300 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
-                                                                </button>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            )}
                                             {viewMode === 'output' ? (
                                                 <textarea
                                                     readOnly

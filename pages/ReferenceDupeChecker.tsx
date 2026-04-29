@@ -48,6 +48,7 @@ interface DupeGroup {
     id: number;
     items: RefItem[];
     selectedId: string;
+    resolutionMode: 'merge' | 'ignore';
 }
 
 interface CitationChangeAudit {
@@ -398,7 +399,12 @@ const ReferenceDupeChecker: React.FC = () => {
                             visited.add(itemJ.id); 
                         }
                     }
-                    if (currentGroup.length > 1) newGroups.push({ id: groupId++, items: currentGroup, selectedId: currentGroup[0].id });
+                    if (currentGroup.length > 1) newGroups.push({ 
+                        id: groupId++, 
+                        items: currentGroup, 
+                        selectedId: currentGroup[0].id,
+                        resolutionMode: 'merge'
+                    });
                 }
                 if (newGroups.length === 0) { setToast({ msg: "No duplicates found!", type: "success" }); setIsLoading(false); return; }
                 setStats(s => ({ ...s, totalRefs: refs.length }));
@@ -408,7 +414,11 @@ const ReferenceDupeChecker: React.FC = () => {
     };
 
     const handleSelection = (groupId: number, selectedRefId: string) => {
-        setGroups(prev => prev.map(g => g.id === groupId ? { ...g, selectedId: selectedRefId } : g));
+        setGroups(prev => prev.map(g => g.id === groupId ? { ...g, selectedId: selectedRefId, resolutionMode: 'merge' } : g));
+    };
+
+    const toggleResolutionMode = (groupId: number, mode: 'merge' | 'ignore') => {
+        setGroups(prev => prev.map(g => g.id === groupId ? { ...g, resolutionMode: mode } : g));
     };
 
     const processMerge = () => {
@@ -443,6 +453,8 @@ const ReferenceDupeChecker: React.FC = () => {
                 const citationAudits: CitationChangeAudit[] = [];
 
                 groups.forEach(group => {
+                    if (group.resolutionMode === 'ignore') return;
+                    
                     const keeper = group.items.find(i => i.id === group.selectedId);
                     if (!keeper) return;
                     group.items.forEach(item => {
@@ -756,7 +768,7 @@ const ReferenceDupeChecker: React.FC = () => {
                 </div>
             </motion.div>
 
-            <div className="bg-white rounded-[2rem] border border-slate-200 min-h-[700px] flex flex-col relative shadow-[0_32px_64px_-16px_rgba(0,0,0,0.08)] overflow-hidden">
+            <div className="bg-white rounded-[2rem] border border-slate-200 h-[calc(100vh-320px)] min-h-[700px] flex flex-col relative shadow-[0_32px_64px_-16px_rgba(0,0,0,0.08)] overflow-hidden">
                 <AnimatePresence mode="wait">
                     {isLoading && (
                         <motion.div 
@@ -834,18 +846,19 @@ const ReferenceDupeChecker: React.FC = () => {
                                 </div>
                             </div>
                             <div 
-                                className={`flex-grow flex flex-col relative overflow-hidden transition-all duration-500 ${isDragging ? 'bg-indigo-500/5' : 'bg-transparent'}`}
+                                className={`flex-grow flex flex-col relative overflow-hidden transition-all duration-500 rounded-b-[2rem] ${isDragging ? 'bg-indigo-500/5' : 'bg-slate-50/30'}`}
                                 onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
                                 onDragLeave={() => setIsDragging(false)}
                                 onDrop={handleDrop}
                             >
+                                <div className="absolute inset-0 pointer-events-none opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(#000 0.5px, transparent 0.5px)', backgroundSize: '24px 24px' }}></div>
                                 <AnimatePresence>
                                     {isDragging && (
                                         <motion.div 
                                             initial={{ opacity: 0 }}
                                             animate={{ opacity: 1 }}
                                             exit={{ opacity: 0 }}
-                                            className="absolute inset-0 z-20 bg-indigo-600/10 backdrop-blur-sm flex flex-col items-center justify-center pointer-events-none p-12"
+                                            className="absolute inset-0 z-30 bg-indigo-600/10 backdrop-blur-sm flex flex-col items-center justify-center pointer-events-none p-12"
                                         >
                                             <div className="bg-white p-12 rounded-[2rem] shadow-2xl shadow-indigo-200 border border-indigo-100 flex flex-col items-center gap-6">
                                                 <div className="w-20 h-20 rounded-full bg-indigo-600 flex items-center justify-center text-white shadow-xl shadow-indigo-300">
@@ -861,22 +874,24 @@ const ReferenceDupeChecker: React.FC = () => {
                                 </AnimatePresence>
                                 
                                 {!input && !isDragging && (
-                                    <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300 pointer-events-none">
-                                        <div className="w-24 h-24 rounded-3xl flex items-center justify-center mb-8 border-2 border-dashed border-slate-100 bg-slate-50/50 text-slate-200 group">
-                                            <FileCode size={40} strokeWidth={1} />
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300 pointer-events-none z-10">
+                                        <div className="w-32 h-32 rounded-[2.5rem] flex items-center justify-center mb-8 border-2 border-dashed border-slate-200 bg-white/80 shadow-xl shadow-slate-100 text-slate-300 group">
+                                            <FileCode size={48} strokeWidth={1} />
                                         </div>
-                                        <p className="font-black text-[11px] uppercase tracking-[0.4em] mb-2 text-slate-400">
-                                            Awaiting Source Data
-                                        </p>
-                                        <p className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">
-                                            Drop XML file or paste bibliography content
-                                        </p>
+                                        <div className="text-center px-8">
+                                            <p className="font-black text-[12px] uppercase tracking-[0.5em] mb-3 text-slate-400">
+                                                Awaiting Source Data
+                                            </p>
+                                            <p className="text-[10px] font-bold text-slate-400/60 uppercase tracking-widest leading-loose max-w-xs mx-auto">
+                                                Drop XML file, paste bibliography nodes,<br /> or use the sample button above.
+                                            </p>
+                                        </div>
                                     </div>
                                 )}
                                 <textarea 
                                     value={input} 
                                     onChange={(e) => setInput(e.target.value)} 
-                                    className={`w-full h-full p-12 text-[13px] font-mono text-slate-600 border-0 focus:ring-0 outline-none resize-none bg-transparent leading-relaxed custom-scrollbar overflow-y-auto transition-opacity placeholder:text-slate-200 ${isDragging ? 'opacity-10' : 'opacity-100'}`} 
+                                    className={`w-full h-full p-16 text-[13px] font-mono text-slate-600 border-0 focus:ring-0 outline-none resize-none bg-transparent leading-relaxed custom-scrollbar overflow-y-auto transition-opacity placeholder:text-slate-400 relative z-20 ${isDragging ? 'opacity-10' : 'opacity-100'}`} 
                                     spellCheck={false} 
                                     placeholder="<!-- Paste XML <ce:bib-reference> nodes here... -->"
                                 />
@@ -976,21 +991,38 @@ const ReferenceDupeChecker: React.FC = () => {
                                         transition={{ delay: gIdx * 0.05 }}
                                         className="bg-white border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden"
                                     >
-                                        <div className="bg-slate-50/80 px-10 py-5 border-b border-slate-100 flex justify-between items-center sm:flex-row flex-col gap-4">
-                                            <div className="flex items-center gap-4">
-                                                <div className="w-8 h-8 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-[11px] font-black text-indigo-600 shadow-sm">
-                                                    {group.id}
+                                        <div className="bg-slate-50/80 px-10 py-5 border-b border-slate-100 flex justify-between items-center sm:flex-row flex-col gap-8">
+                                            <div className="flex items-center gap-6">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-8 h-8 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-[11px] font-black text-indigo-600 shadow-sm">
+                                                        {group.id}
+                                                    </div>
+                                                    <span className="text-[11px] font-bold text-slate-900 uppercase tracking-widest">Similarity Group</span>
                                                 </div>
-                                                <span className="text-[11px] font-bold text-slate-900 uppercase tracking-widest">Similarity Group</span>
+                                                <div className="h-4 w-px bg-slate-200 hidden sm:block"></div>
+                                                <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm overflow-hidden min-w-[240px]">
+                                                    <button 
+                                                        onClick={() => toggleResolutionMode(group.id, 'merge')}
+                                                        className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 text-[9px] font-black uppercase tracking-widest transition-all ${group.resolutionMode === 'merge' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+                                                    >
+                                                        <GitCompare size={10} /> Consolidate
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => toggleResolutionMode(group.id, 'ignore')}
+                                                        className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 text-[9px] font-black uppercase tracking-widest transition-all ${group.resolutionMode === 'ignore' ? 'bg-amber-500 text-white shadow-md' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+                                                    >
+                                                        <Layers size={10} /> Keep Both
+                                                    </button>
+                                                </div>
                                             </div>
-                                            <div className="flex items-center gap-3 bg-rose-50 px-4 py-2 rounded-xl border border-rose-100/50">
-                                                <div className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></div>
-                                                <span className="text-[11px] font-black text-rose-600 uppercase tracking-widest">
-                                                    {group.items.length} Variants
+                                            <div className={`flex items-center gap-3 px-4 py-2 rounded-xl border transition-all ${group.resolutionMode === 'ignore' ? 'bg-amber-50 border-amber-100 text-amber-600' : 'bg-rose-50 border-rose-100 text-rose-600'}`}>
+                                                <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${group.resolutionMode === 'ignore' ? 'bg-amber-500' : 'bg-rose-500'}`}></div>
+                                                <span className="text-[11px] font-black uppercase tracking-widest">
+                                                    {group.resolutionMode === 'ignore' ? 'Split Action active' : `${group.items.length} Variants found`}
                                                 </span>
                                             </div>
                                         </div>
-                                        <div className="divide-y divide-slate-100">
+                                        <div className={`divide-y divide-slate-100 transition-opacity duration-300 ${group.resolutionMode === 'ignore' ? 'opacity-40 grayscale pointer-events-none cursor-not-allowed' : 'opacity-100'}`}>
                                             {group.items.map(item => {
                                                 const isSelected = item.id === group.selectedId;
                                                 return (

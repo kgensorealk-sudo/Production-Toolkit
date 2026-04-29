@@ -1,11 +1,12 @@
 
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useCallback } from 'react';
 import { CREDIT_DB } from '../constants';
 import { findCreditRole, getSuggestions } from '../utils/creditLogic';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 import useLocalStorage from '../hooks/useLocalStorage';
+import { Download, Table as TableIcon, FileUp, Clipboard, Check, Info } from 'lucide-react';
 
 interface Issue {
     id: string;
@@ -97,9 +98,10 @@ const CreditGenerator: React.FC = () => {
     const [reportIssues, setReportIssues] = useState<Issue[]>([]);
     const [scanStats, setScanStats] = useState({ errors: 0, authors: 0 });
     
-    const [activeTab, setActiveTab] = useState<'preview' | 'bold' | 'roles' | 'report'>('preview');
+    const [activeTab, setActiveTab] = useState<'preview' | 'matrix' | 'bold' | 'roles' | 'report'>('preview');
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [dragActive, setDragActive] = useState(false);
     
     const backdropRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -138,6 +140,14 @@ const CreditGenerator: React.FC = () => {
         } catch (e) {
              setToast({ msg: 'Copy failed', type: 'error' });
         }
+    };
+
+    const copyAuthorRoles = (author: ParsedAuthor) => {
+        if (!author.roles || author.roles.length === 0) return;
+        const roles = author.roles.filter(r => !r.isDuplicate).map(r => r.normalized).join(', ');
+        navigator.clipboard.writeText(roles).then(() => {
+            setToast({ msg: `Copied roles for ${author.name}`, type: 'success' });
+        });
     };
 
     // --- Highlighting Logic for Output ---
@@ -250,6 +260,62 @@ const CreditGenerator: React.FC = () => {
             inputStats: { authors: authorCount, valid: validRolesCount, invalid: invalidRolesCount }
         };
     }, [input]);
+
+    // --- File Handling ---
+    const handleDrag = useCallback((e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.type === "dragenter" || e.type === "dragover") {
+            setDragActive(true);
+        } else if (e.type === "dragleave") {
+            setDragActive(false);
+        }
+    }, []);
+
+    const handleDrop = useCallback((e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setDragActive(false);
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+            const file = e.dataTransfer.files[0];
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                const content = evt.target?.result as string;
+                setInput(content);
+                setToast({ msg: `Imported ${file.name}`, type: 'success' });
+            };
+            reader.readAsText(file);
+        }
+    }, [setInput]);
+
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                const content = evt.target?.result as string;
+                setInput(content);
+                setToast({ msg: `Imported ${file.name}`, type: 'success' });
+            };
+            reader.readAsText(file);
+        }
+    };
+
+    // --- JSON Export ---
+    const exportAsJson = () => {
+        if (parsedAuthors.length === 0) return;
+        const data = parsedAuthors.map(a => ({
+            name: a.name,
+            roles: a.roles.filter(r => !r.isDuplicate).map(r => r.normalized)
+        }));
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `credit_statement_${new Date().toISOString().split('T')[0]}.json`;
+        link.click();
+        setToast({ msg: "JSON exported!", type: "success" });
+    };
 
     // --- Parsing Logic ---
     const generate = () => {
@@ -500,13 +566,41 @@ const CreditGenerator: React.FC = () => {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 min-h-[700px]">
                 {/* Input Area */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col relative group focus-within:ring-2 focus-within:ring-purple-100 transition-all duration-300 min-h-[500px]">
+                <div 
+                    onDragEnter={handleDrag}
+                    onDragLeave={handleDrag}
+                    onDragOver={handleDrag}
+                    onDrop={handleDrop}
+                    className={`bg-white rounded-2xl shadow-sm border-2 overflow-hidden flex flex-col relative group transition-all duration-300 min-h-[500px] ${dragActive ? 'border-purple-500 bg-purple-50/50' : 'border-slate-200'}`}
+                >
+                    {dragActive && (
+                        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-purple-500/10 backdrop-blur-sm pointer-events-none">
+                            <div className="bg-white p-6 rounded-2xl shadow-2xl flex flex-col items-center gap-4 border-2 border-purple-500 animate-bounce">
+                                <FileUp size={48} className="text-purple-600" />
+                                <span className="text-xl font-black text-purple-700 uppercase">Drop to Import Statement</span>
+                            </div>
+                        </div>
+                    )}
+                    
                     <div className="bg-slate-50 px-4 py-3 border-b border-slate-100 flex justify-between items-center z-20 relative">
                         <label className="font-bold text-slate-700 flex items-center gap-2 text-sm">
                             <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white border border-slate-200 text-xs text-purple-600 font-mono shadow-sm">IN</span>
                             Input Text
                         </label>
                         <div className="flex gap-2">
+                             <input 
+                                type="file" 
+                                id="file-upload" 
+                                className="hidden" 
+                                accept=".txt,.xml" 
+                                onChange={handleFileUpload} 
+                             />
+                             <button 
+                                onClick={() => document.getElementById('file-upload')?.click()}
+                                className="text-xs font-semibold text-slate-500 hover:text-indigo-600 px-2 py-1 rounded transition-colors flex items-center gap-1"
+                             >
+                                <FileUp size={12} /> Import
+                             </button>
                              <button onClick={() => {
                                  setInput('');
                                  setBoldOutput('');
@@ -575,7 +669,7 @@ const CreditGenerator: React.FC = () => {
                             )}
                         </label>
                         <div className="flex items-center gap-2">
-                            {activeTab !== 'report' && activeTab !== 'preview' && (
+                            {activeTab !== 'report' && activeTab !== 'preview' && activeTab !== 'matrix' && (
                                 <button 
                                     onClick={() => {
                                         if (activeTab === 'bold') copyRichText(boldOutput);
@@ -591,9 +685,15 @@ const CreditGenerator: React.FC = () => {
                                         : 'text-indigo-600 hover:bg-indigo-50 border-transparent hover:border-indigo-100'
                                     }`}
                                 >
-                                    {isStale ? 'Copy Stale XML' : 'Copy'}
+                                    {isStale ? <><Clipboard size={14} /> Copy Stale XML</> : <><Clipboard size={14} /> Copy</>}
                                 </button>
                             )}
+                            <button 
+                                onClick={exportAsJson}
+                                className="text-xs font-bold text-slate-600 border border-slate-200 hover:bg-slate-50 px-3 py-1.5 rounded transition-colors flex items-center gap-1"
+                            >
+                                <Download size={14} /> Export JSON
+                            </button>
                             {scanStats.errors > 0 && (
                                 <button 
                                     onClick={autoFixAll}
@@ -606,15 +706,16 @@ const CreditGenerator: React.FC = () => {
                     </div>
                     
                     <div className="bg-white px-2 pt-2 border-b border-slate-100 flex space-x-1">
-                        {['preview', 'bold', 'roles', 'report'].map((tab) => (
+                        {['preview', 'matrix', 'bold', 'roles', 'report'].map((tab) => (
                              <button 
                                 key={tab}
                                 onClick={() => setActiveTab(tab as any)} 
-                                className={`flex-1 py-2 text-xs font-bold rounded-t-lg transition-all duration-200 border-t border-x ${activeTab === tab 
+                                className={`flex-1 py-2 text-xs font-bold rounded-t-lg transition-all duration-200 border-t border-x flex items-center justify-center gap-1.5 ${activeTab === tab 
                                     ? 'bg-slate-50 text-purple-600 border-slate-200 translate-y-[1px]' 
                                     : 'bg-white text-slate-500 border-transparent hover:bg-slate-50 hover:text-slate-700'}`}
                              >
                                 {tab === 'preview' && 'Visual Preview'}
+                                {tab === 'matrix' && <><TableIcon size={14} /> Role Matrix</>}
                                 {tab === 'bold' && 'Formatted Text'}
                                 {tab === 'roles' && 'XML Roles'}
                                 {tab === 'report' && `Audit Log ${scanStats.errors > 0 ? `(${scanStats.errors})` : ''}`}
@@ -622,11 +723,11 @@ const CreditGenerator: React.FC = () => {
                         ))}
                     </div>
 
-                    <div className="flex-grow relative bg-slate-50 overflow-auto custom-scrollbar">
+                    <div className="flex-grow relative bg-slate-50 min-h-[400px]">
                         {isLoading && <LoadingOverlay message="Scanning Authors..." color="purple" />}
                         
                         {activeTab === 'preview' && (
-                            <div className="p-6 space-y-4">
+                            <div className="absolute inset-0 p-6 space-y-4 overflow-auto custom-scrollbar">
                                 {parsedAuthors.length === 0 ? (
                                     <div className="h-full flex flex-col items-center justify-center text-slate-400 pt-20">
                                         <p>Generate to see preview</p>
@@ -641,10 +742,19 @@ const CreditGenerator: React.FC = () => {
                                                     </div>
                                                     {author.name}
                                                 </div>
+                                                <button 
+                                                    onClick={() => copyAuthorRoles(author)}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all border border-slate-200 group/copy"
+                                                    title="Copy only roles"
+                                                >
+                                                    <span className="text-[10px] font-black uppercase tracking-widest hidden group-hover/copy:inline transition-all duration-300">Copy Roles</span>
+                                                    <Clipboard size={12} />
+                                                </button>
                                             </div>
                                             <div className="flex flex-wrap gap-2">
                                                 {author.roles.map((role, rIdx) => {
-                                                    const isUnknown = findCreditRole(role.normalized) === null;
+                                                    const roleDetails = CREDIT_DB.find(dbR => dbR.name === role.normalized);
+                                                    const isUnknown = !roleDetails;
                                                     const colors = !isUnknown ? getRoleColor(role.normalized) : { text: 'text-rose-700', bg: 'bg-rose-50', border: 'border-rose-200' };
                                                     
                                                     if (role.isDuplicate) {
@@ -660,20 +770,30 @@ const CreditGenerator: React.FC = () => {
                                                     }
 
                                                     return (
-                                                        <span 
-                                                            key={rIdx} 
-                                                            title={role.isCorrection ? `Corrected from: "${role.original}"` : role.original}
-                                                            className={`px-3 py-1.5 rounded-lg text-xs font-bold border flex items-center gap-1.5 cursor-help
-                                                                ${colors.bg} ${colors.text} ${colors.border}`}
-                                                        >
-                                                            {role.normalized}
-                                                            {role.isCorrection && (
-                                                                <svg className="w-3 h-3 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                                        <div key={rIdx} className="group/role relative">
+                                                            <span 
+                                                                title={role.isCorrection ? `Corrected from: "${role.original}"` : role.original}
+                                                                className={`px-3 py-1.5 rounded-lg text-xs font-bold border flex items-center gap-1.5 cursor-help
+                                                                    ${colors.bg} ${colors.text} ${colors.border}`}
+                                                            >
+                                                                {role.normalized}
+                                                                {role.isCorrection && (
+                                                                    <svg className="w-3 h-3 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                                                )}
+                                                                {isUnknown && (
+                                                                    <svg className="w-3 h-3 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                                                )}
+                                                            </span>
+                                                            {!isUnknown && roleDetails.definition && (
+                                                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-slate-900 text-white p-3 rounded-xl shadow-2xl opacity-0 invisible group-hover/role:opacity-100 group-hover/role:visible transition-all z-50 pointer-events-none normal-case">
+                                                                    <div className="font-black text-indigo-400 text-[10px] mb-1 uppercase tracking-widest">{roleDetails.name}</div>
+                                                                    <div className="text-[10px] leading-relaxed text-slate-300 font-medium">
+                                                                        {roleDetails.definition}
+                                                                    </div>
+                                                                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-slate-900"></div>
+                                                                </div>
                                                             )}
-                                                            {isUnknown && (
-                                                                <svg className="w-3 h-3 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                                            )}
-                                                        </span>
+                                                        </div>
                                                     );
                                                 })}
                                             </div>
@@ -683,22 +803,96 @@ const CreditGenerator: React.FC = () => {
                             </div>
                         )}
 
+                        {activeTab === 'matrix' && (
+                            <div className="w-full h-full p-0 flex flex-col relative overflow-hidden">
+                                {parsedAuthors.length === 0 ? (
+                                    <div className="h-40 flex items-center justify-center text-slate-400">Generate to see matrix</div>
+                                ) : (
+                                    <div className="w-full flex-grow overflow-auto custom-scrollbar bg-white rounded-b-2xl border-t border-slate-200">
+                                        <table className="min-w-[1400px] w-full text-[10px] text-left border-separate border-spacing-0 table-fixed">
+                                            <thead className="sticky top-0 z-30 shadow-sm">
+                                                <tr className="bg-slate-50/95 backdrop-blur-sm">
+                                                    <th className="p-4 font-black text-slate-900 border-r border-b border-slate-200 sticky left-0 bg-slate-50 z-40 w-48 shadow-[2px_0_10px_rgba(0,0,0,0.05)]">
+                                                        <div className="flex flex-col">
+                                                            <span className="text-[10px] font-black uppercase text-slate-900 leading-none mb-1">Author Repository</span>
+                                                            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">{parsedAuthors.length} Identity Nodes</span>
+                                                        </div>
+                                                    </th>
+                                                    {CREDIT_DB.map(role => (
+                                                        <th key={role.name} title={role.name} className="p-0 border-r border-b border-slate-200 last:border-r-0 hover:bg-white transition-colors group relative align-bottom overflow-visible h-32 w-12">
+                                                            <div className="flex items-center justify-center h-full w-full py-4">
+                                                                <div className="rotate-[-60deg] origin-center whitespace-nowrap -translate-x-1 translate-y-2">
+                                                                    <span className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-500 group-hover:text-indigo-600 transition-colors">
+                                                                        {role.shortName || role.name}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 bg-slate-900 text-white p-3 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none normal-case">
+                                                                <div className="font-black text-indigo-400 text-[10px] mb-1 uppercase tracking-widest">{role.name}</div>
+                                                                {role.definition && (
+                                                                    <div className="text-[10px] leading-relaxed text-slate-300 font-medium">
+                                                                        {role.definition}
+                                                                    </div>
+                                                                )}
+                                                                <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-slate-900"></div>
+                                                            </div>
+                                                        </th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100 relative">
+                                                {parsedAuthors.map((author, aIdx) => (
+                                                    <tr key={aIdx} className="hover:bg-indigo-50/30 transition-colors group">
+                                                        <td className="p-4 font-bold text-blue-600 sticky left-0 bg-white group-hover:bg-indigo-50/50 z-20 border-r border-slate-200 shadow-[2px_0_10px_rgba(0,0,0,0.03)] transition-colors">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="w-6 h-6 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-[10px] font-black shadow-inner shrink-0">
+                                                                    {author.name.charAt(0)}
+                                                                </div>
+                                                                <span className="truncate max-w-[150px]">{author.name}</span>
+                                                            </div>
+                                                        </td>
+                                                        {CREDIT_DB.map(role => {
+                                                            const hasRole = author.roles.some(r => r.normalized === role.name && !r.isDuplicate);
+                                                            const colors = getRoleColor(role.name);
+                                                            return (
+                                                                <td key={role.name} className="p-0 text-center border-r border-slate-100 last:border-r-0 h-10 w-12 group-hover:bg-white/40 transition-colors">
+                                                                    {hasRole ? (
+                                                                        <div className="flex items-center justify-center w-full h-full">
+                                                                            <div className={`w-6 h-6 rounded-lg flex items-center justify-center ${colors.bg} ${colors.text} shadow-sm border ${colors.border} transform group-hover:scale-110 transition-transform`}>
+                                                                                <Check size={14} strokeWidth={4} />
+                                                                            </div>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="w-1 h-1 bg-slate-200 rounded-full mx-auto opacity-30"></div>
+                                                                    )}
+                                                                </td>
+                                                            );
+                                                        })}
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         {activeTab === 'bold' && (
                             <div 
-                                className="w-full h-full p-6 text-sm font-mono text-slate-800 bg-transparent border-0 focus:ring-0 resize-none leading-relaxed outline-none whitespace-pre-wrap break-words"
+                                className="absolute inset-0 p-6 text-sm font-mono text-slate-800 bg-transparent border-0 focus:ring-0 resize-none leading-relaxed outline-none whitespace-pre-wrap break-words overflow-auto custom-scrollbar"
                                 dangerouslySetInnerHTML={{ __html: getHighlightedBoldOutput(boldOutput) || '<span class="text-slate-400">Formatted output will appear here...</span>' }}
                             />
                         )}
                         
                         {activeTab === 'roles' && (
                              <div 
-                                className="w-full h-full p-6 text-sm font-mono text-slate-800 bg-transparent border-0 focus:ring-0 resize-none leading-relaxed outline-none whitespace-pre-wrap break-words"
+                                className="absolute inset-0 p-6 text-sm font-mono text-slate-800 bg-transparent border-0 focus:ring-0 resize-none leading-relaxed outline-none whitespace-pre-wrap break-words overflow-auto custom-scrollbar"
                                 dangerouslySetInnerHTML={{ __html: getHighlightedXmlOutput(rolesOutput) || '<span class="text-slate-400">XML roles will appear here...</span>' }}
                             />
                         )}
                         
                         {activeTab === 'report' && (
-                            <div className="h-full flex flex-col">
+                            <div className="absolute inset-0 flex flex-col overflow-hidden">
                                 {reportIssues.length === 0 ? (
                                     <div className="h-full flex flex-col items-center justify-center text-slate-400">
                                          {scanStats.authors > 0 ? (
@@ -714,7 +908,7 @@ const CreditGenerator: React.FC = () => {
                                          )}
                                     </div>
                                 ) : (
-                                    <div className="overflow-auto custom-scrollbar">
+                                    <div className="overflow-auto custom-scrollbar h-full">
                                         <table className="min-w-full text-left text-sm whitespace-nowrap">
                                             <thead className="bg-slate-50 border-b border-slate-100 sticky top-0">
                                                 <tr>
@@ -758,13 +952,13 @@ const CreditGenerator: React.FC = () => {
                 </div>
             </div>
 
-            <div className="mt-8 text-center">
+            <div className="mt-8 flex flex-col sm:flex-row justify-center items-center gap-4">
                 <button 
                     id="generate-btn"
                     onClick={generate} 
                     disabled={isLoading}
                     title="Ctrl+Enter"
-                    className={`bg-purple-600 hover:bg-purple-700 text-white font-bold py-3.5 px-10 rounded-xl shadow-lg shadow-purple-500/30 transform transition-all active:scale-95 ${isLoading ? 'opacity-80 cursor-wait' : 'hover:-translate-y-0.5'}`}
+                    className={`bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 px-10 rounded-xl shadow-lg shadow-indigo-500/30 transform transition-all active:scale-95 flex items-center gap-2 ${isLoading ? 'opacity-80 cursor-wait' : 'hover:-translate-y-0.5'}`}
                 >
                     {isLoading ? 'Processing...' : 'Analyze & Generate'}
                 </button>

@@ -270,7 +270,6 @@ const Dashboard: React.FC = () => {
 
     return (
         <div className="max-w-[1800px] mx-auto px-4 py-12 sm:px-6 lg:px-10">
-            <AnnouncementModal />
             {activeTipTool && <ToolTipsModal toolId={activeTipTool.id} toolName={activeTipTool.name} isOpen={!!activeTipTool} onClose={() => setActiveTipTool(null)} />}
 
             <AnimatePresence>

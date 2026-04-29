@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -11,11 +11,10 @@ import {
     Shield,
     Cloud, 
     Monitor,
-    FlaskConical,
-    MessageCircle,
-    Mail
+    FlaskConical
 } from 'lucide-react';
 import { ToolId } from '../types';
+import AnnouncementModal from './AnnouncementModal';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
 import TrialTimer from './TrialTimer';
@@ -40,8 +39,6 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
     const [isAnnouncementUnread, setIsAnnouncementUnread] = useState(false);
     const [isExiting, setIsExiting] = useState(false);
     const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
-    const [hasNewMessages, setHasNewMessages] = useState(false);
-    const [hasMentions, setHasMentions] = useState(false);
     const [toast, setToast] = useState<{ msg: string, type: 'success' | 'warn' | 'error' | 'info' } | null>(null);
     
     const isVercel = window.location.hostname.includes('vercel.app');
@@ -67,6 +64,11 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
         logUsage();
     }, [currentTool, user?.id, authLoading]);
 
+    const profileRef = useRef(profile);
+    useEffect(() => {
+        profileRef.current = profile;
+    }, [profile]);
+
     useEffect(() => {
         const handleOnline = () => setIsOnline(true);
         const handleOffline = () => setIsOnline(false);
@@ -75,17 +77,27 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
 
         const checkBroadcastStatus = async () => {
             try {
-                const { data } = await supabase
+                const currentProfile = profileRef.current;
+                let { data, error } = await supabase
                     .from('announcements')
-                    .select('id, content, category')
+                    .select('id, content, category, created_at, is_mandatory')
                     .eq('is_active', true)
                     .order('created_at', { ascending: false });
+
+                if (error) {
+                    const fallback = await supabase
+                        .from('announcements')
+                        .select('id, content, created_at')
+                        .eq('is_active', true)
+                        .order('created_at', { ascending: false });
+                    data = fallback.data as any;
+                }
 
                 if (data && data.length > 0) {
                     // Filter based on user preferences
                     const filtered = data.find(a => {
-                        if (!profile) return true; // Show all if profile not loaded
-                        const prefs = profile.notification_preferences || {
+                        if (!currentProfile) return true; // Show all if profile not loaded
+                        const prefs = currentProfile.notification_preferences || {
                             system_alerts: true,
                             security_updates: true,
                             maintenance_windows: true
@@ -96,9 +108,32 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
 
                     if (filtered) {
                         setHasActiveAnnouncement(true);
-                        const contentHash = btoa(filtered.content.substring(0, 30)).substring(0, 8);
-                        const seenKey = `ann_seen_${filtered.id}_${contentHash}`;
-                        setIsAnnouncementUnread(!localStorage.getItem(seenKey));
+                        const seenKey = `ann_seen_${filtered.id}_${filtered.created_at}`;
+                        const hasSeenLocally = localStorage.getItem(seenKey);
+                        
+                        if (hasSeenLocally) {
+                            setIsAnnouncementUnread(false);
+                            return;
+                        }
+
+                        // Source of Truth check
+                        if (user?.id) {
+                            const { data: readData } = await supabase
+                                .from('announcement_reads')
+                                .select('id')
+                                .eq('announcement_id', filtered.id)
+                                .eq('user_id', user.id)
+                                .maybeSingle();
+
+                            if (readData) {
+                                localStorage.setItem(seenKey, 'true');
+                                setIsAnnouncementUnread(false);
+                            } else {
+                                setIsAnnouncementUnread(true);
+                            }
+                        } else {
+                            setIsAnnouncementUnread(true);
+                        }
                     } else {
                         setHasActiveAnnouncement(false);
                     }
@@ -110,13 +145,16 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
 
         checkBroadcastStatus();
         const interval = setInterval(checkBroadcastStatus, 60000 * 5);
+        const handleSync = () => checkBroadcastStatus();
+        window.addEventListener('app:announcement-sync', handleSync);
 
         return () => {
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('offline', handleOffline);
+            window.removeEventListener('app:announcement-sync', handleSync);
             clearInterval(interval);
         };
-    }, [profile?.notification_preferences]);
+    }, [user?.id]);
 
     const triggerAnnouncement = () => {
         window.dispatchEvent(new CustomEvent('app:show-announcement'));
@@ -133,224 +171,6 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
         }
     };
 
-    useEffect(() => {
-        if (!user?.id || authLoading) return;
-
-        let isMounted = true;
-        const checkUnread = async () => {
-            if (!isMounted) return;
-            try {
-                // 1. Check Direct Messages
-                const { count: dmCount, error: dmError } = await supabase
-                    .from('messages')
-                    .select('*', { count: 'exact', head: true })
-                    .eq('receiver_id', user.id)
-                    .eq('is_read', false);
-
-                if (dmError) throw dmError;
-
-                if (dmCount && dmCount > 0) {
-                    if (isMounted) setHasNewMessages(true);
-                    // Check for mentions in DMs (though DMs are already personal, we might still want to highlight mentions)
-                    const { data: dmMsgs } = await supabase
-                        .from('messages')
-                        .select('content')
-                        .eq('receiver_id', user.id)
-                        .eq('is_read', false);
-                    
-                    if (dmMsgs && profile) {
-                        const myName = profile.display_name || profile.email.split('@')[0];
-                        const mentionRegex = new RegExp(`@${myName}\\b|@Channel\\b`, 'i');
-                        if (dmMsgs.some(m => m.content && mentionRegex.test(m.content))) {
-                            if (isMounted) setHasMentions(true);
-                        }
-                    }
-                    return;
-                }
-
-                // 2. Check Global Chat
-                const lastGlobalRead = profile?.last_global_read_at || '1970-01-01T00:00:00Z';
-                const { count: globalCount, error: globalError } = await supabase
-                    .from('messages')
-                    .select('*', { count: 'exact', head: true })
-                    .is('receiver_id', null)
-                    .is('channel_id', null)
-                    .gt('created_at', lastGlobalRead)
-                    .neq('sender_id', user.id);
-
-                if (globalError) throw globalError;
-
-                if (globalCount && globalCount > 0) {
-                    console.log(`Unread Global Messages: ${globalCount} (after ${lastGlobalRead})`);
-                    if (isMounted) setHasNewMessages(true);
-                    
-                    const { data: globalMsgs } = await supabase
-                        .from('messages')
-                        .select('content')
-                        .is('receiver_id', null)
-                        .is('channel_id', null)
-                        .gt('created_at', lastGlobalRead)
-                        .neq('sender_id', user.id);
-                    
-                    if (globalMsgs && profile) {
-                        const myName = profile.display_name || profile.email.split('@')[0];
-                        const mentionRegex = new RegExp(`@${myName}\\b|@Channel\\b`, 'i');
-                        if (globalMsgs.some(m => m.content && mentionRegex.test(m.content))) {
-                            if (isMounted) setHasMentions(true);
-                        }
-                    }
-                    return;
-                }
-
-                // 3. Check Channel Messages
-                const { data: memberships, error: memError } = await supabase
-                    .from('channel_members')
-                    .select('channel_id, last_read_at')
-                    .eq('user_id', user.id);
-
-                if (memError) throw memError;
-
-                if (memberships && memberships.length > 0) {
-                    for (const membership of memberships) {
-                        const lastRead = membership.last_read_at || '1970-01-01T00:00:00Z';
-                        const { count: chanCount, error: chanError } = await supabase
-                            .from('messages')
-                            .select('*', { count: 'exact', head: true })
-                            .eq('channel_id', membership.channel_id)
-                            .gt('created_at', lastRead)
-                            .neq('sender_id', user.id);
-
-                        if (chanError) throw chanError;
-
-                        if (chanCount && chanCount > 0) {
-                            console.log(`Unread Channel Messages in ${membership.channel_id}: ${chanCount} (after ${lastRead})`);
-                            if (isMounted) setHasNewMessages(true);
-                            
-                            const { data: chanMsgs } = await supabase
-                                .from('messages')
-                                .select('content')
-                                .eq('channel_id', membership.channel_id)
-                                .gt('created_at', lastRead)
-                                .neq('sender_id', user.id);
-                            
-                            if (chanMsgs && profile) {
-                                const myName = profile.display_name || profile.email.split('@')[0];
-                                const mentionRegex = new RegExp(`@${myName}\\b|@Channel\\b`, 'i');
-                                if (chanMsgs.some(m => m.content && mentionRegex.test(m.content))) {
-                                    if (isMounted) setHasMentions(true);
-                                }
-                            }
-                            return;
-                        }
-                    }
-                }
-
-                if (isMounted) {
-                    setHasNewMessages(false);
-                    setHasMentions(false);
-                }
-            } catch (e) {
-                console.error('Error checking unread messages:', e);
-            }
-        };
-
-        // Initial check
-        checkUnread();
-
-        // Set up real-time subscription
-        const channel = supabase
-            .channel(`unread-monitor-${user.id}`)
-            .on(
-                'postgres_changes',
-                {
-                    event: 'INSERT',
-                    schema: 'public',
-                    table: 'messages'
-                },
-                (payload) => {
-                    const msg = payload.new;
-                    // Trigger check if message is for this user or in a channel they belong to
-                    // Or if it's a global message
-                    if (msg.sender_id !== user.id) {
-                        checkUnread();
-                    }
-                }
-            )
-            .on(
-                'postgres_changes',
-                {
-                    event: 'UPDATE',
-                    schema: 'public',
-                    table: 'messages',
-                    filter: `receiver_id=eq.${user.id}`
-                },
-                () => checkUnread()
-            )
-            .on(
-                'postgres_changes',
-                {
-                    event: 'UPDATE',
-                    schema: 'public',
-                    table: 'channel_members',
-                    filter: `user_id=eq.${user.id}`
-                },
-                () => checkUnread()
-            )
-            .on(
-                'postgres_changes',
-                {
-                    event: 'INSERT',
-                    schema: 'public',
-                    table: 'channel_members',
-                    filter: `user_id=eq.${user.id}`
-                },
-                () => checkUnread()
-            )
-            .on(
-                'postgres_changes',
-                {
-                    event: 'DELETE',
-                    schema: 'public',
-                    table: 'channel_members',
-                    filter: `user_id=eq.${user.id}`
-                },
-                () => checkUnread()
-            )
-            .on(
-                'postgres_changes',
-                {
-                    event: 'UPDATE',
-                    schema: 'public',
-                    table: 'profiles',
-                    filter: `id=eq.${user.id}`
-                },
-                () => checkUnread()
-            )
-            .subscribe((status) => {
-                if (status === 'SUBSCRIBED') {
-                    checkUnread(); // Re-check once subscribed to be safe
-                }
-            });
-
-        // Periodic check as a fallback
-        const interval = setInterval(checkUnread, 30000);
-
-        const handleVisibilityChange = () => {
-            if (document.visibilityState === 'visible') {
-                checkUnread();
-            }
-        };
-        window.addEventListener('visibilitychange', handleVisibilityChange);
-
-        return () => {
-            isMounted = false;
-            clearInterval(interval);
-            window.removeEventListener('visibilitychange', handleVisibilityChange);
-            supabase.removeChannel(channel);
-        };
-    }, [user?.id, authLoading, profile?.last_global_read_at]);
-
-    const isMessaging = location.pathname === '/messaging';
     const isTrial = !!profile?.trial_end;
     const headerClass = isLanding 
     ? "bg-transparent py-6" 
@@ -440,26 +260,6 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                                 </button>
                             )}
 
-
-                            {!isLanding && !isExiting && (
-                                <button 
-                                    onClick={() => navigate('/messaging')} 
-                                    className={`p-2 rounded-xl transition-all relative ${location.pathname === '/messaging' ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/50' : 'text-slate-400 hover:text-indigo-600'}`}
-                                    title="Messaging"
-                                >
-                                    <MessageCircle size={18} />
-                                    {hasMentions ? (
-                                        <span className="absolute -top-1 -right-1 bg-indigo-600 text-white text-[7px] font-black px-1 py-0.5 rounded-md shadow-lg shadow-indigo-200 animate-bounce uppercase tracking-tighter ring-2 ring-white">
-                                            Mention
-                                        </span>
-                                    ) : hasNewMessages && (
-                                        <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[7px] font-black px-1 py-0.5 rounded-md shadow-lg shadow-rose-200 animate-bounce uppercase tracking-tighter">
-                                            New
-                                        </span>
-                                    )}
-                                </button>
-                            )}
-
                             {!isLanding && !isExiting && (
                                 <button 
                                     onClick={() => navigate('/experimental')} 
@@ -529,7 +329,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                 </div>
             </header>
 
-            <main className={`flex-grow w-full relative z-10 ${isMessaging ? 'overflow-hidden' : 'overflow-y-auto'} min-h-0 custom-scrollbar ${isExiting ? 'pointer-events-none blur-[2px]' : ''}`}>
+            <main className={`flex-grow w-full relative z-10 overflow-y-auto min-h-0 custom-scrollbar ${isExiting ? 'pointer-events-none blur-[2px]' : ''}`}>
+                <AnnouncementModal />
                 <AnimatePresence mode="wait">
                     <motion.div
                         key={location.pathname}

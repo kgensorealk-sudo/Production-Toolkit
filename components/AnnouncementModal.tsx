@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
+import ReactMarkdown from 'react-markdown';
+import { AlertTriangle, Info, CheckCircle2, AlertCircle, X, Bell, Zap, Radio } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface Announcement {
     id: string;
@@ -8,60 +11,111 @@ interface Announcement {
     content: string;
     type: 'warning' | 'info' | 'success' | 'error';
     category: 'system_alerts' | 'security_updates' | 'maintenance_windows';
+    is_mandatory: boolean;
     updated_at: string;
     created_at: string;
 }
 
 const AnnouncementModal: React.FC = () => {
-    const { profile } = useAuth();
+    const { profile, user } = useAuth();
     const [isOpen, setIsOpen] = useState(false);
     const [announcement, setAnnouncement] = useState<Announcement | null>(null);
 
     const fetchAnnouncement = async (forceOpen = false) => {
         try {
-            const { data, error } = await supabase
+            // Safer query that handles potential schema mismatch
+            let { data, error } = await supabase
                 .from('announcements')
                 .select('*')
                 .eq('is_active', true)
                 .order('created_at', { ascending: false });
 
-            if (error) return;
+            // Fallback for older schemas if the first query fails due to missing columns
+            if (error) {
+                console.warn("[AnnouncementSystem] Primary fetch failed, attempting legacy schema fallback...", error);
+                const fallback = await supabase
+                    .from('announcements')
+                    .select('id, title, content, type, created_at, updated_at')
+                    .eq('is_active', true)
+                    .order('created_at', { ascending: false });
+                
+                data = fallback.data;
+                error = fallback.error;
+            }
+
+            if (error) {
+                console.error("[AnnouncementSystem] Broadcast retrieval failed entirely.", error);
+                return;
+            }
 
             if (data && data.length > 0) {
                 const announcements = data as Announcement[];
                 
                 // Filter based on user preferences
                 const filtered = announcements.find(a => {
-                    if (!profile) return true; // Show all if profile not loaded (e.g. landing)
+                    if (!profile) return true; 
                     const prefs = profile.notification_preferences || {
                         system_alerts: true,
                         security_updates: true,
                         maintenance_windows: true
                     };
-                    // If category is missing, default to system_alerts
                     const category = (a.category || 'system_alerts') as keyof typeof prefs;
                     return prefs[category] !== false;
                 });
 
                 if (filtered) {
+                    console.log("[AnnouncementSystem] Active broadcast detected:", filtered.id);
                     setAnnouncement(filtered);
                     
                     if (forceOpen) {
+                        console.log("[AnnouncementSystem] Force-opening modal.");
                         setIsOpen(true);
                         return;
                     }
 
-                    const contentHash = btoa(filtered.content.substring(0, 30)).substring(0, 8);
-                    const seenKey = `ann_seen_${filtered.id}_${contentHash}`;
-                    const hasSeen = localStorage.getItem(seenKey);
+                    // 1. Check LocalStorage (Fast check)
+                    const seenKey = `ann_seen_${filtered.id}_${filtered.created_at}`;
+                    const hasSeenLocally = localStorage.getItem(seenKey);
                     
-                    if (!hasSeen) {
-                        setIsOpen(true);
+                    if (!hasSeenLocally) {
+                        console.log("[AnnouncementSystem] Not seen locally. Verifying with database...");
+                        // 2. Check Database (Source of Truth)
+                        if (user?.id) {
+                            try {
+                                const { data: readData, error: readError } = await supabase
+                                    .from('announcement_reads')
+                                    .select('id')
+                                    .eq('announcement_id', filtered.id)
+                                    .eq('user_id', user.id)
+                                    .maybeSingle();
+
+                                if (readError) {
+                                    console.warn("[AnnouncementSystem] Database read check failed (likely table missing). Falling back to show.", readError);
+                                    setIsOpen(true);
+                                } else if (!readData) {
+                                    console.log("[AnnouncementSystem] Database confirms unread status. Displaying broadcast.");
+                                    setIsOpen(true);
+                                } else {
+                                    console.log("[AnnouncementSystem] Database confirms already read. Syncing local storage.");
+                                    localStorage.setItem(seenKey, 'true');
+                                }
+                            } catch (fallbackErr) {
+                                console.warn("[AnnouncementSystem] Critical error in read check. Falling back to show.", fallbackErr);
+                                setIsOpen(true);
+                            }
+                        } else {
+                            console.log("[AnnouncementSystem] No user session. Displaying broadcast as guest.");
+                            setIsOpen(true);
+                        }
+                    } else {
+                        console.log("[AnnouncementSystem] Broadcast already acknowledged locally.");
                     }
+                } else {
+                    console.log("[AnnouncementSystem] No broadcast found matching user preferences.");
                 }
             }
         } catch (err) {
-            console.warn("Announcement check failed");
+            console.warn("Announcement check failed", err);
         }
     };
 
@@ -73,13 +127,33 @@ const AnnouncementModal: React.FC = () => {
         window.addEventListener('app:show-announcement', handleManualTrigger);
         
         return () => window.removeEventListener('app:show-announcement', handleManualTrigger);
-    }, [profile?.notification_preferences]);
+    }, [profile?.notification_preferences, user?.id]);
 
-    const close = () => {
-        if (announcement) {
-            const contentHash = btoa(announcement.content.substring(0, 30)).substring(0, 8);
-            localStorage.setItem(`ann_seen_${announcement.id}_${contentHash}`, 'true');
+    const acknowledge = async () => {
+        if (announcement && user?.id) {
+            const seenKey = `ann_seen_${announcement.id}_${announcement.created_at}`;
+            localStorage.setItem(seenKey, 'true');
+            
+            // Persist to database so it stays "read" on all devices
+            try {
+                await supabase.from('announcement_reads').upsert([{
+                    announcement_id: announcement.id,
+                    user_id: user.id
+                }], { onConflict: 'announcement_id,user_id' });
+            } catch (e) {
+                console.warn("Failed to persist read state");
+            }
+
+            // Sync with other components (like Header)
+            window.dispatchEvent(new CustomEvent('app:announcement-sync'));
         }
+        setIsOpen(false);
+    };
+
+    const dismiss = () => {
+        // Just close the modal without marking it as seen/read.
+        // It will reappear on next session/trigger.
+        window.dispatchEvent(new CustomEvent('app:announcement-sync'));
         setIsOpen(false);
     };
 
@@ -93,7 +167,9 @@ const AnnouncementModal: React.FC = () => {
                     header: 'bg-amber-100/50',
                     border: 'border-amber-200',
                     accent: 'bg-amber-500',
-                    icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    secondary: 'text-amber-600',
+                    glow: 'shadow-amber-500/20',
+                    icon: <AlertTriangle className="w-6 h-6" />
                 };
             case 'error':
                 return {
@@ -101,7 +177,9 @@ const AnnouncementModal: React.FC = () => {
                     header: 'bg-rose-100/50',
                     border: 'border-rose-200',
                     accent: 'bg-rose-500',
-                    icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    secondary: 'text-rose-600',
+                    glow: 'shadow-rose-500/20',
+                    icon: <AlertCircle className="w-6 h-6" />
                 };
             case 'success':
                 return {
@@ -109,7 +187,9 @@ const AnnouncementModal: React.FC = () => {
                     header: 'bg-emerald-100/50',
                     border: 'border-emerald-200',
                     accent: 'bg-emerald-500',
-                    icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    secondary: 'text-emerald-600',
+                    glow: 'shadow-emerald-500/20',
+                    icon: <CheckCircle2 className="w-6 h-6" />
                 };
             default: // info
                 return {
@@ -117,7 +197,9 @@ const AnnouncementModal: React.FC = () => {
                     header: 'bg-indigo-100/50',
                     border: 'border-indigo-200',
                     accent: 'bg-indigo-500',
-                    icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    secondary: 'text-indigo-600',
+                    glow: 'shadow-indigo-500/20',
+                    icon: <Info className="w-6 h-6" />
                 };
         }
     };
@@ -125,39 +207,115 @@ const AnnouncementModal: React.FC = () => {
     const style = getStyles(announcement.type);
 
     return (
-        <div className="fixed inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" role="dialog" aria-modal="true">
-            <div className="bg-white rounded-[2rem] shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden animate-scale-in relative ring-1 ring-black/5 flex flex-col max-h-[85vh]">
-                <div className={`h-1.5 w-full ${style.accent}`}></div>
-                <div className={`${style.header} py-6 px-8 border-b border-slate-100 flex items-center gap-5`}>
-                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-sm border border-white/50 bg-white ${style.accent.replace('bg-', 'text-')}`}>
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            {style.icon}
-                        </svg>
-                    </div>
-                    <div>
-                        <h3 className="text-lg font-black text-slate-900 tracking-tight leading-tight uppercase">{announcement.title}</h3>
-                        <div className="flex items-center gap-2 mt-1">
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Protocol Broadcast</span>
-                            <div className="w-1 h-1 rounded-full bg-slate-200"></div>
-                            <span className="text-[9px] font-bold text-slate-400 uppercase">{new Date(announcement.created_at).toLocaleDateString()}</span>
-                        </div>
-                    </div>
-                </div>
-                <div className="p-8 overflow-y-auto custom-scrollbar flex-grow bg-white">
-                    <div className="text-sm text-slate-600 leading-relaxed font-medium whitespace-pre-wrap break-words">
-                        {announcement.content}
-                    </div>
-                </div>
-                <div className="p-6 bg-slate-50 border-t border-slate-100">
-                    <button 
-                        onClick={close}
-                        className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-4 px-6 rounded-xl transition-all active:scale-95 text-xs uppercase tracking-widest shadow-xl shadow-slate-900/10"
+        <AnimatePresence>
+            {isOpen && announcement && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 overflow-hidden" role="dialog" aria-modal="true">
+                    <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={() => !announcement.is_mandatory && dismiss()}
+                        className={`absolute inset-0 bg-slate-900/60 backdrop-blur-md ${announcement.is_mandatory ? 'cursor-default' : 'cursor-pointer'}`} 
+                    />
+                    
+                    <motion.div 
+                        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                        className="bg-white rounded-[2.5rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.2)] max-w-lg w-full border border-slate-200 overflow-hidden relative ring-1 ring-black/5 flex flex-col max-h-[85vh] z-10"
                     >
-                        Confirm & Acknowledge
-                    </button>
+                        {/* Header Section */}
+                        <div className="relative overflow-hidden">
+                            <div className={`h-1.5 w-full ${style.accent} relative z-20`}>
+                                <motion.div 
+                                    className="absolute inset-0 bg-white/40"
+                                    animate={{ 
+                                        x: ['-100%', '100%'],
+                                    }}
+                                    transition={{ 
+                                        duration: 2, 
+                                        repeat: Infinity,
+                                        ease: "linear"
+                                    }}
+                                />
+                            </div>
+                            
+                            <div className={`${style.header} py-8 px-10 border-b border-slate-100 flex items-center gap-6 relative z-10`}>
+                                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-lg border border-white bg-white ${style.accent.replace('bg-', 'text-')} ${style.glow}`}>
+                                    {style.icon}
+                                </div>
+                                
+                                <div className="flex-grow min-w-0">
+                                    <div className="flex items-center gap-3 mb-1">
+                                        <div className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-900 text-white rounded-md">
+                                            <Radio size={10} className="animate-pulse" />
+                                            <span className="text-[9px] font-black uppercase tracking-[0.2em]">LIVE_FEED</span>
+                                        </div>
+                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{announcement.category?.replace('_', ' ') || 'SYSTEM_PROTOCOL'}</span>
+                                        {announcement.is_mandatory && (
+                                            <span className="text-[7px] font-black text-rose-500 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100 uppercase tracking-tighter animate-pulse">
+                                                Required Reading
+                                            </span>
+                                        )}
+                                    </div>
+                                    <h3 className="text-xl font-black text-slate-900 tracking-tight leading-tight uppercase whitespace-pre-wrap break-words">{announcement.title}</h3>
+                                </div>
+
+                                {!announcement.is_mandatory && (
+                                    <button onClick={dismiss} className="p-2 hover:bg-slate-200/50 rounded-xl transition-colors text-slate-400">
+                                        <X size={20} />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Content Area */}
+                        <div className="p-10 overflow-y-auto custom-scrollbar flex-grow bg-white">
+                            <div className="prose prose-slate prose-sm max-w-none prose-headings:uppercase prose-headings:tracking-tighter prose-headings:font-black prose-p:leading-relaxed prose-p:text-slate-600 prose-p:font-medium prose-strong:text-slate-900 prose-strong:font-black prose-code:font-mono prose-code:bg-slate-100 prose-code:px-1 prose-code:rounded">
+                                <ReactMarkdown>
+                                    {announcement.content}
+                                </ReactMarkdown>
+                            </div>
+                            
+                            <div className="mt-10 pt-8 border-t border-slate-50 flex items-center justify-between">
+                                <div className="flex flex-col">
+                                    <span className="text-[9px] font-black text-slate-300 uppercase tracking-[0.25em] mb-1">Packet Timestamp</span>
+                                    <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-tight">
+                                        {new Date(announcement.created_at).toISOString().replace('T', ' ').substring(0, 19)}
+                                    </span>
+                                </div>
+                                <div className="flex flex-col items-end">
+                                    <span className="text-[9px] font-black text-slate-300 uppercase tracking-[0.25em] mb-1">Signal Authority</span>
+                                    <span className="text-[10px] font-bold text-slate-900 uppercase">Administrator Node_01</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Footer Section */}
+                        <div className="p-8 bg-slate-50/80 border-t border-slate-100 backdrop-blur-sm">
+                            <button 
+                                onClick={acknowledge}
+                                className="w-full relative group"
+                            >
+                                <div className={`absolute -inset-1 rounded-2xl blur-lg transition opacity-50 group-hover:opacity-80 ${style.accent}`} />
+                                <div className="relative flex items-center justify-center gap-4 bg-slate-900 hover:bg-slate-800 text-white font-black py-5 px-8 rounded-2xl transition-all active:scale-[0.98] text-xs uppercase tracking-[0.4em] shadow-2xl">
+                                    <Zap size={14} className={announcement.type === 'error' || announcement.type === 'warning' ? 'animate-bounce' : ''} />
+                                    Acknowledge Transmission
+                                </div>
+                            </button>
+                            {!announcement.is_mandatory && (
+                                <button 
+                                    onClick={dismiss}
+                                    className="w-full mt-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
+                                >
+                                    Dismiss for Now
+                                </button>
+                            )}
+                        </div>
+                    </motion.div>
                 </div>
-            </div>
-        </div>
+            )}
+        </AnimatePresence>
     );
 };
 

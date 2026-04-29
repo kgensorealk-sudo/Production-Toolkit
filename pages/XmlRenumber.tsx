@@ -637,6 +637,40 @@ const XmlRenumber: React.FC = () => {
                 </button>
             </div>
 
+            {/* Smart Suggestions Section */}
+            {suggestions.length > 0 && (
+                <div className="mb-8 animate-in fade-in slide-in-from-top-4 duration-700">
+                    <div className="p-4 bg-indigo-50/30 border-2 border-indigo-100 rounded-2xl border-dashed">
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="w-8 h-8 rounded-xl bg-indigo-100 flex items-center justify-center">
+                                <Lightbulb className="w-4 h-4 text-indigo-600" />
+                            </div>
+                            <h4 className="text-[10px] font-black text-indigo-900 uppercase tracking-[0.2em]">Architectural Recommendations</h4>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {suggestions.map(sug => (
+                                <button 
+                                    key={sug.id}
+                                    onClick={() => {
+                                        navigate(sug.path, { state: { transferredXml: output, sourceTool: 'XML Normalizer' } });
+                                    }}
+                                    className="flex items-center gap-4 p-3 bg-white border border-indigo-100 rounded-xl hover:border-indigo-300 hover:shadow-md transition-all group text-left shadow-sm"
+                                >
+                                    <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:scale-110 transition-transform">
+                                        {sug.icon}
+                                    </div>
+                                    <div className="flex-grow">
+                                        <div className="text-[9px] font-black text-indigo-900 uppercase tracking-widest mb-0.5">{sug.toolName}</div>
+                                        <div className="text-[8px] text-indigo-500 font-medium leading-tight">{sug.description}</div>
+                                    </div>
+                                    <ArrowRight className="w-3 h-3 text-indigo-300 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
              <div className={`grid gap-8 min-h-[calc(100vh-280px)] transition-all duration-300 ${activeTab === 'diff' ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
                 <div className={`bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col group focus-within:ring-2 focus-within:ring-indigo-100 transition-all duration-300 ${activeTab === 'diff' ? 'hidden' : 'flex'} min-h-[500px]`}>
                     <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center shrink-0">
@@ -656,37 +690,6 @@ const XmlRenumber: React.FC = () => {
                 </div>
                 
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-                    {/* Smart Suggestions Section */}
-                    {suggestions.length > 0 && (
-                        <div className="px-5 pt-4 bg-white border-b border-slate-100">
-                            <div className="p-4 bg-indigo-50/30 border-2 border-indigo-100 rounded-2xl border-dashed">
-                                <div className="flex items-center gap-3 mb-3">
-                                    <Lightbulb className="w-4 h-4 text-indigo-600" />
-                                    <h4 className="text-[10px] font-black text-indigo-900 uppercase tracking-[0.2em]">Architectural Recommendations</h4>
-                                </div>
-                                <div className="grid grid-cols-1 gap-3">
-                                    {suggestions.map(sug => (
-                                        <button 
-                                            key={sug.id}
-                                            onClick={() => {
-                                                navigate(sug.path, { state: { transferredXml: output, sourceTool: 'XML Normalizer' } });
-                                            }}
-                                            className="flex items-center gap-4 p-3 bg-white border border-indigo-100 rounded-xl hover:border-indigo-300 hover:shadow-md transition-all group text-left shadow-sm"
-                                        >
-                                            <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:scale-110 transition-transform">
-                                                {sug.icon}
-                                            </div>
-                                            <div className="flex-grow">
-                                                <div className="text-[9px] font-black text-indigo-900 uppercase tracking-widest mb-0.5">{sug.toolName}</div>
-                                                <div className="text-[8px] text-indigo-500 font-medium leading-tight">{sug.description}</div>
-                                            </div>
-                                            <ArrowRight className="w-3 h-3 text-indigo-300 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    )}
                      <div className="bg-slate-50 px-5 py-2 border-b border-slate-100 flex justify-between items-center shrink-0">
                          <label className="font-bold text-slate-700 text-sm flex items-center gap-2">
                             <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white border border-slate-200 text-xs text-emerald-600 font-mono shadow-sm">OUT</span>

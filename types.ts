@@ -2,6 +2,8 @@ export interface CreditRole {
     name: string;
     url: string;
     aliases: string[];
+    definition?: string;
+    shortName?: string;
 }
 
 export interface Suggestion {
@@ -43,7 +45,6 @@ export interface UserProfile {
     trial_start?: string;
     trial_end?: string;
     last_seen?: string;
-    last_global_read_at?: string;
     unlocked_tools: string[]; // List of tool IDs unlocked via keys
     notification_preferences?: {
         system_alerts: boolean;
@@ -53,16 +54,6 @@ export interface UserProfile {
     created_at?: string;
 }
 
-export interface Channel {
-    id: string;
-    name: string;
-    description?: string;
-    notes?: string;
-    is_private: boolean;
-    created_by: string;
-    created_at: string;
-}
-
 export interface SmartSuggestion {
     id: string;
     toolName: string;
@@ -70,15 +61,6 @@ export interface SmartSuggestion {
     path: string;
     icon: React.ReactNode;
     condition: string;
-}
-
-export interface ChannelMember {
-    id: string;
-    channel_id: string;
-    user_id: string;
-    last_read_at?: string;
-    role: 'member' | 'admin';
-    joined_at: string;
 }
 
 export enum ToolId {
@@ -104,43 +86,7 @@ export enum ToolId {
     STRUCTURAL_ARCHITECT = 'structuralArchitect',
     REF_SORTER = 'refSorter',
     DOCS = 'docs',
-    DASHBOARD = 'dashboard',
-    MESSAGING = 'messaging'
-}
-
-export interface Message {
-    id: string;
-    sender_id: string;
-    receiver_id: string | null;
-    channel_id?: string | null;
-    parent_id?: string | null;
-    content: string;
-    file_url?: string | null;
-    file_name?: string | null;
-    is_read: boolean;
-    is_edited?: boolean;
-    is_pinned?: boolean;
-    created_at: string;
-    sender?: UserProfile;
-    receiver?: UserProfile;
-    reactions?: Reaction[];
-    link_preview?: LinkPreview | null;
-}
-
-export interface Reaction {
-    id: string;
-    message_id: string;
-    user_id: string;
-    emoji: string;
-    created_at: string;
-    user?: UserProfile;
-}
-
-export interface LinkPreview {
-    title: string;
-    description: string;
-    image: string;
-    url: string;
+    DASHBOARD = 'dashboard'
 }
 
 export interface DefaultAvatar {

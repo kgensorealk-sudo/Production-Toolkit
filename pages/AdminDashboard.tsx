@@ -1,11 +1,14 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
-import { UserProfile, ToolId, DefaultAvatar } from '../types';
+import { UserProfile, ToolId, DefaultAvatar, SmartSuggestion } from '../types';
 import { useAuth, withRetry } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import ConfirmationModal from '../components/ConfirmationModal';
-import { History, Info, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import ReactMarkdown from 'react-markdown';
+import { History, Info, X, Radio, Signal, Terminal, Eye, Send, Save, Trash2, Layout as LayoutIcon, Play, Square, AlertTriangle, CheckCircle2, AlertCircle, Lightbulb, ShieldCheck, Database, Zap } from 'lucide-react';
 
 interface Announcement {
     id: string;
@@ -14,6 +17,7 @@ interface Announcement {
     type: 'warning' | 'info' | 'success' | 'error';
     category: 'system_alerts' | 'security_updates' | 'maintenance_windows';
     is_active: boolean;
+    is_mandatory: boolean;
     created_at: string;
 }
 
@@ -110,10 +114,42 @@ const formatLastSeen = (timestamp?: string) => {
 };
 
 const AdminDashboard: React.FC = () => {
+    const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState<'users' | 'keys' | 'announcements' | 'config' | 'intelligence' | 'feedback' | 'avatars'>('users');
     const [isLoading, setIsLoading] = useState(false);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
     const { freeToolsData, refreshFreeTools, refreshProfile } = useAuth();
+    const [suggestions, setSuggestions] = useState<SmartSuggestion[]>([]);
+
+    useEffect(() => {
+        // Dashboard specific recommendations
+        setSuggestions([
+            {
+                id: 'suggest-id-audit',
+                toolName: 'ID Prefix Auditor',
+                description: 'System-wide check for non-compliant ID prefixes in current XML buffers.',
+                path: '/id-auditor',
+                icon: <ShieldCheck size={18} />,
+                condition: 'High anomaly count detected'
+            },
+            {
+                id: 'suggest-intel-reset',
+                toolName: 'Intelligence Sync',
+                description: 'Perform a deep integrity sync if telemetry feels stale.',
+                path: '/dashboard', 
+                icon: <Database size={18} />,
+                condition: 'Stale data'
+            },
+            {
+                id: 'suggest-view-sync',
+                toolName: 'View Synchronizer',
+                description: 'Ensure paragraph consistency across all active views.',
+                path: '/view-sync',
+                icon: <Zap size={18} />,
+                condition: 'New session'
+            }
+        ]);
+    }, []);
 
     const [users, setUsers] = useState<UserProfile[]>([]);
     const [search, setSearch] = useState('');
@@ -125,6 +161,8 @@ const AdminDashboard: React.FC = () => {
     const [newContent, setNewContent] = useState('');
     const [newType, setNewType] = useState<'info' | 'warning' | 'success' | 'error'>('info');
     const [newCategory, setNewCategory] = useState<'system_alerts' | 'security_updates' | 'maintenance_windows'>('system_alerts');
+    const [newMandatory, setNewMandatory] = useState(false);
+    const [previewMode, setPreviewMode] = useState(false);
 
     const [defaultAvatars, setDefaultAvatars] = useState<DefaultAvatar[]>([]);
     const [newAvatarName, setNewAvatarName] = useState('');
@@ -579,10 +617,11 @@ const AdminDashboard: React.FC = () => {
                         content: newContent, 
                         type: newType, 
                         category: newCategory,
+                        is_mandatory: newMandatory,
                         updated_at: new Date().toISOString() 
                     }).eq('id', editingId);
                     if (error) throw error;
-                    setAnnouncements(prev => prev.map(a => a.id === editingId ? { ...a, title: newTitle, content: newContent, type: newType, category: newCategory } : a));
+                    setAnnouncements(prev => prev.map(a => a.id === editingId ? { ...a, title: newTitle, content: newContent, type: newType, category: newCategory, is_mandatory: newMandatory } : a));
                 });
                 setToast({ msg: 'Broadcast updated', type: 'success' });
             } else {
@@ -592,14 +631,15 @@ const AdminDashboard: React.FC = () => {
                         content: newContent, 
                         type: newType, 
                         category: newCategory,
+                        is_mandatory: newMandatory,
                         is_active: false 
                     }]).select();
                     if (error) throw error;
-                    if (data) setAnnouncements(prev => [data[0], ...prev]);
+                    if (data) setAnnouncements(prev => [data[0] as Announcement, ...prev]);
                 });
                 setToast({ msg: 'Broadcast created', type: 'success' });
             }
-            setNewTitle(''); setNewContent(''); setNewType('info'); setNewCategory('system_alerts'); setEditingId(null);
+            setNewTitle(''); setNewContent(''); setNewType('info'); setNewCategory('system_alerts'); setNewMandatory(false); setEditingId(null);
         } catch (err: any) { setToast({ msg: 'Broadcast failed to save', type: 'error' }); } finally { setIsLoading(false); }
     };
 
@@ -609,6 +649,7 @@ const AdminDashboard: React.FC = () => {
         setNewContent(a.content); 
         setNewType(a.type); 
         setNewCategory(a.category || 'system_alerts');
+        setNewMandatory(a.is_mandatory || false);
     };
 
     const activateAnnouncement = async (id: string) => {
@@ -933,6 +974,43 @@ const AdminDashboard: React.FC = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Architectural Recommendations */}
+            {suggestions.length > 0 && (
+                <motion.div 
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-6 mb-8"
+                >
+                    <h3 className="text-sm font-black text-indigo-900 uppercase tracking-widest mb-4 flex items-center gap-2">
+                        <Lightbulb size={16} />
+                        Architectural Recommendations
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {suggestions.map((suggestion) => (
+                            <button
+                                key={suggestion.id}
+                                onClick={() => {
+                                    if (suggestion.path === '/dashboard') {
+                                        refreshActiveTab(true);
+                                    } else {
+                                        navigate(suggestion.path);
+                                    }
+                                }}
+                                className="flex items-start gap-3 p-4 bg-white border border-indigo-100 rounded-xl hover:shadow-md transition-all text-left group"
+                            >
+                                <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 shrink-0 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                                    {suggestion.icon}
+                                </div>
+                                <div>
+                                    <div className="text-xs font-black text-slate-900 uppercase tracking-tight mb-1">{suggestion.toolName}</div>
+                                    <div className="text-[11px] text-slate-500 leading-relaxed">{suggestion.description}</div>
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                </motion.div>
+            )}
 
             <div className="flex space-x-1 bg-slate-200/50 p-1 rounded-xl mb-6 w-full max-w-5xl overflow-x-auto">
                 <button onClick={() => setActiveTab('users')} className={`flex-1 py-2.5 px-6 text-sm font-bold rounded-lg transition-all ${activeTab === 'users' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Personnel</button>
@@ -1681,154 +1759,227 @@ const AdminDashboard: React.FC = () => {
                         <div className="p-10 bg-white border-r border-slate-200 flex flex-col shadow-inner">
                             <div className="flex justify-between items-center mb-10">
                                 <div className="flex flex-col">
-                                    <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Signal Transmitter</h3>
-                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.3em] mt-1">Deploy Global Broadcast</p>
+                                    <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-3">
+                                        <Signal className="text-indigo-600" size={24} />
+                                        Signal Transmitter
+                                    </h3>
+                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.3em] mt-1">Deploy Global Protocol</p>
                                 </div>
-                                {editingId && (
+                                <div className="flex gap-2">
                                     <button 
-                                        onClick={() => { setEditingId(null); setNewTitle(''); setNewContent(''); setNewType('info'); setNewCategory('system_alerts'); }} 
-                                        className="w-10 h-10 rounded-xl bg-rose-50 text-rose-500 border border-rose-100 flex items-center justify-center transition-all hover:bg-rose-500 hover:text-white"
-                                        title="Cancel Edit"
+                                        type="button"
+                                        onClick={() => setPreviewMode(!previewMode)}
+                                        className={`w-10 h-10 rounded-xl border flex items-center justify-center transition-all ${previewMode ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-white text-slate-400 border-slate-200 hover:bg-slate-50'}`}
+                                        title="Toggle Preview"
                                     >
-                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
+                                        <Eye size={18} />
                                     </button>
-                                )}
+                                    {editingId && (
+                                        <button 
+                                            onClick={() => { setEditingId(null); setNewTitle(''); setNewContent(''); setNewType('info'); setNewCategory('system_alerts'); }} 
+                                            className="w-10 h-10 rounded-xl bg-rose-50 text-rose-500 border border-rose-100 flex items-center justify-center transition-all hover:bg-rose-500 hover:text-white"
+                                            title="Cancel Edit"
+                                        >
+                                            <X size={20} />
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                             
-                            <form onSubmit={saveAnnouncement} className="space-y-8 flex-grow flex flex-col">
-                                <div className="space-y-3">
-                                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Subject Frequency</label>
-                                    <input 
-                                        type="text" 
-                                        required 
-                                        placeholder="SIGNAL_TITLE_KEY"
-                                        value={newTitle} 
-                                        onChange={e => setNewTitle(e.target.value)} 
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-5 text-base font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all placeholder-slate-300 font-mono" 
-                                    />
-                                </div>
-                                
-                                <div className="space-y-3">
-                                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Severity Layer</label>
-                                    <select 
-                                        value={newType} 
-                                        onChange={e => setNewType(e.target.value as any)} 
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-5 text-base font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all appearance-none"
-                                    >
-                                        <option value="info">STANDARD_PULSE (INFO)</option>
-                                        <option value="warning">ALERT_THRESHOLD (WARN)</option>
-                                        <option value="success">STABLE_RESOLUTION (OK)</option>
-                                        <option value="error">CRITICAL_EXCEPTION (ERROR)</option>
-                                    </select>
-                                </div>
+                            <form onSubmit={saveAnnouncement} className="space-y-8 flex-grow flex flex-col group/transmitter">
+                                <div className="grid grid-cols-1 gap-6">
+                                    <div className="space-y-3">
+                                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1 flex items-center gap-2">
+                                            <Terminal size={12} />
+                                            Subject Frequency
+                                        </label>
+                                        <input 
+                                            type="text" 
+                                            required 
+                                            placeholder="SIGNAL_TITLE_KEY"
+                                            value={newTitle} 
+                                            onChange={e => setNewTitle(e.target.value)} 
+                                            className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-5 text-base font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all placeholder-slate-300 font-mono" 
+                                        />
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-3">
+                                            <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Severity</label>
+                                            <select 
+                                                value={newType} 
+                                                onChange={e => setNewType(e.target.value as any)} 
+                                                className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-4 text-xs font-black uppercase text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all appearance-none tracking-widest"
+                                            >
+                                                <option value="info">INFO_PULSE</option>
+                                                <option value="warning">ALERT_THRESHOLD</option>
+                                                <option value="success">STABLE_RES</option>
+                                                <option value="error">CRITICAL_EX</option>
+                                            </select>
+                                        </div>
 
-                                <div className="space-y-3">
-                                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Target Category</label>
-                                    <select 
-                                        value={newCategory} 
-                                        onChange={e => setNewCategory(e.target.value as any)} 
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-5 text-base font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all appearance-none"
-                                    >
-                                        <option value="system_alerts">SYSTEM_ALERTS (TOOLS)</option>
-                                        <option value="security_updates">SECURITY_UPDATES (AUTH)</option>
-                                        <option value="maintenance_windows">MAINTENANCE_WINDOWS (DOWNTIME)</option>
-                                    </select>
+                                        <div className="space-y-3">
+                                            <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Category</label>
+                                            <select 
+                                                value={newCategory} 
+                                                onChange={e => setNewCategory(e.target.value as any)} 
+                                                className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-4 text-xs font-black uppercase text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all appearance-none tracking-widest"
+                                            >
+                                                <option value="system_alerts">SYSTEM_OPS</option>
+                                                <option value="security_updates">SECURITY_CMD</option>
+                                                <option value="maintenance_windows">DOWNTIME_LOG</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center justify-between bg-slate-50 border-2 border-slate-100 rounded-xl px-6 py-4 mt-6">
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest leading-none">Mandatory Reading</span>
+                                            <span className="text-[8px] font-bold text-slate-400 uppercase mt-1">Forces acknowledgment before dismissal</span>
+                                        </div>
+                                        <button 
+                                            type="button"
+                                            onClick={() => setNewMandatory(!newMandatory)}
+                                            className={`w-12 h-6 rounded-full p-1 transition-all duration-300 ${newMandatory ? 'bg-indigo-600' : 'bg-slate-300'}`}
+                                        >
+                                            <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-300 ${newMandatory ? 'translate-x-6' : 'translate-x-0'}`} />
+                                        </button>
+                                    </div>
                                 </div>
                                 
-                                <div className="space-y-3 flex-grow flex flex-col">
-                                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Payload Content</label>
-                                    <textarea 
-                                        required 
-                                        placeholder="ENTER_TRANSMISSION_DATA..."
-                                        value={newContent} 
-                                        onChange={e => setNewContent(e.target.value)} 
-                                        className="w-full flex-grow bg-slate-50 border-2 border-slate-100 rounded-[2rem] px-8 py-6 text-base font-medium text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all resize-none leading-relaxed placeholder-slate-300" 
-                                    />
+                                <div className="space-y-3 flex-grow flex flex-col min-h-[300px]">
+                                    <div className="flex justify-between items-center px-1">
+                                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em]">Payload Content</label>
+                                        <div className="flex items-center gap-2">
+                                            <div className={`w-2 h-2 rounded-full ${newContent.length > 500 ? 'bg-amber-500' : 'bg-emerald-500'} animate-pulse`} />
+                                            <span className="text-[9px] font-mono font-bold text-slate-400 uppercase">{newContent.length} B</span>
+                                        </div>
+                                    </div>
+                                    
+                                    {previewMode ? (
+                                        <div className="w-full flex-grow bg-slate-50 border-2 border-dashed border-slate-200 rounded-[2rem] px-8 py-6 overflow-y-auto custom-scrollbar prose prose-slate prose-sm max-w-none prose-headings:uppercase prose-headings:font-black prose-p:leading-relaxed prose-p:text-slate-600 prose-code:font-mono prose-code:bg-slate-200 prose-code:px-1 prose-code:rounded">
+                                            <ReactMarkdown>{newContent || '_Signal awaiting transmission data..._'}</ReactMarkdown>
+                                        </div>
+                                    ) : (
+                                        <textarea 
+                                            required 
+                                            placeholder="ENTER_TRANSMISSION_MARKDOWN_DATA..."
+                                            value={newContent} 
+                                            onChange={e => setNewContent(e.target.value)} 
+                                            className="w-full flex-grow bg-slate-50 border-2 border-slate-100 rounded-[2rem] px-8 py-6 text-sm font-mono text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all resize-none leading-relaxed placeholder-slate-300 custom-scrollbar" 
+                                        />
+                                    )}
                                 </div>
                                 
                                 <button 
                                     type="submit" 
-                                    className={`w-full py-5 rounded-[2rem] font-black uppercase text-xs tracking-[0.3em] shadow-2xl transition-all active:scale-95 flex items-center justify-center gap-4 ${
-                                        editingId ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200' : 'bg-slate-900 hover:bg-slate-800 text-white shadow-slate-200'
+                                    className={`w-full py-6 rounded-[2rem] font-black uppercase text-xs tracking-[0.4em] shadow-2xl transition-all active:scale-[0.98] flex items-center justify-center gap-4 group ${
+                                        editingId ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-500/20' : 'bg-slate-900 hover:bg-slate-800 text-white shadow-slate-900/10'
                                     }`}
                                 >
-                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                                    {editingId ? 'Push Update' : 'Initialize Signal'}
+                                    <Send size={16} className={`transition-transform group-hover:translate-x-1 group-hover:-translate-y-1`} />
+                                    {editingId ? 'Hot-Swap Signal' : 'Deploy Protocol'}
                                 </button>
                             </form>
                         </div>
 
-                        <div className="lg:col-span-2 p-12 overflow-y-auto custom-scrollbar">
-                            <div className="flex items-center justify-between mb-10">
-                                <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.4em]">Signal Logs</h3>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></div>
-                                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Master Frequency Stable</span>
+                        <div className="lg:col-span-2 p-12 overflow-y-auto custom-scrollbar bg-slate-50/30">
+                            <div className="flex items-center justify-between mb-12">
+                                <div className="flex flex-col">
+                                    <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.5em]">Active Frequency Logs</h3>
+                                    <p className="text-[10px] font-bold text-slate-300 uppercase mt-1">Live monitoring of system-wide broadcasts</p>
+                                </div>
+                                <div className="flex items-center gap-4 bg-white px-5 py-3 rounded-2xl border border-slate-200 shadow-sm">
+                                    <Radio className="text-emerald-500 animate-pulse" size={16} />
+                                    <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest leading-none">Node_01 Status: Stable</span>
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                 {announcements.map(a => {
-                                    const typeColors = {
-                                        info: 'border-indigo-100 text-indigo-600 bg-indigo-50',
-                                        warning: 'border-amber-100 text-amber-600 bg-amber-50',
-                                        success: 'border-emerald-100 text-emerald-600 bg-emerald-50',
-                                        error: 'border-rose-100 text-rose-600 bg-rose-50'
+                                    const typeConfig = {
+                                        info: { color: 'border-indigo-100 text-indigo-600 bg-indigo-50', icon: <Info size={12} /> },
+                                        warning: { color: 'border-amber-100 text-amber-600 bg-amber-50', icon: <AlertTriangle size={12} /> },
+                                        success: { color: 'border-emerald-100 text-emerald-600 bg-emerald-50', icon: <CheckCircle2 size={12} /> },
+                                        error: { color: 'border-rose-100 text-rose-600 bg-rose-50', icon: <AlertCircle size={12} /> }
                                     };
                                     
                                     return (
-                                        <div key={a.id} className={`group relative flex flex-col p-8 bg-white border-2 rounded-[2.5rem] transition-all duration-500 ${
-                                            a.is_active ? 'border-indigo-500 ring-8 ring-indigo-50 shadow-2xl' : 'border-slate-100 hover:border-slate-200 shadow-sm opacity-80 hover:opacity-100'
-                                        }`}>
-                                            <div className="flex justify-between items-start mb-6">
-                                                <div className="flex flex-col gap-2">
+                                        <motion.div 
+                                            layout
+                                            key={a.id} 
+                                            className={`group relative flex flex-col p-8 bg-white border-2 rounded-[3rem] transition-all duration-500 ${
+                                                a.is_active ? 'border-indigo-500 ring-8 ring-indigo-50 shadow-2xl scale-[1.02]' : 'border-slate-100 hover:border-slate-200 shadow-sm opacity-80 hover:opacity-100'
+                                            }`}
+                                        >
+                                            <div className="flex justify-between items-start mb-8">
+                                                <div className="flex flex-col gap-3">
                                                     <div className="flex items-center gap-2">
-                                                        <div className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border w-max ${typeColors[a.type]}`}>
-                                                            {a.type}_TRANS
+                                                        <div className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border flex items-center gap-2 ${typeConfig[a.type].color}`}>
+                                                            {typeConfig[a.type].icon}
+                                                            {a.type}_PKT
                                                         </div>
-                                                        <div className="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border border-slate-100 bg-slate-50 text-slate-400 w-max">
-                                                            {a.category?.replace('_', ' ') || 'SYSTEM ALERTS'}
+                                                        <div className="px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border border-slate-100 bg-slate-50 text-slate-400">
+                                                            {a.category?.replace('_', ' ') || 'SYSTEM_LOG'}
                                                         </div>
+                                                        {a.is_mandatory && (
+                                                            <div className="px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest bg-rose-600 text-white shadow-lg shadow-rose-200 animate-pulse">
+                                                                MANDATORY
+                                                            </div>
+                                                        )}
                                                     </div>
-                                                    <div className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-tight">
-                                                        PKT_{a.id.slice(0, 8)}
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-1.5 h-1.5 rounded-full bg-slate-200" />
+                                                        <div className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-tight">
+                                                            ID_{a.id.slice(0, 8)}
+                                                        </div>
                                                     </div>
                                                 </div>
 
-                                                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-2 group-hover:translate-x-0">
-                                                    <button onClick={() => editAnnouncement(a)} className="p-2.5 bg-slate-50 text-slate-400 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 border border-transparent hover:border-indigo-100 transition-all">
-                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                                <div className="flex gap-2">
+                                                    <button onClick={() => editAnnouncement(a)} className="w-10 h-10 bg-slate-50 text-slate-400 rounded-xl hover:bg-indigo-600 hover:text-white border border-transparent transition-all flex items-center justify-center">
+                                                        <LayoutIcon size={16} />
                                                     </button>
-                                                    <button onClick={() => deleteAnnouncement(a.id)} className="p-2.5 bg-slate-50 text-slate-400 rounded-xl hover:bg-rose-50 hover:text-rose-600 border border-transparent hover:border-rose-100 transition-all">
-                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                                    <button onClick={() => deleteAnnouncement(a.id)} className="w-10 h-10 bg-slate-50 text-slate-400 rounded-xl hover:bg-rose-600 hover:text-white border border-transparent transition-all flex items-center justify-center font-bold">
+                                                        <Trash2 size={16} />
                                                     </button>
                                                 </div>
                                             </div>
 
-                                            <h4 className="text-lg font-black text-slate-900 mb-3 uppercase tracking-tight leading-none truncate pr-4">{a.title}</h4>
-                                            <div className="text-[12px] text-slate-500 font-medium leading-relaxed mb-10 flex-grow h-20 overflow-hidden line-clamp-4 italic">
-                                                {a.content}
+                                            <h4 className="text-xl font-black text-slate-900 mb-4 uppercase tracking-tighter leading-tight whitespace-pre-wrap break-words pr-4">{a.title}</h4>
+                                            
+                                            <div className="relative mb-10 group/content">
+                                                <div className="text-[12px] text-slate-500 font-medium leading-relaxed h-24 overflow-hidden line-clamp-4 italic border-l-4 border-slate-100 pl-4 bg-slate-50/50 py-2 rounded-r-2xl">
+                                                    {a.content}
+                                                </div>
+                                                <div className="absolute inset-0 bg-gradient-to-t from-white/90 to-transparent opacity-0 group-hover/content:opacity-100 transition-opacity flex items-end justify-center pb-2 pointer-events-none">
+                                                    <span className="text-[9px] font-black text-slate-400 uppercase">Click Edit to Expand</span>
+                                                </div>
                                             </div>
 
-                                            <div className="mt-auto flex items-center justify-between border-t border-slate-50 pt-6">
+                                            <div className="mt-auto flex items-center justify-between border-t border-slate-50 pt-8">
                                                 <div className="flex flex-col">
-                                                    <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest leading-none mb-1">Time Marker</span>
-                                                    <span className="text-[10px] font-mono font-bold text-slate-500">{new Date(a.created_at).toLocaleString([], { hour12: false })}</span>
+                                                    <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest leading-none mb-2">Deployed At</span>
+                                                    <span className="text-[10px] font-mono font-bold text-slate-500 uppercase">
+                                                        {new Date(a.created_at).toLocaleDateString([], { month: 'short', day: 'numeric', year: '2-digit' }).replace(',', '')} 
+                                                        <span className="mx-1.5 opacity-30">|</span>
+                                                        {new Date(a.created_at).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit' })}
+                                                    </span>
                                                 </div>
 
                                                 <button 
                                                     onClick={() => activateAnnouncement(a.id)}
-                                                    className={`px-6 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] transition-all border-2 flex items-center gap-3 active:scale-95 ${
+                                                    className={`px-8 py-3.5 rounded-2xl text-[9px] font-black uppercase tracking-[0.3em] transition-all border-2 flex items-center gap-3 active:scale-95 shadow-xl ${
                                                         a.is_active 
-                                                            ? 'bg-rose-50 border-rose-100 text-rose-600 hover:bg-rose-600 hover:text-white' 
-                                                            : 'bg-emerald-50 border-emerald-100 text-emerald-600 hover:bg-emerald-600 hover:text-white shadow-lg shadow-emerald-500/10'
+                                                            ? 'bg-rose-600 border-rose-600 text-white shadow-rose-500/20 hover:bg-rose-700 hover:border-rose-700' 
+                                                            : 'bg-indigo-600 border-indigo-600 text-white shadow-indigo-500/20 hover:bg-indigo-700 hover:border-indigo-700'
                                                     }`}
                                                 >
-                                                    <span className={`w-2 h-2 rounded-full ${a.is_active ? 'bg-rose-600 animate-pulse' : 'bg-emerald-600'}`}></span>
-                                                    {a.is_active ? 'Terminate' : 'Deploy'}
+                                                    {a.is_active ? <Square size={10} fill="currentColor" /> : <Play size={10} fill="currentColor" />}
+                                                    {a.is_active ? 'Shut Down' : 'Initialize'}
                                                 </button>
                                             </div>
-                                        </div>
+                                        </motion.div>
                                     );
                                 })}
                                 

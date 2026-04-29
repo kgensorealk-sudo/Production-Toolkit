@@ -46,10 +46,12 @@ const ViewSync: React.FC = () => {
     const [suggestions, setSuggestions] = useState<SmartSuggestion[]>([]);
     const [syncDirection, setSyncDirection] = useState<'compact-to-extended' | 'extended-to-compact'>('compact-to-extended');
     const [customStartId, setCustomStartId] = useState<string>('');
+    const [orphans, setOrphans] = useState<{type: 'compact' | 'extended', id: string, text: string}[]>([]);
     
     // View State
-    const [activeTab, setActiveTab] = useState<'raw' | 'diff' | 'report' | 'mismatches'>('raw');
+    const [activeTab, setActiveTab] = useState<'raw' | 'diff' | 'report' | 'mismatches' | 'orphans'>('raw');
     const [mismatches, setMismatches] = useState<{paraId: string, compactText: string, extendedText: string, index: number}[]>([]);
+    const [selectedMismatches, setSelectedMismatches] = useState<Set<number>>(new Set());
     const [diffRows, setDiffRows] = useState<any[]>([]);
     const [currentChangeIndex, setCurrentChangeIndex] = useState(0);
     const [totalChanges, setTotalChanges] = useState(0);
@@ -220,20 +222,30 @@ const ViewSync: React.FC = () => {
     };
 
     const getValidRanges = (text: string) => {
-        const sectionsRegex = /<ce:sections\b[^>]*>([\s\S]*?)<\/ce:sections>/g;
+        // Expanded to include all structural areas where views typically reside
+        const sectionsRegex = /<(ce:sections|ce:caption|ce:biographical-note|ce:abstract|ce:glossary|ce:figure|ce:table|ce:appendix|ce:acknowledgment|ce:bibliography)\b[^>]*>([\s\S]*?)<\/\1>/gi;
         const appendicesRegex = /<ce:appendices\b[^>]*>([\s\S]*?)<\/ce:appendices>/g;
         
         const ranges: {start: number, end: number}[] = [];
         let sectionMatch;
+        let foundAnyStructuralArea = false;
+
         while ((sectionMatch = sectionsRegex.exec(text)) !== null) {
-            const sectionStart = sectionMatch.index;
-            const sectionContent = sectionMatch[1];
-            const sectionContentStart = sectionStart + sectionMatch[0].indexOf(sectionContent);
+            foundAnyStructuralArea = true;
+            const fullMatch = sectionMatch[0];
+            const tagName = sectionMatch[1];
+            const content = sectionMatch[2];
             
-            // Find appendices within this section
+            const sectionStart = sectionMatch.index;
+            // Find the actual start of content by looking for the first '>' after the tag name
+            const openTagEndIndex = fullMatch.indexOf('>', fullMatch.indexOf(tagName));
+            const sectionContentStart = sectionStart + openTagEndIndex + 1;
+            const sectionContentEnd = sectionContentStart + content.length;
+            
+            // Find appendices within this section content
             const appendices: {start: number, end: number}[] = [];
             let appendixMatch;
-            while ((appendixMatch = appendicesRegex.exec(sectionContent)) !== null) {
+            while ((appendixMatch = appendicesRegex.exec(content)) !== null) {
                 const appStart = sectionContentStart + appendixMatch.index;
                 const appEnd = appStart + appendixMatch[0].length;
                 appendices.push({start: appStart, end: appEnd});
@@ -248,11 +260,32 @@ const ViewSync: React.FC = () => {
                 currentStart = app.end;
             });
             
-            const sectionContentEnd = sectionContentStart + sectionContent.length;
             if (currentStart < sectionContentEnd) {
                 ranges.push({start: currentStart, end: sectionContentEnd});
             }
         }
+
+        if (!foundAnyStructuralArea) {
+            // Fallback: If no recognized structural areas found, the whole document is valid minus appendices
+            let currentStart = 0;
+            const globalAppendices: {start: number, end: number}[] = [];
+            let appendixMatch;
+            while ((appendixMatch = appendicesRegex.exec(text)) !== null) {
+                globalAppendices.push({start: appendixMatch.index, end: appendixMatch.index + appendixMatch[0].length});
+            }
+
+            globalAppendices.forEach(app => {
+                if (app.start > currentStart) {
+                    ranges.push({start: currentStart, end: app.start});
+                }
+                currentStart = app.end;
+            });
+
+            if (currentStart < text.length) {
+                ranges.push({start: currentStart, end: text.length});
+            }
+        }
+
         return ranges;
     };
 
@@ -271,6 +304,196 @@ const ViewSync: React.FC = () => {
         });
     };
 
+    const getPairsAndOrphans = (xml: string) => {
+        const structuralAreas = getValidRanges(xml);
+        const pairs: {compact: any, extended: any}[] = [];
+        const orphans: {type: 'compact' | 'extended', id: string, text: string, match: any}[] = [];
+        
+        const allViewsRegex = /<ce:(para|simple-para)\b[^>]*?\bview\s*=\s*["'](compact|compact-standard|view|extended)["'][^>]*?>([\s\S]*?)<\/ce:(?:para|simple-para)>/gi;
+        const allMatches = [...xml.matchAll(allViewsRegex)];
+
+        const isCompact = (m: any) => m && (m[2] === 'compact' || m[2] === 'compact-standard' || m[2] === 'view');
+        const isExtended = (m: any) => m && m[2] === 'extended';
+
+        structuralAreas.forEach(range => {
+            const areaMatches = allMatches.filter(m => m.index! >= range.start && m.index! < range.end);
+            
+            for (let i = 0; i < areaMatches.length; i++) {
+                const current = areaMatches[i];
+                const next = areaMatches[i + 1];
+                
+                if (isCompact(current)) {
+                    if (next && isExtended(next)) {
+                        pairs.push({ compact: current, extended: next });
+                        i++; 
+                    } else {
+                        const idMatch = current[0].match(/\bid="([^"]+)"/);
+                        orphans.push({ 
+                            type: 'compact', 
+                            id: idMatch ? idMatch[1] : 'Unknown', 
+                            text: stripTags(current[3]),
+                            match: current
+                        });
+                    }
+                } else if (isExtended(current)) {
+                    if (next && isCompact(next)) {
+                        pairs.push({ compact: next, extended: current });
+                        i++;
+                    } else {
+                        const idMatch = current[0].match(/\bid="([^"]+)"/);
+                        orphans.push({ 
+                            type: 'extended', 
+                            id: idMatch ? idMatch[1] : 'Unknown', 
+                            text: stripTags(current[3]),
+                            match: current
+                        });
+                    }
+                }
+            }
+        });
+        
+        return { pairs, orphans };
+    };
+
+    const detectOrphans = (xml: string) => {
+        const { orphans } = getPairsAndOrphans(xml);
+        return orphans.map(o => ({ type: o.type, id: o.id, text: o.text }));
+    };
+
+    const fixOrphans = () => {
+        if (!input.trim()) return;
+        setIsLoading(true);
+        setTimeout(() => {
+            const xml = input;
+            const { orphans } = getPairsAndOrphans(xml);
+
+            if (orphans.length === 0) {
+                setIsLoading(false);
+                setToast({ msg: "No orphans to fix.", type: "success" });
+                return;
+            }
+
+            const allIds = new Set<string>();
+            const idMatches = xml.matchAll(/\bid="([^"]+)"/g);
+            for (const m of idMatches) {
+                allIds.add(m[1]);
+            }
+
+            const allViewsRegex = /<ce:(para|simple-para)\b[^>]*?\bview\s*=\s*["'](compact|compact-standard|view|extended)["'][^>]*?>([\s\S]*?)<\/ce:(?:para|simple-para)>/gi;
+            const matches = [...xml.matchAll(allViewsRegex)];
+            let maxIdNum = 4000;
+            matches.forEach(m => {
+                const idAttr = m[0].match(/\bid="[a-zA-Z]+(\d+)"/);
+                if (idAttr) {
+                    const num = parseInt(idAttr[1], 10);
+                    if (!isNaN(num) && num > maxIdNum) maxIdNum = num;
+                }
+            });
+
+            const configId = customStartId ? parseInt(customStartId, 10) : 0;
+            const idShift = configId || 3000;
+            let nextIdSeed = configId || Math.max(4000, Math.ceil((maxIdNum + 10) / 5) * 5);
+
+            const getUniqueId = (prefix: string, preferredNum: number): string => {
+                let num = preferredNum;
+                let candidate = `${prefix}${num.toString().padStart(4, '0')}`;
+                while (allIds.has(candidate)) {
+                    num = nextIdSeed;
+                    candidate = `${prefix}${num.toString().padStart(4, '0')}`;
+                    nextIdSeed += 5;
+                }
+                allIds.add(candidate);
+                return candidate;
+            };
+
+            const replacements: {start: number, end: number, replacement: string}[] = [];
+
+            orphans.forEach(orphan => {
+                const match = orphan.match;
+                const fullMatch = match[0];
+                const tagName = match[1];
+                const viewType = match[2];
+                const content = match[3];
+                const startIndex = match.index!;
+                
+                if (viewType === 'extended') {
+                    let newContent = content.replace(/<e-component\b[^>]*>([\s\S]*?)<\/e-component>/gi, '$1');
+                    newContent = newContent.replace(/<ce:cross-refs?\b[^>]*?\brefid=["']ec\d+["'][^>]*?>([\s\S]*?)<\/ce:cross-refs?>/gi, '$1');
+                    
+                    // Renumber internal IDs in newContent to avoid duplicates
+                    newContent = newContent.replace(/\bid="([a-zA-Z]+)(\d+)"/g, (m: string, prefix: string, numStr: string) => {
+                        const num = parseInt(numStr, 10);
+                        return `id="${getUniqueId(prefix, num + idShift)}"`;
+                    });
+
+                    const idMatch = fullMatch.match(/\bid="([a-zA-Z]+)(\d+)"/);
+                    let newId = '';
+                    if (idMatch) {
+                        const prefix = idMatch[1];
+                        const oldNum = parseInt(idMatch[2], 10);
+                        newId = getUniqueId(prefix, oldNum + idShift);
+                    } else {
+                        const standardPrefix = tagName === 'simple-para' ? 'sp' : 'p';
+                        newId = getUniqueId(standardPrefix, nextIdSeed);
+                    }
+
+                    const newBlock = `<ce:${tagName} view="compact-standard" id="${newId}">${newContent}</ce:${tagName}>`;
+                    replacements.push({
+                        start: startIndex + fullMatch.length,
+                        end: startIndex + fullMatch.length,
+                        replacement: `\n${newBlock}`
+                    });
+                } else {
+                    const idMatch = fullMatch.match(/\bid="([a-zA-Z]+)(\d+)"/);
+                    let newId = '';
+                    if (idMatch) {
+                        const prefix = idMatch[1];
+                        const oldNum = parseInt(idMatch[2], 10);
+                        newId = getUniqueId(prefix, Math.max(1, oldNum - idShift));
+                    } else {
+                        const standardPrefix = tagName === 'simple-para' ? 'sp' : 'p';
+                        newId = getUniqueId(standardPrefix, nextIdSeed);
+                    }
+
+                    // Renumber internal IDs in content
+                    const newContent = content.replace(/\bid="([a-zA-Z]+)(\d+)"/g, (m: string, prefix: string, numStr: string) => {
+                        const num = parseInt(numStr, 10);
+                        return `id="${getUniqueId(prefix, Math.max(1, num - idShift))}"`;
+                    });
+
+                    const newBlock = `<ce:${tagName} view="extended" id="${newId}">${newContent}</ce:${tagName}>`;
+
+                    replacements.push({
+                        start: startIndex,
+                        end: startIndex,
+                        replacement: `${newBlock}\n`
+                    });
+                }
+            });
+
+            replacements.sort((a, b) => b.start - a.start);
+            let finalOutput = xml;
+            replacements.forEach(rep => {
+                finalOutput = finalOutput.substring(0, rep.start) + rep.replacement + finalOutput.substring(rep.end);
+            });
+
+            setOutput(finalOutput);
+            setLastProcessedInput(xml);
+            generateDiff(xml, finalOutput);
+            setLogs([{
+                id: 1,
+                paraId: 'ORPHAN-FIX',
+                status: 'success',
+                message: `Automatically generated missing counterparts for ${orphans.length} orphans.`,
+                detectedRefs: []
+            }]);
+            setOrphans([]);
+            setActiveTab('diff');
+            setToast({ msg: `Fixed ${orphans.length} orphans!`, type: "success" });
+            setIsLoading(false);
+        }, 800);
+    };
+
     const scanForMismatches = () => {
         if (!input.trim()) {
             setToast({ msg: "Please paste XML content first.", type: "warn" });
@@ -279,27 +502,21 @@ const ViewSync: React.FC = () => {
 
         setIsLoading(true);
         setTimeout(() => {
-            const validRanges = getValidRanges(input);
-            const isInsideValidRange = (index: number) => validRanges.some(r => index >= r.start && index < r.end);
-
-            const compactRegex = /<ce:para\b([^>]*?)view="(compact|compact-standard)"([^>]*?)>([\s\S]*?)<\/ce:para>/g;
-            const extendedRegex = /<ce:para\b([^>]*?)view="extended"([^>]*?)>([\s\S]*?)<\/ce:para>/g;
-
-            const compactMatches = [...input.matchAll(compactRegex)].filter(m => isInsideValidRange(m.index!));
-            const extendedMatches = [...input.matchAll(extendedRegex)].filter(m => isInsideValidRange(m.index!));
+            const { pairs, orphans: foundOrphans } = getPairsAndOrphans(input);
+            setOrphans(foundOrphans.map(o => ({ type: o.type, id: o.id, text: o.text })));
 
             const foundMismatches: {paraId: string, compactText: string, extendedText: string, index: number}[] = [];
-            const count = Math.min(compactMatches.length, extendedMatches.length);
-
-            for (let i = 0; i < count; i++) {
-                const compactContent = compactMatches[i][4] || '';
-                const extendedContent = extendedMatches[i][3] || '';
+            
+            for (let i = 0; i < pairs.length; i++) {
+                const pair = pairs[i];
+                const compactContent = pair.compact[3] || '';
+                const extendedContent = pair.extended[3] || '';
 
                 const compactText = stripTags(compactContent);
                 const extendedText = stripTags(extendedContent);
 
                 if (compactText !== extendedText) {
-                    const idMatch = compactMatches[i][0].match(/\bid="([^"]+)"/);
+                    const idMatch = pair.compact[0].match(/\bid="([^"]+)"/);
                     foundMismatches.push({
                         paraId: idMatch ? idMatch[1] : `Pair ${i + 1}`,
                         compactText,
@@ -310,9 +527,13 @@ const ViewSync: React.FC = () => {
             }
 
             setMismatches(foundMismatches);
-            setActiveTab('mismatches');
+            setSelectedMismatches(new Set(foundMismatches.map(m => m.index)));
+            setActiveTab(foundOrphans.length > 0 ? 'orphans' : 'mismatches');
             setIsLoading(false);
-            if (foundMismatches.length === 0) {
+            
+            if (foundOrphans.length > 0) {
+                setToast({ msg: `Found ${foundOrphans.length} unpaired views! Please fix these before syncing.`, type: "error" });
+            } else if (foundMismatches.length === 0) {
                 setToast({ msg: "No mismatches found! All pairs are synchronized.", type: "success" });
             } else {
                 setToast({ msg: `Found ${foundMismatches.length} unsynchronized paragraph pairs.`, type: "warn" });
@@ -320,7 +541,14 @@ const ViewSync: React.FC = () => {
         }, 500);
     };
 
-    const processSync = () => {
+    const toggleMismatchSelection = (index: number) => {
+        const next = new Set(selectedMismatches);
+        if (next.has(index)) next.delete(index);
+        else next.add(index);
+        setSelectedMismatches(next);
+    };
+
+    const processSync = (specificIndices?: Set<number>) => {
         if (!input.trim()) {
             setToast({ msg: "Please paste XML content first.", type: "warn" });
             return;
@@ -332,12 +560,16 @@ const ViewSync: React.FC = () => {
             let logCounter = 1;
             let nextIdNum = 4000;
 
+            const allIds = new Set<string>();
+            const idMatches = input.matchAll(/\bid="([^"]+)"/g);
+            for (const m of idMatches) {
+                allIds.add(m[1]);
+            }
+
             if (customStartId && !isNaN(parseInt(customStartId))) {
                 nextIdNum = parseInt(customStartId);
             } else {
-                // 1. Determine Global Max ID to ensure uniqueness
-                // Scans for any pattern like id="abc1234" to find the highest number used.
-                // We strictly match 1-4 digit IDs to avoid "self-infection" from long numbers
+                // Determine Global Max ID to ensure uniqueness
                 const allIdRegex = /\bid="([a-zA-Z]+)(\d{1,4})"/g;
                 let maxIdNum = 0;
                 let m;
@@ -347,69 +579,74 @@ const ViewSync: React.FC = () => {
                         maxIdNum = num;
                     }
                 }
-                // Start new IDs safely above the max found (or at 4000), ensuring it's a multiple of 5
                 nextIdNum = Math.max(4000, Math.ceil((maxIdNum + 10) / 5) * 5);
             }
 
-            // 2. Extract Paragraphs based on direction (Restricted to ce:sections and outside ce:appendices)
-            const validRanges = getValidRanges(input);
-            const isInsideValidRange = (index: number) => validRanges.some(r => index >= r.start && index < r.end);
+            const getUniqueId = (prefix: string): string => {
+                let candidate = `${prefix}${nextIdNum.toString().padStart(4, '0')}`;
+                while (allIds.has(candidate)) {
+                    nextIdNum += 5;
+                    candidate = `${prefix}${nextIdNum.toString().padStart(4, '0')}`;
+                }
+                allIds.add(candidate);
+                nextIdNum += 5;
+                return candidate;
+            };
 
-            const compactRegex = /<ce:para\b([^>]*?)view="(compact|compact-standard)"([^>]*?)>([\s\S]*?)<\/ce:para>/g;
-            const extendedRegex = /<ce:para\b([^>]*?)view="extended"([^>]*?)>([\s\S]*?)<\/ce:para>/g;
+            // 2. Extract Paragraph Pairs
+            const { pairs, orphans: inputOrphans } = getPairsAndOrphans(input);
+            setOrphans(inputOrphans.map(o => ({ type: o.type, id: o.id, text: o.text })));
 
-            const compactMatches = [...input.matchAll(compactRegex)].filter(m => isInsideValidRange(m.index!));
-            const extendedMatches = [...input.matchAll(extendedRegex)].filter(m => isInsideValidRange(m.index!));
-
-            if (compactMatches.length === 0) {
-                 setToast({ msg: "No 'compact' paragraphs found.", type: "error" });
+            if (pairs.length === 0 && inputOrphans.length === 0) {
+                 setToast({ msg: "No synchronized pairs or orphans found.", type: "error" });
                  setIsLoading(false);
                  return;
             }
-            if (extendedMatches.length === 0) {
-                 setToast({ msg: "No 'extended' paragraphs found.", type: "error" });
-                 setIsLoading(false);
-                 return;
-            }
 
-            // Validation: Mismatched counts
-            if (compactMatches.length !== extendedMatches.length) {
+            if (inputOrphans.length > 0) {
                 newLogs.push({
                     id: logCounter++,
-                    paraId: 'GLOBAL',
-                    status: 'warning',
-                    message: `Mismatch: ${compactMatches.length} Compact vs ${extendedMatches.length} Extended. Syncing sequential pairs.`,
+                    paraId: 'ORPHANS',
+                    status: 'error',
+                    message: `Critical: ${inputOrphans.length} unpaired view(s) detected. Compact-standard must be paired with Extended.`,
                     detectedRefs: []
                 });
             }
-
-            const count = Math.min(compactMatches.length, extendedMatches.length);
             
             // 3. Build Replacements
             const replacements: {start: number, end: number, replacement: string}[] = [];
 
-            for (let i = 0; i < count; i++) {
-                const compactMatch = compactMatches[i];
-                const extendedMatch = extendedMatches[i];
+            for (let i = 0; i < pairs.length; i++) {
+                // If specific indices are provided, only sync those
+                if (specificIndices && !specificIndices.has(i)) {
+                    continue;
+                }
+
+                const pair = pairs[i];
+                const compactMatch = pair.compact;
+                const extendedMatch = pair.extended;
                 
                 let sourceContent = '';
                 let targetContent = '';
                 let targetFullMatch = '';
                 let targetIndex = 0;
 
+                let targetView = '';
                 if (syncDirection === 'compact-to-extended') {
-                    sourceContent = compactMatch[4] || ''; 
+                    sourceContent = compactMatch[3] || ''; 
                     targetContent = extendedMatch[3] || ''; 
                     targetFullMatch = extendedMatch[0] || '';
                     targetIndex = extendedMatch.index || 0;
+                    targetView = 'extended';
                 } else {
                     sourceContent = extendedMatch[3] || ''; 
-                    targetContent = compactMatch[4] || '';
+                    targetContent = compactMatch[3] || '';
                     targetFullMatch = compactMatch[0] || '';
                     targetIndex = compactMatch.index || 0;
+                    targetView = compactMatch[2] || ''; // compact-standard or compact or view
                 }
                 
-                const targetOpenTagMatch = targetFullMatch.match(/^<ce:para\b[^>]*>/);
+                const targetOpenTagMatch = targetFullMatch.match(/^<(ce:(?:para|simple-para))\b[^>]*>/);
                 
                 if (!targetOpenTagMatch) {
                     newLogs.push({
@@ -422,113 +659,106 @@ const ViewSync: React.FC = () => {
                     continue;
                 }
 
+                const targetTagName = targetOpenTagMatch[1];
                 const targetOpenTag = targetOpenTagMatch[0];
                 const targetIdMatch = targetOpenTag.match(/\bid="([^"]+)"/);
                 const targetParaId = targetIdMatch ? targetIdMatch[1] : `Index ${i}`;
 
-                // 4A. Scan TARGET for existing Cross-Refs and e-components
-                const targetRefRegex = /<(ce:cross-refs?|e-component)\b([^>]*)>([\s\S]*?)<\/\1>/g;
-                const targetRefs: {tagName: string, attributes: string, text: string, refid?: string, originalId?: string}[] = [];
-                let tm;
-                while ((tm = targetRefRegex.exec(targetContent)) !== null) {
-                    const tagName = tm[1];
-                    const attrs = tm[2];
-                    const content = tm[3];
-                    const refIdMatch = attrs.match(/refid="([^"]+)"/);
+                // --- ROBUST SYNCHRONIZATION STRATEGY ---
+                
+                // 1. Pre-process source based on target view requirements
+                let processedSource = sourceContent || '';
+                
+                if (targetView !== 'extended') {
+                    // Strip e-component tags for non-extended views
+                    processedSource = processedSource.replace(/<e-component\b[^>]*>([\s\S]*?)<\/e-component>/gi, '$1');
+                    // Strip cross-ref tags pointing to supplementary files (ecXXXX) for non-extended views
+                    processedSource = processedSource.replace(/<ce:cross-refs?\b[^>]*?\brefid=["']ec\d+["'][^>]*?>([\s\S]*?)<\/ce:cross-refs?>/gi, '$1');
+                } else {
+                    // When syncing TO extended view, we want to RESTORE ec#### links if they existed in the target but are missing in the source
+                    const ecRegex = /<(ce:cross-refs?)\b([^>]*?\brefid=["']ec\d+["'][^>]*?)>([\s\S]*?)<\/ce:cross-refs?>/gi;
+                    const targetEcLinks: {text: string, fullTag: string}[] = [];
+                    let ecm;
+                    while ((ecm = ecRegex.exec(targetContent)) !== null) {
+                        targetEcLinks.push({
+                            text: stripTags(ecm[3]),
+                            fullTag: ecm[0]
+                        });
+                    }
+
+                    // For each unique supplementary text found in target, if it's unlinked in source, link it
+                    targetEcLinks.forEach(link => {
+                        const escapedText = link.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        // Check if it's already inside any cross-ref tag
+                        const alreadyLinkedRegex = new RegExp(`<ce:cross-refs?[^>]*>([\\s\\S]*?${escapedText}[\\s\\S]*?)<\\/ce:cross-refs?>`, 'i');
+                        if (!alreadyLinkedRegex.test(processedSource)) {
+                            // Link all occurrences of this text
+                            processedSource = processedSource.replace(new RegExp(escapedText, 'g'), link.fullTag);
+                        }
+                    });
+                }
+
+                // 2. Map existing cf IDs from target to preserve them
+                const targetCfMap = new Map<string, string[]>();
+                const tOpenTagRegex = /<(ce:cross-refs?)\b([^>]*?)>/gi;
+                let tom;
+                while ((tom = tOpenTagRegex.exec(targetContent)) !== null) {
+                    const attrs = tom[2];
                     const idMatch = attrs.match(/\bid="([^"]+)"/);
-                    
-                    targetRefs.push({ 
-                        tagName,
-                        attributes: attrs,
-                        text: content,
-                        refid: refIdMatch ? refIdMatch[1] : undefined,
-                        originalId: idMatch ? idMatch[1] : undefined
-                    });
+                    const refidMatch = attrs.match(/\brefid="([^"]+)"/);
+                    if (idMatch && refidMatch) {
+                        const id = idMatch[1];
+                        const refid = refidMatch[1];
+                        if (!targetCfMap.has(refid)) targetCfMap.set(refid, []);
+                        targetCfMap.get(refid)!.push(id);
+                    }
                 }
 
-                // 4B. Scan SOURCE for existing refs and STRIP them to avoid double-tagging and ID conflicts
-                const sourceRefs: {tagName: string, attributes: string, text: string}[] = [];
-                let sm;
-                const sourceRefRegex = /<(ce:cross-refs?|e-component)\b([^>]*)>([\s\S]*?)<\/\1>/g;
-                while ((sm = sourceRefRegex.exec(sourceContent)) !== null) {
-                    sourceRefs.push({
-                        tagName: sm[1],
-                        attributes: sm[2],
-                        text: sm[3]
-                    });
-                }
-                const cleanSource = sourceContent.replace(sourceRefRegex, '$3');
-
-                // 4C. Content Renumbering (Clean Source)
+                // 3. Synchronize IDs while prioritizing preservation of target IDs
                 let remappedCount = 0;
-                let newContent = (cleanSource || '').replace(/\bid="([a-zA-Z]+)(\d+)"/g, (match, prefix, oldNum) => {
-                     remappedCount++;
-                     const currentVal = nextIdNum;
-                     nextIdNum += 5;
-                     const newId = `${prefix}${currentVal.toString().padStart(4, '0')}`;
-                     return `id="${newId}"`;
+                
+                // Track IDs used in this specific paragraph to avoid internal collisions
+                const usedInCurrentPara = new Set<string>();
+
+                let newContent = processedSource.replace(/<(ce:cross-refs?)\b([^>]*?\brefid="([^"]+)"[^>]*?)>([\s\S]*?)<\/ce:cross-refs?>/gi, (match, tagName, attrs, refid, content) => {
+                    const targetIds = targetCfMap.get(refid);
+                    const preservedId = (targetIds && targetIds.length > 0) ? targetIds.shift() : null;
+
+                    remappedCount++;
+                    if (preservedId && !allIds.has(preservedId)) {
+                        allIds.add(preservedId);
+                        const cleanAttrs = attrs.replace(/\bid="[^"]*"/, '').trim();
+                        return `<${tagName} id="${preservedId}"${cleanAttrs ? ' ' + cleanAttrs : ''}>${content}</${tagName}>`;
+                    } else {
+                        // Generate new globally unique ID
+                        const prefix = tagName.includes('cross-refs') ? 'cfs' : 'cf';
+                        const newId = getUniqueId(prefix);
+                        const cleanAttrs = attrs.replace(/\bid="[^"]*"/, '').trim();
+                        return `<${tagName} id="${newId}"${cleanAttrs ? ' ' + cleanAttrs : ''}>${content}</${tagName}>`;
+                    }
                 });
 
-                // 4D. Restore References and e-components
-                let restoredCount = 0;
+                // Renumber existing IDs for non-cross-refs (anchors, e-components)
+                newContent = newContent.replace(/\bid="([a-zA-Z]+)(\d+)"/g, (match, prefix, oldNum) => {
+                    const fullId = `${prefix}${oldNum}`;
+                    if (allIds.has(fullId)) return match; // Already handled/preserved
+                    
+                    const newId = getUniqueId(prefix);
+                    return `id="${newId}"`;
+                });
+
+                // Safety: Ensure required tags that might have lost IDs are re-anchored
+                newContent = newContent.replace(/<(ce:(?:anchor)|e-component)\b((?:(?!id=)[^>])*)>/g, (match, tagName, attrs) => {
+                    const prefix = tagName === 'ce:anchor' ? 'anc' : 'ec';
+                    const newId = getUniqueId(prefix);
+                    return `<${tagName} id="${newId}"${attrs}>`;
+                });
+
+                const restoredCount = 0; // Legacy tracking placeholder
                 const restoredRefIds = new Set<string>();
                 const restoredTagIds = new Set<string>();
-                
-                // Group refs by text. Target refs take priority for ID retention.
-                const refsByText = new Map<string, any[]>();
-                
-                targetRefs.forEach(ref => {
-                    if (!refsByText.has(ref.text)) refsByText.set(ref.text, []);
-                    refsByText.get(ref.text)!.push({...ref, priority: 1});
-                });
-                
-                sourceRefs.forEach(ref => {
-                    // Only add source refs if they aren't already covered by target refs for the same text
-                    // Actually, we add them all but mark them as lower priority
-                    if (!refsByText.has(ref.text)) refsByText.set(ref.text, []);
-                    refsByText.get(ref.text)!.push({...ref, priority: 2});
-                });
 
-                refsByText.forEach((refs, textKey) => {
-                    const safeTextKey = textKey || '';
-                    const escapedText = safeTextKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                    // We don't need to worry about insideRestorableTag anymore because we stripped them
-                    const tokenRegex = new RegExp(`(${escapedText})`, 'g');
-                    
-                    newContent = newContent.replace(tokenRegex, (match, textGroup) => {
-                        const nextRef = refs.shift(); 
-                        if (nextRef) {
-                            if (nextRef.refid) restoredRefIds.add(nextRef.refid);
-                            if (nextRef.originalId) restoredTagIds.add(nextRef.originalId);
-                            restoredCount++;
-                            
-                            let newTagIdAttr = '';
-                            if (nextRef.priority === 1 && nextRef.originalId) {
-                                // Retain target ID
-                                newTagIdAttr = ` id="${nextRef.originalId}"`;
-                            } else {
-                                // Generate new ID for source-only refs or target refs without IDs
-                                const currentVal = nextIdNum;
-                                nextIdNum += 5;
-                                const prefixMatch = nextRef.attributes.match(/\bid="([a-zA-Z]+)/);
-                                const prefix = prefixMatch ? prefixMatch[1] : (nextRef.tagName.startsWith('ce:cross-ref') ? 'cf' : 'ec');
-                                const newId = `${prefix}${currentVal.toString().padStart(4, '0')}`;
-                                newTagIdAttr = ` id="${newId}"`;
-                            }
-
-                            if (nextRef.tagName.startsWith('ce:cross-ref')) {
-                                return `<${nextRef.tagName}${newTagIdAttr} refid="${nextRef.refid || ''}">${textGroup}</${nextRef.tagName}>`;
-                            } else {
-                                const otherAttrs = (nextRef.attributes || '').replace(/\bid="[^"]*"/, '').trim();
-                                const attrStr = otherAttrs ? ` ${otherAttrs}` : '';
-                                return `<${nextRef.tagName}${newTagIdAttr}${attrStr}>${textGroup}</${nextRef.tagName}>`;
-                            }
-                        }
-                        return textGroup;
-                    });
-                });
-
-                // 5. Scan for FINAL Cross-Refs and e-components
+                // 5. Scan for FINAL Cross-Refs and e-components for reporting
                 const detectedRefs: DetectedRef[] = [];
                 const crossRefRegex = /<(ce:cross-refs?|e-component)\b([^>]*)>([\s\S]*?)<\/\1>/g;
                 let crMatch;
@@ -537,17 +767,16 @@ const ViewSync: React.FC = () => {
                     const attrs = crMatch[2];
                     const text = crMatch[3];
                     const refIdMatch = attrs.match(/refid="([^"]+)"/);
-                    const idMatch = attrs.match(/\bid="([^"]+)"/);
                     
                     detectedRefs.push({
                         tagName,
                         refid: refIdMatch ? refIdMatch[1] : undefined,
                         text: text,
-                        isRestored: !!((refIdMatch && restoredRefIds.has(refIdMatch[1])) || (idMatch && restoredTagIds.has(idMatch[1])))
+                        isRestored: true // Structural sync effectively preserves all source refs
                     });
                 }
 
-                const newBlock = `${targetOpenTag}${newContent}</ce:para>`;
+                const newBlock = `${targetOpenTag}${newContent}</${targetTagName}>`;
                 
                 // Diff Stats
                 const charDiff = diffChars(targetFullMatch, newBlock);
@@ -593,9 +822,25 @@ const ViewSync: React.FC = () => {
             setLogs(newLogs);
             generateDiff(input, finalOutput);
             
+            // Detect Orphans for background check
+            const foundOrphans = detectOrphans(finalOutput);
+            setOrphans(foundOrphans);
+
             // Background Scanner for Smart Suggestions
             const newSuggestions: SmartSuggestion[] = [];
             
+            // 0. Orphans Check
+            if (foundOrphans.length > 0) {
+                newSuggestions.push({
+                    id: 'orphans-detected',
+                    toolName: 'Orphan Detection',
+                    description: `Critical: ${foundOrphans.length} unpaired view(s) detected. Compact-standard views must always be paired with Extended views.`,
+                    path: '#', // Stays on same page but indicates issue
+                    icon: <AlertCircle className="w-4 h-4" />,
+                    condition: 'Unpaired views detected'
+                });
+            }
+
             // 1. XML Normalizer (Renumber)
             if (finalOutput.includes('<ce:bib-reference')) {
                 newSuggestions.push({
@@ -673,7 +918,7 @@ const ViewSync: React.FC = () => {
 
             setSuggestions(newSuggestions);
             setActiveTab('report');
-            setToast({ msg: `Successfully synced ${count} paragraph pairs.`, type: "success" });
+            setToast({ msg: `Successfully synced ${pairs.length} paragraph pairs.`, type: "success" });
             setIsLoading(false);
 
         }, 800);
@@ -772,7 +1017,7 @@ const ViewSync: React.FC = () => {
                     </button>
 
                     <button 
-                        onClick={processSync} 
+                        onClick={() => processSync()} 
                         disabled={isLoading}
                         title="Ctrl+Enter"
                         className="flex-shrink-0 group bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 px-8 rounded-xl shadow-lg shadow-indigo-500/30 transform transition-all active:scale-95 disabled:opacity-70 disabled:cursor-wait hover:-translate-y-0.5"
@@ -784,6 +1029,40 @@ const ViewSync: React.FC = () => {
                     </button>
                 </div>
             </div>
+
+            {/* Smart Suggestions Section */}
+            {suggestions.length > 0 && (
+                <div className="mb-8 animate-in fade-in slide-in-from-top-4 duration-700">
+                    <div className="p-4 bg-indigo-50/30 border-2 border-indigo-100 rounded-2xl border-dashed">
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="w-8 h-8 rounded-xl bg-indigo-100 flex items-center justify-center">
+                                <Lightbulb className="w-4 h-4 text-indigo-600" />
+                            </div>
+                            <h4 className="text-[10px] font-black text-indigo-900 uppercase tracking-[0.2em]">Architectural Recommendations</h4>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {suggestions.map(sug => (
+                                <button 
+                                    key={sug.id}
+                                    onClick={() => {
+                                        navigate(sug.path, { state: { transferredXml: output, sourceTool: 'View Synchronizer' } });
+                                    }}
+                                    className="flex items-center gap-4 p-4 bg-white border border-indigo-100 rounded-xl hover:border-indigo-400 hover:shadow-lg transition-all group text-left shadow-sm ring-1 ring-indigo-50/50"
+                                >
+                                    <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:scale-110 group-hover:bg-indigo-600 group-hover:text-white transition-all duration-300">
+                                        {sug.icon}
+                                    </div>
+                                    <div className="flex-grow">
+                                        <div className="text-[10px] font-black text-indigo-900 uppercase tracking-[0.15em] mb-1 group-hover:text-indigo-700 transition-colors">{sug.toolName}</div>
+                                        <div className="text-[9px] text-slate-500 font-medium leading-relaxed italic line-clamp-2">{sug.description}</div>
+                                    </div>
+                                    <ArrowRight className="w-4 h-4 text-indigo-200 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Main Content Grid */}
             <div className={`grid gap-6 h-[calc(100vh-320px)] min-h-[600px] transition-all duration-300 ${activeTab === 'diff' ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
@@ -808,37 +1087,6 @@ const ViewSync: React.FC = () => {
                 
                 {/* Output Section */}
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col relative">
-                    {/* Smart Suggestions Section */}
-                    {suggestions.length > 0 && (
-                        <div className="px-5 pt-4 bg-white border-b border-slate-100">
-                            <div className="p-4 bg-indigo-50/30 border-2 border-indigo-100 rounded-2xl border-dashed">
-                                <div className="flex items-center gap-3 mb-3">
-                                    <Lightbulb className="w-4 h-4 text-indigo-600" />
-                                    <h4 className="text-[10px] font-black text-indigo-900 uppercase tracking-[0.2em]">Architectural Recommendations</h4>
-                                </div>
-                                <div className="grid grid-cols-1 gap-3">
-                                    {suggestions.map(sug => (
-                                        <button 
-                                            key={sug.id}
-                                            onClick={() => {
-                                                navigate(sug.path, { state: { transferredXml: output, sourceTool: 'View Synchronizer' } });
-                                            }}
-                                            className="flex items-center gap-4 p-3 bg-white border border-indigo-100 rounded-xl hover:border-indigo-300 hover:shadow-md transition-all group text-left shadow-sm"
-                                        >
-                                            <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:scale-110 transition-transform">
-                                                {sug.icon}
-                                            </div>
-                                            <div className="flex-grow">
-                                                <div className="text-[9px] font-black text-indigo-900 uppercase tracking-widest mb-0.5">{sug.toolName}</div>
-                                                <div className="text-[8px] text-indigo-500 font-medium leading-tight">{sug.description}</div>
-                                            </div>
-                                            <ArrowRight className="w-3 h-3 text-indigo-300 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    )}
                     <div className="bg-slate-50 px-5 py-2 border-b border-slate-100 flex justify-between items-center">
                         <label className="font-bold text-slate-700 text-sm flex items-center gap-2">
                             <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white border border-slate-200 text-xs text-emerald-600 font-mono shadow-sm">2</span>
@@ -865,7 +1113,7 @@ const ViewSync: React.FC = () => {
                     </div>
 
                     <div className="bg-white px-2 pt-2 border-b border-slate-100 flex space-x-1">
-                         {['raw', 'diff', 'report', 'mismatches'].map((tab) => (
+                         {['raw', 'diff', 'report', 'mismatches', 'orphans'].map((tab) => (
                              <button 
                                 key={tab}
                                 onClick={() => setActiveTab(tab as any)} 
@@ -877,6 +1125,7 @@ const ViewSync: React.FC = () => {
                                 {tab === 'diff' && 'Diff View'}
                                 {tab === 'report' && `Log (${logs.length})`}
                                 {tab === 'mismatches' && `Mismatches (${mismatches.length})`}
+                                {tab === 'orphans' && `Orphans (${orphans.length})`}
                              </button>
                          ))}
                     </div>
@@ -984,50 +1233,153 @@ const ViewSync: React.FC = () => {
                          )}
 
                          {activeTab === 'mismatches' && (
-                            <div className="h-full bg-white flex flex-col overflow-auto custom-scrollbar p-4">
-                                {mismatches.length > 0 ? (
-                                    <div className="space-y-4">
-                                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
-                                            <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
-                                            <div>
-                                                <h4 className="text-sm font-bold text-amber-900">Unsynchronized Pairs Detected</h4>
-                                                <p className="text-xs text-amber-700 mt-1">
-                                                    The following paragraphs have differing text content between their Compact and Extended views.
-                                                </p>
+                            <div className="h-full bg-white flex flex-col overflow-hidden">
+                                <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                                    <div className="flex items-center gap-4">
+                                        <div className="flex items-center gap-2">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={mismatches.length > 0 && selectedMismatches.size === mismatches.length}
+                                                onChange={(e) => {
+                                                    if (e.target.checked) setSelectedMismatches(new Set(mismatches.map(m => m.index)));
+                                                    else setSelectedMismatches(new Set());
+                                                }}
+                                                className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                            />
+                                            <span className="text-xs font-bold text-slate-700">Select All {mismatches.length > 0 ? `(${mismatches.length})` : ''}</span>
+                                        </div>
+                                        {selectedMismatches.size > 0 && (
+                                            <span className="text-[10px] font-black text-indigo-600 px-2 py-0.5 bg-indigo-50 rounded-full border border-indigo-100">
+                                                {selectedMismatches.size} Selected
+                                            </span>
+                                        )}
+                                    </div>
+                                    <button 
+                                        onClick={() => processSync(selectedMismatches)}
+                                        disabled={selectedMismatches.size === 0 || isLoading}
+                                        className="flex items-center gap-2 px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all"
+                                    >
+                                        <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+                                        Sync Selected
+                                    </button>
+                                </div>
+                                <div className="flex-grow overflow-auto custom-scrollbar p-4">
+                                    {mismatches.length > 0 ? (
+                                        <div className="space-y-4">
+                                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+                                                <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
+                                                <div>
+                                                    <h4 className="text-sm font-bold text-amber-900">Unsynchronized Pairs Detected</h4>
+                                                    <p className="text-xs text-amber-700 mt-1">
+                                                        The following paragraphs have differing text content between their Compact and Extended views. Select which ones to synchronize.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="grid gap-4 pb-8">
+                                                {mismatches.map((m, i) => (
+                                                    <div 
+                                                        key={i} 
+                                                        onClick={() => toggleMismatchSelection(m.index)}
+                                                        className={`group border rounded-xl overflow-hidden bg-white shadow-sm hover:shadow-md transition-all duration-300 cursor-pointer ${selectedMismatches.has(m.index) ? 'border-indigo-300 ring-2 ring-indigo-50' : 'border-slate-200'}`}
+                                                    >
+                                                        <div className={`px-4 py-2 border-b flex justify-between items-center transition-colors ${selectedMismatches.has(m.index) ? 'bg-indigo-50 border-indigo-200' : 'bg-slate-50 border-slate-200 group-hover:bg-slate-100'}`}>
+                                                            <div className="flex items-center gap-3">
+                                                                <input 
+                                                                    type="checkbox" 
+                                                                    checked={selectedMismatches.has(m.index)}
+                                                                    onChange={() => {}} // Handled by div click
+                                                                    className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                                                />
+                                                                <span className={`text-xs font-bold font-mono ${selectedMismatches.has(m.index) ? 'text-indigo-700' : 'text-slate-700'}`}>ID: {m.paraId}</span>
+                                                            </div>
+                                                            <span className="text-[10px] font-bold text-slate-400 uppercase">Pair Index: {m.index}</span>
+                                                        </div>
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-100">
+                                                            <div className="p-4">
+                                                                <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Compact View Text</div>
+                                                                <div className="text-xs text-slate-600 leading-relaxed line-clamp-3 group-hover:line-clamp-none transition-all duration-500">
+                                                                    {renderMismatchDiff(m.compactText, m.extendedText, 'compact')}
+                                                                </div>
+                                                            </div>
+                                                            <div className="p-4 bg-slate-50/30 group-hover:bg-white transition-colors">
+                                                                <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Extended View Text</div>
+                                                                <div className="text-xs text-slate-600 leading-relaxed line-clamp-3 group-hover:line-clamp-none transition-all duration-500">
+                                                                    {renderMismatchDiff(m.compactText, m.extendedText, 'extended')}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
                                             </div>
                                         </div>
-                                        <div className="grid gap-4">
-                                            {mismatches.map((m, i) => (
-                                                <div key={i} className="group border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm hover:shadow-md transition-all duration-300">
-                                                    <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex justify-between items-center group-hover:bg-indigo-50 transition-colors">
-                                                        <span className="text-xs font-bold text-slate-700 font-mono group-hover:text-indigo-700">ID: {m.paraId}</span>
-                                                        <span className="text-[10px] font-bold text-slate-400 uppercase">Pair Index: {m.index}</span>
-                                                    </div>
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-100">
-                                                        <div className="p-4">
-                                                            <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Compact View Text</div>
-                                                            <div className="text-xs text-slate-600 leading-relaxed line-clamp-3 group-hover:line-clamp-none transition-all duration-500">
-                                                                {renderMismatchDiff(m.compactText, m.extendedText, 'compact')}
-                                                            </div>
-                                                        </div>
-                                                        <div className="p-4 bg-slate-50/30 group-hover:bg-white transition-colors">
-                                                            <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Extended View Text</div>
-                                                            <div className="text-xs text-slate-600 leading-relaxed line-clamp-3 group-hover:line-clamp-none transition-all duration-500">
-                                                                {renderMismatchDiff(m.compactText, m.extendedText, 'extended')}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))}
+                                    ) : (
+                                        <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60">
+                                            <CheckCircle size={48} strokeWidth={1} className="mb-3 text-emerald-400" />
+                                            <p className="text-sm font-medium uppercase tracking-widest">No mismatches found</p>
+                                            <p className="text-xs mt-2">All paragraph pairs are perfectly synchronized.</p>
                                         </div>
+                                    )}
+                                </div>
+                            </div>
+                         )}
+
+                         {activeTab === 'orphans' && (
+                            <div className="h-full bg-white flex flex-col overflow-hidden">
+                                <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-rose-50/20">
+                                    <div className="flex items-center gap-3">
+                                        <AlertCircle className="w-5 h-5 text-rose-500" />
+                                        <h3 className="text-sm font-bold text-rose-900">Unpaired Views Detected</h3>
                                     </div>
-                                ) : (
-                                    <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60">
-                                        <CheckCircle size={48} strokeWidth={1} className="mb-3 text-emerald-400" />
-                                        <p className="text-sm font-medium uppercase tracking-widest">No mismatches found</p>
-                                        <p className="text-xs mt-2">All paragraph pairs are perfectly synchronized.</p>
-                                    </div>
-                                )}
+                                    {orphans.length > 0 && (
+                                        <button 
+                                            onClick={fixOrphans}
+                                            disabled={isLoading}
+                                            className="flex items-center gap-2 px-4 py-1.5 bg-rose-600 text-white rounded-lg text-xs font-bold hover:bg-rose-700 shadow-sm transition-all animate-pulse hover:animate-none"
+                                        >
+                                            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+                                            Generate All Missing Partners
+                                        </button>
+                                    )}
+                                    {orphans.length > 0 && (
+                                        <span className="text-[10px] font-black text-rose-600 px-2 py-0.5 bg-rose-50 rounded-full border border-rose-100">
+                                            {orphans.length} Critical Issues
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="flex-grow overflow-auto custom-scrollbar p-4">
+                                    {orphans.length > 0 ? (
+                                        <div className="space-y-4">
+                                            <div className="bg-rose-50 border border-rose-200 rounded-xl p-4">
+                                                <p className="text-xs text-rose-700">
+                                                    The following paragraphs are missing their counterparts. Every <b>compact-standard</b> view must be paired with an <b>extended</b> view.
+                                                </p>
+                                            </div>
+                                            <div className="grid gap-4 pb-8">
+                                                {orphans.map((orphan, i) => (
+                                                    <div key={i} className="border border-rose-100 rounded-xl overflow-hidden bg-white shadow-sm">
+                                                        <div className="px-4 py-2 border-b bg-rose-50/30 flex justify-between items-center">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${orphan.type === 'compact' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                                    {orphan.type === 'compact' ? 'Compact Missing Extended' : 'Extended Missing Compact'}
+                                                                </span>
+                                                                <span className="text-xs font-bold font-mono text-slate-700">Para ID: {orphan.id}</span>
+                                                            </div>
+                                                        </div>
+                                                        <div className="p-4 text-xs text-slate-600 italic line-clamp-3">
+                                                            "{orphan.text}"
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60">
+                                            <CheckCircle size={48} strokeWidth={1} className="mb-3 text-emerald-400" />
+                                            <p className="text-sm font-medium uppercase tracking-widest">No orphans found</p>
+                                            <p className="text-xs mt-2">All paragraph views are properly paired.</p>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                          )}
 

@@ -715,21 +715,22 @@ const ReferenceUpdater: React.FC = () => {
         }
 
         try {
-            const getNextIdMap = (xml: string) => {
-                const prefixes = ['bb', 'rf', 'se', 'ir', 'or', 'tr'];
-                const map: Record<string, number> = { bb: 3000, rf: 3000, se: 3000, ir: 3000, or: 3000, tr: 3000 };
+            const getNextIdMap = (xml1: string, xml2: string) => {
+                const prefixes = ['bb', 'rf', 'se', 'ir', 'ca', 'cf', 'or', 'tr'];
+                const map: Record<string, number> = { bb: 3000, rf: 3000, se: 3000, ir: 3000, ca: 3000, cf: 3000, or: 3000, tr: 3000 };
+                const combined = xml1 + ' ' + xml2;
                 prefixes.forEach(prefix => {
-                    const regex = new RegExp(`id="${prefix}(\\d+)"`, 'g');
+                    const regex = new RegExp(`id="${prefix}(\\d{4})"`, 'g');
                     let m;
-                    while ((m = regex.exec(xml)) !== null) {
+                    while ((m = regex.exec(combined)) !== null) {
                         const val = parseInt(m[1]);
-                        if (val >= map[prefix]) map[prefix] = Math.ceil((val + 5) / 5) * 5;
+                        if (val >= map[prefix]) map[prefix] = val + 1;
                     }
                 });
                 return map;
             };
 
-            const idCounters = getNextIdMap(originalXml);
+            const idCounters = getNextIdMap(originalXml, updatedXml);
             const finalBlocks: string[] = [];
             const sequence = projectedSequence;
             const CHUNK_SIZE = 20;

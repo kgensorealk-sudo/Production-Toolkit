@@ -25,11 +25,15 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   public static getDerivedStateFromError(error: Error): State {
+    console.error("Critical System Failure Captured:", error);
     return { hasError: true, error };
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error("Uncaught error:", error, errorInfo);
+    console.group("Error Boundary Diagnostic");
+    console.error("Error:", error);
+    console.error("Component Stack:", errorInfo.componentStack);
+    console.groupEnd();
   }
 
   public render(): ReactNode {

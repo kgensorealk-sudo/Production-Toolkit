@@ -415,6 +415,40 @@ const UncitedRefCleaner: React.FC = () => {
                 <p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic">Sanitize lists by purging orphans or relocating them to a Further-reading section.</p>
             </div>
 
+            {/* Smart Suggestions Section outside the main results container */}
+            {suggestions.length > 0 && step === 'result' && (
+                <div className="mb-8 animate-in fade-in slide-in-from-top-4 duration-700">
+                    <div className="p-6 bg-indigo-50/30 border-2 border-indigo-100 rounded-[2rem] border-dashed">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-10 h-10 rounded-2xl bg-indigo-100 flex items-center justify-center">
+                                <Lightbulb className="w-5 h-5 text-indigo-600" />
+                            </div>
+                            <h4 className="text-xs font-black text-indigo-900 uppercase tracking-[0.2em]">Architectural Recommendations</h4>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {suggestions.map(sug => (
+                                <button 
+                                    key={sug.id}
+                                    onClick={() => {
+                                        navigate(sug.path, { state: { transferredXml: output, sourceTool: 'Uncited Ref Cleaner' } });
+                                    }}
+                                    className="flex items-center gap-4 p-4 bg-white border border-indigo-100 rounded-2xl hover:border-indigo-300 hover:shadow-md transition-all group text-left shadow-sm"
+                                >
+                                    <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:scale-110 transition-transform">
+                                        {sug.icon}
+                                    </div>
+                                    <div className="flex-grow">
+                                        <div className="text-[10px] font-black text-indigo-900 uppercase tracking-widest mb-0.5">{sug.toolName}</div>
+                                        <div className="text-[9px] text-indigo-500 font-medium leading-tight">{sug.description}</div>
+                                    </div>
+                                    <ArrowRight className="w-4 h-4 text-indigo-300 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-200 overflow-hidden h-[700px] flex flex-col relative">
                 {isLoading && <LoadingOverlay message="Analyzing Data Matrix..." color="rose" />}
 
@@ -513,37 +547,6 @@ const UncitedRefCleaner: React.FC = () => {
 
                 {step === 'result' && (
                     <div className="flex flex-col h-full animate-fade-in">
-                        {/* Smart Suggestions Section */}
-                        {suggestions.length > 0 && (
-                            <div className="px-10 pt-6 bg-white border-b border-slate-100">
-                                <div className="p-6 bg-indigo-50/30 border-2 border-indigo-100 rounded-[2rem] border-dashed">
-                                    <div className="flex items-center gap-3 mb-4">
-                                        <Lightbulb className="w-5 h-5 text-indigo-600" />
-                                        <h4 className="text-xs font-black text-indigo-900 uppercase tracking-[0.2em]">Architectural Recommendations</h4>
-                                    </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                        {suggestions.map(sug => (
-                                            <button 
-                                                key={sug.id}
-                                                onClick={() => {
-                                                    navigate(sug.path, { state: { transferredXml: output, sourceTool: 'Uncited Ref Cleaner' } });
-                                                }}
-                                                className="flex items-center gap-4 p-4 bg-white border border-indigo-100 rounded-2xl hover:border-indigo-300 hover:shadow-md transition-all group text-left shadow-sm"
-                                            >
-                                                <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:scale-110 transition-transform">
-                                                    {sug.icon}
-                                                </div>
-                                                <div className="flex-grow">
-                                                    <div className="text-[10px] font-black text-indigo-900 uppercase tracking-widest mb-0.5">{sug.toolName}</div>
-                                                    <div className="text-[9px] text-indigo-500 font-medium leading-tight">{sug.description}</div>
-                                                </div>
-                                                <ArrowRight className="w-4 h-4 text-indigo-300 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
                         <div className="bg-slate-50 px-10 py-5 border-b border-slate-200 flex justify-between items-center">
                             <h3 className="font-black text-slate-900 text-xs uppercase tracking-widest">Post-Processing Audit</h3>
                             <button onClick={() => { setStep('input'); setUncitedRefs([]); }} className="text-xs font-bold text-indigo-600 hover:underline uppercase tracking-widest">New Session</button>

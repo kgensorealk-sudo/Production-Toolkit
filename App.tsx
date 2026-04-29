@@ -29,7 +29,6 @@ import Docs from './pages/Docs';
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
 import Experimental from './pages/Experimental';
-import Messaging from './pages/Messaging';
 import UserSettings from './pages/UserSettings';
 import HtmlViewer from './pages/HtmlViewer';
 import AuthModal from './components/AuthModal';
@@ -130,7 +129,6 @@ const App: React.FC = () => {
                                 <Route path="/" element={<ProtectedRoute><Layout isLanding={true}><Landing /></Layout></ProtectedRoute>} />
                                 <Route path="/admin" element={<AdminRoute><Layout><AdminDashboard /></Layout></AdminRoute>} />
                                 <Route path="/dashboard" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />
-                                <Route path="/messaging" element={<ProtectedRoute><Layout><Messaging /></Layout></ProtectedRoute>} />
                                 <Route path="/experimental" element={<ProtectedRoute><Layout><Experimental /></Layout></ProtectedRoute>} />
                                 <Route path="/docs" element={<ProtectedRoute><Layout><Docs /></Layout></ProtectedRoute>} />
                                 <Route path="/settings" element={<ProtectedRoute><Layout><UserSettings /></Layout></ProtectedRoute>} />

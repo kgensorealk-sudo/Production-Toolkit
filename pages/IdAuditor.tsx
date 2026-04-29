@@ -29,7 +29,9 @@ const ID_CONFIG = [
     { tag: 'ce:inter-ref', prefix: 'ir' },
     { tag: 'ce:caption', prefix: 'ca' },
     { tag: 'ce:cross-ref', prefix: 'cf' },
-    { tag: 'ce:cross-refs', prefix: 'cf' }
+    { tag: 'ce:cross-refs', prefix: 'cf' },
+    { tag: 'ce:para', prefix: 'p' },
+    { tag: 'ce:simple-para', prefix: 'sp' }
 ];
 
 const IdAuditor: React.FC = () => {
@@ -435,7 +437,34 @@ const IdAuditor: React.FC = () => {
 
                 // 2. ID Mapping & Replacement Logic
                 const mapping = new Map<string, string>();
-                const counters: Record<string, number> = { bb: 3000, rf: 3000, se: 3000, ir: 3000, ca: 3000, cf: 3000 };
+                const counters: Record<string, number> = { bb: 1, rf: 1, se: 1, ir: 1, ca: 1, cf: 1 };
+                const seenIdsInOriginal = new Set<string>();
+                
+                // First pass: Find ALL existing IDs in the document to avoid collisions
+                const allIdRegex = /\bid="([^"]+)"/g;
+                let idMatch;
+                while ((idMatch = allIdRegex.exec(input)) !== null) {
+                    const existingId = idMatch[1];
+                    seenIdsInOriginal.add(existingId);
+                    
+                    // Also update counters to be at least as high as existing valid sequences
+                    // LOGIC FIX: Only use 4-digit IDs to set the floor. 
+                    // Long IDs (like timestamps) should be ignored so they don't "poison" the counter.
+                    const prefixMatch = existingId.match(/^([a-z]{2})(\d{4})$/i);
+                    if (prefixMatch) {
+                        const pre = prefixMatch[1].toLowerCase();
+                        const num = parseInt(prefixMatch[2]);
+                        if (counters[pre] !== undefined && num >= counters[pre]) {
+                            counters[pre] = num + 1;
+                        }
+                    }
+                }
+
+                // Ensure counters start at least at 3000 if they are low (protocol standard)
+                Object.keys(counters).forEach(k => {
+                    if (counters[k] < 3000) counters[k] = 3000;
+                });
+
                 const seenIdsInOutput = new Set<string>();
 
                 // We iterate through each tag type and replace occurrences one by one
@@ -444,13 +473,21 @@ const IdAuditor: React.FC = () => {
                     processedXml = processedXml.replace(tagRegex, (match, start, id, end) => {
                         const strictIdRegex = new RegExp(`^${prefix}\\d{4}$`, 'i');
                         const isInvalid = !strictIdRegex.test(id);
+                        
+                        // It's a duplicate if we've already written this ID to output, 
+                        // OR if it's invalid and we need to fix it.
                         const isDuplicate = seenIdsInOutput.has(id);
 
                         if (isInvalid || isDuplicate) {
-                            const newIdNum = counters[prefix].toString().padStart(4, '0');
-                            const newId = `${prefix}${newIdNum}`;
-                            counters[prefix] += 5;
-                            mapping.set(id, newId); // Store mapping for refid updates (last one wins if duplicate)
+                            // Find next available ID
+                            let newId = '';
+                            do {
+                                const newIdNum = counters[prefix].toString().padStart(4, '0');
+                                newId = `${prefix}${newIdNum}`;
+                                counters[prefix]++;
+                            } while (seenIdsInOriginal.has(newId) || seenIdsInOutput.has(newId));
+
+                            mapping.set(id, newId);
                             seenIdsInOutput.add(newId);
                             return `${start}${newId}${end}`;
                         } else {
@@ -501,7 +538,41 @@ const IdAuditor: React.FC = () => {
                 </p>
             </div>
 
-            <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-200 overflow-hidden h-[750px] flex flex-col relative transition-all duration-500">
+            {/* Smart Suggestions Section outside the main results container */}
+            {suggestions.length > 0 && step === 'result' && (
+                <div className="mb-8 animate-in fade-in slide-in-from-top-4 duration-700">
+                    <div className="p-6 bg-indigo-50/30 border-2 border-indigo-100 rounded-[2rem] border-dashed">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-10 h-10 rounded-2xl bg-indigo-100 flex items-center justify-center">
+                                <Lightbulb className="w-5 h-5 text-indigo-600" />
+                            </div>
+                            <h4 className="text-xs font-black text-indigo-900 uppercase tracking-[0.2em]">Architectural Recommendations</h4>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {suggestions.map(sug => (
+                                <button 
+                                    key={sug.id}
+                                    onClick={() => {
+                                        navigate(sug.path, { state: { transferredXml: output, sourceTool: 'ID Prefix Auditor' } });
+                                    }}
+                                    className="flex items-center gap-4 p-4 bg-white border border-indigo-100 rounded-2xl hover:border-indigo-300 hover:shadow-md transition-all group text-left shadow-sm"
+                                >
+                                    <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:scale-110 transition-transform">
+                                        {sug.icon}
+                                    </div>
+                                    <div className="flex-grow">
+                                        <div className="text-[10px] font-black text-indigo-900 uppercase tracking-widest mb-0.5">{sug.toolName}</div>
+                                        <div className="text-[9px] text-indigo-500 font-medium leading-tight">{sug.description}</div>
+                                    </div>
+                                    <ArrowRight className="w-4 h-4 text-indigo-300 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-200 overflow-hidden h-[calc(100vh-320px)] min-h-[750px] flex flex-col relative transition-all duration-500">
                 {isLoading && <LoadingOverlay message="Executing Structural Protocol Check..." color="slate" />}
 
                 {step === 'input' && (
@@ -524,13 +595,16 @@ const IdAuditor: React.FC = () => {
                             </div>
                             <button onClick={() => setInput('')} className="text-[10px] font-black text-rose-500 uppercase tracking-widest hover:underline transition-all ml-4">Reset Input</button>
                         </div>
-                        <textarea 
-                            value={input} 
-                            onChange={e => setInput(e.target.value)} 
-                            className="flex-grow p-10 font-mono text-[13px] border-0 focus:ring-0 resize-none bg-transparent leading-relaxed placeholder-slate-300" 
-                            placeholder="Paste the full XML article source here. Violations in ID prefixes, length, and spaced initials will be reported. Plural cross-refs are now audited..."
-                            spellCheck={false}
-                        />
+                        <div className="flex-grow flex flex-col relative bg-slate-50/30">
+                            <div className="absolute inset-0 pointer-events-none opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(#000 0.5px, transparent 0.5px)', backgroundSize: '24px 24px' }}></div>
+                            <textarea 
+                                value={input} 
+                                onChange={e => setInput(e.target.value)} 
+                                className="flex-grow p-12 font-mono text-[13px] border-0 focus:ring-0 resize-none bg-transparent leading-relaxed placeholder:text-slate-400 z-10" 
+                                placeholder="Paste the full XML article source here. Violations in ID prefixes, length, and spaced initials will be reported. Plural cross-refs are now audited..."
+                                spellCheck={false}
+                            />
+                        </div>
                         <div className="p-8 border-t border-slate-100 flex justify-center bg-slate-50/50">
                             <button onClick={runAudit} className="bg-slate-900 hover:bg-slate-800 text-white font-black py-4 px-20 rounded-[2.5rem] shadow-2xl transition-all active:scale-95 uppercase text-xs tracking-[0.3em]">
                                 Execute Global Audit
@@ -641,36 +715,6 @@ const IdAuditor: React.FC = () => {
 
                 {step === 'result' && (
                     <div className="flex flex-col h-full animate-fade-in overflow-hidden">
-                        {suggestions.length > 0 && (
-                            <div className="px-10 pt-6 bg-white border-b border-slate-100">
-                                <div className="p-6 bg-indigo-50/30 border-2 border-indigo-100 rounded-[2rem] border-dashed">
-                                    <div className="flex items-center gap-3 mb-4">
-                                        <Lightbulb className="w-5 h-5 text-indigo-600" />
-                                        <h4 className="text-xs font-black text-indigo-900 uppercase tracking-[0.2em]">Architectural Recommendations</h4>
-                                    </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {suggestions.map(sug => (
-                                            <button 
-                                                key={sug.id}
-                                                onClick={() => {
-                                                    navigate(sug.path, { state: { transferredXml: output, sourceTool: 'ID Prefix Auditor' } });
-                                                }}
-                                                className="flex items-center gap-4 p-4 bg-white border border-indigo-100 rounded-2xl hover:border-indigo-300 hover:shadow-md transition-all group text-left shadow-sm"
-                                            >
-                                                <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:scale-110 transition-transform">
-                                                    {sug.icon}
-                                                </div>
-                                                <div className="flex-grow">
-                                                    <div className="text-[10px] font-black text-indigo-900 uppercase tracking-widest mb-0.5">{sug.toolName}</div>
-                                                    <div className="text-[9px] text-indigo-500 font-medium leading-tight">{sug.description}</div>
-                                                </div>
-                                                <ArrowRight className="w-4 h-4 text-indigo-300 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
                         <div className="bg-slate-50 px-10 py-5 border-b border-slate-200 flex justify-between items-center">
                             <h3 className="font-black text-slate-900 text-xs uppercase tracking-widest">Corrected Protocol Stream</h3>
                             <div className="flex gap-4">
