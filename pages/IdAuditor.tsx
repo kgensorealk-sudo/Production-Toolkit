@@ -31,7 +31,9 @@ const ID_CONFIG = [
     { tag: 'ce:cross-ref', prefix: 'cf' },
     { tag: 'ce:cross-refs', prefix: 'cf' },
     { tag: 'ce:para', prefix: 'p' },
-    { tag: 'ce:simple-para', prefix: 'sp' }
+    { tag: 'ce:simple-para', prefix: 'sp' },
+    { tag: 'ce:other-ref', prefix: 'or' },
+    { tag: 'ce:textref', prefix: 'tr' }
 ];
 
 const IdAuditor: React.FC = () => {
@@ -219,25 +221,28 @@ const IdAuditor: React.FC = () => {
                 const idMap = new Map<string, number>(); // Track ID occurrences
                 
                 ID_CONFIG.forEach(({ tag, prefix }) => {
-                    const tagRegex = new RegExp(`<${tag}\\b[^>]*?\\bid="([^"]+)"[^>]*>`, 'g');
+                    const tagRegex = new RegExp(`<${tag}\\b([^>]*?)>`, 'g');
                     const strictIdRegex = new RegExp(`^${prefix}\\d{4}$`, 'i');
                     let match;
                     while ((match = tagRegex.exec(input)) !== null) {
-                        const originalId = match[1];
                         const fullOpeningTag = match[0];
+                        const attrs = match[1];
+                        const idMatch = attrs.match(/\bid="([^"]+)"/);
+                        const originalId = idMatch ? idMatch[1] : "";
                         
-                        // Track duplicates
-                        idMap.set(originalId, (idMap.get(originalId) || 0) + 1);
+                        if (originalId) {
+                            // Track duplicates
+                            idMap.set(originalId, (idMap.get(originalId) || 0) + 1);
+                        }
 
                         const elementEndIdx = input.indexOf(`</${tag}>`, match.index);
                         const elementContent = elementEndIdx !== -1 
                             ? input.substring(match.index, elementEndIdx + `</${tag}>`.length)
                             : fullOpeningTag;
 
-                        const isValidId = strictIdRegex.test(originalId);
-                        const isPrefixValid = originalId.toLowerCase().startsWith(prefix);
+                        const isValidId = originalId ? strictIdRegex.test(originalId) : false;
+                        const isPrefixValid = originalId ? originalId.toLowerCase().startsWith(prefix) : false;
                         const isLengthViolation = isPrefixValid && !isValidId;
-                        const isInvalidId = !isValidId;
 
                         const isOtherRef = elementContent.includes('<ce:other-ref');
                         
@@ -254,7 +259,7 @@ const IdAuditor: React.FC = () => {
                         }
 
                         results.push({
-                            id: originalId,
+                            id: originalId || '[MISSING ID]',
                             originalId: originalId,
                             tagName: tag,
                             expectedPrefix: prefix,
@@ -271,11 +276,13 @@ const IdAuditor: React.FC = () => {
 
                 // Post-process for duplicates and final status
                 results.forEach(item => {
-                    item.isDuplicate = (idMap.get(item.originalId) || 0) > 1;
+                    if (item.originalId) {
+                        item.isDuplicate = (idMap.get(item.originalId) || 0) > 1;
+                    }
                     const strictIdRegex = new RegExp(`^${item.expectedPrefix}\\d{4}$`, 'i');
-                    const isValidId = strictIdRegex.test(item.originalId);
+                    const isValidId = item.originalId ? strictIdRegex.test(item.originalId) : false;
                     
-                    if (!isValidId || item.hasNameSpacingViolation || item.isDuplicate) {
+                    if (!item.originalId || !isValidId || item.hasNameSpacingViolation || item.isDuplicate) {
                         item.status = 'invalid';
                     }
                 });
@@ -437,7 +444,7 @@ const IdAuditor: React.FC = () => {
 
                 // 2. ID Mapping & Replacement Logic
                 const mapping = new Map<string, string>();
-                const counters: Record<string, number> = { bb: 1, rf: 1, se: 1, ir: 1, ca: 1, cf: 1 };
+                const counters: Record<string, number> = { bb: 3000, rf: 3000, se: 3000, ir: 3000, ca: 3000, cf: 3000, or: 3000, tr: 3000, p: 3000, sp: 3000 };
                 const seenIdsInOriginal = new Set<string>();
                 
                 // First pass: Find ALL existing IDs in the document to avoid collisions
@@ -454,8 +461,12 @@ const IdAuditor: React.FC = () => {
                     if (prefixMatch) {
                         const pre = prefixMatch[1].toLowerCase();
                         const num = parseInt(prefixMatch[2]);
-                        if (counters[pre] !== undefined && num >= counters[pre]) {
-                            counters[pre] = num + 1;
+                        if (counters[pre] !== undefined) {
+                            // Align to the next multiple of 5 above the current numeric ID
+                            const nextMultiple = Math.ceil((num + 1) / 5) * 5;
+                            if (nextMultiple > counters[pre]) {
+                                counters[pre] = nextMultiple;
+                            }
                         }
                     }
                 }
@@ -463,20 +474,22 @@ const IdAuditor: React.FC = () => {
                 // Ensure counters start at least at 3000 if they are low (protocol standard)
                 Object.keys(counters).forEach(k => {
                     if (counters[k] < 3000) counters[k] = 3000;
+                    // Double check alignment for the starting point
+                    if (counters[k] % 5 !== 0) counters[k] = Math.ceil(counters[k] / 5) * 5;
                 });
 
                 const seenIdsInOutput = new Set<string>();
 
                 // We iterate through each tag type and replace occurrences one by one
                 ID_CONFIG.forEach(({ tag, prefix }) => {
-                    const tagRegex = new RegExp(`(<${tag}\\b[^>]*?\\bid=")([^"]+)("[^>]*>)`, 'g');
-                    processedXml = processedXml.replace(tagRegex, (match, start, id, end) => {
-                        const strictIdRegex = new RegExp(`^${prefix}\\d{4}$`, 'i');
-                        const isInvalid = !strictIdRegex.test(id);
+                    const tagRegex = new RegExp(`<${tag}\\b([^>]*?)>`, 'g');
+                    processedXml = processedXml.replace(tagRegex, (match, attrs) => {
+                        const idMatch = attrs.match(/\bid="([^"]+)"/);
+                        const id = idMatch ? idMatch[1] : "";
                         
-                        // It's a duplicate if we've already written this ID to output, 
-                        // OR if it's invalid and we need to fix it.
-                        const isDuplicate = seenIdsInOutput.has(id);
+                        const strictIdRegex = new RegExp(`^${prefix}\\d{4}$`, 'i');
+                        const isInvalid = !id || !strictIdRegex.test(id);
+                        const isDuplicate = id && seenIdsInOutput.has(id);
 
                         if (isInvalid || isDuplicate) {
                             // Find next available ID
@@ -484,12 +497,20 @@ const IdAuditor: React.FC = () => {
                             do {
                                 const newIdNum = counters[prefix].toString().padStart(4, '0');
                                 newId = `${prefix}${newIdNum}`;
-                                counters[prefix]++;
+                                counters[prefix] += 5;
                             } while (seenIdsInOriginal.has(newId) || seenIdsInOutput.has(newId));
 
-                            mapping.set(id, newId);
+                            if (id) mapping.set(id, newId);
                             seenIdsInOutput.add(newId);
-                            return `${start}${newId}${end}`;
+                            
+                            if (idMatch) {
+                                // Replace existing ID
+                                const idAttrRegex = new RegExp(`\\bid="${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`);
+                                return match.replace(idAttrRegex, `id="${newId}"`);
+                            } else {
+                                // Add missing ID after tag name
+                                return `<${tag} id="${newId}"${attrs}>`;
+                            }
                         } else {
                             seenIdsInOutput.add(id);
                             return match;
@@ -534,7 +555,7 @@ const IdAuditor: React.FC = () => {
             <div className="mb-10 text-center animate-fade-in">
                 <h1 className="text-3xl font-black text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase tracking-tighter">ID Prefix Auditor</h1>
                 <p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic tracking-tight leading-relaxed">
-                    Protocol validation for bb, rf, se, ir, ca, cf, and plural cross-refs. Enforcing strict 4-digit numeric suffixes and collapsed initials.
+                    Protocol validation for bb, rf, se, ir, ca, cf, or, tr, and plural cross-refs. Enforcing strict 4-digit numeric suffixes and collapsed initials.
                 </p>
             </div>
 

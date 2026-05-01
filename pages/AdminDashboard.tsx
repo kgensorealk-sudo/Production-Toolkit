@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
-import { UserProfile, ToolId, DefaultAvatar, SmartSuggestion } from '../types';
+import { UserProfile, ToolId, DefaultAvatar } from '../types';
 import { useAuth, withRetry } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router';
 import Toast from '../components/Toast';
@@ -8,7 +8,7 @@ import LoadingOverlay from '../components/LoadingOverlay';
 import ConfirmationModal from '../components/ConfirmationModal';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
-import { History, Info, X, Radio, Signal, Terminal, Eye, Send, Save, Trash2, Layout as LayoutIcon, Play, Square, AlertTriangle, CheckCircle2, AlertCircle, Lightbulb, ShieldCheck, Database, Zap } from 'lucide-react';
+import { History, Info, X, Radio, Signal, Terminal, Eye, Send, Save, Trash2, Layout as LayoutIcon, Play, Square, AlertTriangle, CheckCircle2, AlertCircle, ShieldCheck, Database, Zap } from 'lucide-react';
 
 interface Announcement {
     id: string;
@@ -121,37 +121,6 @@ const AdminDashboard: React.FC = () => {
     const [actionSuccess, setActionSuccess] = useState<string | null>(null);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
     const { freeToolsData, refreshFreeTools, refreshProfile } = useAuth();
-    const [suggestions, setSuggestions] = useState<SmartSuggestion[]>([]);
-
-    useEffect(() => {
-        // Dashboard specific recommendations
-        setSuggestions([
-            {
-                id: 'suggest-id-audit',
-                toolName: 'ID Prefix Auditor',
-                description: 'System-wide check for non-compliant ID prefixes in current XML buffers.',
-                path: '/id-auditor',
-                icon: <ShieldCheck size={18} />,
-                condition: 'High anomaly count detected'
-            },
-            {
-                id: 'suggest-intel-reset',
-                toolName: 'Intelligence Sync',
-                description: 'Perform a deep integrity sync if telemetry feels stale.',
-                path: '/dashboard', 
-                icon: <Database size={18} />,
-                condition: 'Stale data'
-            },
-            {
-                id: 'suggest-view-sync',
-                toolName: 'View Synchronizer',
-                description: 'Ensure paragraph consistency across all active views.',
-                path: '/view-sync',
-                icon: <Zap size={18} />,
-                condition: 'New session'
-            }
-        ]);
-    }, []);
 
     const [users, setUsers] = useState<UserProfile[]>([]);
     const [search, setSearch] = useState('');
@@ -612,37 +581,63 @@ const AdminDashboard: React.FC = () => {
         e.preventDefault();
         setIsLoading(true);
         try {
+            const payload: any = { 
+                title: newTitle, 
+                content: newContent, 
+                type: newType, 
+                category: newCategory,
+                is_mandatory: newMandatory
+            };
+
             if (editingId) {
+                payload.updated_at = new Date().toISOString();
                 await withRetry(async () => {
-                    const { error } = await supabase.from('announcements').update({ 
-                        title: newTitle, 
-                        content: newContent, 
-                        type: newType, 
-                        category: newCategory,
-                        is_mandatory: newMandatory,
-                        updated_at: new Date().toISOString() 
-                    }).eq('id', editingId);
+                    let { error } = await supabase.from('announcements').update(payload).eq('id', editingId);
+                    
+                    // Fallback for missing mandatory/category columns
+                    if (error && (error.message?.includes("is_mandatory") || error.message?.includes("category"))) {
+                        console.warn("Retrying save without newer columns...");
+                        const { is_mandatory, category, ...fallbackPayload } = payload;
+                        const { error: error2 } = await supabase.from('announcements').update(fallbackPayload).eq('id', editingId);
+                        error = error2;
+                        if (!error) setToast({ msg: 'Database migration needed for full features.', type: 'warn' });
+                    }
+                    
                     if (error) throw error;
-                    setAnnouncements(prev => prev.map(a => a.id === editingId ? { ...a, title: newTitle, content: newContent, type: newType, category: newCategory, is_mandatory: newMandatory } : a));
+                    setAnnouncements(prev => prev.map(a => a.id === editingId ? { ...a, ...payload } : a));
                 });
                 setToast({ msg: 'Broadcast updated', type: 'success' });
             } else {
+                payload.is_active = false;
                 await withRetry(async () => {
-                    const { data, error } = await supabase.from('announcements').insert([{ 
-                        title: newTitle, 
-                        content: newContent, 
-                        type: newType, 
-                        category: newCategory,
-                        is_mandatory: newMandatory,
-                        is_active: false 
-                    }]).select();
+                    let { data, error } = await supabase.from('announcements').insert([payload]).select();
+                    
+                    // Fallback for missing mandatory/category columns
+                    if (error && (error.message?.includes("is_mandatory") || error.message?.includes("category"))) {
+                        console.warn("Retrying insert without newer columns...");
+                        const { is_mandatory, category, ...fallbackPayload } = payload;
+                        const { data: data2, error: error2 } = await supabase.from('announcements').insert([fallbackPayload]).select();
+                        data = data2;
+                        error = error2;
+                        if (!error) setToast({ msg: 'Warning: database schema stale. Mandatory/Category flags ignored.', type: 'warn' });
+                    }
+                    
                     if (error) throw error;
                     if (data) setAnnouncements(prev => [data[0] as Announcement, ...prev]);
                 });
                 setToast({ msg: 'Broadcast created', type: 'success' });
             }
             setNewTitle(''); setNewContent(''); setNewType('info'); setNewCategory('system_alerts'); setNewMandatory(false); setEditingId(null);
-        } catch (err: any) { setToast({ msg: 'Broadcast failed to save', type: 'error' }); } finally { setIsLoading(false); }
+        } catch (err: any) { 
+            console.error("SAVE_BROADCAST_FAILED:", err);
+            const isSchemaError = err.message?.includes("column") || err.message?.includes("schema cache");
+            setToast({ 
+                msg: isSchemaError 
+                    ? `Schema Mismatch: Please run the SQL migration in supabase_schema.sql` 
+                    : `Broadcast failed: ${err.message || 'Unknown error'}`, 
+                type: 'error' 
+            }); 
+        } finally { setIsLoading(false); }
     };
 
     const editAnnouncement = (a: Announcement) => { 
@@ -977,42 +972,6 @@ const AdminDashboard: React.FC = () => {
                 </div>
             </div>
 
-            {/* Architectural Recommendations */}
-            {suggestions.length > 0 && (
-                <motion.div 
-                    initial={{ opacity: 0, y: -20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-6 mb-8"
-                >
-                    <h3 className="text-sm font-black text-indigo-900 uppercase tracking-widest mb-4 flex items-center gap-2">
-                        <Lightbulb size={16} />
-                        Architectural Recommendations
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {suggestions.map((suggestion) => (
-                            <button
-                                key={suggestion.id}
-                                onClick={() => {
-                                    if (suggestion.path === '/dashboard') {
-                                        refreshActiveTab(true);
-                                    } else {
-                                        navigate(suggestion.path);
-                                    }
-                                }}
-                                className="flex items-start gap-3 p-4 bg-white border border-indigo-100 rounded-xl hover:shadow-md transition-all text-left group"
-                            >
-                                <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 shrink-0 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                                    {suggestion.icon}
-                                </div>
-                                <div>
-                                    <div className="text-xs font-black text-slate-900 uppercase tracking-tight mb-1">{suggestion.toolName}</div>
-                                    <div className="text-[11px] text-slate-500 leading-relaxed">{suggestion.description}</div>
-                                </div>
-                            </button>
-                        ))}
-                    </div>
-                </motion.div>
-            )}
 
             <div className="flex space-x-1 bg-slate-200/50 p-1 rounded-xl mb-6 w-full max-w-5xl overflow-x-auto">
                 <button onClick={() => setActiveTab('users')} className={`flex-1 py-2.5 px-6 text-sm font-bold rounded-lg transition-all ${activeTab === 'users' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Personnel</button>

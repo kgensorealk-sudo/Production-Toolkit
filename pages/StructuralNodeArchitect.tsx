@@ -201,6 +201,41 @@ const StructuralNodeArchitect: React.FC = () => {
         if (doi) {
             parts.push(`https://doi.org/${doi.replace(/^doi:/i, '')}`);
         }
+
+        // 6. Inter-refs (URLs) and Date Accessed
+        const dateAccessedNode = sbRef.getElementsByTagName("sb:date-accessed")[0];
+        let dateAccessedStr = "";
+        if (dateAccessedNode) {
+            const day = dateAccessedNode.getAttribute("day");
+            const month = dateAccessedNode.getAttribute("month");
+            const yearVal = dateAccessedNode.getAttribute("year");
+            const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+            let monthStr = month || "";
+            if (month && !isNaN(parseInt(month))) {
+                const mIdx = parseInt(month) - 1;
+                if (mIdx >= 0 && mIdx < 12) monthStr = monthNames[mIdx];
+            }
+            const fullDate = [day, monthStr, yearVal].filter(Boolean).join(" ");
+            if (fullDate) dateAccessedStr = `(Accessed: ${fullDate})`;
+        }
+
+        const interRefs = Array.from(sbRef.getElementsByTagName("ce:inter-ref")).concat(Array.from(sbRef.getElementsByTagName("sb:inter-ref")));
+        interRefs.forEach(ir => {
+            const urlText = ir.textContent?.trim();
+            if (urlText && (urlText.startsWith("http") || urlText.includes("www."))) {
+                let urlPart = urlText;
+                if (dateAccessedStr) {
+                    urlPart += ` ${dateAccessedStr}`;
+                    dateAccessedStr = ""; // Only append to the first URL found
+                }
+                parts.push(urlPart);
+            }
+        });
+
+        // If date exists but no URL was found to attach it to, add it as a separate part
+        if (dateAccessedStr) {
+            parts.push(dateAccessedStr);
+        }
         
         let result = parts.filter(p => p.trim()).join(", ");
         if (result && !result.endsWith(".")) result += ".";
@@ -334,6 +369,9 @@ const StructuralNodeArchitect: React.FC = () => {
 
                 // Inter-ref ID Audit
                 const interRefs = Array.from(ref.getElementsByTagName("ce:inter-ref")).concat(Array.from(ref.getElementsByTagName("sb:inter-ref")));
+                const urls = interRefs.map(ir => ir.textContent?.trim()).filter(u => u && (u.startsWith("http") || u.includes("www.")));
+
+                // Inter-ref ID Audit
                 interRefs.forEach(ir => {
                     const irId = ir.getAttribute("id") || "";
                     if (duplicates.has(irId) && irId) {
@@ -362,6 +400,19 @@ const StructuralNodeArchitect: React.FC = () => {
                         msg: `SOURCE: Missing <ce:source-text> element. (unique SE ID)`, 
                         type: 'source-text' 
                     });
+                } else if (sourceText && (urls.length > 0 || sbRef.getElementsByTagName("sb:date-accessed").length > 0)) {
+                    const stContent = sourceText.textContent || "";
+                    const missingUrl = urls.some(u => u && !stContent.includes(u));
+                    const missingDate = sbRef.getElementsByTagName("sb:date-accessed").length > 0 && !stContent.includes("Accessed");
+                    
+                    if (missingUrl || missingDate) {
+                        currentAudit.push({ 
+                            id: refId, 
+                            status: 'fixed', 
+                            msg: `SOURCE: Source text missing URL(s) or Accessed Date.`, 
+                            type: 'source-text' 
+                        });
+                    }
                 }
 
                 const hosts = Array.from(sbRef.getElementsByTagName("sb:host"));
@@ -506,6 +557,8 @@ const StructuralNodeArchitect: React.FC = () => {
 
                     // Inter-ref ID Repair
                     const interRefs = Array.from(ref.getElementsByTagName("ce:inter-ref")).concat(Array.from(ref.getElementsByTagName("sb:inter-ref")));
+                    const urlsInRef = interRefs.map(ir => ir.textContent?.trim()).filter(u => u && (u.startsWith("http") || u.includes("www.")));
+                    
                     interRefs.forEach(ir => {
                         const irId = ir.getAttribute("id") || "";
                         if (!irId || irId.startsWith("or") || duplicatesFoundInInput.has(irId)) {
@@ -516,13 +569,28 @@ const StructuralNodeArchitect: React.FC = () => {
                     });
 
                     let sourceText = ref.getElementsByTagName("ce:source-text")[0];
+                    const dateAccessedInRef = sbRef.getElementsByTagName("sb:date-accessed")[0];
+                    let needsSourceUpdate = false;
                     if (!sourceText && !sbRef.tagName.includes('other-ref')) {
-                        const newSourceText = fragmentDoc.createElement("ce:source-text");
-                        const newSeId = getNextId('se');
-                        newSourceText.setAttribute("id", newSeId);
-                        newSourceText.textContent = generateSourceText(sbRef);
-                        ref.appendChild(newSourceText);
-                        finalAudit.push({ id: refId, status: 'fixed', msg: `REPAIRED: Generated source text (${newSeId}).` });
+                        needsSourceUpdate = true;
+                    } else if (sourceText && !sbRef.tagName.includes('other-ref')) {
+                        const stContent = sourceText.textContent || "";
+                        const missingUrl = urlsInRef.some(u => u && !stContent.includes(u));
+                        const missingDate = dateAccessedInRef && !stContent.includes("Accessed");
+                        if (missingUrl || missingDate) {
+                            needsSourceUpdate = true;
+                        }
+                    }
+
+                    if (needsSourceUpdate) {
+                        if (!sourceText) {
+                            sourceText = fragmentDoc.createElement("ce:source-text");
+                            const newSeId = getNextId('se');
+                            sourceText.setAttribute("id", newSeId);
+                            ref.appendChild(sourceText);
+                        }
+                        sourceText.textContent = generateSourceText(sbRef);
+                        finalAudit.push({ id: refId, status: 'fixed', msg: `REPAIRED: Synchronized source text with URLs/Accessed Date.` });
                     }
 
                     // Name Repair
@@ -1060,40 +1128,6 @@ const StructuralNodeArchitect: React.FC = () => {
                         </button>
                     </nav>
 
-            {/* Smart Suggestions Section outside the main grid */}
-            {suggestions.length > 0 && activeTab === 'result' && (
-                <div className="mb-8 animate-in fade-in slide-in-from-top-4 duration-700">
-                    <div className="p-6 bg-indigo-50/30 border-2 border-indigo-100 rounded-[2rem] border-dashed">
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="w-10 h-10 rounded-2xl bg-indigo-100 flex items-center justify-center">
-                                <Lightbulb className="w-5 h-5 text-indigo-600" />
-                            </div>
-                            <h4 className="text-[10px] font-black text-indigo-900 uppercase tracking-[0.2em]">Architectural Recommendations</h4>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {suggestions.map(sug => (
-                                <button 
-                                    key={sug.id}
-                                    onClick={() => {
-                                        navigate(sug.path, { state: { transferredXml: output, sourceTool: 'Structural Node Architect v3.2' } });
-                                    }}
-                                    className="flex items-center gap-4 p-4 bg-white border border-indigo-100 rounded-2xl hover:border-indigo-300 hover:shadow-md transition-all group text-left shadow-sm"
-                                >
-                                    <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:scale-110 transition-transform">
-                                        {sug.icon}
-                                    </div>
-                                    <div className="flex-grow">
-                                        <div className="text-[9px] font-black text-indigo-900 uppercase tracking-widest mb-0.5">{sug.toolName}</div>
-                                        <div className="text-[8px] text-indigo-500 font-medium leading-tight">{sug.description}</div>
-                                    </div>
-                                    <ArrowRight className="w-4 h-4 text-indigo-300 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            )}
-
                     <div className="flex-grow grid grid-cols-1 xl:grid-cols-12 gap-6 overflow-hidden">
                         {/* Left Sidebar: Stats & Actions */}
                         <aside className="xl:col-span-3 flex flex-col gap-6 overflow-y-auto custom-scrollbar pr-2">
@@ -1207,6 +1241,38 @@ const StructuralNodeArchitect: React.FC = () => {
                                     The protocol is currently optimized for Elsevier XML standards. All repairs are validated against DTD schemas.
                                 </p>
                             </div>
+
+                            {/* Architectural Recommendations moved to sidebar to save vertical space */}
+                            {suggestions.length > 0 && activeTab === 'result' && (
+                                <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+                                    <div className="p-5 bg-indigo-50/30 border border-indigo-100 rounded-2xl">
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <Lightbulb className="w-4 h-4 text-indigo-600" />
+                                            <h4 className="text-[10px] font-black text-indigo-900 uppercase tracking-widest">Recommendations</h4>
+                                        </div>
+                                        <div className="flex flex-col gap-3">
+                                            {suggestions.map(sug => (
+                                                <button 
+                                                    key={sug.id}
+                                                    onClick={() => {
+                                                        navigate(sug.path, { state: { transferredXml: output, sourceTool: 'Structural Node Architect v3.2' } });
+                                                    }}
+                                                    className="flex items-center gap-3 p-3 bg-white border border-indigo-50 rounded-xl hover:border-indigo-200 hover:shadow-sm transition-all group text-left"
+                                                >
+                                                    <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 shrink-0 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                                                        {sug.icon}
+                                                    </div>
+                                                    <div className="flex-grow min-w-0">
+                                                        <div className="text-[9px] font-black text-indigo-900 uppercase tracking-tight truncate">{sug.toolName}</div>
+                                                        <div className="text-[8px] text-indigo-500 font-medium leading-tight line-clamp-2">{sug.description}</div>
+                                                    </div>
+                                                    <ArrowRight className="w-3 h-3 text-indigo-300 group-hover:text-indigo-600 shrink-0" />
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </aside>
 
                         {/* Right Content Area: Tab Panels */}

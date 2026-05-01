@@ -206,11 +206,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         const { data: newData, error: createError } = await supabase.from('profiles').upsert([{ 
                             id: userId, 
                             email: email || '', 
-                            role: 'user' 
+                            role: (email === SUPER_ADMIN_EMAIL || email === SECONDARY_ADMIN_EMAIL) ? 'admin' : 'user' 
                         }]).select().maybeSingle();
                         if (createError) throw createError;
                         return newData;
                     }
+                    
+                    // If profile exists but role is not admin for admin emails, fix it
+                    if ((email === SUPER_ADMIN_EMAIL || email === SECONDARY_ADMIN_EMAIL) && data.role !== 'admin') {
+                        const { data: updatedData, error: updateError } = await supabase.from('profiles').update({ 
+                            role: 'admin' 
+                        }).eq('id', userId).select().maybeSingle();
+                        if (!updateError && updatedData) return updatedData;
+                    }
+
                     return data;
                 }, 3);
 
