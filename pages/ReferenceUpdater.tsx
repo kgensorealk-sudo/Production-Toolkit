@@ -44,12 +44,15 @@ interface RefBlock {
     contentHash: string; 
     sortKey: string;
     author?: string;
+    allAuthors?: string[];
+    authCount?: number;
     year?: string;
     title?: string;
     doi?: string;
     rawAuthor?: string;
     rawYear?: string;
     rawTitle?: string;
+    subIds?: Record<string, string>;
 }
 
 interface ScanCandidate {
@@ -66,7 +69,7 @@ interface ScanItem {
     id: string;
     status: 'update' | 'unchanged' | 'orphan' | 'smart_match' | 'add' | 'conflict' | 'potential_duplicate';
     preview: string;
-    matchType?: 'ID' | 'Label' | 'Content' | 'Fuzzy' | 'DOI' | 'Surname-Year';
+    matchType?: 'ID' | 'Label' | 'Content' | 'Fuzzy' | 'DOI' | 'Surname-Year' | 'Full-Text';
     matchScore?: number;
     isSynthetic?: boolean;
     selected: boolean;
@@ -283,40 +286,63 @@ const ReferenceUpdater: React.FC = () => {
         let match;
         while ((match = regex.exec(xml)) !== null) {
             const content = match[2], idMatch = match[1].match(/id="([^"]+)"/), id = idMatch ? idMatch[1] : '';
+            
+            // Extract sub-element IDs for preservation
+            const subIds: Record<string, string> = {};
+            const subIdRegex = /<(?:sb:reference|ce:source-text|ce:inter-ref|sb:inter-ref|ce:other-ref|ce:textref|ce:doi)\b[^>]*?\bid="([^"]+)"/g;
+            let sidm;
+            while ((sidm = subIdRegex.exec(content)) !== null) {
+                const sid = sidm[1];
+                const prefix = sid.replace(/\d+$/, '');
+                subIds[prefix] = sid; 
+            }
+
             const labelMatch = content.match(/<ce:label>(.*?)<\/ce:label>/);
             let label = labelMatch ? labelMatch[1].trim() : '', isSynthetic = false;
             
-            const surnameMatch = content.match(/<(?:ce|sb):surname\b[^>]*>([\s\S]*?)<\/(?:ce|sb):surname>/i);
-            const author = surnameMatch ? surnameMatch[1].toLowerCase().replace(/[^a-z]/g, '') : '';
+            const surnameMatches = Array.from(content.matchAll(/<(?:ce|sb):surname\b[^>]*>([\s\S]*?)<\/(?:ce|sb):surname>/gi));
+            const authCount = surnameMatches.length;
+            const author = authCount > 0 ? surnameMatches[0][1].toLowerCase().replace(/[^a-z]/g, '') : '';
             
             const dateMatch = content.match(/<(?:ce|sb):year\b[^>]*>([\s\S]*?)<\/(?:ce|sb):year>/i) || 
                               content.match(/<(?:ce|sb):date\b[^>]*>([\s\S]*?)<\/(?:ce|sb):date>/i);
-            const year = dateMatch ? dateMatch[1].replace(/\D/g, '') : '';
+            const yearRaw = dateMatch ? dateMatch[1].trim() : '';
+            const year = yearRaw.toLowerCase().replace(/[^0-9a-z]/g, ''); // Preserve letter suffix (e.g. 2022a)
             
             const titleMatch = content.match(/<(?:ce|sb):title\b[^>]*>([\s\S]*?)<\/(?:ce|sb):title>/i);
             const titleRaw = titleMatch ? titleMatch[1] : '';
             let title = titleRaw.replace(/<[^>]+>/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
             const doiMatch = content.match(/<(?:ce|sb):doi\b[^>]*>([\s\S]*?)<\/(?:ce|sb):doi>/i);
-            const doi = doiMatch ? doiMatch[1].replace(/<[^>]+>/g, '').trim().toLowerCase() : '';
+            let doi = doiMatch ? doiMatch[1].replace(/<[^>]+>/g, '').trim().toLowerCase() : '';
+            // Normalize DOI
+            doi = doi.replace(/^(https?:\/\/)?(dx\.)?doi\.org\//, '').replace(/^doi:/, '');
             
             const cleanContent = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
             const contentHash = cleanContent.replace(/[^a-z0-9]/g, '');
 
             // Enhanced metadata extraction for unstructured references (ce:other-ref)
             let finalAuthor = author;
+            let finalAuthors = surnameMatches.map(m => m[1].toLowerCase().replace(/[^a-z]/g, ''));
             let finalYear = year;
             let finalTitle = title;
+            let finalAuthCount = authCount;
 
             if (!finalAuthor || !finalYear || !finalTitle) {
                 const textOnly = content.replace(/<[^>]+>/g, ' ');
                 if (!finalYear) {
-                    const yMatch = textOnly.match(/\b(19|20)\d{2}\b/) || label.match(/\b(19|20)\d{2}\b/);
+                    // Handle years with suffixes like 2022a
+                    const yMatch = textOnly.match(/\b(19|20)\d{2}[a-z]?\b/) || label.match(/\b(19|20)\d{2}[a-z]?\b/);
                     if (yMatch) finalYear = yMatch[0];
                 }
                 if (!finalAuthor) {
-                    const aMatch = label.match(/^([A-Za-z'’\u00C0-\u017F]+)/) || textOnly.trim().match(/^([A-Za-z'’\u00C0-\u017F]+)/);
-                    if (aMatch) finalAuthor = aMatch[1].toLowerCase().replace(/[^a-z]/g, '');
+                    // More robust author extraction from label or start of text
+                    const aMatch = label.match(/^([A-Za-z'’\u00C0-\u017F]+(?:\s+[A-Za-z'’\u00C0-\u017F]+)?)/) || 
+                                   textOnly.trim().match(/^([A-Za-z'’\u00C0-\u017F]+(?:\s+[A-Za-z'’\u00C0-\u017F]+)?)/);
+                    if (aMatch) {
+                        finalAuthor = aMatch[1].toLowerCase().replace(/[^a-z]/g, '');
+                        if (finalAuthors.length === 0) finalAuthors = [finalAuthor];
+                    }
                 }
                 if (!finalTitle && textOnly.length > 20) {
                     // Try to remove author/year from the start to get a better title proxy
@@ -348,16 +374,28 @@ const ReferenceUpdater: React.FC = () => {
                     }
                     finalTitle = titleProxy.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 100);
                 }
+                
+                // For unstructured refs, try to estimate author count by common separators if it looks like a list
+                if (finalAuthCount === 0 && textOnly.length > 0) {
+                    const authorBlock = textOnly.substring(0, textOnly.indexOf(finalYear) || 50);
+                    const separators = (authorBlock.match(/,/g) || []).length + (authorBlock.match(/&| and /gi) || []).length;
+                    finalAuthCount = separators + 1;
+                }
+                
+                // Detect "et al" to ensure count is at least 3
+                if ((label.toLowerCase().includes('et al') || textOnly.toLowerCase().includes('et al')) && finalAuthCount < 3) {
+                    finalAuthCount = 3; 
+                }
             }
 
             // Capture raw segments for comparative UI
-            const rawAuthor = surnameMatch ? surnameMatch[1] : (label.match(/^[A-Za-z'’\u00C0-\u017F]+/) ? label.match(/^[A-Za-z'’\u00C0-\u017F]+/)?.[0] : undefined);
+            const rawAuthor = surnameMatches.length > 0 ? surnameMatches[0][1] : (label.match(/^[A-Za-z'’\u00C0-\u017F]+/) ? label.match(/^[A-Za-z'’\u00C0-\u017F]+/)?.[0] : undefined);
             const rawYear = finalYear;
             const rawTitle = titleRaw || undefined;
             
             let fingerprint = finalAuthor || finalYear || finalTitle || doi
-                ? `meta|${finalAuthor}|${finalYear}|${doi}|${finalTitle.substring(0, 100)}` 
-                : `text|${contentHash.substring(0, 150)}`;
+                ? `meta|${finalAuthor}|${finalAuthCount}|${finalYear}|${doi}|${finalTitle.substring(0, 100)}` 
+                : `text|${contentHash.substring(0, 300)}`;
             
             if (!label && finalAuthor && finalYear) { label = `${finalAuthor}, ${finalYear}`; isSynthetic = true; }
             let sortKey = label || content.replace(/<[^>]+>/g, '').trim().substring(0, 60);
@@ -367,12 +405,15 @@ const ReferenceUpdater: React.FC = () => {
                     fullTag: match[0], 
                     id, label, content, isSynthetic, cleanContent, fingerprint, contentHash, sortKey,
                     author: finalAuthor,
+                    allAuthors: finalAuthors,
+                    authCount: finalAuthCount,
                     year: finalYear,
                     title: finalTitle,
                     doi,
                     rawAuthor,
                     rawYear,
-                    rawTitle
+                    rawTitle,
+                    subIds
                 });
             }
         }
@@ -410,52 +451,65 @@ const ReferenceUpdater: React.FC = () => {
                         });
                     }
 
-                    // 3. Label Match
-                    if (candidates.length === 0 && origRef.label) {
-                        const normOrigLabel = origRef.label.toLowerCase().replace(/['’]/g, "'");
+                    // 3. High-Confidence Full-Text Similarity
+                    if (candidates.length === 0) {
                         updatedRefs.forEach((u, idx) => {
-                            if (u.label && u.label.toLowerCase().replace(/['’]/g, "'") === normOrigLabel) {
+                            const textSim = getSimilarity(origRef.cleanContent || '', u.cleanContent || '');
+                            if (textSim > 0.92) { // Extremely high threshold for direct text match
+                                candidates.push({ index: idx, score: Math.round(textSim * 100), matchType: 'Full-Text', label: u.label, preview: u.content.substring(0, 60) });
+                            }
+                        });
+                    }
+
+                    // 4. Label Match
+                    if (candidates.length === 0 && origRef.label) {
+                        const normOrigLabel = origRef.label.toLowerCase().replace(/['’]/g, "'").replace(/\s+/g, ' ');
+                        updatedRefs.forEach((u, idx) => {
+                            const normULabel = (u.label || '').toLowerCase().replace(/['’]/g, "'").replace(/\s+/g, ' ');
+                            if (u.label && normULabel === normOrigLabel) {
                                 candidates.push({ index: idx, score: 100, matchType: 'Label', label: u.label, preview: u.content.substring(0, 60) });
                             }
                         });
                     }
 
-                    // 4. Fingerprint Match
-                    if (candidates.length === 0) {
-                        updatedRefs.forEach((u, idx) => {
-                            if (u.fingerprint === origRef.fingerprint) {
-                                candidates.push({ index: idx, score: 100, matchType: 'Content', label: u.label, preview: u.content.substring(0, 60) });
-                            }
-                        });
-                    }
-
-                    // 5. Fuzzy Match & Surname-Year Heuristic
+                    // 5. Surname-Year Heuristic
                     if (candidates.length === 0) {
                         updatedRefs.forEach((u, idx) => {
                             const authMatch = (origRef.author && u.author && origRef.author === u.author);
                             const yearMatch = (origRef.year && u.year && origRef.year === u.year);
+                            const countMatch = (origRef.authCount !== undefined && u.authCount !== undefined && origRef.authCount === u.authCount);
                             
                             if (authMatch && yearMatch) {
-                                let score = 75;
+                                let score = 75; 
+                                if (countMatch) score += 10;
+                                
                                 const titleSim = getSimilarity(origRef.title || '', u.title || '');
-                                score += (titleSim * 25);
-                                candidates.push({ index: idx, score: Math.round(score), matchType: 'Surname-Year', label: u.label, preview: u.content.substring(0, 60) });
+                                score += (titleSim * 15);
+                                
+                                // NEW: Penalize if secondary authors differ (if available)
+                                if (origRef.allAuthors && u.allAuthors && origRef.allAuthors.length > 1 && u.allAuthors.length > 1) {
+                                    if (origRef.allAuthors[1] !== u.allAuthors[1]) score -= 40; 
+                                }
+
+                                // If titles exist and are VERY different, penalize heavily
+                                if (origRef.title && u.title && origRef.title.length > 8 && u.title.length > 8 && titleSim < 0.25) {
+                                    score -= 80; 
+                                }
+
+                                // Additional check: Years with suffixes must match exactly
+                                if (origRef.year && u.year && (origRef.year.length > 4 || u.year.length > 4)) {
+                                    if (origRef.year !== u.year) score -= 40;
+                                }
+
+                                if (score > 75) { 
+                                    candidates.push({ index: idx, score: Math.round(score), matchType: 'Surname-Year', label: u.label, preview: u.content.substring(0, 60) });
+                                }
                                 return;
                             }
 
                             // Regular Fuzzy logic for Smart Matches
-                            if (u.year && origRef.year && u.year !== origRef.year) {
-                                const yearSim = getSimilarity(u.year, origRef.year);
-                                if (yearSim < 0.75) return; 
-                            }
-
-                            if (u.author && origRef.author && u.author !== origRef.author) {
-                                const authSim = getSimilarity(u.author, origRef.author);
-                                if (authSim < 0.6) return;
-                            }
-
                             const score = getSimilarity(u.fingerprint, origRef.fingerprint);
-                            if (score > 0.82) {
+                            if (score > 0.90) { 
                                 candidates.push({ index: idx, score: Math.round(score * 100), matchType: 'Fuzzy', label: u.label, preview: u.content.substring(0, 60) });
                             }
                         });
@@ -467,12 +521,13 @@ const ReferenceUpdater: React.FC = () => {
                         
                         const best = candidates[0];
                         const isConflict = candidates.length > 1 && candidates[1].score > 90;
+                        const isPotentialDupe = best.matchType === 'Surname-Year' && best.score <= 85;
 
                         analysis.push({ 
                             uid: Math.random().toString(36).substring(2, 15),
                             label: formatLabel(origRef.label || updatedRefs[best.index].label), 
                             id: origRef.id, 
-                            status: isConflict ? 'conflict' : (best.matchType === 'Surname-Year' ? 'potential_duplicate' : (best.matchType === 'Fuzzy' ? 'smart_match' : 'update')), 
+                            status: isConflict ? 'conflict' : (isPotentialDupe ? 'potential_duplicate' : (best.matchType === 'Surname-Year' && best.score > 85 ? 'smart_match' : (best.matchType === 'Fuzzy' || best.matchType === 'Full-Text' ? 'smart_match' : 'update'))), 
                             reviewed: false,
                             matchType: best.matchType as any, 
                             matchScore: best.score, 
@@ -483,7 +538,7 @@ const ReferenceUpdater: React.FC = () => {
                             originalIndex: oIdx, 
                             updatedIndex: best.index,
                             candidates: candidates.length > 1 ? candidates : undefined,
-                            potentialMatches: best.matchType === 'Surname-Year' ? candidates.map(c => ({
+                            potentialMatches: (best.matchType === 'Surname-Year' || best.matchType === 'Fuzzy' || best.matchType === 'Full-Text') ? candidates.map(c => ({
                                 index: c.index,
                                 score: c.score,
                                 matchType: c.matchType,
@@ -562,21 +617,48 @@ const ReferenceUpdater: React.FC = () => {
                                 const yearMatch = (o.year && u.year && o.year === u.year);
                                 
                                 if (authMatch && yearMatch) {
-                                    // FIRST AUTHOR SURNAME & YEAR IDENTICAL -> 75% Base Score
+                                    const countMatch = (o.authCount !== undefined && u.authCount !== undefined && o.authCount === u.authCount);
+                                    
                                     score = 75; 
+                                    if (countMatch) score += 10;
+                                    
                                     matchType = 'Surname-Year';
                                     
-                                    // Add weight if titles show partial overlaps
                                     const titleSim = getSimilarity(o.title || '', u.title || '');
-                                    score += (titleSim * 25);
-                                } else if (authMatch || yearMatch) {
+                                    score += (titleSim * 15);
+
+                                    // NEW: Penalize if secondary authors differ (if available)
+                                    if (o.allAuthors && u.allAuthors && o.allAuthors.length > 1 && u.allAuthors.length > 1) {
+                                        if (o.allAuthors[1] !== u.allAuthors[1]) score -= 40; 
+                                    }
+
+                                    // If titles exist and are VERY different, penalize heavily
+                                    if (o.title && u.title && o.title.length > 8 && u.title.length > 8 && titleSim < 0.25) {
+                                        score -= 80;
+                                    }
+
+                                    // Additional check: Years with suffixes must match exactly
+                                    if (o.year && u.year && (o.year.length > 4 || u.year.length > 4)) {
+                                        if (o.year !== u.year) score -= 40;
+                                    }
+                                } else if (authMatch && !yearMatch) {
+                                    // Author match but year differs: probably another paper by same author
                                     const sim = getSimilarity(o.fingerprint, u.fingerprint);
-                                    score = Math.round(sim * 100);
-                                    matchType = 'Fuzzy';
+                                    if (sim > 0.8) { // Require very high overlap if year differs
+                                        score = Math.round(sim * 100);
+                                        matchType = 'Fuzzy';
+                                    }
+                                } else if (!authMatch && yearMatch) {
+                                    // Year match but author differs: probably totally different paper
+                                    const sim = getSimilarity(o.fingerprint, u.fingerprint);
+                                    if (sim > 0.85) { // Require even higher overlap if author differs
+                                        score = Math.round(sim * 100);
+                                        matchType = 'Fuzzy';
+                                    }
                                 }
                             }
 
-                            if (score > 60) {
+                            if (score > 70) {
                                 potentials.push({
                                     index: oIdx,
                                     score: Math.round(score),
@@ -592,6 +674,7 @@ const ReferenceUpdater: React.FC = () => {
                             item.potentialMatches = potentials;
                             item.status = 'potential_duplicate';
                             item.reviewed = false;
+                            item.selected = true;
                             item.originalIndex = potentials[0].index;
                         }
                     }
@@ -652,18 +735,39 @@ const ReferenceUpdater: React.FC = () => {
     const splitMatch = (item: ScanItem) => {
         setScanResults((prev: ScanItem[]) => {
             if (item.originalIndex !== null && item.updatedIndex !== null) {
-                // Check if the original index is already represented by another item
-                const isOrigRepresented = prev.some(it => it.uid !== item.uid && it.originalIndex === item.originalIndex);
+                // Determine if this update is still represented elsewhere in an active match
+                const isUpdateStillHandled = prev.some(it => 
+                    it.uid !== item.uid && 
+                    it.updatedIndex === item.updatedIndex && 
+                    (it.status === 'update' || it.status === 'smart_match' || it.status === 'conflict')
+                );
                 
-                let nextResults = prev.map(it => it.uid === item.uid ? {
-                    ...it,
-                    status: 'add' as const,
-                    originalIndex: null,
-                    reviewed: true,
-                    selected: true
-                } : it);
-
-                if (!isOrigRepresented) {
+                let nextResults = [...prev];
+                
+                if (isUpdateStillHandled) {
+                    // This specific match relationship ends. This item represents the original becoming unchanged.
+                    nextResults = nextResults.map(it => it.uid === item.uid ? {
+                        ...it,
+                        status: 'unchanged' as const,
+                        updatedIndex: null,
+                        reviewed: true,
+                        selected: true,
+                        matchType: undefined,
+                        matchScore: undefined
+                    } : it);
+                } else {
+                    // The update is now orphaned. We transform current item to 'add'
+                    // and then add a new item for the original 'unchanged'.
+                    nextResults = nextResults.map(it => it.uid === item.uid ? {
+                        ...it,
+                        status: 'add' as const,
+                        originalIndex: null,
+                        reviewed: true,
+                        selected: true,
+                        matchType: undefined,
+                        matchScore: undefined
+                    } : it);
+                    
                     const originalRef = parsedOriginalRefs[item.originalIndex!];
                     const originalEntry: ScanItem = {
                         uid: Math.random().toString(36).substring(2, 15),
@@ -716,11 +820,11 @@ const ReferenceUpdater: React.FC = () => {
 
         try {
             const getNextIdMap = (xml1: string, xml2: string) => {
-                const prefixes = ['bb', 'rf', 'se', 'ir', 'ca', 'cf', 'or', 'tr'];
-                const map: Record<string, number> = { bb: 3000, rf: 3000, se: 3000, ir: 3000, ca: 3000, cf: 3000, or: 3000, tr: 3000 };
+                const prefixes = ['bb', 'rf', 'se', 'ir', 'ca', 'cf', 'or', 'tr', 'doi'];
+                const map: Record<string, number> = { bb: 3000, rf: 3000, se: 3000, ir: 3000, ca: 3000, cf: 3000, or: 3000, tr: 3000, doi: 3000 };
                 const combined = xml1 + ' ' + xml2;
                 prefixes.forEach(prefix => {
-                    const regex = new RegExp(`id="${prefix}(\\d{4})"`, 'g');
+                    const regex = new RegExp(`id="${prefix}(\\d+)"`, 'g');
                     let m;
                     while ((m = regex.exec(combined)) !== null) {
                         const val = parseInt(m[1]);
@@ -769,10 +873,21 @@ const ReferenceUpdater: React.FC = () => {
                                 blockMarkup = blockMarkup.replace(/id="[^"]*"\s*/, '').replace('<ce:bib-reference', `<ce:bib-reference id="${targetId}"`);
                             }
                             if (renumberInternal) {
-                                blockMarkup = blockMarkup.replace(/(<(?:sb:reference|ce:source-text|ce:inter-ref|sb:inter-ref|ce:other-ref|ce:textref)\b[^>]*?)(\bid="[^"]+")([^>]*?>)/g, (m, p1, idAttr, p2) => {
-                                    let prefix = p1.includes('ce:source-text') ? 'se' : p1.includes('inter-ref') ? 'ir' : p1.includes('ce:other-ref') ? 'or' : p1.includes('ce:textref') ? 'tr' : 'rf';
-                                    let currentVal = idCounters[prefix];
-                                    idCounters[prefix] += 5;
+                                // Capture original subIds if available for this slot
+                                const origSubIds = (item.originalIndex !== null) ? origRefs[item.originalIndex].subIds : {};
+                                
+                                blockMarkup = blockMarkup.replace(/(<(?:sb:reference|ce:source-text|ce:inter-ref|sb:inter-ref|ce:other-ref|ce:textref|ce:doi)\b[^>]*?)(\bid="[^"]+")([^>]*?>)/g, (m, p1, idAttr, p2) => {
+                                    let tagTypeMatch = p1.match(/<(?:ce|sb):([a-z-]+)/);
+                                    let tagType = tagTypeMatch ? tagTypeMatch[1] : '';
+                                    let prefix = tagType === 'source-text' ? 'se' : tagType.includes('inter-ref') ? 'ir' : tagType === 'other-ref' ? 'or' : tagType === 'textref' ? 'tr' : tagType === 'doi' ? 'doi' : 'rf';
+                                    
+                                    // PRESERVE original ID if it exists and prefix matches
+                                    if (origSubIds && origSubIds[prefix]) {
+                                        return `${p1}id="${origSubIds[prefix]}"${p2}`;
+                                    }
+
+                                    let currentVal = idCounters[prefix] || 3000;
+                                    idCounters[prefix] = currentVal + 5;
                                     return `${p1}id="${prefix}${currentVal.toString().padStart(4, '0')}"${p2}`;
                                 });
                             }
@@ -903,7 +1018,7 @@ const ReferenceUpdater: React.FC = () => {
         newList.splice(absoluteIdxMove, 1);
         const absoluteIdxTarget = newList.findIndex(r => r === visibleItems[dropIndex]);
         newList.splice(absoluteIdxTarget, 0, itemToMove);
-        setScanResults(newList.map((item, idx) => ({ ...item, originalIndex: idx })));
+        setScanResults(newList); // Do NOT re-map originalIndex to list position!
         setDraggedItemIndex(null);
         setSortAlphabetically(false);
     };
@@ -936,6 +1051,10 @@ const ReferenceUpdater: React.FC = () => {
                     <Switch id="toggle-orphans" label="Auto-Add" subLabel="New Items" checked={addOrphans} onChange={setAddOrphans} color="emerald" />
                     <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
                     <Switch id="toggle-smart-match" label="Auto-Confirm" subLabel="Smart Matches" checked={autoUpdateSmartMatch} onChange={setAutoUpdateSmartMatch} color="purple" />
+                    <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
+                    <Switch id="toggle-preserve-ids" label="Preserve" subLabel="Original IDs" checked={preserveIds} onChange={setPreserveIds} color="indigo" />
+                    <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
+                    <Switch id="toggle-renumber" label="Standardize" subLabel="Internal IDs" checked={renumberInternal} onChange={setRenumberInternal} color="blue" />
                     <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
                     <div className="flex gap-3">
                         <button onClick={runAnalysis} className="bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold py-2.5 px-6 rounded-xl border border-slate-200 transition-all active:scale-95 shadow-sm">Analyze Set</button>
