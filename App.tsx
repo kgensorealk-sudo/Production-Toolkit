@@ -25,6 +25,7 @@ import SectionAuditor from './pages/SectionAuditor';
 import AffiliationSequencer from './pages/AffiliationSequencer';
 import StructuralNodeArchitect from './pages/StructuralNodeArchitect';
 import RefSorter from './pages/RefSorter';
+import WordToXml from './pages/WordToXml';
 import Docs from './pages/Docs';
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
@@ -156,6 +157,7 @@ const App: React.FC = () => {
                                 <Route path="/affiliationSequencer" element={<ProtectedRoute><Layout currentTool={ToolId.AFFILIATION_SEQUENCER}><NodeAccessController toolId={ToolId.AFFILIATION_SEQUENCER} displayName="Affiliation Sequencer" mode="subscription-only"><AffiliationSequencer /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/structuralArchitect" element={<ProtectedRoute><Layout currentTool={ToolId.STRUCTURAL_ARCHITECT}><NodeAccessController toolId={ToolId.STRUCTURAL_ARCHITECT} displayName="Structural Node Architect" mode="subscription-only"><StructuralNodeArchitect /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/refSorter" element={<ProtectedRoute><Layout currentTool={ToolId.REF_SORTER}><NodeAccessController toolId={ToolId.REF_SORTER} displayName="Reference Sorter" mode="subscription-only"><RefSorter /></NodeAccessController></Layout></ProtectedRoute>} />
+                                <Route path="/wordToXml" element={<ProtectedRoute><Layout currentTool={ToolId.WORD_TO_XML}><NodeAccessController toolId={ToolId.WORD_TO_XML} displayName="MS Word to XML" mode="key-allowed"><WordToXml /></NodeAccessController></Layout></ProtectedRoute>} />
                             </Routes>
                         </HashRouter>
                     </InactivityTracker>

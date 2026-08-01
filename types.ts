@@ -85,6 +85,7 @@ export enum ToolId {
     AFFILIATION_SEQUENCER = 'affiliationSequencer',
     STRUCTURAL_ARCHITECT = 'structuralArchitect',
     REF_SORTER = 'refSorter',
+    WORD_TO_XML = 'wordToXml',
     DOCS = 'docs',
     DASHBOARD = 'dashboard'
 }

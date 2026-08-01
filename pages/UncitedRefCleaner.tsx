@@ -5,7 +5,7 @@ import { diffLines, diffWordsWithSpace, Change } from 'diff';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
-import { ChevronUp, ChevronDown, GitCompare, Trash2, ArrowRight, Check, Shield, Lightbulb, Link as LinkIcon, Eraser, Hash, RefreshCw, Box, SortAsc } from 'lucide-react';
+import { ChevronUp, ChevronDown, GitCompare, Trash2, ArrowRight, Check, Shield, Lightbulb, Link as LinkIcon, Eraser, Hash, RefreshCw, Box, SortAsc, Copy } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SmartSuggestion, ToolId } from '../types';
 
@@ -489,6 +489,27 @@ const UncitedRefCleaner: React.FC = () => {
                             </div>
                             <button onClick={processCleanup} className="bg-rose-600 hover:bg-rose-700 text-white font-black py-4 px-12 rounded-2xl shadow-xl active:scale-95 transition-all uppercase text-xs tracking-widest">
                                 Execute Selection
+                            </button>
+                        </div>
+
+                        {/* 1-Click ID Copy Section */}
+                        <div className="mx-10 mt-6 p-4 bg-slate-100 border border-slate-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+                            <div className="min-w-0 flex-1">
+                                <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Uncited Reference ID Pool</div>
+                                <div className="font-mono text-xs text-slate-600 bg-white px-3 py-2 rounded-xl border border-slate-200 overflow-x-auto whitespace-nowrap scrollbar-thin select-all">
+                                    {uncitedRefs.map(r => r.id).join(', ')}
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    const idListStr = uncitedRefs.map(r => r.id).join(', ');
+                                    navigator.clipboard.writeText(idListStr);
+                                    setToast({ msg: `${uncitedRefs.length} reference IDs copied!`, type: 'success' });
+                                }}
+                                className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black py-3 px-6 rounded-xl shadow-md transition-all active:scale-95 text-[10px] uppercase tracking-wider whitespace-nowrap group"
+                            >
+                                <Copy size={13} className="group-hover:scale-110 transition-transform" />
+                                Copy All IDs
                             </button>
                         </div>
                         <div className="flex-grow overflow-auto p-10 space-y-4 custom-scrollbar">

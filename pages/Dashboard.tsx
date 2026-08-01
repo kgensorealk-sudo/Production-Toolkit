@@ -27,7 +27,8 @@ import {
     Highlighter,
     Trash2,
     ShieldAlert,
-    SortAsc
+    SortAsc,
+    FileCode
 } from 'lucide-react';
 import { ToolId } from '../types';
 import { useAuth, withRetry } from '../contexts/AuthContext';
@@ -241,6 +242,7 @@ const Dashboard: React.FC = () => {
         { id: ToolId.TAG_CLEANER, title: "XML Tag Cleaner", desc: "Safstrip specific editing option tags while maintaining document structure.", iconBg: "bg-teal-50", iconText: "text-teal-600", borderColor: "bg-teal-500", Icon: Eraser },
         { id: ToolId.TABLE_FIXER, title: "XML Table Fixer", desc: "Manage table footnotes by detaching them to legends or attaching legends back to cells.", iconBg: "bg-pink-50", iconText: "text-pink-600", borderColor: "bg-pink-500", Icon: Table },
         { id: ToolId.TABLE_BEAUTIFIER, title: "Table XML Beautifier", desc: "Transform single-line table rows into structured multi-line formatted entry blocks.", iconBg: "bg-pink-50", iconText: "text-pink-600", borderColor: "bg-pink-400", Icon: Sparkles },
+        { id: ToolId.WORD_TO_XML, title: "MS Word to XML Converter", desc: "Paste MS Word text with superscript, subscript, bold, italics, & paragraphs to automatically scan and generate XML.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: FileCode },
         { id: ToolId.VIEW_SYNC, title: "View Synchronizer", desc: "Mirror content between paragraph views while maintaining ID integrity and references.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: RefreshCw }
     ];
 

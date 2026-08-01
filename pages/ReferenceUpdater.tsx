@@ -285,7 +285,13 @@ const ReferenceUpdater: React.FC = () => {
         const regex = /<ce:bib-reference\b([^>]*)>([\s\S]*?)<\/ce:bib-reference>/g;
         let match;
         while ((match = regex.exec(xml)) !== null) {
-            const content = match[2], idMatch = match[1].match(/id="([^"]+)"/), id = idMatch ? idMatch[1] : '';
+            const content = match[2];
+            const idMatch = match[1].match(/id="([^"]+)"/);
+            let id = idMatch ? idMatch[1] : '';
+            if (!id) {
+                // Generate a guaranteed unique fallback ID
+                id = `bb_fallback_${Math.random().toString(36).substring(2, 8)}`;
+            }
             
             // Extract sub-element IDs for preservation
             const subIds: Record<string, string> = {};
@@ -533,7 +539,7 @@ const ReferenceUpdater: React.FC = () => {
                             matchScore: best.score, 
                             preview: updatedRefs[best.index].content.substring(0, 100).replace(/<[^>]+>/g, '').trim() + '...', 
                             isSynthetic: origRef.isSynthetic, 
-                            selected: !isConflict, 
+                            selected: true, 
                             sortKey: updatedRefs[best.index].sortKey, 
                             originalIndex: oIdx, 
                             updatedIndex: best.index,
@@ -577,7 +583,7 @@ const ReferenceUpdater: React.FC = () => {
                     if (origIndices.length > 1) {
                         origIndices.forEach(aIdx => {
                             analysis[aIdx].status = 'conflict';
-                            analysis[aIdx].selected = false;
+                            analysis[aIdx].selected = true;
                         });
                     }
                 });
@@ -835,6 +841,25 @@ const ReferenceUpdater: React.FC = () => {
             };
 
             const idCounters = getNextIdMap(originalXml, updatedXml);
+            const existingAllIds = new Set<string>();
+            const idMatchRegex = /\bid="([^"]+)"/g;
+            let extMatch;
+            const combinedXml = originalXml + " " + updatedXml;
+            while ((extMatch = idMatchRegex.exec(combinedXml)) !== null) {
+                existingAllIds.add(extMatch[1]);
+            }
+
+            const generateUniqueSequentialId = (prefix: string): string => {
+                let candidate = `${prefix}${idCounters[prefix].toString().padStart(4, '0')}`;
+                while (existingAllIds.has(candidate)) {
+                    idCounters[prefix] += 5;
+                    candidate = `${prefix}${idCounters[prefix].toString().padStart(4, '0')}`;
+                }
+                existingAllIds.add(candidate);
+                idCounters[prefix] += 5;
+                return candidate;
+            };
+
             const finalBlocks: string[] = [];
             const sequence = projectedSequence;
             const CHUNK_SIZE = 20;
@@ -851,18 +876,25 @@ const ReferenceUpdater: React.FC = () => {
                         if (item.selected && item.updatedIndex !== null && (item.status === 'update' || (item.status === 'smart_match' && (autoUpdateSmartMatch || item.reviewed)))) {
                             blockMarkup = updatedRefs[item.updatedIndex].fullTag;
                             targetId = origRef.id;
+                            if (targetId.startsWith('bb_fallback_') || !targetId) {
+                                targetId = generateUniqueSequentialId('bb');
+                            }
                             isTrulyUnchanged = false;
                         } else {
                             // IF UNCHANGED: Use original markup exactly to preserve all IDs
                             blockMarkup = origRef.fullTag;
                             targetId = origRef.id;
-                            isTrulyUnchanged = true;
+                            if (targetId.startsWith('bb_fallback_') || !targetId) {
+                                targetId = generateUniqueSequentialId('bb');
+                                isTrulyUnchanged = false;
+                            } else {
+                                isTrulyUnchanged = true;
+                            }
                         }
                     } else if (item.updatedIndex !== null && item.selected) {
                         const orphan = updatedRefs[item.updatedIndex];
                         blockMarkup = orphan.fullTag;
-                        targetId = `bb${idCounters.bb.toString().padStart(4, '0')}`;
-                        idCounters.bb += 5;
+                        targetId = generateUniqueSequentialId('bb');
                         isTrulyUnchanged = false;
                     }
 
