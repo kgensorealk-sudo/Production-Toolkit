@@ -27,7 +27,12 @@ import {
     ChevronUp,
     X,
     AlertCircle,
-    CheckCircle2
+    CheckCircle2,
+    Bookmark,
+    Tag,
+    ShieldAlert,
+    FileText,
+    BookOpen
 } from 'lucide-react';
 import Toast from '../components/Toast';
 
@@ -53,10 +58,10 @@ interface ConversionOptions {
     embedListInPara: boolean;
 }
 
-const SAMPLE_WORD_HTML = `<p>This is a text example with <b>bold</b>, <i>italic</i>, <u>underline</u>, <sup>superscript</sup>, and <sub>subscript</sub> formatting.</p>
+const SAMPLE_WORD_HTML = `<p>This is a text example with Research & Development, <b>bold</b>, <i>italic</i>, <u>underline</u>, <sup>superscript</sup>, and <sub>subscript</sub> formatting.</p>
 <p><b>1. Bulleted List with Nested Sub-List:</b></p>
 <ul>
-  <li>First main bullet item with <b>bold</b> highlight
+  <li>First main bullet item with <b>bold &amp; key</b> highlights
     <ul>
       <li>Sub-item A with <sup>superscript</sup> details</li>
       <li>Sub-item B with <sub>subscript</sub> reference</li>
@@ -66,7 +71,7 @@ const SAMPLE_WORD_HTML = `<p>This is a text example with <b>bold</b>, <i>italic<
 </ul>
 <p><b>2. Numbered List (1, 2, 3) with Nested Lettered Sub-List:</b></p>
 <ol type="1">
-  <li>Primary research objective
+  <li>Primary research &amp; development objective
     <ol type="a">
       <li>First sub-objective analysis</li>
       <li>Second sub-objective evaluation</li>
@@ -79,7 +84,16 @@ const SAMPLE_WORD_HTML = `<p>This is a text example with <b>bold</b>, <i>italic<
   <li>Plain item without label prefix</li>
   <li>Another plain item without label tags</li>
 </ul>
-<p>You can also use the toolbar buttons to switch list styles or indent/outdent nested items.</p>`;
+<div data-ce-type="acknowledgment" data-ce-title="Acknowledgements" class="ce-capture-box my-3 p-3.5 bg-amber-50/70 border-l-4 border-amber-500 rounded-r-2xl border border-amber-200/80 shadow-xs relative group select-text">
+  <div contenteditable="false" class="ce-capture-badge flex items-center justify-between pb-1.5 mb-2 border-b border-amber-200/60 select-none">
+    <span class="text-[10px] font-black uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+      Captured as: Acknowledgements
+    </span>
+    <span class="text-[9px] text-amber-600 font-bold uppercase tracking-wider">CE XML</span>
+  </div>
+  <p>The authors would like to thank BM Impianti S.r.l. for providing the real-world data of the PV-BESS systems, as well as the energy consumption profiles of their clients.</p>
+</div>
+<p>You can also use the toolbar buttons to switch list styles, indent/outdent nested items, or highlight text and use "Capture as..." to wrap sections.</p>`;
 
 export const WordToXml: React.FC = () => {
     const editorRef = useRef<HTMLDivElement>(null);
@@ -107,7 +121,7 @@ export const WordToXml: React.FC = () => {
         trimInsideTags: true,
         mergeAdjacentTags: true,
         cleanEmptyTags: true,
-        encodeEntities: false,
+        encodeEntities: true,
         prettyPrint: true,
         convertHeadings: true,
         embedListInPara: true
@@ -124,9 +138,136 @@ export const WordToXml: React.FC = () => {
     const handleEditorInput = () => {
         if (editorRef.current) {
             const html = editorRef.current.innerHTML;
-            setEditorHtml(html);
-            setRawHtmlInput(html);
+            const text = (editorRef.current.textContent || '').replace(/\u00a0/g, ' ').trim();
+            const hasMedia = editorRef.current.querySelector('img, table, iframe, svg') !== null;
+
+            if (!text && !hasMedia) {
+                setEditorHtml('');
+                setRawHtmlInput('');
+                if (html === '<br>' || html === '<p><br></p>' || html === '<div><br></div>') {
+                    editorRef.current.innerHTML = '';
+                }
+            } else {
+                setEditorHtml(html);
+                setRawHtmlInput(html);
+            }
         }
+    };
+
+    // Calculate accurate character count for empty or formatted editor state
+    const getCharCount = () => {
+        if (isHtmlMode) {
+            if (!rawHtmlInput || rawHtmlInput === '<br>' || rawHtmlInput === '<p><br></p>') return 0;
+            const cleanText = rawHtmlInput.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+            if (!cleanText && !/<(img|table|iframe|svg)\b/i.test(rawHtmlInput)) return 0;
+            return rawHtmlInput.length;
+        }
+
+        if (!editorHtml || editorHtml === '<br>' || editorHtml === '<p><br></p>' || editorHtml === '<div><br></div>') return 0;
+        const text = editorRef.current ? (editorRef.current.textContent || '').replace(/\u00a0/g, ' ').trim() : editorHtml.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+        const hasMedia = /<(img|table|iframe|svg)\b/i.test(editorHtml);
+        if (!text && !hasMedia) return 0;
+
+        return text.length;
+    };
+
+    const [isCaptureMenuOpen, setIsCaptureMenuOpen] = useState<boolean>(false);
+
+    // Capture highlighted text or section block as specific CE XML section
+    const captureSelectionAs = (type: string) => {
+        if (isHtmlMode || !editorRef.current) return;
+
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) return;
+
+        const range = selection.getRangeAt(0);
+        if (!editorRef.current.contains(range.commonAncestorContainer)) return;
+
+        if (type === 'clear') {
+            let node: Node | null = range.commonAncestorContainer;
+            while (node && node !== editorRef.current) {
+                if (node.nodeType === Node.ELEMENT_NODE) {
+                    const el = node as HTMLElement;
+                    if (el.hasAttribute('data-ce-type')) {
+                        const parent = el.parentNode;
+                        if (parent) {
+                            while (el.firstChild) {
+                                if ((el.firstChild as HTMLElement).classList?.contains('ce-capture-badge')) {
+                                    el.removeChild(el.firstChild);
+                                    continue;
+                                }
+                                parent.insertBefore(el.firstChild, el);
+                            }
+                            parent.removeChild(el);
+                        }
+                        break;
+                    }
+                }
+                node = node.parentNode;
+            }
+            handleEditorInput();
+            setToast({ msg: 'Removed section wrapper', type: 'info' });
+            return;
+        }
+
+        let defaultTitle = 'Acknowledgements';
+        let label = 'Acknowledgement';
+        if (type === 'abstract') {
+            defaultTitle = 'Abstract';
+            label = 'Abstract';
+        } else if (type === 'appendix') {
+            defaultTitle = 'Appendix A';
+            label = 'Appendix';
+        } else if (type === 'section') {
+            defaultTitle = 'Section Title';
+            label = 'Section';
+        } else if (type === 'conflict-of-interest') {
+            defaultTitle = 'Declaration of competing interest';
+            label = 'Conflict of Interest';
+        }
+
+        let targetBlock: HTMLElement | null = null;
+        let currNode: Node | null = range.commonAncestorContainer;
+
+        while (currNode && currNode !== editorRef.current) {
+            if (currNode.nodeType === Node.ELEMENT_NODE) {
+                const tag = (currNode as HTMLElement).tagName.toLowerCase();
+                if (tag === 'p' || tag === 'div' || tag === 'li' || /^h[1-6]$/.test(tag)) {
+                    targetBlock = currNode as HTMLElement;
+                    break;
+                }
+            }
+            currNode = currNode.parentNode;
+        }
+
+        const wrapper = document.createElement('div');
+        wrapper.setAttribute('data-ce-type', type);
+        wrapper.setAttribute('data-ce-title', defaultTitle);
+        wrapper.className = 'ce-capture-box my-3 p-3.5 bg-amber-50/70 border-l-4 border-amber-500 rounded-r-2xl border border-amber-200/80 shadow-xs relative group select-text';
+
+        const badge = document.createElement('div');
+        badge.contentEditable = 'false';
+        badge.className = 'ce-capture-badge flex items-center justify-between pb-1.5 mb-2 border-b border-amber-200/60 select-none';
+        badge.innerHTML = `<span class="text-[10px] font-black uppercase tracking-wider text-amber-900 flex items-center gap-1.5"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg> Captured as: ${label}</span><span class="text-[9px] text-amber-600 font-bold uppercase tracking-wider">CE XML</span>`;
+        wrapper.appendChild(badge);
+
+        if (targetBlock && targetBlock.parentNode && !targetBlock.hasAttribute('data-ce-type')) {
+            targetBlock.parentNode.replaceChild(wrapper, targetBlock);
+            wrapper.appendChild(targetBlock);
+        } else {
+            const contents = range.extractContents();
+            const p = document.createElement('p');
+            if (contents.childNodes.length > 0) {
+                p.appendChild(contents);
+            } else {
+                p.textContent = 'The authors would like to thank BM Impianti S.r.l. for providing the real-world data of the PV-BESS systems, as well as the energy consumption profiles of their clients.';
+            }
+            wrapper.appendChild(p);
+            range.insertNode(wrapper);
+        }
+
+        handleEditorInput();
+        setToast({ msg: `Captured content as ${label}`, type: 'success' });
     };
 
     // Format rich text commands
@@ -378,6 +519,13 @@ export const WordToXml: React.FC = () => {
             return ` id="${idVal}"`;
         };
 
+        let ackCounter = 1;
+        let abstractCounter = 1;
+        let appendixCounter = 1;
+        let coiCounter = 1;
+        let secCounter = 1;
+        let secTitleCounter = 1;
+
         const parser = new DOMParser();
         const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html');
         const container = doc.body.firstElementChild || doc.body;
@@ -399,11 +547,14 @@ export const WordToXml: React.FC = () => {
             if (node.nodeType === Node.TEXT_NODE) {
                 let text = node.textContent || '';
                 text = text.replace(/\u00a0/g, ' ').replace(/&nbsp;/g, ' ');
-                if (opts.encodeEntities) {
+                // Always escape unescaped ampersands (&) and angle brackets (<, >) for XML compliance
+                if (opts.encodeEntities !== false) {
                     text = text
-                        .replace(/&/g, '&amp;')
+                        .replace(/&(?!amp;|lt;|gt;|quot;|apos;|#[0-9]+;|#x[0-9a-fA-F]+;)/g, '&amp;')
                         .replace(/</g, '&lt;')
                         .replace(/>/g, '&gt;');
+                } else {
+                    text = text.replace(/&(?!amp;|lt;|gt;|quot;|apos;|#[0-9]+;|#x[0-9a-fA-F]+;)/g, '&amp;');
                 }
                 return text;
             }
@@ -478,7 +629,8 @@ export const WordToXml: React.FC = () => {
             return { labelVal, cleanText };
         };
 
-        const processListNode = (listEl: HTMLElement, listDepth = 0): string => {
+        const processListNode = (listEl: HTMLElement, listDepth = 0, customGetParaIdAttr?: () => string): string => {
+            const getParaId = customGetParaIdAttr || getNextParaIdAttr;
             const listItemsXml: string[] = [];
             const children = Array.from(listEl.childNodes);
 
@@ -563,12 +715,12 @@ export const WordToXml: React.FC = () => {
 
                         itemIdx++;
 
-                        const paraIdAttr = getNextParaIdAttr();
+                        const paraIdAttr = getParaId();
                         const listItemIdAttr = getNextListItemIdAttr();
                         const labelXml = (opts.addListLabels && finalLabel) ? `\n    <${tagMap.label}>${finalLabel}</${tagMap.label}>` : '';
 
                         const nestedXmls = nestedListElements
-                            .map(nl => processListNode(nl, listDepth + 1))
+                            .map(nl => processListNode(nl, listDepth + 1, customGetParaIdAttr))
                             .filter(Boolean);
 
                         if (nestedXmls.length > 0) {
@@ -588,7 +740,7 @@ export const WordToXml: React.FC = () => {
                             );
                         }
                     } else if (childTag === 'ul' || childTag === 'ol') {
-                        const nestedXml = processListNode(childEl, listDepth + 1);
+                        const nestedXml = processListNode(childEl, listDepth + 1, customGetParaIdAttr);
                         if (nestedXml) {
                             if (listItemsXml.length > 0) {
                                 const lastIdx = listItemsXml.length - 1;
@@ -647,7 +799,8 @@ export const WordToXml: React.FC = () => {
         };
 
         // Recursive processor for block containers (body, div, etc.)
-        const processBlockContainer = (containerNode: Node): string[] => {
+        const processBlockContainer = (containerNode: Node, customGetParaIdAttr?: () => string): string[] => {
+            const getParaId = customGetParaIdAttr || getNextParaIdAttr;
             const blocks: string[] = [];
             let inlineBuffer: string[] = [];
             let pendingListItems: { xml: string; category: 'bullet' | 'number' | 'alpha' | 'simple' }[] = [];
@@ -699,7 +852,7 @@ export const WordToXml: React.FC = () => {
                                 finalLabel = extractedLabel || '•';
                             }
 
-                            const paraIdAttr = getNextParaIdAttr();
+                            const paraIdAttr = getParaId();
                             const listItemIdAttr = getNextListItemIdAttr();
                             const labelXml = (opts.addListLabels && finalLabel) ? `\n    <${tagMap.label}>${finalLabel}</${tagMap.label}>` : '';
                             pendingListItems.push({
@@ -708,7 +861,7 @@ export const WordToXml: React.FC = () => {
                             });
                         } else {
                             flushListItems();
-                            const idAttr = getNextParaIdAttr();
+                            const idAttr = getParaId();
                             blocks.push(`<${tagMap.para}${idAttr}>${trimmedLine}</${tagMap.para}>`);
                         }
                     }
@@ -736,6 +889,82 @@ export const WordToXml: React.FC = () => {
                         return;
                     }
 
+                    if (el.hasAttribute('data-ce-type')) {
+                        flushInlineBuffer();
+                        flushListItems();
+
+                        const ceType = (el.getAttribute('data-ce-type') || 'acknowledgment').toLowerCase();
+                        const titleVal = el.getAttribute('data-ce-title') || (
+                            ceType === 'acknowledgment' ? 'Acknowledgements' :
+                            ceType === 'abstract' ? 'Abstract' :
+                            ceType === 'appendix' ? 'Appendix' :
+                            ceType === 'conflict-of-interest' ? 'Declaration of competing interest' :
+                            'Section'
+                        );
+
+                        const cleanEl = el.cloneNode(true) as HTMLElement;
+                        const badge = cleanEl.querySelector('.ce-capture-badge');
+                        if (badge) badge.remove();
+
+                        let outerTag = 'ce:section';
+                        let titleTag = 'ce:section-title';
+                        let wrapperIdAttr = '';
+                        let titleIdAttr = '';
+
+                        if (opts.schema === 'elsevier') {
+                            if (ceType === 'acknowledgment') outerTag = 'ce:acknowledgment';
+                            else if (ceType === 'abstract') outerTag = 'ce:abstract';
+                            else if (ceType === 'appendix') outerTag = 'ce:appendix';
+                            else if (ceType === 'conflict-of-interest') outerTag = 'ce:conflict-of-interest';
+                            else outerTag = 'ce:section';
+                            titleTag = 'ce:section-title';
+                        } else if (opts.schema === 'jats') {
+                            if (ceType === 'acknowledgment') outerTag = 'ack';
+                            else if (ceType === 'abstract') outerTag = 'abstract';
+                            else if (ceType === 'appendix') outerTag = 'app';
+                            else outerTag = 'sec';
+                            titleTag = 'title';
+                        } else {
+                            outerTag = ceType;
+                            titleTag = 'heading';
+                        }
+
+                        if (opts.addParagraphIds) {
+                            const stNum = secTitleCounter * 5;
+                            secTitleCounter++;
+                            titleIdAttr = ` id="st${String(stNum).padStart(4, '0')}"`;
+
+                            if (ceType === 'acknowledgment') {
+                                const ackNum = ackCounter * 5;
+                                ackCounter++;
+                                wrapperIdAttr = ` id="ac${String(ackNum).padStart(4, '0')}"`;
+                            } else if (ceType === 'abstract') {
+                                const abNum = abstractCounter * 5;
+                                abstractCounter++;
+                                wrapperIdAttr = ` id="ab${String(abNum).padStart(4, '0')}"`;
+                            } else if (ceType === 'appendix') {
+                                const apNum = appendixCounter * 5;
+                                appendixCounter++;
+                                wrapperIdAttr = ` id="ap${String(apNum).padStart(4, '0')}"`;
+                            } else if (ceType === 'conflict-of-interest') {
+                                const coiNum = coiCounter * 5;
+                                coiCounter++;
+                                wrapperIdAttr = ` id="coi${String(coiNum).padStart(4, '0')}"`;
+                            } else {
+                                const sNum = secCounter * 5;
+                                secCounter++;
+                                wrapperIdAttr = ` id="s${String(sNum).padStart(4, '0')}"`;
+                            }
+                        }
+
+                        const subBlocks = processBlockContainer(cleanEl);
+                        const titleXml = `<${titleTag}${titleIdAttr}>${titleVal}</${titleTag}>`;
+                        const innerXml = subBlocks.join('\n');
+
+                        blocks.push(`<${outerTag}${wrapperIdAttr}>\n${titleXml}\n${innerXml}\n</${outerTag}>`);
+                        return;
+                    }
+
                     if (BLOCK_TAGS.has(tagName)) {
                         flushInlineBuffer();
 
@@ -758,7 +987,7 @@ export const WordToXml: React.FC = () => {
                                         finalLabel = extractedLabel || '•';
                                     }
 
-                                    const paraIdAttr = getNextParaIdAttr();
+                                    const paraIdAttr = getParaId();
                                     const listItemIdAttr = getNextListItemIdAttr();
                                     const labelXml = (opts.addListLabels && finalLabel) ? `\n    <${tagMap.label}>${finalLabel}</${tagMap.label}>` : '';
                                     pendingListItems.push({
@@ -767,13 +996,13 @@ export const WordToXml: React.FC = () => {
                                     });
                                 } else {
                                     flushListItems();
-                                    const idAttr = getNextParaIdAttr();
+                                    const idAttr = getParaId();
                                     blocks.push(`<${tagMap.para}${idAttr}>${content}</${tagMap.para}>`);
                                 }
                             }
                         } else if ((tagName === 'div' || tagName === 'p') && hasBlockChildren(el)) {
                             flushListItems();
-                            const subBlocks = processBlockContainer(el);
+                            const subBlocks = processBlockContainer(el, getParaId);
                             blocks.push(...subBlocks);
                         } else if (/^h[1-6]$/.test(tagName)) {
                             flushListItems();
@@ -782,13 +1011,13 @@ export const WordToXml: React.FC = () => {
                                 if (opts.convertHeadings) {
                                     blocks.push(`<${tagMap.title}>${content}</${tagMap.title}>`);
                                 } else {
-                                    const idAttr = getNextParaIdAttr();
+                                    const idAttr = getParaId();
                                     blocks.push(`<${tagMap.para}${idAttr}><${tagMap.bold}>${content}</${tagMap.bold}></${tagMap.para}>`);
                                 }
                             }
                         } else if (tagName === 'ul' || tagName === 'ol') {
                             flushListItems();
-                            const listXml = processListNode(el);
+                            const listXml = processListNode(el, 0, getParaId);
                             if (listXml) {
                                 blocks.push(listXml);
                             }
@@ -811,7 +1040,7 @@ export const WordToXml: React.FC = () => {
                             }
                         } else if (tagName === 'blockquote' || tagName === 'section' || tagName === 'article') {
                             flushListItems();
-                            const subBlocks = processBlockContainer(el);
+                            const subBlocks = processBlockContainer(el, getParaId);
                             blocks.push(...subBlocks);
                         }
                         return;
@@ -895,6 +1124,9 @@ export const WordToXml: React.FC = () => {
 
         // Clean multi-space artifacts
         resultXml = resultXml.replace(/ {2,}/g, ' ');
+
+        // Final XML validation pass: guarantee no unescaped ampersands remain in text nodes
+        resultXml = resultXml.replace(/&(?!amp;|lt;|gt;|quot;|apos;|#[0-9]+;|#x[0-9a-fA-F]+;)/g, '&amp;');
 
         // Option: Wrap in root container if requested
         if (opts.wrapInRoot && opts.rootTag) {
@@ -1187,6 +1419,16 @@ export const WordToXml: React.FC = () => {
                             <label className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-200/60 cursor-pointer hover:bg-slate-100 transition-all">
                                 <input
                                     type="checkbox"
+                                    checked={options.encodeEntities}
+                                    onChange={(e) => setOptions(prev => ({ ...prev, encodeEntities: e.target.checked }))}
+                                    className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                                />
+                                <span className="text-xs font-bold text-slate-700">Encode XML Special Entities (&amp; &rarr; &amp;amp;, &lt;, &gt;)</span>
+                            </label>
+
+                            <label className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-200/60 cursor-pointer hover:bg-slate-100 transition-all">
+                                <input
+                                    type="checkbox"
                                     checked={options.embedListInPara}
                                     onChange={(e) => setOptions(prev => ({ ...prev, embedListInPara: e.target.checked }))}
                                     className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
@@ -1305,6 +1547,94 @@ export const WordToXml: React.FC = () => {
                                 >
                                     <Outdent size={16} />
                                 </button>
+                                <div className="h-4 w-px bg-slate-200 mx-1"></div>
+                                <div className="relative">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsCaptureMenuOpen(!isCaptureMenuOpen)}
+                                        disabled={isHtmlMode}
+                                        className="px-2.5 py-1 rounded-lg text-amber-900 bg-amber-50 hover:bg-amber-100 hover:text-amber-950 transition-colors disabled:opacity-40 text-xs font-bold flex items-center gap-1.5 border border-amber-200/80 shadow-2xs"
+                                        title="Capture highlighted text or block as a specific CE XML section"
+                                    >
+                                        <Bookmark size={14} className="text-amber-600 fill-amber-500/20" />
+                                        <span>Capture as...</span>
+                                        <ChevronDown size={12} className="text-amber-600" />
+                                    </button>
+
+                                    {isCaptureMenuOpen && (
+                                        <div className="absolute left-0 top-full mt-1.5 w-60 bg-white rounded-2xl shadow-xl border border-slate-200 p-1.5 z-30 space-y-1">
+                                            <div className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-100 flex items-center justify-between">
+                                                <span>Section Tagging</span>
+                                                <span className="text-amber-600 font-mono">CE XML</span>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => { captureSelectionAs('acknowledgment'); setIsCaptureMenuOpen(false); }}
+                                                className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-amber-50 text-slate-800 hover:text-amber-900 text-xs font-semibold flex items-center justify-between transition-colors group"
+                                            >
+                                                <div className="flex items-center gap-2">
+                                                    <Bookmark size={14} className="text-amber-600 group-hover:scale-110 transition-transform" />
+                                                    <span>Acknowledgement</span>
+                                                </div>
+                                                <span className="text-[9px] font-mono font-bold text-amber-700 bg-amber-100/80 px-1.5 py-0.5 rounded">&lt;ce:ack&gt;</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => { captureSelectionAs('abstract'); setIsCaptureMenuOpen(false); }}
+                                                className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-indigo-50 text-slate-800 hover:text-indigo-900 text-xs font-semibold flex items-center justify-between transition-colors group"
+                                            >
+                                                <div className="flex items-center gap-2">
+                                                    <FileText size={14} className="text-indigo-600 group-hover:scale-110 transition-transform" />
+                                                    <span>Abstract</span>
+                                                </div>
+                                                <span className="text-[9px] font-mono font-bold text-indigo-700 bg-indigo-100/80 px-1.5 py-0.5 rounded">&lt;ce:abs&gt;</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => { captureSelectionAs('section'); setIsCaptureMenuOpen(false); }}
+                                                className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-blue-50 text-slate-800 hover:text-blue-900 text-xs font-semibold flex items-center justify-between transition-colors group"
+                                            >
+                                                <div className="flex items-center gap-2">
+                                                    <BookOpen size={14} className="text-blue-600 group-hover:scale-110 transition-transform" />
+                                                    <span>Section</span>
+                                                </div>
+                                                <span className="text-[9px] font-mono font-bold text-blue-700 bg-blue-100/80 px-1.5 py-0.5 rounded">&lt;ce:sec&gt;</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => { captureSelectionAs('appendix'); setIsCaptureMenuOpen(false); }}
+                                                className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-emerald-50 text-slate-800 hover:text-emerald-900 text-xs font-semibold flex items-center justify-between transition-colors group"
+                                            >
+                                                <div className="flex items-center gap-2">
+                                                    <Tag size={14} className="text-emerald-600 group-hover:scale-110 transition-transform" />
+                                                    <span>Appendix</span>
+                                                </div>
+                                                <span className="text-[9px] font-mono font-bold text-emerald-700 bg-emerald-100/80 px-1.5 py-0.5 rounded">&lt;ce:app&gt;</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => { captureSelectionAs('conflict-of-interest'); setIsCaptureMenuOpen(false); }}
+                                                className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-rose-50 text-slate-800 hover:text-rose-900 text-xs font-semibold flex items-center justify-between transition-colors group"
+                                            >
+                                                <div className="flex items-center gap-2">
+                                                    <ShieldAlert size={14} className="text-rose-600 group-hover:scale-110 transition-transform" />
+                                                    <span>Conflict of Interest</span>
+                                                </div>
+                                                <span className="text-[9px] font-mono font-bold text-rose-700 bg-rose-100/80 px-1.5 py-0.5 rounded">&lt;ce:coi&gt;</span>
+                                            </button>
+                                            <div className="pt-1 border-t border-slate-100">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { captureSelectionAs('clear'); setIsCaptureMenuOpen(false); }}
+                                                    className="w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-700 text-xs font-semibold flex items-center gap-2 transition-colors"
+                                                >
+                                                    <Eraser size={14} />
+                                                    <span>Remove Section Tag</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
                             <div className="flex items-center gap-2">
@@ -1342,7 +1672,8 @@ export const WordToXml: React.FC = () => {
                                     ref={editorRef}
                                     contentEditable
                                     onInput={handleEditorInput}
-                                    className="w-full h-full min-h-[400px] outline-none text-slate-800 font-serif text-base leading-relaxed select-text placeholder:text-slate-300 [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:my-2 [&_ul.unlabelled]:list-none [&_ul[type=unstyled]]:list-none [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:my-2 [&_ol[type=a]]:list-[lower-alpha] [&_ol[type=A]]:list-[upper-alpha] [&_ol[type=unstyled]]:list-none [&_li]:my-1"
+                                    data-placeholder="Paste text or type content here..."
+                                    className="w-full h-full min-h-[400px] outline-none text-slate-800 font-serif text-base leading-relaxed select-text empty:before:content-[attr(data-placeholder)] empty:before:text-slate-300 empty:before:pointer-events-none [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:my-2 [&_ul.unlabelled]:list-none [&_ul[type=unstyled]]:list-none [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:my-2 [&_ol[type=a]]:list-[lower-alpha] [&_ol[type=A]]:list-[upper-alpha] [&_ol[type=unstyled]]:list-none [&_li]:my-1"
                                     style={{ minHeight: '100%' }}
                                 />
                             ) : (
@@ -1364,7 +1695,7 @@ export const WordToXml: React.FC = () => {
                                 <Zap size={12} />
                                 Paste from MS Word or Plain Text directly
                             </span>
-                            <span>{editorHtml.length} characters</span>
+                            <span>{getCharCount()} characters</span>
                         </div>
                     </div>
                 </div>
