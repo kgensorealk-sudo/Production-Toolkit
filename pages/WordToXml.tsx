@@ -29,10 +29,7 @@ import {
     AlertCircle,
     CheckCircle2,
     Bookmark,
-    Tag,
-    ShieldAlert,
-    FileText,
-    BookOpen
+    ShieldAlert
 } from 'lucide-react';
 import Toast from '../components/Toast';
 
@@ -42,6 +39,7 @@ interface ConversionOptions {
     schema: NamespaceSchema;
     addParagraphIds: boolean;
     paraIdPrefix: string;
+    sectionTitleIdPrefix: string;
     listIdPrefix: string;
     listItemIdPrefix: string;
     paraIdStart: number;
@@ -111,6 +109,7 @@ export const WordToXml: React.FC = () => {
         schema: 'elsevier',
         addParagraphIds: true,
         paraIdPrefix: 'p',
+        sectionTitleIdPrefix: 'st',
         listIdPrefix: 'l',
         listItemIdPrefix: 'li',
         paraIdStart: 3005,
@@ -210,6 +209,49 @@ export const WordToXml: React.FC = () => {
             return;
         }
 
+        // Check if statement/selection is already tagged within any captured section/box
+        let existingType: string | null = null;
+        let checkNode: Node | null = range.commonAncestorContainer;
+        while (checkNode && checkNode !== editorRef.current) {
+            if (checkNode.nodeType === Node.ELEMENT_NODE) {
+                const el = checkNode as HTMLElement;
+                if (el.hasAttribute('data-ce-type') || el.classList.contains('ce-capture-box')) {
+                    existingType = el.getAttribute('data-ce-type') || 'section';
+                    break;
+                }
+            }
+            checkNode = checkNode.parentNode;
+        }
+
+        if (!existingType && range.cloneContents) {
+            try {
+                const frag = range.cloneContents();
+                if (frag.querySelector) {
+                    const found = frag.querySelector('[data-ce-type], .ce-capture-box');
+                    if (found) {
+                        existingType = found.getAttribute('data-ce-type') || 'section';
+                    }
+                }
+            } catch {
+                // ignore range errors if any
+            }
+        }
+
+        if (existingType) {
+            const readableName = existingType === 'acknowledgment'
+                ? 'Acknowledgement'
+                : existingType === 'conflict-of-interest'
+                ? 'Conflict of Interest'
+                : existingType === 'highlights'
+                ? 'Highlights'
+                : existingType.charAt(0).toUpperCase() + existingType.slice(1);
+            setToast({
+                msg: `Statement is already tagged within ${readableName} and cannot be re-tagged with another tool.`,
+                type: 'warn'
+            });
+            return;
+        }
+
         let defaultTitle = 'Acknowledgements';
         let label = 'Acknowledgement';
         if (type === 'abstract') {
@@ -224,6 +266,9 @@ export const WordToXml: React.FC = () => {
         } else if (type === 'conflict-of-interest') {
             defaultTitle = 'Declaration of competing interest';
             label = 'Conflict of Interest';
+        } else if (type === 'highlights') {
+            defaultTitle = 'Highlights';
+            label = 'Highlights';
         }
 
         let targetBlock: HTMLElement | null = null;
@@ -251,19 +296,40 @@ export const WordToXml: React.FC = () => {
         badge.innerHTML = `<span class="text-[10px] font-black uppercase tracking-wider text-amber-900 flex items-center gap-1.5"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg> Captured as: ${label}</span><span class="text-[9px] text-amber-600 font-bold uppercase tracking-wider">CE XML</span>`;
         wrapper.appendChild(badge);
 
+        let pTarget: HTMLElement | null = null;
+
         if (targetBlock && targetBlock.parentNode && !targetBlock.hasAttribute('data-ce-type')) {
             targetBlock.parentNode.replaceChild(wrapper, targetBlock);
             wrapper.appendChild(targetBlock);
+            pTarget = targetBlock;
         } else {
             const contents = range.extractContents();
             const p = document.createElement('p');
             if (contents.childNodes.length > 0) {
                 p.appendChild(contents);
-            } else {
-                p.textContent = 'The authors would like to thank BM Impianti S.r.l. for providing the real-world data of the PV-BESS systems, as well as the energy consumption profiles of their clients.';
             }
             wrapper.appendChild(p);
             range.insertNode(wrapper);
+            pTarget = p;
+        }
+
+        if (pTarget) {
+            const cleanText = (pTarget.textContent || '').replace(/\u00a0/g, ' ').trim();
+            if (!cleanText && !pTarget.querySelector('br')) {
+                pTarget.innerHTML = '<br>';
+            }
+            const sel = window.getSelection();
+            if (sel) {
+                try {
+                    const r = document.createRange();
+                    r.selectNodeContents(pTarget);
+                    r.collapse(false);
+                    sel.removeAllRanges();
+                    sel.addRange(r);
+                } catch {
+                    // ignore
+                }
+            }
         }
 
         handleEditorInput();
@@ -496,35 +562,49 @@ export const WordToXml: React.FC = () => {
         const getNextParaIdAttr = (): string => {
             if (!opts.addParagraphIds) return '';
             const prefix = opts.paraIdPrefix || 'p';
-            const idVal = `${prefix}${opts.paraIdStart + paraCounter * opts.paraIdStep}`;
+            const num = opts.paraIdStart + paraCounter * opts.paraIdStep;
             paraCounter++;
-            return ` id="${idVal}"`;
+            const formattedNum = String(num).padStart(4, '0');
+            return ` id="${prefix}${formattedNum}"`;
         };
 
         let listCounter = 0;
         const getNextListIdAttr = (): string => {
             if (!opts.addParagraphIds) return '';
             const prefix = opts.listIdPrefix || 'l';
-            const idVal = `${prefix}${opts.paraIdStart + listCounter * opts.paraIdStep}`;
+            const num = opts.paraIdStart + listCounter * opts.paraIdStep;
             listCounter++;
-            return ` id="${idVal}"`;
+            const formattedNum = String(num).padStart(4, '0');
+            return ` id="${prefix}${formattedNum}"`;
         };
 
         let listItemCounter = 0;
         const getNextListItemIdAttr = (): string => {
             if (!opts.addParagraphIds) return '';
             const prefix = opts.listItemIdPrefix || 'li';
-            const idVal = `${prefix}${opts.paraIdStart + listItemCounter * opts.paraIdStep}`;
+            const num = opts.paraIdStart + listItemCounter * opts.paraIdStep;
             listItemCounter++;
-            return ` id="${idVal}"`;
+            const formattedNum = String(num).padStart(4, '0');
+            return ` id="${prefix}${formattedNum}"`;
         };
 
-        let ackCounter = 1;
-        let abstractCounter = 1;
-        let appendixCounter = 1;
-        let coiCounter = 1;
-        let secCounter = 1;
-        let secTitleCounter = 1;
+        let secTitleCounter = 0;
+        const getNextSectionTitleIdAttr = (): string => {
+            if (!opts.addParagraphIds) return '';
+            const prefix = opts.sectionTitleIdPrefix || 'st';
+            const num = opts.paraIdStart + secTitleCounter * opts.paraIdStep;
+            secTitleCounter++;
+            const formattedNum = String(num).padStart(4, '0');
+            return ` id="${prefix}${formattedNum}"`;
+        };
+
+        let ackCounter = 0;
+        let abstractCounter = 0;
+        let appendixCounter = 0;
+        let coiCounter = 0;
+        let secCounter = 0;
+        let asCounter = 0;
+        let spCounter = 0;
 
         const parser = new DOMParser();
         const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html');
@@ -546,7 +626,8 @@ export const WordToXml: React.FC = () => {
         const processInlineNode = (node: Node): string => {
             if (node.nodeType === Node.TEXT_NODE) {
                 let text = node.textContent || '';
-                text = text.replace(/\u00a0/g, ' ').replace(/&nbsp;/g, ' ');
+                text = text.replace(/[\r\n\t]+/g, ' ').replace(/\u00a0/g, ' ').replace(/&nbsp;/g, ' ');
+                text = text.replace(/ {2,}/g, ' ');
                 // Always escape unescaped ampersands (&) and angle brackets (<, >) for XML compliance
                 if (opts.encodeEntities !== false) {
                     text = text
@@ -607,7 +688,7 @@ export const WordToXml: React.FC = () => {
             return wrapped;
         };
 
-        const LIST_MARKER_REGEX = /^(\s*(?:<[^>]+>\s*)*)(?:[•\*\-\u2013\u2014]|\d+[\.\)]|\([0-9a-zA-Z]+\)|[a-zA-Z][\.\)])\s+/i;
+        const LIST_MARKER_REGEX = /^(\s*(?:<[^>]+>\s*)*)(?:[•\*\-\u2013\u2014]|\d{1,3}[\.\)]|\((?:\d{1,2}|[a-zA-Z]|i{1,3}|iv|v|vi{0,3}|ix|x)\)|[a-zA-Z][\.\)])\s+/i;
 
         const isListParagraph = (el: HTMLElement, rawContent: string): boolean => {
             if (el.classList.contains('MsoListParagraph') || /mso-list/i.test(el.getAttribute('style') || '')) {
@@ -617,11 +698,11 @@ export const WordToXml: React.FC = () => {
         };
 
         const extractLabel = (rawText: string): { labelVal: string; cleanText: string } => {
-            const match = rawText.match(/^(\s*(?:<[^>]+>\s*)*)([•\*\-\u2013\u2014]|\d+[\.\)]|\([0-9a-zA-Z]+\)|[a-zA-Z][\.\)])\s*/i);
+            const match = rawText.match(/^(\s*(?:<[^>]+>\s*)*)([•\*\-\u2013\u2014]|\d{1,3}[\.\)]|\((?:\d{1,2}|[a-zA-Z]|i{1,3}|iv|v|vi{0,3}|ix|x)\)|[a-zA-Z][\.\)])\s*/i);
             if (!match) return { labelVal: '', cleanText: rawText };
 
             const rawMarker = match[2];
-            const cleanText = rawText.replace(/^(\s*(?:<[^>]+>\s*)*)(?:[•\*\-\u2013\u2014]|\d+[\.\)]|\([0-9a-zA-Z]+\)|[a-zA-Z][\.\)])\s*/i, '$1').trim();
+            const cleanText = rawText.replace(/^(\s*(?:<[^>]+>\s*)*)(?:[•\*\-\u2013\u2014]|\d{1,3}[\.\)]|\((?:\d{1,2}|[a-zA-Z]|i{1,3}|iv|v|vi{0,3}|ix|x)\)|[a-zA-Z][\.\)])\s*/i, '$1').trim();
 
             let labelVal = rawMarker.replace(/^[\(\s]+|[\.\)\s]+$/g, '');
             if (!labelVal && rawMarker) labelVal = rawMarker;
@@ -679,7 +760,13 @@ export const WordToXml: React.FC = () => {
 
                         inlineText = inlineText.trim();
 
-                        const { labelVal: extractedLabel, cleanText } = extractLabel(inlineText);
+                        let { labelVal: extractedLabel, cleanText } = extractLabel(inlineText);
+
+                        // If in a bullet list (<ul>), non-bullet text at the start of a line (e.g. "(002)" or "1.") is part of the content and shouldn't be stripped as a label
+                        if (baseCategory === 'bullet' && extractedLabel && !['•', '*', '-', '–', '—'].includes(extractedLabel)) {
+                            extractedLabel = '';
+                            cleanText = inlineText;
+                        }
 
                         // If labelVal is present in text, refine category if not unlabelled
                         if (extractedLabel && baseCategory !== 'simple') {
@@ -717,7 +804,7 @@ export const WordToXml: React.FC = () => {
 
                         const paraIdAttr = getParaId();
                         const listItemIdAttr = getNextListItemIdAttr();
-                        const labelXml = (opts.addListLabels && finalLabel) ? `\n    <${tagMap.label}>${finalLabel}</${tagMap.label}>` : '';
+                        const labelXml = (opts.addListLabels && finalLabel) ? `\n<${tagMap.label}>${finalLabel}</${tagMap.label}>` : '';
 
                         const nestedXmls = nestedListElements
                             .map(nl => processListNode(nl, listDepth + 1, customGetParaIdAttr))
@@ -727,16 +814,16 @@ export const WordToXml: React.FC = () => {
                             const combinedNested = nestedXmls.join('\n');
                             if (opts.embedListInPara) {
                                 listItemsXml.push(
-                                    `  <${tagMap.listItem}${listItemIdAttr}>${labelXml}\n    <${tagMap.para}${paraIdAttr}>${cleanText}\n${combinedNested}\n    </${tagMap.para}>\n  </${tagMap.listItem}>`
+                                    `<${tagMap.listItem}${listItemIdAttr}>${labelXml}\n<${tagMap.para}${paraIdAttr}>${cleanText}\n${combinedNested}\n</${tagMap.para}>\n</${tagMap.listItem}>`
                                 );
                             } else {
                                 listItemsXml.push(
-                                    `  <${tagMap.listItem}${listItemIdAttr}>${labelXml}\n    <${tagMap.para}${paraIdAttr}>${cleanText}</${tagMap.para}>\n${combinedNested}\n  </${tagMap.listItem}>`
+                                    `<${tagMap.listItem}${listItemIdAttr}>${labelXml}\n<${tagMap.para}${paraIdAttr}>${cleanText}</${tagMap.para}>\n${combinedNested}\n</${tagMap.listItem}>`
                                 );
                             }
                         } else {
                             listItemsXml.push(
-                                `  <${tagMap.listItem}${listItemIdAttr}>${labelXml}\n    <${tagMap.para}${paraIdAttr}>${cleanText}</${tagMap.para}>\n  </${tagMap.listItem}>`
+                                `<${tagMap.listItem}${listItemIdAttr}>${labelXml}\n<${tagMap.para}${paraIdAttr}>${cleanText}</${tagMap.para}>\n</${tagMap.listItem}>`
                             );
                         }
                     } else if (childTag === 'ul' || childTag === 'ol') {
@@ -746,31 +833,31 @@ export const WordToXml: React.FC = () => {
                                 const lastIdx = listItemsXml.length - 1;
                                 const lastItem = listItemsXml[lastIdx];
                                 if (opts.embedListInPara) {
-                                    const paraCloseRegex = new RegExp(`</${tagMap.para}>\n  </${tagMap.listItem}>$`, 'i');
+                                    const paraCloseRegex = new RegExp(`</${tagMap.para}>\n</${tagMap.listItem}>$`, 'i');
                                     if (paraCloseRegex.test(lastItem)) {
                                         listItemsXml[lastIdx] = lastItem.replace(
                                             paraCloseRegex,
-                                            `\n${nestedXml}\n    </${tagMap.para}>\n  </${tagMap.listItem}>`
+                                            `\n${nestedXml}\n</${tagMap.para}>\n</${tagMap.listItem}>`
                                         );
                                     } else {
                                         const listItemIdAttr = getNextListItemIdAttr();
-                                        listItemsXml.push(`  <${tagMap.listItem}${listItemIdAttr}>\n${nestedXml}\n  </${tagMap.listItem}>`);
+                                        listItemsXml.push(`<${tagMap.listItem}${listItemIdAttr}>\n${nestedXml}\n</${tagMap.listItem}>`);
                                     }
                                 } else {
                                     const itemCloseRegex = new RegExp(`</${tagMap.listItem}>$`, 'i');
                                     if (itemCloseRegex.test(lastItem)) {
                                         listItemsXml[lastIdx] = lastItem.replace(
                                             itemCloseRegex,
-                                            `\n${nestedXml}\n  </${tagMap.listItem}>`
+                                            `\n${nestedXml}\n</${tagMap.listItem}>`
                                         );
                                     } else {
                                         const listItemIdAttr = getNextListItemIdAttr();
-                                        listItemsXml.push(`  <${tagMap.listItem}${listItemIdAttr}>\n${nestedXml}\n  </${tagMap.listItem}>`);
+                                        listItemsXml.push(`<${tagMap.listItem}${listItemIdAttr}>\n${nestedXml}\n</${tagMap.listItem}>`);
                                     }
                                 }
                             } else {
                                 const listItemIdAttr = getNextListItemIdAttr();
-                                listItemsXml.push(`  <${tagMap.listItem}${listItemIdAttr}>\n${nestedXml}\n  </${tagMap.listItem}>`);
+                                listItemsXml.push(`<${tagMap.listItem}${listItemIdAttr}>\n${nestedXml}\n</${tagMap.listItem}>`);
                             }
                         }
                     }
@@ -854,9 +941,9 @@ export const WordToXml: React.FC = () => {
 
                             const paraIdAttr = getParaId();
                             const listItemIdAttr = getNextListItemIdAttr();
-                            const labelXml = (opts.addListLabels && finalLabel) ? `\n    <${tagMap.label}>${finalLabel}</${tagMap.label}>` : '';
+                            const labelXml = (opts.addListLabels && finalLabel) ? `\n<${tagMap.label}>${finalLabel}</${tagMap.label}>` : '';
                             pendingListItems.push({
-                                xml: `  <${tagMap.listItem}${listItemIdAttr}>${labelXml}\n    <${tagMap.para}${paraIdAttr}>${cleanText}</${tagMap.para}>\n  </${tagMap.listItem}>`,
+                                xml: `<${tagMap.listItem}${listItemIdAttr}>${labelXml}\n<${tagMap.para}${paraIdAttr}>${cleanText}</${tagMap.para}>\n</${tagMap.listItem}>`,
                                 category
                             });
                         } else {
@@ -899,6 +986,7 @@ export const WordToXml: React.FC = () => {
                             ceType === 'abstract' ? 'Abstract' :
                             ceType === 'appendix' ? 'Appendix' :
                             ceType === 'conflict-of-interest' ? 'Declaration of competing interest' :
+                            ceType === 'highlights' ? 'Highlights' :
                             'Section'
                         );
 
@@ -906,14 +994,27 @@ export const WordToXml: React.FC = () => {
                         const badge = cleanEl.querySelector('.ce-capture-badge');
                         if (badge) badge.remove();
 
+                        // Flatten any nested capture boxes inside cleanEl so section tags are never nested in XML
+                        cleanEl.querySelectorAll('[data-ce-type]').forEach(childCe => {
+                            while (childCe.firstChild) {
+                                childCe.parentNode?.insertBefore(childCe.firstChild, childCe);
+                            }
+                            childCe.remove();
+                        });
+
                         let outerTag = 'ce:section';
                         let titleTag = 'ce:section-title';
                         let wrapperIdAttr = '';
                         let titleIdAttr = '';
+                        let wrapperExtraAttrs = '';
 
                         if (opts.schema === 'elsevier') {
                             if (ceType === 'acknowledgment') outerTag = 'ce:acknowledgment';
                             else if (ceType === 'abstract') outerTag = 'ce:abstract';
+                            else if (ceType === 'highlights') {
+                                outerTag = 'ce:abstract';
+                                wrapperExtraAttrs = ' class="author-highlights" xml:lang="en"';
+                            }
                             else if (ceType === 'appendix') outerTag = 'ce:appendix';
                             else if (ceType === 'conflict-of-interest') outerTag = 'ce:conflict-of-interest';
                             else outerTag = 'ce:section';
@@ -921,6 +1022,10 @@ export const WordToXml: React.FC = () => {
                         } else if (opts.schema === 'jats') {
                             if (ceType === 'acknowledgment') outerTag = 'ack';
                             else if (ceType === 'abstract') outerTag = 'abstract';
+                            else if (ceType === 'highlights') {
+                                outerTag = 'abstract';
+                                wrapperExtraAttrs = ' abstract-type="author-highlights"';
+                            }
                             else if (ceType === 'appendix') outerTag = 'app';
                             else outerTag = 'sec';
                             titleTag = 'title';
@@ -930,38 +1035,46 @@ export const WordToXml: React.FC = () => {
                         }
 
                         if (opts.addParagraphIds) {
-                            const stNum = secTitleCounter * 5;
-                            secTitleCounter++;
-                            titleIdAttr = ` id="st${String(stNum).padStart(4, '0')}"`;
+                            titleIdAttr = getNextSectionTitleIdAttr();
 
                             if (ceType === 'acknowledgment') {
-                                const ackNum = ackCounter * 5;
-                                ackCounter++;
+                                const ackNum = opts.paraIdStart + (ackCounter++) * opts.paraIdStep;
                                 wrapperIdAttr = ` id="ac${String(ackNum).padStart(4, '0')}"`;
-                            } else if (ceType === 'abstract') {
-                                const abNum = abstractCounter * 5;
-                                abstractCounter++;
+                            } else if (ceType === 'abstract' || ceType === 'highlights') {
+                                const abNum = opts.paraIdStart + (abstractCounter++) * opts.paraIdStep;
                                 wrapperIdAttr = ` id="ab${String(abNum).padStart(4, '0')}"`;
                             } else if (ceType === 'appendix') {
-                                const apNum = appendixCounter * 5;
-                                appendixCounter++;
+                                const apNum = opts.paraIdStart + (appendixCounter++) * opts.paraIdStep;
                                 wrapperIdAttr = ` id="ap${String(apNum).padStart(4, '0')}"`;
                             } else if (ceType === 'conflict-of-interest') {
-                                const coiNum = coiCounter * 5;
-                                coiCounter++;
+                                const coiNum = opts.paraIdStart + (coiCounter++) * opts.paraIdStep;
                                 wrapperIdAttr = ` id="coi${String(coiNum).padStart(4, '0')}"`;
                             } else {
-                                const sNum = secCounter * 5;
-                                secCounter++;
+                                const sNum = opts.paraIdStart + (secCounter++) * opts.paraIdStep;
                                 wrapperIdAttr = ` id="s${String(sNum).padStart(4, '0')}"`;
                             }
                         }
 
                         const subBlocks = processBlockContainer(cleanEl);
                         const titleXml = `<${titleTag}${titleIdAttr}>${titleVal}</${titleTag}>`;
-                        const innerXml = subBlocks.join('\n');
+                        const innerXml = subBlocks.length > 0 
+                            ? subBlocks.join('\n') 
+                            : `<${tagMap.para}${getParaId()}></${tagMap.para}>`;
 
-                        blocks.push(`<${outerTag}${wrapperIdAttr}>\n${titleXml}\n${innerXml}\n</${outerTag}>`);
+                        if (ceType === 'highlights' && opts.schema === 'elsevier') {
+                            let asIdAttr = '';
+                            let spIdAttr = '';
+                            if (opts.addParagraphIds) {
+                                const asNum = opts.paraIdStart + (asCounter++) * opts.paraIdStep;
+                                asIdAttr = ` id="as${String(asNum).padStart(4, '0')}"`;
+                                const spNum = opts.paraIdStart + (spCounter++) * opts.paraIdStep;
+                                spIdAttr = ` id="sp${String(spNum).padStart(4, '0')}"`;
+                            }
+                            const bodyContent = `<ce:abstract-sec${asIdAttr}>\n<ce:simple-para${spIdAttr}>${innerXml}</ce:simple-para>\n</ce:abstract-sec>`;
+                            blocks.push(`<${outerTag}${wrapperIdAttr}${wrapperExtraAttrs}>\n${titleXml}\n${bodyContent}\n</${outerTag}>`);
+                        } else {
+                            blocks.push(`<${outerTag}${wrapperIdAttr}${wrapperExtraAttrs}>\n${titleXml}\n${innerXml}\n</${outerTag}>`);
+                        }
                         return;
                     }
 
@@ -972,7 +1085,11 @@ export const WordToXml: React.FC = () => {
                             const content = processInlineNode(el).trim();
                             if (content) {
                                 if (isListParagraph(el, content)) {
-                                    const { labelVal: extractedLabel, cleanText } = extractLabel(content);
+                                    let { labelVal: extractedLabel, cleanText } = extractLabel(content);
+                                    if (pendingListItems.length > 0 && pendingListItems[0].category === 'bullet' && extractedLabel && !['•', '*', '-', '–', '—'].includes(extractedLabel)) {
+                                        extractedLabel = '';
+                                        cleanText = content;
+                                    }
                                     let category: 'bullet' | 'number' | 'alpha' | 'simple' = 'bullet';
                                     if (/^\d+$/.test(extractedLabel)) {
                                         category = 'number';
@@ -989,9 +1106,9 @@ export const WordToXml: React.FC = () => {
 
                                     const paraIdAttr = getParaId();
                                     const listItemIdAttr = getNextListItemIdAttr();
-                                    const labelXml = (opts.addListLabels && finalLabel) ? `\n    <${tagMap.label}>${finalLabel}</${tagMap.label}>` : '';
+                                    const labelXml = (opts.addListLabels && finalLabel) ? `\n<${tagMap.label}>${finalLabel}</${tagMap.label}>` : '';
                                     pendingListItems.push({
-                                        xml: `  <${tagMap.listItem}${listItemIdAttr}>${labelXml}\n    <${tagMap.para}${paraIdAttr}>${cleanText}</${tagMap.para}>\n  </${tagMap.listItem}>`,
+                                        xml: `<${tagMap.listItem}${listItemIdAttr}>${labelXml}\n<${tagMap.para}${paraIdAttr}>${cleanText}</${tagMap.para}>\n</${tagMap.listItem}>`,
                                         category
                                     });
                                 } else {
@@ -1009,7 +1126,8 @@ export const WordToXml: React.FC = () => {
                             const content = processInlineNode(el).trim();
                             if (content) {
                                 if (opts.convertHeadings) {
-                                    blocks.push(`<${tagMap.title}>${content}</${tagMap.title}>`);
+                                    const titleIdAttr = getNextSectionTitleIdAttr();
+                                    blocks.push(`<${tagMap.title}${titleIdAttr}>${content}</${tagMap.title}>`);
                                 } else {
                                     const idAttr = getParaId();
                                     blocks.push(`<${tagMap.para}${idAttr}><${tagMap.bold}>${content}</${tagMap.bold}></${tagMap.para}>`);
@@ -1292,20 +1410,29 @@ export const WordToXml: React.FC = () => {
                                 />
                                 <span className="text-xs font-black text-indigo-950 uppercase tracking-wider flex items-center gap-1.5">
                                     <Hash size={14} className="text-indigo-600" />
-                                    Auto-Add Element IDs (&lt;ce:para&gt;, &lt;ce:list&gt;, &lt;ce:list-item&gt;)
+                                    Auto-Add Element IDs (&lt;ce:para&gt;, &lt;ce:section-title&gt;, &lt;ce:list&gt;)
                                 </span>
                             </label>
 
                             {options.addParagraphIds && (
                                 <div className="space-y-3 pt-3 border-t border-indigo-100">
-                                    <div className="grid grid-cols-3 gap-3">
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                                         <div>
                                             <label className="text-[10px] font-bold text-indigo-900 uppercase tracking-wider block mb-1">Para Prefix</label>
                                             <input
                                                 type="text"
                                                 value={options.paraIdPrefix}
                                                 onChange={(e) => setOptions(prev => ({ ...prev, paraIdPrefix: e.target.value }))}
-                                                className="w-full bg-white px-3 py-1.5 rounded-xl border border-indigo-200 text-xs font-mono font-bold text-slate-800 focus:outline-indigo-500"
+                                                className="w-full bg-white px-2.5 py-1.5 rounded-xl border border-indigo-200 text-xs font-mono font-bold text-slate-800 focus:outline-indigo-500"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-indigo-900 uppercase tracking-wider block mb-1">Title Prefix</label>
+                                            <input
+                                                type="text"
+                                                value={options.sectionTitleIdPrefix}
+                                                onChange={(e) => setOptions(prev => ({ ...prev, sectionTitleIdPrefix: e.target.value }))}
+                                                className="w-full bg-white px-2.5 py-1.5 rounded-xl border border-indigo-200 text-xs font-mono font-bold text-slate-800 focus:outline-indigo-500"
                                             />
                                         </div>
                                         <div>
@@ -1314,7 +1441,7 @@ export const WordToXml: React.FC = () => {
                                                 type="text"
                                                 value={options.listIdPrefix}
                                                 onChange={(e) => setOptions(prev => ({ ...prev, listIdPrefix: e.target.value }))}
-                                                className="w-full bg-white px-3 py-1.5 rounded-xl border border-indigo-200 text-xs font-mono font-bold text-slate-800 focus:outline-indigo-500"
+                                                className="w-full bg-white px-2.5 py-1.5 rounded-xl border border-indigo-200 text-xs font-mono font-bold text-slate-800 focus:outline-indigo-500"
                                             />
                                         </div>
                                         <div>
@@ -1323,19 +1450,19 @@ export const WordToXml: React.FC = () => {
                                                 type="text"
                                                 value={options.listItemIdPrefix}
                                                 onChange={(e) => setOptions(prev => ({ ...prev, listItemIdPrefix: e.target.value }))}
-                                                className="w-full bg-white px-3 py-1.5 rounded-xl border border-indigo-200 text-xs font-mono font-bold text-slate-800 focus:outline-indigo-500"
+                                                className="w-full bg-white px-2.5 py-1.5 rounded-xl border border-indigo-200 text-xs font-mono font-bold text-slate-800 focus:outline-indigo-500"
                                             />
                                         </div>
                                     </div>
 
-                                    <div className="grid grid-cols-2 gap-3">
+                                    <div className="grid grid-cols-2 gap-2.5">
                                         <div>
                                             <label className="text-[10px] font-bold text-indigo-900 uppercase tracking-wider block mb-1">Start ID</label>
                                             <input
                                                 type="number"
                                                 value={options.paraIdStart}
                                                 onChange={(e) => setOptions(prev => ({ ...prev, paraIdStart: parseInt(e.target.value) || 0 }))}
-                                                className="w-full bg-white px-3 py-1.5 rounded-xl border border-indigo-200 text-xs font-mono font-bold text-slate-800 focus:outline-indigo-500"
+                                                className="w-full bg-white px-2.5 py-1.5 rounded-xl border border-indigo-200 text-xs font-mono font-bold text-slate-800 focus:outline-indigo-500"
                                             />
                                         </div>
                                         <div>
@@ -1344,7 +1471,7 @@ export const WordToXml: React.FC = () => {
                                                 type="number"
                                                 value={options.paraIdStep}
                                                 onChange={(e) => setOptions(prev => ({ ...prev, paraIdStep: parseInt(e.target.value) || 1 }))}
-                                                className="w-full bg-white px-3 py-1.5 rounded-xl border border-indigo-200 text-xs font-mono font-bold text-slate-800 focus:outline-indigo-500"
+                                                className="w-full bg-white px-2.5 py-1.5 rounded-xl border border-indigo-200 text-xs font-mono font-bold text-slate-800 focus:outline-indigo-500"
                                             />
                                         </div>
                                     </div>
@@ -1567,6 +1694,17 @@ export const WordToXml: React.FC = () => {
                                                 <span>Section Tagging</span>
                                                 <span className="text-amber-600 font-mono">CE XML</span>
                                             </div>
+                                             <button
+                                                type="button"
+                                                onClick={() => { captureSelectionAs('highlights'); setIsCaptureMenuOpen(false); }}
+                                                className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-emerald-50 text-slate-800 hover:text-emerald-900 text-xs font-semibold flex items-center justify-between transition-colors group"
+                                            >
+                                                <div className="flex items-center gap-2">
+                                                    <Sparkles size={14} className="text-emerald-600 group-hover:scale-110 transition-transform" />
+                                                    <span>Highlights</span>
+                                                </div>
+                                                <span className="text-[9px] font-mono font-bold text-emerald-700 bg-emerald-100/80 px-1.5 py-0.5 rounded">&lt;ce:abs&gt;</span>
+                                            </button>
                                             <button
                                                 type="button"
                                                 onClick={() => { captureSelectionAs('acknowledgment'); setIsCaptureMenuOpen(false); }}
@@ -1577,39 +1715,6 @@ export const WordToXml: React.FC = () => {
                                                     <span>Acknowledgement</span>
                                                 </div>
                                                 <span className="text-[9px] font-mono font-bold text-amber-700 bg-amber-100/80 px-1.5 py-0.5 rounded">&lt;ce:ack&gt;</span>
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => { captureSelectionAs('abstract'); setIsCaptureMenuOpen(false); }}
-                                                className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-indigo-50 text-slate-800 hover:text-indigo-900 text-xs font-semibold flex items-center justify-between transition-colors group"
-                                            >
-                                                <div className="flex items-center gap-2">
-                                                    <FileText size={14} className="text-indigo-600 group-hover:scale-110 transition-transform" />
-                                                    <span>Abstract</span>
-                                                </div>
-                                                <span className="text-[9px] font-mono font-bold text-indigo-700 bg-indigo-100/80 px-1.5 py-0.5 rounded">&lt;ce:abs&gt;</span>
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => { captureSelectionAs('section'); setIsCaptureMenuOpen(false); }}
-                                                className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-blue-50 text-slate-800 hover:text-blue-900 text-xs font-semibold flex items-center justify-between transition-colors group"
-                                            >
-                                                <div className="flex items-center gap-2">
-                                                    <BookOpen size={14} className="text-blue-600 group-hover:scale-110 transition-transform" />
-                                                    <span>Section</span>
-                                                </div>
-                                                <span className="text-[9px] font-mono font-bold text-blue-700 bg-blue-100/80 px-1.5 py-0.5 rounded">&lt;ce:sec&gt;</span>
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => { captureSelectionAs('appendix'); setIsCaptureMenuOpen(false); }}
-                                                className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-emerald-50 text-slate-800 hover:text-emerald-900 text-xs font-semibold flex items-center justify-between transition-colors group"
-                                            >
-                                                <div className="flex items-center gap-2">
-                                                    <Tag size={14} className="text-emerald-600 group-hover:scale-110 transition-transform" />
-                                                    <span>Appendix</span>
-                                                </div>
-                                                <span className="text-[9px] font-mono font-bold text-emerald-700 bg-emerald-100/80 px-1.5 py-0.5 rounded">&lt;ce:app&gt;</span>
                                             </button>
                                             <button
                                                 type="button"
@@ -1672,6 +1777,34 @@ export const WordToXml: React.FC = () => {
                                     ref={editorRef}
                                     contentEditable
                                     onInput={handleEditorInput}
+                                    onClick={(e) => {
+                                        const target = e.target as HTMLElement;
+                                        const box = target.closest('.ce-capture-box') as HTMLElement;
+                                        if (box) {
+                                            const isBadge = target.classList.contains('ce-capture-badge') || !!target.closest('.ce-capture-badge');
+                                            if (isBadge || target === box) {
+                                                const para = (box.querySelector('p') || box.querySelector('div:not(.ce-capture-badge)') || box) as HTMLElement;
+                                                if (para && para !== box) {
+                                                    const cleanText = (para.textContent || '').replace(/\u00a0/g, ' ').trim();
+                                                    if (!cleanText && !para.querySelector('br')) {
+                                                        para.innerHTML = '<br>';
+                                                    }
+                                                    const sel = window.getSelection();
+                                                    if (sel) {
+                                                        try {
+                                                            const r = document.createRange();
+                                                            r.selectNodeContents(para);
+                                                            r.collapse(false);
+                                                            sel.removeAllRanges();
+                                                            sel.addRange(r);
+                                                        } catch {
+                                                            // ignore
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }}
                                     data-placeholder="Paste text or type content here..."
                                     className="w-full h-full min-h-[400px] outline-none text-slate-800 font-serif text-base leading-relaxed select-text empty:before:content-[attr(data-placeholder)] empty:before:text-slate-300 empty:before:pointer-events-none [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:my-2 [&_ul.unlabelled]:list-none [&_ul[type=unstyled]]:list-none [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:my-2 [&_ol[type=a]]:list-[lower-alpha] [&_ol[type=A]]:list-[upper-alpha] [&_ol[type=unstyled]]:list-none [&_li]:my-1"
                                     style={{ minHeight: '100%' }}

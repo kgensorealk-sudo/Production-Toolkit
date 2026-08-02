@@ -44,7 +44,7 @@ const AnnouncementModal: React.FC = () => {
             }
 
             if (error) {
-                console.error("[AnnouncementSystem] Broadcast retrieval failed entirely.", error);
+                console.warn("[AnnouncementSystem] Broadcast retrieval unavailable.", error?.message || error);
                 return;
             }
 

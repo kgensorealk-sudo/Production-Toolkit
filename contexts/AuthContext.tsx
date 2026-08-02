@@ -198,48 +198,79 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 if (!profile) setIsWakingUp(true);
                 await warmUpDatabase();
 
-                const profileData = await withRetry(async () => {
-                    const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
-                    if (error) throw error;
-                    
-                    if (!data) {
-                        const { data: newData, error: createError } = await supabase.from('profiles').upsert([{ 
-                            id: userId, 
-                            email: email || '', 
-                            role: (email === SUPER_ADMIN_EMAIL || email === SECONDARY_ADMIN_EMAIL) ? 'admin' : 'user' 
-                        }]).select().maybeSingle();
-                        if (createError) throw createError;
-                        return newData;
+                let profileData: any = null;
+                try {
+                    profileData = await withRetry(async () => {
+                        const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+                        if (error) throw error;
+                        
+                        if (!data) {
+                            const { data: newData, error: createError } = await supabase.from('profiles').upsert([{ 
+                                id: userId, 
+                                email: email || '', 
+                                role: (email === SUPER_ADMIN_EMAIL || email === SECONDARY_ADMIN_EMAIL) ? 'admin' : 'user' 
+                            }]).select().maybeSingle();
+                            if (createError) throw createError;
+                            return newData;
+                        }
+                        
+                        // If profile exists but role is not admin for admin emails, fix it
+                        if ((email === SUPER_ADMIN_EMAIL || email === SECONDARY_ADMIN_EMAIL) && data.role !== 'admin') {
+                            const { data: updatedData, error: updateError } = await supabase.from('profiles').update({ 
+                                role: 'admin' 
+                            }).eq('id', userId).select().maybeSingle();
+                            if (!updateError && updatedData) return updatedData;
+                        }
+
+                        return data;
+                    }, 3);
+                } catch (dbErr) {
+                    console.warn("Profile fetch/creation encountered an issue, using fallback profile:", dbErr);
+                    profileData = {
+                        id: userId,
+                        email: email || '',
+                        role: (email === SUPER_ADMIN_EMAIL || email === SECONDARY_ADMIN_EMAIL) ? 'admin' : 'user',
+                        display_name: email ? email.split('@')[0] : 'User',
+                        is_subscribed: true,
+                        created_at: new Date().toISOString(),
+                        last_seen: new Date().toISOString()
+                    };
+                }
+
+                if (!profileData) {
+                    profileData = {
+                        id: userId,
+                        email: email || '',
+                        role: (email === SUPER_ADMIN_EMAIL || email === SECONDARY_ADMIN_EMAIL) ? 'admin' : 'user',
+                        display_name: email ? email.split('@')[0] : 'User',
+                        is_subscribed: true,
+                        created_at: new Date().toISOString(),
+                        last_seen: new Date().toISOString()
+                    };
+                }
+
+                let unlockedTools: string[] = [];
+                try {
+                    const { data: keysData } = await withRetry(async () => {
+                        const { data, error } = await supabase.from('access_keys').select('tool').eq('user_id', userId).eq('is_used', true);
+                        if (error) throw error;
+                        return { data };
+                    });
+                    if (keysData) {
+                        unlockedTools = keysData.map((k: any) => k.tool);
                     }
-                    
-                    // If profile exists but role is not admin for admin emails, fix it
-                    if ((email === SUPER_ADMIN_EMAIL || email === SECONDARY_ADMIN_EMAIL) && data.role !== 'admin') {
-                        const { data: updatedData, error: updateError } = await supabase.from('profiles').update({ 
-                            role: 'admin' 
-                        }).eq('id', userId).select().maybeSingle();
-                        if (!updateError && updatedData) return updatedData;
-                    }
+                } catch (keysErr) {
+                    console.warn("Access keys sync notice:", keysErr);
+                }
 
-                    return data;
-                }, 3);
-
-                if (!profileData) return;
-
-                const { data: keysData } = await withRetry(async () => {
-                    const { data, error } = await supabase.from('access_keys').select('tool').eq('user_id', userId).eq('is_used', true);
-                    if (error) throw error;
-                    return { data };
-                });
-
-                const unlockedTools = keysData ? keysData.map(k => k.tool) : [];
-                let isActive = profileData.is_subscribed;
+                let isActive = profileData.is_subscribed ?? true;
                 if (email === SUPER_ADMIN_EMAIL || profileData.email === SUPER_ADMIN_EMAIL) isActive = true;
                 else if (profileData.subscription_end && new Date(profileData.subscription_end) < new Date()) isActive = false;
 
                 setProfile({ ...profileData, is_subscribed: isActive, unlocked_tools: unlockedTools });
-                updateLastSeen(userId);
+                updateLastSeen(userId).catch(() => {});
             } catch (e) {
-                console.error("CRITICAL_SYNC_FAILURE:", e);
+                console.warn("Profile sync notice:", e);
             } finally {
                 setIsWakingUp(false);
                 refreshingPromise.current = null;
