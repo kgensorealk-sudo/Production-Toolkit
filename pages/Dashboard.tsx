@@ -244,9 +244,7 @@ const Dashboard: React.FC = () => {
         { id: ToolId.TABLE_BEAUTIFIER, title: "Table XML Beautifier", desc: "Transform single-line table rows into structured multi-line formatted entry blocks.", iconBg: "bg-pink-50", iconText: "text-pink-600", borderColor: "bg-pink-400", Icon: Sparkles },
         { id: ToolId.WORD_TO_XML, title: "MS Word to XML Converter", desc: "Paste MS Word text with superscript, subscript, bold, italics, & paragraphs to automatically scan and generate XML.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: FileCode },
         { id: ToolId.VIEW_SYNC, title: "View Synchronizer", desc: "Mirror content between paragraph views while maintaining ID integrity and references.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: RefreshCw },
-        { id: ToolId.STRUCTURAL_ARCHITECT, title: "Reference Structure Repair", desc: "Audit and auto-repair XML reference structures, ID sequences, author initials, empty tags, and source text.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: Cpu },
-        { id: ToolId.SECTION_AUDITOR, title: "Section Auditor", desc: "Inspect and validate document section hierarchy, node titles, and ID properties.", iconBg: "bg-slate-50", iconText: "text-slate-600", borderColor: "bg-slate-500", Icon: SearchCode },
-        { id: ToolId.REF_SORTER, title: "Reference Sorter", desc: "Alphabetize and re-order bibliography reference blocks into proper sequence.", iconBg: "bg-blue-50", iconText: "text-blue-600", borderColor: "bg-blue-500", Icon: SortAsc }
+        { id: ToolId.STRUCTURAL_ARCHITECT, title: "Reference Structure Repair", desc: "Audit and auto-repair XML reference structures, ID sequences, author initials, empty tags, and source text.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: Cpu }
     ];
 
     const filteredTools = useMemo(() => {
