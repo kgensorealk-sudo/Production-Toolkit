@@ -29,7 +29,8 @@ import {
     AlertCircle,
     CheckCircle2,
     Bookmark,
-    ShieldAlert
+    ShieldAlert,
+    Tag
 } from 'lucide-react';
 import Toast from '../components/Toast';
 
@@ -244,6 +245,8 @@ export const WordToXml: React.FC = () => {
                 ? 'Conflict of Interest'
                 : existingType === 'highlights'
                 ? 'Highlights'
+                : existingType === 'jel' || existingType === 'jel-classifications'
+                ? 'JEL Classifications'
                 : existingType.charAt(0).toUpperCase() + existingType.slice(1);
             setToast({
                 msg: `Statement is already tagged within ${readableName} and cannot be re-tagged with another tool.`,
@@ -269,6 +272,9 @@ export const WordToXml: React.FC = () => {
         } else if (type === 'highlights') {
             defaultTitle = 'Highlights';
             label = 'Highlights';
+        } else if (type === 'jel' || type === 'jel-classifications') {
+            defaultTitle = 'JEL classifications';
+            label = 'JEL Classifications';
         }
 
         let targetBlock: HTMLElement | null = null;
@@ -605,6 +611,9 @@ export const WordToXml: React.FC = () => {
         let secCounter = 0;
         let asCounter = 0;
         let spCounter = 0;
+        let ksCounter = 0;
+        let kwCounter = 0;
+        let txCounter = 0;
 
         const parser = new DOMParser();
         const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html');
@@ -987,6 +996,7 @@ export const WordToXml: React.FC = () => {
                             ceType === 'appendix' ? 'Appendix' :
                             ceType === 'conflict-of-interest' ? 'Declaration of competing interest' :
                             ceType === 'highlights' ? 'Highlights' :
+                            ceType === 'jel' || ceType === 'jel-classifications' ? 'JEL classifications' :
                             'Section'
                         );
 
@@ -1015,6 +1025,10 @@ export const WordToXml: React.FC = () => {
                                 outerTag = 'ce:abstract';
                                 wrapperExtraAttrs = ' class="author-highlights" xml:lang="en"';
                             }
+                            else if (ceType === 'jel' || ceType === 'jel-classifications') {
+                                outerTag = 'ce:keywords';
+                                wrapperExtraAttrs = ' class="jel"';
+                            }
                             else if (ceType === 'appendix') outerTag = 'ce:appendix';
                             else if (ceType === 'conflict-of-interest') outerTag = 'ce:conflict-of-interest';
                             else outerTag = 'ce:section';
@@ -1026,12 +1040,22 @@ export const WordToXml: React.FC = () => {
                                 outerTag = 'abstract';
                                 wrapperExtraAttrs = ' abstract-type="author-highlights"';
                             }
+                            else if (ceType === 'jel' || ceType === 'jel-classifications') {
+                                outerTag = 'kwd-group';
+                                wrapperExtraAttrs = ' kwd-group-type="jel"';
+                            }
                             else if (ceType === 'appendix') outerTag = 'app';
                             else outerTag = 'sec';
                             titleTag = 'title';
                         } else {
-                            outerTag = ceType;
-                            titleTag = 'heading';
+                            if (ceType === 'jel' || ceType === 'jel-classifications') {
+                                outerTag = 'keywords';
+                                wrapperExtraAttrs = ' class="jel"';
+                                titleTag = 'heading';
+                            } else {
+                                outerTag = ceType;
+                                titleTag = 'heading';
+                            }
                         }
 
                         if (opts.addParagraphIds) {
@@ -1043,6 +1067,9 @@ export const WordToXml: React.FC = () => {
                             } else if (ceType === 'abstract' || ceType === 'highlights') {
                                 const abNum = opts.paraIdStart + (abstractCounter++) * opts.paraIdStep;
                                 wrapperIdAttr = ` id="ab${String(abNum).padStart(4, '0')}"`;
+                            } else if (ceType === 'jel' || ceType === 'jel-classifications') {
+                                const ksNum = opts.paraIdStart + (ksCounter++) * opts.paraIdStep;
+                                wrapperIdAttr = ` id="ks${String(ksNum).padStart(4, '0')}"`;
                             } else if (ceType === 'appendix') {
                                 const apNum = opts.paraIdStart + (appendixCounter++) * opts.paraIdStep;
                                 wrapperIdAttr = ` id="ap${String(apNum).padStart(4, '0')}"`;
@@ -1072,6 +1099,34 @@ export const WordToXml: React.FC = () => {
                             }
                             const bodyContent = `<ce:abstract-sec${asIdAttr}>\n<ce:simple-para${spIdAttr}>${innerXml}</ce:simple-para>\n</ce:abstract-sec>`;
                             blocks.push(`<${outerTag}${wrapperIdAttr}${wrapperExtraAttrs}>\n${titleXml}\n${bodyContent}\n</${outerTag}>`);
+                        } else if ((ceType === 'jel' || ceType === 'jel-classifications') && opts.schema === 'elsevier') {
+                            let kwIdAttr = '';
+                            let txIdAttr = '';
+                            if (opts.addParagraphIds) {
+                                const kwNum = opts.paraIdStart + (kwCounter++) * opts.paraIdStep;
+                                kwIdAttr = ` id="kw${String(kwNum).padStart(4, '0')}"`;
+                                const txNum = opts.paraIdStart + (txCounter++) * opts.paraIdStep;
+                                txIdAttr = ` id="tx${String(txNum).padStart(4, '0')}"`;
+                            }
+                            let textVal = Array.from(cleanEl.childNodes)
+                                .map(child => processInlineNode(child))
+                                .join('')
+                                .replace(/<ce:para[^>]*>/gi, '')
+                                .replace(/<\/ce:para>/gi, '')
+                                .replace(/<p[^>]*>/gi, '')
+                                .replace(/<\/p>/gi, '')
+                                .trim();
+                            if (!textVal) {
+                                textVal = cleanEl.textContent?.replace(/\u00a0/g, ' ').trim() || '';
+                            }
+                            const kwXml = `<ce:keyword${kwIdAttr}><ce:text${txIdAttr}>${textVal}</ce:text></ce:keyword>`;
+                            blocks.push(`<ce:keywords class="jel"${wrapperIdAttr}>${titleXml}${kwXml}</ce:keywords>`);
+                        } else if ((ceType === 'jel' || ceType === 'jel-classifications') && opts.schema === 'jats') {
+                            let textVal = cleanEl.textContent?.replace(/\u00a0/g, ' ').trim() || '';
+                            blocks.push(`<kwd-group kwd-group-type="jel"${wrapperIdAttr}>${titleXml}<kwd>${textVal}</kwd></kwd-group>`);
+                        } else if (ceType === 'jel' || ceType === 'jel-classifications') {
+                            let textVal = cleanEl.textContent?.replace(/\u00a0/g, ' ').trim() || '';
+                            blocks.push(`<keywords class="jel"${wrapperIdAttr}>${titleXml}<keyword>${textVal}</keyword></keywords>`);
                         } else {
                             blocks.push(`<${outerTag}${wrapperIdAttr}${wrapperExtraAttrs}>\n${titleXml}\n${innerXml}\n</${outerTag}>`);
                         }
@@ -1726,6 +1781,17 @@ export const WordToXml: React.FC = () => {
                                                     <span>Conflict of Interest</span>
                                                 </div>
                                                 <span className="text-[9px] font-mono font-bold text-rose-700 bg-rose-100/80 px-1.5 py-0.5 rounded">&lt;ce:coi&gt;</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => { captureSelectionAs('jel'); setIsCaptureMenuOpen(false); }}
+                                                className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-blue-50 text-slate-800 hover:text-blue-900 text-xs font-semibold flex items-center justify-between transition-colors group"
+                                            >
+                                                <div className="flex items-center gap-2">
+                                                    <Tag size={14} className="text-blue-600 group-hover:scale-110 transition-transform" />
+                                                    <span>JEL Classifications</span>
+                                                </div>
+                                                <span className="text-[9px] font-mono font-bold text-blue-700 bg-blue-100/80 px-1.5 py-0.5 rounded">&lt;ce:keywords&gt;</span>
                                             </button>
                                             <div className="pt-1 border-t border-slate-100">
                                                 <button

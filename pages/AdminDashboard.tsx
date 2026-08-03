@@ -10,7 +10,7 @@ import RichTextEditor from '../components/RichTextEditor';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { History, Info, X, Radio, Signal, Terminal, Eye, Send, Save, Trash2, Layout as LayoutIcon, Play, Square, AlertTriangle, CheckCircle2, AlertCircle, ShieldCheck, Database, Zap, ExternalLink, Search, Filter, Copy, ChevronDown, ChevronUp, RefreshCw, Sparkles, Plus, Edit3, Sliders, Layers, Maximize2, Minimize2, MoreVertical } from 'lucide-react';
+import { History, Info, X, Radio, Signal, Terminal, Eye, Send, Save, Trash2, Layout as LayoutIcon, Play, Square, AlertTriangle, CheckCircle2, AlertCircle, ShieldCheck, Database, Zap, ExternalLink, Search, Filter, Copy, ChevronDown, ChevronUp, RefreshCw, Sparkles, Plus, Edit3, Sliders, Layers, Maximize2, Minimize2, MoreVertical, Calendar, CalendarPlus, Clock } from 'lucide-react';
 
 interface Announcement {
     id: string;
@@ -141,6 +141,10 @@ const AdminDashboard: React.FC = () => {
     const [announcementFilter, setAnnouncementFilter] = useState<'all' | 'active' | 'inactive' | 'mandatory' | 'info' | 'warning' | 'success' | 'error'>('all');
     const [expandedAnnouncementIds, setExpandedAnnouncementIds] = useState<string[]>([]);
     const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
+    const [extendModalUser, setExtendModalUser] = useState<UserProfile | null>(null);
+    const [extendTermKey, setExtendTermKey] = useState<string>('sub_1mo');
+    const [customDateValue, setCustomDateValue] = useState<string>('');
 
     const [defaultAvatars, setDefaultAvatars] = useState<DefaultAvatar[]>([]);
     const [newAvatarName, setNewAvatarName] = useState('');
@@ -491,6 +495,59 @@ const AdminDashboard: React.FC = () => {
             setUsers(users.map(u => u.id === user.id ? { ...u, ...updates } : u));
             setToast({ msg: newVal ? `Authorized (${durationOption?.label})` : 'Access Terminated', type: 'success' });
         } catch (err: any) { setToast({ msg: 'Operation failed', type: 'error' }); } finally { setIsLoading(false); }
+    };
+
+    const extendUserExpiry = async (user: UserProfile, termKeyOrCustomIso?: string) => {
+        setIsLoading(true);
+        try {
+            let newEndIso: string;
+            let extensionLabel: string;
+
+            const currentEndMs = user.subscription_end ? new Date(user.subscription_end).getTime() : 0;
+            const nowMs = Date.now();
+            const baseMs = currentEndMs > nowMs ? currentEndMs : nowMs;
+
+            if (termKeyOrCustomIso && termKeyOrCustomIso.startsWith('custom:')) {
+                const targetDateStr = termKeyOrCustomIso.replace('custom:', '');
+                const targetObj = new Date(`${targetDateStr}T23:59:59.999Z`);
+                newEndIso = targetObj.toISOString();
+                extensionLabel = `Set to ${targetObj.toLocaleDateString()}`;
+            } else {
+                const selectedKey = termKeyOrCustomIso || selectedDurations[user.id] || 'sub_1y';
+                const durationOption = DURATION_OPTIONS.find(o => o.value === selectedKey);
+                const extensionMs = getDurationMs(selectedKey);
+                newEndIso = new Date(baseMs + extensionMs).toISOString();
+                extensionLabel = `+${durationOption?.label || 'Extended'}`;
+            }
+
+            const updates: any = {
+                is_subscribed: true,
+                subscription_end: newEndIso
+            };
+
+            await withRetry(async () => {
+                const { error } = await supabase.from('profiles').update(updates).eq('id', user.id);
+                if (error) throw error;
+            });
+
+            setUsers(prev => prev.map(u => u.id === user.id ? { ...u, ...updates } : u));
+            
+            const formattedDate = new Date(newEndIso).toLocaleDateString(undefined, {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+            });
+
+            setToast({ 
+                msg: `Expiry extended for ${user.email} (${extensionLabel}) -> New Expiry: ${formattedDate}`, 
+                type: 'success' 
+            });
+            setExtendModalUser(null);
+        } catch (err: any) { 
+            setToast({ msg: `Extend operation failed: ${err.message}`, type: 'error' }); 
+        } finally { 
+            setIsLoading(false); 
+        }
     };
 
     const toggleFreeTool = async (tid: string) => {
@@ -1166,17 +1223,81 @@ const AdminDashboard: React.FC = () => {
                                             <td className="px-6 py-4 text-xs font-black uppercase text-slate-400 tracking-tighter">{u.role}</td>
                                             <td className="px-6 py-4"><span className={`px-3 py-1 text-[10px] font-black rounded-full uppercase tracking-widest border ${u.is_subscribed ? 'bg-emerald-50 text-emerald-600 border-emerald-100 shadow-sm' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>{u.is_subscribed ? 'Authorized' : 'Dormant'}</span></td>
                                             <td className="px-6 py-4">
-                                                <div className="flex flex-col">
-                                                    <span className="text-[11px] font-bold text-slate-600">
-                                                        {u.subscription_end ? new Date(u.subscription_end).toLocaleDateString() : 'N/A'}
-                                                    </span>
-                                                    {u.subscription_end && new Date(u.subscription_end) < new Date() && (
-                                                        <span className="text-[8px] font-black text-rose-500 uppercase tracking-tighter">Terminated</span>
+                                                <div className="flex flex-col gap-1">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <Calendar className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                                                        <span className="text-xs font-bold text-slate-800 font-mono">
+                                                            {u.subscription_end 
+                                                                ? new Date(u.subscription_end).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) 
+                                                                : 'No Expiry Set'}
+                                                        </span>
+                                                    </div>
+                                                    {u.subscription_end && (
+                                                        new Date(u.subscription_end) < new Date() ? (
+                                                            <span className="text-[9px] font-black text-rose-500 uppercase tracking-wider flex items-center gap-1">
+                                                                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
+                                                                Expired ({getCountdown(u.subscription_end)})
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-[9px] font-bold text-indigo-600 font-mono flex items-center gap-1">
+                                                                <Clock className="w-2.5 h-2.5 text-indigo-400" />
+                                                                {getCountdown(u.subscription_end)}
+                                                            </span>
+                                                        )
                                                     )}
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4 text-center"><div className="flex flex-col items-center"><span className="text-[11px] font-bold text-slate-600">{formatLastSeen(u.last_seen)}</span></div></td>
-                                            <td className="px-6 py-4"><div className="flex items-center gap-3">{!u.is_subscribed && (<select value={selectedDurations[u.id] || 'sub_1y'} onChange={(e) => setSelectedDurations(prev => ({...prev, [u.id]: e.target.value}))} className="text-[10px] font-black uppercase py-1.5 rounded-lg border-slate-200 bg-white shadow-sm focus:ring-2 focus:ring-indigo-500/10 transition-all"><optgroup label="Access Term">{DURATION_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</optgroup></select>)}<button onClick={() => toggleSubscription(u)} className={`text-[10px] font-black px-4 py-2 rounded-xl border border-slate-200 uppercase transition-all shadow-sm ${u.is_subscribed ? 'text-rose-600 border-rose-100 bg-rose-50 hover:bg-rose-600 hover:text-white' : 'text-indigo-600 hover:bg-indigo-600 hover:text-white'}`}>{u.is_subscribed ? 'Terminate' : 'Authorize'}</button></div></td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <select 
+                                                        value={selectedDurations[u.id] || 'sub_1y'} 
+                                                        onChange={(e) => setSelectedDurations(prev => ({...prev, [u.id]: e.target.value}))} 
+                                                        className="text-[10px] font-black uppercase py-1.5 px-2 rounded-lg border border-slate-200 bg-white text-slate-700 shadow-xs focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all"
+                                                    >
+                                                        <optgroup label="Access Term">
+                                                            {DURATION_OPTIONS.map(o => (
+                                                                <option key={o.value} value={o.value}>{o.label}</option>
+                                                            ))}
+                                                        </optgroup>
+                                                    </select>
+
+                                                    <button 
+                                                        onClick={() => extendUserExpiry(u, selectedDurations[u.id] || 'sub_1y')} 
+                                                        className="text-[10px] font-black px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white border border-indigo-200 uppercase transition-all shadow-xs flex items-center gap-1.5 active:scale-95"
+                                                        title="Extend expiry date by selected term"
+                                                    >
+                                                        <CalendarPlus className="w-3.5 h-3.5" />
+                                                        <span>Extend Expiry</span>
+                                                    </button>
+
+                                                    <button
+                                                        onClick={() => {
+                                                            setExtendModalUser(u);
+                                                            setExtendTermKey('sub_1mo');
+                                                            const defaultDate = u.subscription_end && new Date(u.subscription_end) > new Date()
+                                                                ? new Date(new Date(u.subscription_end).getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+                                                                : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+                                                            setCustomDateValue(defaultDate);
+                                                        }}
+                                                        className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-slate-100 transition-all border border-transparent hover:border-slate-200"
+                                                        title="Open Custom Date Picker & Presets"
+                                                    >
+                                                        <Edit3 className="w-3.5 h-3.5" />
+                                                    </button>
+
+                                                    <button 
+                                                        onClick={() => toggleSubscription(u)} 
+                                                        className={`text-[10px] font-black px-3.5 py-1.5 rounded-lg border uppercase transition-all shadow-xs ${
+                                                            u.is_subscribed 
+                                                                ? 'text-rose-600 border-rose-200 bg-rose-50 hover:bg-rose-600 hover:text-white' 
+                                                                : 'text-emerald-700 border-emerald-200 bg-emerald-50 hover:bg-emerald-600 hover:text-white'
+                                                        }`}
+                                                    >
+                                                        {u.is_subscribed ? 'Terminate' : 'Authorize'}
+                                                    </button>
+                                                </div>
+                                            </td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -2708,6 +2829,118 @@ const AdminDashboard: React.FC = () => {
                     </div>
                 )}
             </div>
+            {extendModalUser && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-lg w-full overflow-hidden flex flex-col">
+                        <div className="p-6 bg-slate-900 text-white flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2.5 bg-indigo-500/20 border border-indigo-400/30 rounded-2xl text-indigo-300">
+                                    <CalendarPlus className="w-6 h-6" />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-black uppercase tracking-wider">Extend Personnel Expiry</h3>
+                                    <p className="text-xs text-slate-400 font-medium">Identity Expiry Protocol Management</p>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => setExtendModalUser(null)}
+                                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-all"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="p-6 space-y-6">
+                            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex items-center justify-between">
+                                <div>
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-0.5">Target Personnel</span>
+                                    <span className="text-sm font-black text-slate-900">{extendModalUser.email}</span>
+                                </div>
+                                <div className="text-right">
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-0.5">Current Expiry</span>
+                                    <span className={`text-xs font-bold font-mono ${extendModalUser.subscription_end && new Date(extendModalUser.subscription_end) < new Date() ? 'text-rose-600' : 'text-slate-700'}`}>
+                                        {extendModalUser.subscription_end ? new Date(extendModalUser.subscription_end).toLocaleDateString() : 'None / Expired'}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 block">Preset Extension Terms</label>
+                                <div className="grid grid-cols-3 gap-2">
+                                    {DURATION_OPTIONS.map(opt => (
+                                        <button
+                                            key={opt.value}
+                                            onClick={() => {
+                                                setExtendTermKey(opt.value);
+                                                const baseMs = extendModalUser.subscription_end && new Date(extendModalUser.subscription_end) > new Date()
+                                                    ? new Date(extendModalUser.subscription_end).getTime()
+                                                    : Date.now();
+                                                const projected = new Date(baseMs + getDurationMs(opt.value));
+                                                setCustomDateValue(projected.toISOString().split('T')[0]);
+                                            }}
+                                            className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition-all ${
+                                                extendTermKey === opt.value
+                                                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-500/20'
+                                                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                                            }`}
+                                        >
+                                            {opt.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="space-y-2 pt-2 border-t border-slate-100">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 block">Or Set Specific Expiry Date</label>
+                                <input
+                                    type="date"
+                                    value={customDateValue}
+                                    onChange={(e) => {
+                                        setCustomDateValue(e.target.value);
+                                        setExtendTermKey('custom');
+                                    }}
+                                    className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white transition-all font-mono"
+                                />
+                            </div>
+
+                            {customDateValue && (
+                                <div className="p-4 bg-indigo-50/60 border border-indigo-100 rounded-2xl flex items-center justify-between">
+                                    <span className="text-xs font-bold text-indigo-900 uppercase">New Projected Expiry:</span>
+                                    <span className="text-sm font-black text-indigo-600 font-mono">
+                                        {new Date(`${customDateValue}T23:59:59.999Z`).toLocaleDateString(undefined, {
+                                            year: 'numeric',
+                                            month: 'short',
+                                            day: 'numeric'
+                                        })}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="p-6 bg-slate-50 border-t border-slate-200 flex justify-end gap-3">
+                            <button
+                                onClick={() => setExtendModalUser(null)}
+                                className="px-5 py-2.5 text-xs font-black uppercase tracking-widest text-slate-500 hover:bg-slate-200 rounded-xl transition-all"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => {
+                                    if (extendTermKey === 'custom' || customDateValue) {
+                                        extendUserExpiry(extendModalUser, `custom:${customDateValue}`);
+                                    } else {
+                                        extendUserExpiry(extendModalUser, extendTermKey);
+                                    }
+                                }}
+                                className="px-6 py-2.5 text-xs font-black uppercase tracking-widest text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-500/20 rounded-xl transition-all active:scale-95 flex items-center gap-2"
+                            >
+                                <CalendarPlus className="w-4 h-4" />
+                                <span>Confirm Extension</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
         </div>
     );

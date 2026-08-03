@@ -243,7 +243,11 @@ const Dashboard: React.FC = () => {
         { id: ToolId.TABLE_FIXER, title: "XML Table Fixer", desc: "Manage table footnotes by detaching them to legends or attaching legends back to cells.", iconBg: "bg-pink-50", iconText: "text-pink-600", borderColor: "bg-pink-500", Icon: Table },
         { id: ToolId.TABLE_BEAUTIFIER, title: "Table XML Beautifier", desc: "Transform single-line table rows into structured multi-line formatted entry blocks.", iconBg: "bg-pink-50", iconText: "text-pink-600", borderColor: "bg-pink-400", Icon: Sparkles },
         { id: ToolId.WORD_TO_XML, title: "MS Word to XML Converter", desc: "Paste MS Word text with superscript, subscript, bold, italics, & paragraphs to automatically scan and generate XML.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: FileCode },
-        { id: ToolId.VIEW_SYNC, title: "View Synchronizer", desc: "Mirror content between paragraph views while maintaining ID integrity and references.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: RefreshCw }
+        { id: ToolId.VIEW_SYNC, title: "View Synchronizer", desc: "Mirror content between paragraph views while maintaining ID integrity and references.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: RefreshCw },
+        { id: ToolId.STRUCTURAL_ARCHITECT, title: "Reference Structure Repair", desc: "Audit and auto-repair XML reference structures, ID sequences, author initials, empty tags, and source text.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: Cpu },
+        { id: ToolId.SECTION_AUDITOR, title: "Section Auditor", desc: "Inspect and validate document section hierarchy, node titles, and ID properties.", iconBg: "bg-slate-50", iconText: "text-slate-600", borderColor: "bg-slate-500", Icon: SearchCode },
+        { id: ToolId.AFFILIATION_SEQUENCER, title: "Affiliation Sequencer", desc: "Sequence and cross-link author affiliation nodes with standard XML markup.", iconBg: "bg-emerald-50", iconText: "text-emerald-600", borderColor: "bg-emerald-500", Icon: Tags },
+        { id: ToolId.REF_SORTER, title: "Reference Sorter", desc: "Alphabetize and re-order bibliography reference blocks into proper sequence.", iconBg: "bg-blue-50", iconText: "text-blue-600", borderColor: "bg-blue-500", Icon: SortAsc }
     ];
 
     const filteredTools = useMemo(() => {

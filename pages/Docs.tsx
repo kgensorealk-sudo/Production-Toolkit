@@ -32,6 +32,7 @@ const Docs: React.FC = () => {
                     <NavBtn id="sync" label="View Sync" />
                     <NavBtn id="diff" label="Quick Text Diff" />
                     <NavBtn id="tag" label="XML Tag Cleaner" />
+                    <NavBtn id="ref-repair" label="Reference Structure Repair" />
                 </nav>
             </aside>
             <div className="flex-1 overflow-y-auto p-8 bg-slate-50 scroll-smooth">
@@ -210,6 +211,16 @@ const Docs: React.FC = () => {
                             <div className="prose prose-slate max-w-none">
                                 <p className="text-slate-600 mb-4">
                                     Bulk processing of editorial markup tags. 
+                                </p>
+                            </div>
+                        </section>
+                    )}
+                    {section === 'ref-repair' && (
+                        <section className="animate-fade-in">
+                            <h2 className="text-3xl font-extrabold text-slate-900 mb-6 uppercase tracking-tight">Reference Structure Repair</h2>
+                            <div className="prose prose-slate max-w-none">
+                                <p className="text-slate-600 mb-4">
+                                    Audits and auto-repairs XML reference structures, reference ID sequences, author given-name initials, empty tags (e.g., &lt;sb:publisher&gt;), and source text blocks.
                                 </p>
                             </div>
                         </section>

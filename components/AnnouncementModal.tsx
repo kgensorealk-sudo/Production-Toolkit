@@ -247,7 +247,7 @@ const AnnouncementModal: React.FC = () => {
                         className="bg-white rounded-[2.5rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.2)] max-w-lg w-full border border-slate-200 overflow-hidden relative ring-1 ring-black/5 flex flex-col max-h-[85vh] z-10"
                     >
                         {/* Header Section */}
-                        <div className="relative overflow-hidden">
+                        <div className="relative overflow-hidden shrink-0">
                             <div className={`h-1.5 w-full ${style.accent} relative z-20`}>
                                 <motion.div 
                                     className="absolute inset-0 bg-white/40"
@@ -262,29 +262,29 @@ const AnnouncementModal: React.FC = () => {
                                 />
                             </div>
                             
-                            <div className={`${style.header} py-8 px-10 border-b border-slate-100 flex items-center gap-6 relative z-10`}>
-                                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-lg border border-white bg-white ${style.accent.replace('bg-', 'text-')} ${style.glow}`}>
+                            <div className={`${style.header} py-5 px-6 sm:py-6 sm:px-8 border-b border-slate-100 flex items-start gap-4 sm:gap-5 relative z-10`}>
+                                <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-lg border border-white bg-white ${style.accent.replace('bg-', 'text-')} ${style.glow}`}>
                                     {style.icon}
                                 </div>
                                 
                                 <div className="flex-grow min-w-0">
-                                    <div className="flex items-center gap-3 mb-1">
-                                        <div className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-900 text-white rounded-md">
+                                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                                        <div className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-900 text-white rounded-md shrink-0">
                                             <Radio size={10} className="animate-pulse" />
                                             <span className="text-[9px] font-black uppercase tracking-[0.2em]">LIVE_FEED</span>
                                         </div>
-                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{announcement.category?.replace('_', ' ') || 'SYSTEM_PROTOCOL'}</span>
+                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest shrink-0">{announcement.category?.replace('_', ' ') || 'SYSTEM_PROTOCOL'}</span>
                                         {announcement.is_mandatory && (
-                                            <span className="text-[7px] font-black text-rose-500 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100 uppercase tracking-tighter animate-pulse">
+                                            <span className="text-[7px] font-black text-rose-500 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100 uppercase tracking-tighter animate-pulse shrink-0">
                                                 Required Reading
                                             </span>
                                         )}
                                     </div>
-                                    <h3 className="text-xl font-black text-slate-900 tracking-tight leading-tight uppercase whitespace-pre-wrap break-words">{announcement.title}</h3>
+                                    <h3 className="text-base sm:text-xl font-black text-slate-900 tracking-tight leading-snug uppercase break-words">{announcement.title}</h3>
                                 </div>
 
                                 {!announcement.is_mandatory && (
-                                    <button onClick={dismiss} className="p-2 hover:bg-slate-200/50 rounded-xl transition-colors text-slate-400">
+                                    <button onClick={dismiss} className="p-2 -mr-1 -mt-1 hover:bg-slate-200/50 rounded-xl transition-colors text-slate-400 shrink-0">
                                         <X size={20} />
                                     </button>
                                 )}
@@ -292,7 +292,7 @@ const AnnouncementModal: React.FC = () => {
                         </div>
 
                         {/* Content Area */}
-                        <div className="p-10 overflow-y-auto custom-scrollbar flex-grow bg-white">
+                        <div className="p-6 sm:p-8 overflow-y-auto custom-scrollbar flex-grow bg-white">
                             {announcementsList.length > 1 && (
                                 <div className="mb-6 pb-4 border-b border-slate-100 flex items-center justify-between">
                                     <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100">
@@ -332,7 +332,7 @@ const AnnouncementModal: React.FC = () => {
                                 </ReactMarkdown>
                             </div>
                             
-                            <div className="mt-10 pt-8 border-t border-slate-50 flex items-center justify-between">
+                            <div className="mt-8 pt-6 border-t border-slate-50 flex items-center justify-between">
                                 <div className="flex flex-col">
                                     <span className="text-[9px] font-black text-slate-300 uppercase tracking-[0.25em] mb-1">Packet Timestamp</span>
                                     <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-tight">
@@ -347,7 +347,7 @@ const AnnouncementModal: React.FC = () => {
                         </div>
 
                         {/* Footer Section */}
-                        <div className="p-8 bg-slate-50/80 border-t border-slate-100 backdrop-blur-sm">
+                        <div className="p-5 sm:p-6 bg-slate-50/80 border-t border-slate-100 backdrop-blur-sm shrink-0">
                             <button 
                                 onClick={acknowledge}
                                 className="w-full relative group"

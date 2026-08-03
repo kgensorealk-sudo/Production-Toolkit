@@ -252,6 +252,54 @@ const StructuralNodeArchitect: React.FC = () => {
         return fixed;
     };
 
+    const pruneEmptyElements = (element: Element) => {
+        const children = Array.from(element.children);
+        children.forEach(child => pruneEmptyElements(child));
+
+        const tagName = element.tagName.toLowerCase();
+        if (tagName === 'sb:et-al' || tagName === 'ce:et-al') return;
+        if (element.hasAttribute('refid') || element.hasAttribute('xlink:href')) return;
+
+        const textContent = element.textContent?.trim() || '';
+        const remainingChildren = element.children.length;
+
+        if (remainingChildren === 0 && textContent === '') {
+            element.parentNode?.removeChild(element);
+        }
+    };
+
+    const sanitizeXmlTags = (xmlStr: string): string => {
+        let result = xmlStr;
+        let prev;
+        
+        do {
+            prev = result;
+            result = result.replace(/<([a-z0-9_:-]+)(?:\s+[^>]*)?>\s*<\/\1>/gi, (match, tag) => {
+                const ltag = tag.toLowerCase();
+                if (ltag === 'sb:et-al' || ltag === 'ce:et-al') return match;
+                return '';
+            });
+            result = result.replace(/<([a-z0-9_:-]+)(?:\s+[^>]*)?\/>/gi, (match, tag) => {
+                const ltag = tag.toLowerCase();
+                if (ltag === 'sb:et-al' || ltag === 'ce:et-al' || ltag === 'ce:cross-ref' || ltag === 'ce:inter-ref') return match;
+                if (match.includes('refid=') || match.includes('xlink:href=')) return match;
+                return '';
+            });
+        } while (prev !== result);
+
+        result = result.replace(/<\/([a-z0-9_:-]+)>/gi, (match, tag, offset, fullStr) => {
+            const substringBefore = fullStr.substring(0, offset);
+            const openMatches = (substringBefore.match(new RegExp(`<${tag}\\b`, 'gi')) || []).length;
+            const closeMatches = (substringBefore.match(new RegExp(`<\/${tag}>`, 'gi')) || []).length;
+            if (closeMatches >= openMatches) {
+                return '';
+            }
+            return match;
+        });
+
+        return result;
+    };
+
     const analyzeXml = () => {
         if (!input.trim()) {
             setToast({ msg: 'Please enter XML source code', type: 'warn' });
@@ -518,7 +566,8 @@ const StructuralNodeArchitect: React.FC = () => {
             const bibRegex = /<ce:bib-reference\b[^>]*>([\s\S]*?)<\/ce:bib-reference>/g;
             
             const repairedXml = input.replace(bibRegex, (fullBlock) => {
-                const wrappedBlock = `<root ${NS_DECLS} xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:sa="http://www.elsevier.com/xml/common/struct-aff/dtd">${fullBlock}</root>`;
+                const preCleanedBlock = sanitizeXmlTags(fullBlock);
+                const wrappedBlock = `<root ${NS_DECLS} xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:sa="http://www.elsevier.com/xml/common/struct-aff/dtd">${preCleanedBlock}</root>`;
                 const fragmentDoc = parser.parseFromString(wrappedBlock, "text/xml");
                 const ref = fragmentDoc.getElementsByTagName("ce:bib-reference")[0];
                 const refId = ref.getAttribute("id") || `REF_${refIndex + 1}`;
@@ -636,10 +685,22 @@ const StructuralNodeArchitect: React.FC = () => {
                     }
                 }
 
+                // Prune empty DOM elements from ref
+                pruneEmptyElements(ref);
+
                 refIndex++;
                 let serialized = serializer.serializeToString(ref);
                 // Strip redundant namespace declarations injected by the serializer
                 serialized = serialized.replace(/\sxmlns(?::[a-z0-9]+)?=['"][^'"]*['"]/gi, '');
+                serialized = sanitizeXmlTags(serialized);
+
+                // Audit report for empty/orphaned tag deletion
+                if (fullBlock !== serialized) {
+                    if (/<sb:publisher\b/i.test(fullBlock) && !/<sb:publisher\b/i.test(serialized)) {
+                        finalAudit.push({ id: refId, status: 'fixed', msg: 'REPAIRED: Deleted empty/orphaned <sb:publisher> tag.' });
+                    }
+                }
+
                 return serialized;
             });
 
@@ -1072,8 +1133,8 @@ const StructuralNodeArchitect: React.FC = () => {
                             <Cpu className="w-6 h-6 text-white" />
                         </div>
                         <div>
-                            <h1 className="text-xl font-bold tracking-tight text-slate-800">Structural Node Architect <span className="text-indigo-600">v3.2</span></h1>
-                            <p className="text-xs font-medium text-slate-400 uppercase tracking-widest">Elsevier Citation Repair Protocol</p>
+                            <h1 className="text-xl font-bold tracking-tight text-slate-800">Reference Structure Repair <span className="text-indigo-600">v3.2</span></h1>
+                            <p className="text-xs font-medium text-slate-400 uppercase tracking-widest">Elsevier Reference Repair Protocol</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-3">
