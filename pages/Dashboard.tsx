@@ -246,7 +246,6 @@ const Dashboard: React.FC = () => {
         { id: ToolId.VIEW_SYNC, title: "View Synchronizer", desc: "Mirror content between paragraph views while maintaining ID integrity and references.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: RefreshCw },
         { id: ToolId.STRUCTURAL_ARCHITECT, title: "Reference Structure Repair", desc: "Audit and auto-repair XML reference structures, ID sequences, author initials, empty tags, and source text.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: Cpu },
         { id: ToolId.SECTION_AUDITOR, title: "Section Auditor", desc: "Inspect and validate document section hierarchy, node titles, and ID properties.", iconBg: "bg-slate-50", iconText: "text-slate-600", borderColor: "bg-slate-500", Icon: SearchCode },
-        { id: ToolId.AFFILIATION_SEQUENCER, title: "Affiliation Sequencer", desc: "Sequence and cross-link author affiliation nodes with standard XML markup.", iconBg: "bg-emerald-50", iconText: "text-emerald-600", borderColor: "bg-emerald-500", Icon: Tags },
         { id: ToolId.REF_SORTER, title: "Reference Sorter", desc: "Alphabetize and re-order bibliography reference blocks into proper sequence.", iconBg: "bg-blue-50", iconText: "text-blue-600", borderColor: "bg-blue-500", Icon: SortAsc }
     ];
 
