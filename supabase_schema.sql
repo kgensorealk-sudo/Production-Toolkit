@@ -114,6 +114,9 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'announcements' AND column_name = 'is_mandatory') THEN
         ALTER TABLE public.announcements ADD COLUMN is_mandatory BOOLEAN DEFAULT false;
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'announcements' AND column_name = 'updated_at') THEN
+        ALTER TABLE public.announcements ADD COLUMN updated_at TIMESTAMPTZ DEFAULT now();
+    END IF;
 END $$;
 
 -- Insert global record if not exists

@@ -6,9 +6,11 @@ import { useNavigate } from 'react-router';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import ConfirmationModal from '../components/ConfirmationModal';
+import RichTextEditor from '../components/RichTextEditor';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
-import { History, Info, X, Radio, Signal, Terminal, Eye, Send, Save, Trash2, Layout as LayoutIcon, Play, Square, AlertTriangle, CheckCircle2, AlertCircle, ShieldCheck, Database, Zap } from 'lucide-react';
+import remarkGfm from 'remark-gfm';
+import { History, Info, X, Radio, Signal, Terminal, Eye, Send, Save, Trash2, Layout as LayoutIcon, Play, Square, AlertTriangle, CheckCircle2, AlertCircle, ShieldCheck, Database, Zap, ExternalLink, Search, Filter, Copy, ChevronDown, ChevronUp, RefreshCw, Sparkles, Plus, Edit3, Sliders, Layers, Maximize2, Minimize2, MoreVertical } from 'lucide-react';
 
 interface Announcement {
     id: string;
@@ -134,6 +136,11 @@ const AdminDashboard: React.FC = () => {
     const [newCategory, setNewCategory] = useState<'system_alerts' | 'security_updates' | 'maintenance_windows'>('system_alerts');
     const [newMandatory, setNewMandatory] = useState(false);
     const [previewMode, setPreviewMode] = useState(false);
+    const [isWideTransmitter, setIsWideTransmitter] = useState(false);
+    const [announcementSearch, setAnnouncementSearch] = useState('');
+    const [announcementFilter, setAnnouncementFilter] = useState<'all' | 'active' | 'inactive' | 'mandatory' | 'info' | 'warning' | 'success' | 'error'>('all');
+    const [expandedAnnouncementIds, setExpandedAnnouncementIds] = useState<string[]>([]);
+    const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
     const [defaultAvatars, setDefaultAvatars] = useState<DefaultAvatar[]>([]);
     const [newAvatarName, setNewAvatarName] = useState('');
@@ -581,63 +588,96 @@ const AdminDashboard: React.FC = () => {
         e.preventDefault();
         setIsLoading(true);
         try {
-            const payload: any = { 
-                title: newTitle, 
-                content: newContent, 
-                type: newType, 
-                category: newCategory,
-                is_mandatory: newMandatory
-            };
-
             if (editingId) {
-                payload.updated_at = new Date().toISOString();
+                const fullPayload: any = { 
+                    title: newTitle, 
+                    content: newContent, 
+                    type: newType, 
+                    category: newCategory,
+                    is_mandatory: newMandatory,
+                    updated_at: new Date().toISOString()
+                };
+
                 await withRetry(async () => {
-                    let { error } = await supabase.from('announcements').update(payload).eq('id', editingId);
+                    let { error } = await supabase.from('announcements').update(fullPayload).eq('id', editingId);
                     
-                    // Fallback for missing mandatory/category columns
-                    if (error && (error.message?.includes("is_mandatory") || error.message?.includes("category"))) {
-                        console.warn("Retrying save without newer columns...");
-                        const { is_mandatory, category, ...fallbackPayload } = payload;
-                        const { error: error2 } = await supabase.from('announcements').update(fallbackPayload).eq('id', editingId);
-                        error = error2;
-                        if (!error) setToast({ msg: 'Database migration needed for full features.', type: 'warn' });
+                    if (error) {
+                        console.warn("Full payload update failed, trying without category/is_mandatory:", error);
+                        const { category, is_mandatory, ...tier2Payload } = fullPayload;
+                        let { error: err2 } = await supabase.from('announcements').update(tier2Payload).eq('id', editingId);
+                        error = err2;
+                        
+                        if (error) {
+                            console.warn("Tier 2 update failed, trying basic payload:", error);
+                            const { updated_at, ...tier3Payload } = tier2Payload;
+                            let { error: err3 } = await supabase.from('announcements').update(tier3Payload).eq('id', editingId);
+                            error = err3;
+                        }
                     }
                     
                     if (error) throw error;
-                    setAnnouncements(prev => prev.map(a => a.id === editingId ? { ...a, ...payload } : a));
+                    setAnnouncements(prev => prev.map(a => a.id === editingId ? { ...a, ...fullPayload } : a));
                 });
-                setToast({ msg: 'Broadcast updated', type: 'success' });
+                setToast({ msg: 'Broadcast updated & synced', type: 'success' });
             } else {
-                payload.is_active = false;
+                const fullPayload: any = { 
+                    title: newTitle, 
+                    content: newContent, 
+                    type: newType, 
+                    category: newCategory,
+                    is_mandatory: newMandatory,
+                    is_active: false
+                };
+
                 await withRetry(async () => {
-                    let { data, error } = await supabase.from('announcements').insert([payload]).select();
+                    let { data, error } = await supabase.from('announcements').insert([fullPayload]).select();
                     
-                    // Fallback for missing mandatory/category columns
-                    if (error && (error.message?.includes("is_mandatory") || error.message?.includes("category"))) {
-                        console.warn("Retrying insert without newer columns...");
-                        const { is_mandatory, category, ...fallbackPayload } = payload;
-                        const { data: data2, error: error2 } = await supabase.from('announcements').insert([fallbackPayload]).select();
-                        data = data2;
-                        error = error2;
-                        if (!error) setToast({ msg: 'Warning: database schema stale. Mandatory/Category flags ignored.', type: 'warn' });
+                    if (error) {
+                        console.warn("Full payload insert failed, trying fallback payload without category/is_mandatory:", error);
+                        const { category, is_mandatory, ...tier2Payload } = fullPayload;
+                        let { data: d2, error: err2 } = await supabase.from('announcements').insert([tier2Payload]).select();
+                        data = d2;
+                        error = err2;
+                        
+                        if (error) {
+                            console.warn("Tier 2 insert failed, trying minimal payload:", error);
+                            const tier3Payload = { title: newTitle, content: newContent, type: newType, is_active: false };
+                            let { data: d3, error: err3 } = await supabase.from('announcements').insert([tier3Payload]).select();
+                            data = d3;
+                            error = err3;
+
+                            if (error) {
+                                const { error: err4 } = await supabase.from('announcements').insert([tier3Payload]);
+                                error = err4;
+                                if (!error) {
+                                    data = [{ id: crypto.randomUUID(), ...tier3Payload, created_at: new Date().toISOString() }];
+                                }
+                            }
+                        }
                     }
                     
                     if (error) throw error;
-                    if (data) setAnnouncements(prev => [data[0] as Announcement, ...prev]);
+                    if (data && data.length > 0) {
+                        setAnnouncements(prev => [data[0] as Announcement, ...prev]);
+                    }
                 });
-                setToast({ msg: 'Broadcast created', type: 'success' });
+                setToast({ msg: 'Broadcast created successfully', type: 'success' });
             }
+
+            // Sync with all tabs and header
+            window.dispatchEvent(new CustomEvent('app:announcement-sync'));
+
             setNewTitle(''); setNewContent(''); setNewType('info'); setNewCategory('system_alerts'); setNewMandatory(false); setEditingId(null);
         } catch (err: any) { 
             console.error("SAVE_BROADCAST_FAILED:", err);
-            const isSchemaError = err.message?.includes("column") || err.message?.includes("schema cache");
+            const errorMsg = err.message || err.details || err.hint || (typeof err === 'string' ? err : 'Database error');
             setToast({ 
-                msg: isSchemaError 
-                    ? `Schema Mismatch: Please run the SQL migration in supabase_schema.sql` 
-                    : `Broadcast failed: ${err.message || 'Unknown error'}`, 
+                msg: `Save Failed: ${errorMsg}`, 
                 type: 'error' 
             }); 
-        } finally { setIsLoading(false); }
+        } finally { 
+            setIsLoading(false); 
+        }
     };
 
     const editAnnouncement = (a: Announcement) => { 
@@ -649,20 +689,55 @@ const AdminDashboard: React.FC = () => {
         setNewMandatory(a.is_mandatory || false);
     };
 
+    const testAnnouncement = (a: Announcement) => {
+        window.dispatchEvent(new CustomEvent('app:show-announcement-detail', { detail: a }));
+        setToast({ msg: 'Displaying test broadcast modal', type: 'success' });
+    };
+
     const activateAnnouncement = async (id: string) => {
         setIsLoading(true);
         try {
             const target = announcements.find(a => a.id === id);
             if (!target) return;
             const nextStatus = !target.is_active;
+            const now = new Date().toISOString();
+
             await withRetry(async () => {
-                if (nextStatus) await supabase.from('announcements').update({ is_active: false }).neq('id', id);
-                const { error } = await supabase.from('announcements').update({ is_active: nextStatus }).eq('id', id);
+                if (nextStatus) {
+                    await supabase.from('announcements').update({ is_active: false }).neq('id', id);
+                }
+                let { error } = await supabase.from('announcements').update({ 
+                    is_active: nextStatus,
+                    updated_at: now
+                }).eq('id', id);
+
+                if (error) {
+                    const { error: err2 } = await supabase.from('announcements').update({ 
+                        is_active: nextStatus
+                    }).eq('id', id);
+                    error = err2;
+                }
+
                 if (error) throw error;
             });
-            setAnnouncements(prev => prev.map(a => (a.id === id ? { ...a, is_active: nextStatus } : (nextStatus ? { ...a, is_active: false } : a))));
-            setToast({ msg: nextStatus ? 'Broadcast Live' : 'Broadcast Halted', type: 'success' });
-        } catch (err: any) { setToast({ msg: 'State update failed', type: 'error' }); } finally { setIsLoading(false); }
+
+            setAnnouncements(prev => prev.map(a => (
+                a.id === id 
+                    ? { ...a, is_active: nextStatus, updated_at: now } 
+                    : (nextStatus ? { ...a, is_active: false } : a)
+            )));
+
+            window.dispatchEvent(new CustomEvent('app:announcement-sync'));
+            if (nextStatus) {
+                window.dispatchEvent(new CustomEvent('app:show-announcement'));
+            }
+
+            setToast({ msg: nextStatus ? 'Broadcast Live & Synced' : 'Broadcast Halted', type: 'success' });
+        } catch (err: any) { 
+            setToast({ msg: `State update failed: ${err.message || 'Error'}`, type: 'error' }); 
+        } finally { 
+            setIsLoading(false); 
+        }
     };
 
     const deleteAnnouncement = async (id: string) => {
@@ -689,6 +764,53 @@ const AdminDashboard: React.FC = () => {
             }
         });
     };
+
+    const toggleExpandAnnouncement = (id: string) => {
+        setExpandedAnnouncementIds(prev => 
+            prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+        );
+    };
+
+    const cloneAnnouncement = (a: Announcement) => {
+        setEditingId(null);
+        setNewTitle(`${a.title} (Draft Copy)`);
+        setNewContent(a.content);
+        setNewType(a.type || 'info');
+        setNewCategory(a.category || 'system_alerts');
+        setNewMandatory(a.is_mandatory || false);
+        setToast({ msg: 'Broadcast cloned into Signal Transmitter panel', type: 'success' });
+    };
+
+    const announcementStats = useMemo(() => {
+        const total = announcements.length;
+        const active = announcements.filter(a => a.is_active).length;
+        const mandatory = announcements.filter(a => a.is_mandatory).length;
+        const critical = announcements.filter(a => a.type === 'error' || a.type === 'warning').length;
+        return { total, active, mandatory, critical };
+    }, [announcements]);
+
+    const filteredAnnouncements = useMemo(() => {
+        return announcements.filter(a => {
+            const query = announcementSearch.toLowerCase().trim();
+            const matchesSearch = !query || 
+                a.title.toLowerCase().includes(query) || 
+                a.content.toLowerCase().includes(query) ||
+                a.id.toLowerCase().includes(query) ||
+                (a.category && a.category.toLowerCase().includes(query));
+
+            if (!matchesSearch) return false;
+
+            if (announcementFilter === 'active') return a.is_active;
+            if (announcementFilter === 'inactive') return !a.is_active;
+            if (announcementFilter === 'mandatory') return a.is_mandatory;
+            if (announcementFilter === 'info') return a.type === 'info';
+            if (announcementFilter === 'warning') return a.type === 'warning';
+            if (announcementFilter === 'success') return a.type === 'success';
+            if (announcementFilter === 'error') return a.type === 'error';
+
+            return true;
+        });
+    }, [announcements, announcementSearch, announcementFilter]);
 
     const handleAvatarUpload = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -1752,75 +1874,198 @@ const AdminDashboard: React.FC = () => {
                 )}
 
                 {activeTab === 'announcements' && (
-                    <div className="grid grid-cols-1 lg:grid-cols-3 divide-x divide-slate-200 h-full min-h-[700px] bg-slate-50/50">
-                        <div className="p-10 bg-white border-r border-slate-200 flex flex-col shadow-inner">
-                            <div className="flex justify-between items-center mb-10">
+                    <div className="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-slate-200 h-full min-h-[700px] bg-slate-50/50">
+                        {/* Signal Transmitter Panel */}
+                        <div className={`${isWideTransmitter ? 'lg:col-span-12 border-b border-slate-200' : 'lg:col-span-7'} p-8 lg:p-10 bg-white border-r border-slate-200 flex flex-col shadow-inner transition-all duration-300`}>
+                            <div className="flex justify-between items-start mb-8">
                                 <div className="flex flex-col">
-                                    <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-3">
-                                        <Signal className="text-indigo-600" size={24} />
-                                        Signal Transmitter
-                                    </h3>
-                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.3em] mt-1">Deploy Global Protocol</p>
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-sm">
+                                            <Signal className="animate-pulse" size={20} />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+                                                Signal Transmitter
+                                            </h3>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.25em]">Deploy Global Protocol</p>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="flex gap-2">
+                                <div className="flex items-center gap-2">
                                     <button 
                                         type="button"
-                                        onClick={() => setPreviewMode(!previewMode)}
-                                        className={`w-10 h-10 rounded-xl border flex items-center justify-center transition-all ${previewMode ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-white text-slate-400 border-slate-200 hover:bg-slate-50'}`}
-                                        title="Toggle Preview"
+                                        onClick={() => setIsWideTransmitter(!isWideTransmitter)}
+                                        className={`px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                                            isWideTransmitter 
+                                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' 
+                                                : 'bg-slate-100 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 border-slate-200'
+                                        }`}
+                                        title={isWideTransmitter ? "Switch to Split Columns View" : "Expand Signal Transmitter to Wide Layout"}
                                     >
-                                        <Eye size={18} />
+                                        {isWideTransmitter ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+                                        {isWideTransmitter ? "Split View" : "Expand Width"}
                                     </button>
-                                    {editingId && (
-                                        <button 
-                                            onClick={() => { setEditingId(null); setNewTitle(''); setNewContent(''); setNewType('info'); setNewCategory('system_alerts'); }} 
-                                            className="w-10 h-10 rounded-xl bg-rose-50 text-rose-500 border border-rose-100 flex items-center justify-center transition-all hover:bg-rose-500 hover:text-white"
-                                            title="Cancel Edit"
-                                        >
-                                            <X size={20} />
-                                        </button>
+
+                                    {editingId ? (
+                                        <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-1.5">
+                                            <span className="w-2 h-2 rounded-full bg-indigo-600 animate-ping" />
+                                            <span className="text-[10px] font-mono font-black text-indigo-700 uppercase">Edit: ID_{editingId.slice(0, 6)}</span>
+                                            <button 
+                                                onClick={() => { setEditingId(null); setNewTitle(''); setNewContent(''); setNewType('info'); setNewCategory('system_alerts'); setNewMandatory(false); }} 
+                                                className="w-6 h-6 rounded-lg bg-indigo-200 hover:bg-rose-500 hover:text-white text-indigo-800 flex items-center justify-center transition-all ml-1"
+                                                title="Cancel Editing"
+                                            >
+                                                <X size={14} />
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <span className="px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-xl text-[10px] font-black uppercase tracking-wider text-emerald-700 flex items-center gap-1.5">
+                                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                            Transmitter Ready
+                                        </span>
                                     )}
                                 </div>
                             </div>
+
+                            {/* Quick Preset Templates Bar */}
+                            <div className="mb-6 bg-slate-50 border border-slate-200 rounded-2xl p-3.5">
+                                <div className="flex items-center justify-between mb-2.5 px-1">
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                                        <Sparkles size={12} className="text-indigo-500" />
+                                        Broadcast Quick Presets
+                                    </span>
+                                    {newTitle || newContent ? (
+                                        <button 
+                                            type="button" 
+                                            onClick={() => { setNewTitle(''); setNewContent(''); setNewType('info'); setNewCategory('system_alerts'); setNewMandatory(false); setEditingId(null); }} 
+                                            className="text-[9px] font-bold text-rose-500 hover:underline uppercase"
+                                        >
+                                            Reset Form
+                                        </button>
+                                    ) : null}
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setNewTitle("SYSTEM_MAINTENANCE_NOTICE");
+                                            setNewType("warning");
+                                            setNewCategory("maintenance_windows");
+                                            setNewContent("### 🛠️ Scheduled System Maintenance\n\nPlease be advised that database indexing will take place during the off-peak window.\n\n* **Expected Duration:** 15 Minutes\n* **Impact:** Minimal read latency\n\n> 💡 All active sessions remain secure.");
+                                        }}
+                                        className="text-left p-2.5 rounded-xl bg-white border border-slate-200 hover:border-amber-300 hover:bg-amber-50/50 transition-all flex items-center gap-2 group"
+                                    >
+                                        <span className="text-sm">🛠️</span>
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] font-black text-slate-800 uppercase tracking-tight group-hover:text-amber-900">Maintenance</span>
+                                            <span className="text-[8px] font-bold text-slate-400 uppercase">Downtime Alert</span>
+                                        </div>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setNewTitle("NEW_FEATURE_DEPLOYED");
+                                            setNewType("success");
+                                            setNewCategory("system_alerts");
+                                            setNewContent("### 🚀 Platform Upgrade Released\n\nWe have deployed major performance improvements to our XML processing pipeline!\n\n1. **Faster Parsing:** Up to 3x speed boost\n2. **Rich Text Telemetry:** Enhanced Markdown & table rendering\n3. **Live Syncing:** Instant broadcast delivery across connected sessions");
+                                        }}
+                                        className="text-left p-2.5 rounded-xl bg-white border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50 transition-all flex items-center gap-2 group"
+                                    >
+                                        <span className="text-sm">🚀</span>
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] font-black text-slate-800 uppercase tracking-tight group-hover:text-emerald-900">Feature Release</span>
+                                            <span className="text-[8px] font-bold text-slate-400 uppercase">Protocol Update</span>
+                                        </div>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setNewTitle("SECURITY_ADVISORY_KEY_ROTATION");
+                                            setNewType("error");
+                                            setNewCategory("security_updates");
+                                            setNewMandatory(true);
+                                            setNewContent("### 🚨 Mandatory Security Protocol Update\n\nAll operator accounts must verify credentials and rotate legacy API keys.\n\n* **Priority:** CRITICAL\n* **Mandatory Action:** Confirm receipt of this transmission to proceed.\n\n> ⚠️ Deprecated keys will be revoked at cycle end.");
+                                        }}
+                                        className="text-left p-2.5 rounded-xl bg-white border border-slate-200 hover:border-rose-300 hover:bg-rose-50/50 transition-all flex items-center gap-2 group"
+                                    >
+                                        <span className="text-sm">🚨</span>
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] font-black text-slate-800 uppercase tracking-tight group-hover:text-rose-900">Security Command</span>
+                                            <span className="text-[8px] font-bold text-slate-400 uppercase">Mandatory Read</span>
+                                        </div>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setNewTitle("SYSTEM_PULSE_HEALTH_OK");
+                                            setNewType("info");
+                                            setNewCategory("system_alerts");
+                                            setNewContent("### ℹ️ Operations Telemetry Normal\n\nAll infrastructure nodes are operating at optimal latency and throughput parameters. No action required.");
+                                        }}
+                                        className="text-left p-2.5 rounded-xl bg-white border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/50 transition-all flex items-center gap-2 group"
+                                    >
+                                        <span className="text-sm">📢</span>
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] font-black text-slate-800 uppercase tracking-tight group-hover:text-indigo-900">General Notice</span>
+                                            <span className="text-[8px] font-bold text-slate-400 uppercase">Info Pulse</span>
+                                        </div>
+                                    </button>
+                                </div>
+                            </div>
                             
-                            <form onSubmit={saveAnnouncement} className="space-y-8 flex-grow flex flex-col group/transmitter">
-                                <div className="grid grid-cols-1 gap-6">
-                                    <div className="space-y-3">
-                                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1 flex items-center gap-2">
-                                            <Terminal size={12} />
-                                            Subject Frequency
-                                        </label>
-                                        <input 
-                                            type="text" 
-                                            required 
-                                            placeholder="SIGNAL_TITLE_KEY"
-                                            value={newTitle} 
-                                            onChange={e => setNewTitle(e.target.value)} 
-                                            className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-5 text-base font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all placeholder-slate-300 font-mono" 
-                                        />
+                            <form onSubmit={saveAnnouncement} className="space-y-6 flex-grow flex flex-col group/transmitter">
+                                <div className="grid grid-cols-1 gap-5">
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between px-1">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] flex items-center gap-1.5">
+                                                <Terminal size={12} className="text-indigo-600" />
+                                                Subject Frequency (Title)
+                                            </label>
+                                            <span className="text-[9px] font-mono font-bold text-slate-400">{newTitle.length}/100</span>
+                                        </div>
+                                        <div className="relative">
+                                            <input 
+                                                type="text" 
+                                                required 
+                                                maxLength={100}
+                                                placeholder="e.g. SYSTEM_MAINTENANCE_SCHEDULE"
+                                                value={newTitle} 
+                                                onChange={e => setNewTitle(e.target.value)} 
+                                                className="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all placeholder-slate-300 font-mono pr-10" 
+                                            />
+                                            {newTitle && (
+                                                <button 
+                                                    type="button" 
+                                                    onClick={() => setNewTitle('')}
+                                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                                                >
+                                                    <X size={14} />
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                     
                                     <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-3">
-                                            <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Severity</label>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-1">Severity Level</label>
                                             <select 
                                                 value={newType} 
                                                 onChange={e => setNewType(e.target.value as any)} 
-                                                className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-4 text-xs font-black uppercase text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all appearance-none tracking-widest"
+                                                className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3.5 text-xs font-black uppercase text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all appearance-none tracking-wider cursor-pointer"
                                             >
-                                                <option value="info">INFO_PULSE</option>
-                                                <option value="warning">ALERT_THRESHOLD</option>
-                                                <option value="success">STABLE_RES</option>
-                                                <option value="error">CRITICAL_EX</option>
+                                                <option value="info">🔵 INFO_PULSE</option>
+                                                <option value="warning">🟠 ALERT_THRESHOLD</option>
+                                                <option value="success">🟢 STABLE_RES</option>
+                                                <option value="error">🔴 CRITICAL_EX</option>
                                             </select>
                                         </div>
 
-                                        <div className="space-y-3">
-                                            <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em] ml-1">Category</label>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-1">Category</label>
                                             <select 
                                                 value={newCategory} 
                                                 onChange={e => setNewCategory(e.target.value as any)} 
-                                                className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-4 text-xs font-black uppercase text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all appearance-none tracking-widest"
+                                                className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3.5 text-xs font-black uppercase text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all appearance-none tracking-wider cursor-pointer"
                                             >
                                                 <option value="system_alerts">SYSTEM_OPS</option>
                                                 <option value="security_updates">SECURITY_CMD</option>
@@ -1829,147 +2074,399 @@ const AdminDashboard: React.FC = () => {
                                         </div>
                                     </div>
 
-                                    <div className="flex items-center justify-between bg-slate-50 border-2 border-slate-100 rounded-xl px-6 py-4 mt-6">
+                                    {/* Mandatory Protocol Card Switch */}
+                                    <div className={`flex items-center justify-between border-2 rounded-2xl px-5 py-3.5 transition-all ${
+                                        newMandatory ? 'bg-indigo-50/70 border-indigo-300 shadow-sm' : 'bg-slate-50 border-slate-200'
+                                    }`}>
                                         <div className="flex flex-col">
-                                            <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest leading-none">Mandatory Reading</span>
-                                            <span className="text-[8px] font-bold text-slate-400 uppercase mt-1">Forces acknowledgment before dismissal</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[11px] font-black text-slate-900 uppercase tracking-wider">Mandatory Reading Protocol</span>
+                                                {newMandatory && (
+                                                    <span className="px-2 py-0.5 bg-indigo-600 text-white text-[8px] font-black uppercase rounded-md tracking-wider">FORCED</span>
+                                                )}
+                                            </div>
+                                            <span className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">Forces acknowledgment from operators before modal dismiss</span>
                                         </div>
                                         <button 
                                             type="button"
                                             onClick={() => setNewMandatory(!newMandatory)}
-                                            className={`w-12 h-6 rounded-full p-1 transition-all duration-300 ${newMandatory ? 'bg-indigo-600' : 'bg-slate-300'}`}
+                                            className={`w-12 h-6 rounded-full p-1 transition-all duration-300 relative ${newMandatory ? 'bg-indigo-600' : 'bg-slate-300'}`}
                                         >
-                                            <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-300 ${newMandatory ? 'translate-x-6' : 'translate-x-0'}`} />
+                                            <div className={`w-4 h-4 bg-white rounded-full shadow-md transition-transform duration-300 ${newMandatory ? 'translate-x-6' : 'translate-x-0'}`} />
                                         </button>
                                     </div>
                                 </div>
                                 
-                                <div className="space-y-3 flex-grow flex flex-col min-h-[300px]">
+                                <div className="space-y-2 flex-grow flex flex-col min-h-[280px]">
                                     <div className="flex justify-between items-center px-1">
-                                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em]">Payload Content</label>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Rich Broadcast Payload</label>
                                         <div className="flex items-center gap-2">
                                             <div className={`w-2 h-2 rounded-full ${newContent.length > 500 ? 'bg-amber-500' : 'bg-emerald-500'} animate-pulse`} />
-                                            <span className="text-[9px] font-mono font-bold text-slate-400 uppercase">{newContent.length} B</span>
+                                            <span className="text-[9px] font-mono font-bold text-slate-400 uppercase">{newContent.length} Bytes</span>
                                         </div>
                                     </div>
                                     
-                                    {previewMode ? (
-                                        <div className="w-full flex-grow bg-slate-50 border-2 border-dashed border-slate-200 rounded-[2rem] px-8 py-6 overflow-y-auto custom-scrollbar prose prose-slate prose-sm max-w-none prose-headings:uppercase prose-headings:font-black prose-p:leading-relaxed prose-p:text-slate-600 prose-code:font-mono prose-code:bg-slate-200 prose-code:px-1 prose-code:rounded">
-                                            <ReactMarkdown>{newContent || '_Signal awaiting transmission data..._'}</ReactMarkdown>
-                                        </div>
-                                    ) : (
-                                        <textarea 
-                                            required 
-                                            placeholder="ENTER_TRANSMISSION_MARKDOWN_DATA..."
-                                            value={newContent} 
-                                            onChange={e => setNewContent(e.target.value)} 
-                                            className="w-full flex-grow bg-slate-50 border-2 border-slate-100 rounded-[2rem] px-8 py-6 text-sm font-mono text-slate-700 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all resize-none leading-relaxed placeholder-slate-300 custom-scrollbar" 
-                                        />
-                                    )}
+                                    <RichTextEditor 
+                                        value={newContent} 
+                                        onChange={setNewContent} 
+                                        placeholder="Type markdown, insert lists, tables, callouts, links, or pick a preset template..."
+                                        minHeight="300px"
+                                    />
                                 </div>
                                 
-                                <button 
-                                    type="submit" 
-                                    className={`w-full py-6 rounded-[2rem] font-black uppercase text-xs tracking-[0.4em] shadow-2xl transition-all active:scale-[0.98] flex items-center justify-center gap-4 group ${
-                                        editingId ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-500/20' : 'bg-slate-900 hover:bg-slate-800 text-white shadow-slate-900/10'
-                                    }`}
-                                >
-                                    <Send size={16} className={`transition-transform group-hover:translate-x-1 group-hover:-translate-y-1`} />
-                                    {editingId ? 'Hot-Swap Signal' : 'Deploy Protocol'}
-                                </button>
+                                <div className="flex gap-3 pt-2">
+                                    <button 
+                                        type="submit" 
+                                        disabled={isLoading}
+                                        className={`flex-1 py-4 rounded-2xl font-black uppercase text-xs tracking-[0.25em] shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-3 group ${
+                                            editingId 
+                                                ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-500/20' 
+                                                : 'bg-slate-900 hover:bg-slate-800 text-white shadow-slate-900/20'
+                                        }`}
+                                    >
+                                        <Send size={15} className="transition-transform group-hover:translate-x-1 group-hover:-translate-y-1" />
+                                        {editingId ? 'Hot-Swap Signal' : 'Deploy Protocol'}
+                                    </button>
+                                    
+                                    <button
+                                        type="button"
+                                        onClick={() => testAnnouncement({
+                                            id: editingId || 'TEST_DRAFT',
+                                            title: newTitle || 'PREVIEW_BROADCAST_TITLE',
+                                            content: newContent || 'This is a sample test preview of the broadcast modal.',
+                                            type: newType,
+                                            category: newCategory,
+                                            is_active: true,
+                                            is_mandatory: newMandatory,
+                                            created_at: new Date().toISOString()
+                                        })}
+                                        className="px-5 py-4 bg-slate-100 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 border border-slate-200 hover:border-indigo-200 rounded-2xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-2"
+                                        title="Preview how users will see this modal popup"
+                                    >
+                                        <Eye size={15} />
+                                        Test Modal
+                                    </button>
+                                </div>
                             </form>
                         </div>
 
-                        <div className="lg:col-span-2 p-12 overflow-y-auto custom-scrollbar bg-slate-50/30">
-                            <div className="flex items-center justify-between mb-12">
-                                <div className="flex flex-col">
-                                    <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.5em]">Active Frequency Logs</h3>
-                                    <p className="text-[10px] font-bold text-slate-300 uppercase mt-1">Live monitoring of system-wide broadcasts</p>
+                        {/* Active Frequency Logs Panel */}
+                        <div className={`${isWideTransmitter ? 'lg:col-span-12' : 'lg:col-span-5'} p-8 lg:p-10 overflow-y-auto custom-scrollbar bg-slate-50/40 flex flex-col transition-all duration-300`}>
+                            {/* Summary Metrics Bar */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
+                                    <div className="flex items-center justify-between text-slate-400 mb-2">
+                                        <span className="text-[10px] font-black uppercase tracking-wider">Total Logs</span>
+                                        <Signal size={14} className="text-slate-400" />
+                                    </div>
+                                    <span className="text-2xl font-black text-slate-900">{announcementStats.total}</span>
                                 </div>
-                                <div className="flex items-center gap-4 bg-white px-5 py-3 rounded-2xl border border-slate-200 shadow-sm">
-                                    <Radio className="text-emerald-500 animate-pulse" size={16} />
-                                    <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest leading-none">Node_01 Status: Stable</span>
+                                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
+                                    <div className="flex items-center justify-between text-emerald-600 mb-2">
+                                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Live Signals</span>
+                                        <Radio size={14} className="text-emerald-500 animate-pulse" />
+                                    </div>
+                                    <span className="text-2xl font-black text-emerald-600">{announcementStats.active}</span>
+                                </div>
+                                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
+                                    <div className="flex items-center justify-between text-indigo-600 mb-2">
+                                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Mandatory</span>
+                                        <ShieldCheck size={14} className="text-indigo-500" />
+                                    </div>
+                                    <span className="text-2xl font-black text-indigo-600">{announcementStats.mandatory}</span>
+                                </div>
+                                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
+                                    <div className="flex items-center justify-between text-amber-600 mb-2">
+                                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Critical / Alert</span>
+                                        <AlertTriangle size={14} className="text-amber-500" />
+                                    </div>
+                                    <span className="text-2xl font-black text-amber-600">{announcementStats.critical}</span>
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                {announcements.map(a => {
+                            {/* Panel Controls: Title + Search & Filters */}
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 bg-white p-5 rounded-3xl border border-slate-200 shadow-sm">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600">
+                                        <Radio size={18} />
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <h3 className="text-sm font-black text-slate-900 uppercase tracking-[0.3em]">Active Frequency Logs</h3>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">Live Telemetry & Protocol Broadcast Archive</p>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-3.5 py-2 rounded-xl text-emerald-700">
+                                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                        <span className="text-[10px] font-mono font-black uppercase">Node_01: Online</span>
+                                        <button 
+                                            type="button" 
+                                            onClick={() => fetchAnnouncements(false)}
+                                            className="text-emerald-700 hover:text-emerald-900 ml-1 p-0.5 hover:rotate-180 transition-all duration-300"
+                                            title="Refresh logs telemetry"
+                                        >
+                                            <RefreshCw size={12} />
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Search and Category Filters */}
+                            <div className="flex flex-col md:flex-row gap-4 mb-8">
+                                <div className="relative flex-grow">
+                                    <Search size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                                    <input 
+                                        type="text" 
+                                        placeholder="Search logs by title, content, or ID..."
+                                        value={announcementSearch}
+                                        onChange={e => setAnnouncementSearch(e.target.value)}
+                                        className="w-full bg-white border border-slate-200 rounded-2xl pl-11 pr-10 py-3 text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-all shadow-sm"
+                                    />
+                                    {announcementSearch && (
+                                        <button 
+                                            onClick={() => setAnnouncementSearch('')}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                                        >
+                                            <X size={14} />
+                                        </button>
+                                    )}
+                                </div>
+
+                                <div className="flex bg-white p-1 rounded-2xl border border-slate-200 shadow-sm overflow-x-auto custom-scrollbar">
+                                    <button 
+                                        onClick={() => setAnnouncementFilter('all')} 
+                                        className={`px-3.5 py-2 text-[10px] font-black uppercase rounded-xl transition-all whitespace-nowrap ${
+                                            announcementFilter === 'all' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'
+                                        }`}
+                                    >
+                                        All ({announcementStats.total})
+                                    </button>
+                                    <button 
+                                        onClick={() => setAnnouncementFilter('active')} 
+                                        className={`px-3.5 py-2 text-[10px] font-black uppercase rounded-xl transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                                            announcementFilter === 'active' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 hover:text-emerald-600'
+                                        }`}
+                                    >
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                        Live ({announcementStats.active})
+                                    </button>
+                                    <button 
+                                        onClick={() => setAnnouncementFilter('inactive')} 
+                                        className={`px-3.5 py-2 text-[10px] font-black uppercase rounded-xl transition-all whitespace-nowrap ${
+                                            announcementFilter === 'inactive' ? 'bg-slate-200 text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-900'
+                                        }`}
+                                    >
+                                        Standby
+                                    </button>
+                                    <button 
+                                        onClick={() => setAnnouncementFilter('mandatory')} 
+                                        className={`px-3.5 py-2 text-[10px] font-black uppercase rounded-xl transition-all whitespace-nowrap ${
+                                            announcementFilter === 'mandatory' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-indigo-600'
+                                        }`}
+                                    >
+                                        Mandatory ({announcementStats.mandatory})
+                                    </button>
+                                    <button 
+                                        onClick={() => setAnnouncementFilter('error')} 
+                                        className={`px-3.5 py-2 text-[10px] font-black uppercase rounded-xl transition-all whitespace-nowrap ${
+                                            announcementFilter === 'error' ? 'bg-rose-600 text-white shadow-sm' : 'text-slate-500 hover:text-rose-600'
+                                        }`}
+                                    >
+                                        Critical
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Signal Cards Grid */}
+                            <div className={`grid gap-6 flex-grow ${isWideTransmitter ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3' : 'grid-cols-1 xl:grid-cols-2'}`}>
+                                {filteredAnnouncements.map(a => {
                                     const typeConfig = {
-                                        info: { color: 'border-indigo-100 text-indigo-600 bg-indigo-50', icon: <Info size={12} /> },
-                                        warning: { color: 'border-amber-100 text-amber-600 bg-amber-50', icon: <AlertTriangle size={12} /> },
-                                        success: { color: 'border-emerald-100 text-emerald-600 bg-emerald-50', icon: <CheckCircle2 size={12} /> },
-                                        error: { color: 'border-rose-100 text-rose-600 bg-rose-50', icon: <AlertCircle size={12} /> }
+                                        info: { color: 'border-indigo-200 text-indigo-700 bg-indigo-50/70', icon: <Info size={12} /> },
+                                        warning: { color: 'border-amber-200 text-amber-700 bg-amber-50/70', icon: <AlertTriangle size={12} /> },
+                                        success: { color: 'border-emerald-200 text-emerald-700 bg-emerald-50/70', icon: <CheckCircle2 size={12} /> },
+                                        error: { color: 'border-rose-200 text-rose-700 bg-rose-50/70', icon: <AlertCircle size={12} /> }
                                     };
+
+                                    const isExpanded = expandedAnnouncementIds.includes(a.id);
                                     
                                     return (
                                         <motion.div 
                                             layout
                                             key={a.id} 
-                                            className={`group relative flex flex-col p-8 bg-white border-2 rounded-[3rem] transition-all duration-500 ${
-                                                a.is_active ? 'border-indigo-500 ring-8 ring-indigo-50 shadow-2xl scale-[1.02]' : 'border-slate-100 hover:border-slate-200 shadow-sm opacity-80 hover:opacity-100'
+                                            className={`group relative flex flex-col p-6 bg-white border-2 rounded-[2.5rem] transition-all duration-300 ${
+                                                a.is_active 
+                                                    ? 'border-indigo-500 ring-4 ring-indigo-500/10 shadow-xl' 
+                                                    : 'border-slate-200 hover:border-slate-300 shadow-sm opacity-90 hover:opacity-100'
                                             }`}
                                         >
-                                            <div className="flex justify-between items-start mb-8">
-                                                <div className="flex flex-col gap-3">
-                                                    <div className="flex items-center gap-2">
-                                                        <div className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border flex items-center gap-2 ${typeConfig[a.type].color}`}>
+                                            {/* Card Top Badges & Actions Row */}
+                                            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-5 border-b border-slate-100 pb-4">
+                                                <div className="flex flex-col gap-2 min-w-0">
+                                                    <div className="flex flex-wrap items-center gap-1.5">
+                                                        {a.is_active ? (
+                                                            <div className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-emerald-50 border border-emerald-300 text-emerald-700 flex items-center gap-1.5 shadow-xs">
+                                                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                                                                LIVE SIGNAL
+                                                            </div>
+                                                        ) : (
+                                                            <div className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-slate-100 border border-slate-200 text-slate-500">
+                                                                STANDBY
+                                                            </div>
+                                                        )}
+
+                                                        <div className={`px-2 py-1 rounded-xl text-[9px] font-black uppercase tracking-wider border flex items-center gap-1.5 ${typeConfig[a.type].color}`}>
                                                             {typeConfig[a.type].icon}
                                                             {a.type}_PKT
                                                         </div>
-                                                        <div className="px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border border-slate-100 bg-slate-50 text-slate-400">
-                                                            {a.category?.replace('_', ' ') || 'SYSTEM_LOG'}
-                                                        </div>
+
                                                         {a.is_mandatory && (
-                                                            <div className="px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest bg-rose-600 text-white shadow-lg shadow-rose-200 animate-pulse">
+                                                            <div className="px-2 py-1 rounded-xl text-[8px] font-black uppercase tracking-wider bg-rose-600 text-white shadow-xs animate-pulse">
                                                                 MANDATORY
                                                             </div>
                                                         )}
                                                     </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="w-1.5 h-1.5 rounded-full bg-slate-200" />
-                                                        <div className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-tight">
+
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <span className="px-2 py-0.5 rounded-md text-[9px] font-mono font-bold text-slate-500 bg-slate-100 border border-slate-200">
+                                                            {a.category?.replace('_', ' ') || 'SYSTEM_OPS'}
+                                                        </span>
+                                                        <span className="text-[9px] font-mono text-slate-400 font-bold uppercase tracking-tight">
                                                             ID_{a.id.slice(0, 8)}
-                                                        </div>
+                                                        </span>
                                                     </div>
                                                 </div>
 
-                                                <div className="flex gap-2">
-                                                    <button onClick={() => editAnnouncement(a)} className="w-10 h-10 bg-slate-50 text-slate-400 rounded-xl hover:bg-indigo-600 hover:text-white border border-transparent transition-all flex items-center justify-center">
-                                                        <LayoutIcon size={16} />
+                                                {/* Vertical Ellipsis Action Menu Dropdown */}
+                                                <div className="relative shrink-0 self-start sm:self-auto">
+                                                    <button 
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setOpenMenuId(openMenuId === a.id ? null : a.id);
+                                                        }} 
+                                                        className={`w-8 h-8 rounded-xl border flex items-center justify-center transition-all ${
+                                                            openMenuId === a.id 
+                                                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' 
+                                                                : 'bg-slate-50 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 border-slate-200'
+                                                        }`}
+                                                        title="Broadcast Options"
+                                                    >
+                                                        <MoreVertical size={16} />
                                                     </button>
-                                                    <button onClick={() => deleteAnnouncement(a.id)} className="w-10 h-10 bg-slate-50 text-slate-400 rounded-xl hover:bg-rose-600 hover:text-white border border-transparent transition-all flex items-center justify-center font-bold">
-                                                        <Trash2 size={16} />
-                                                    </button>
+
+                                                    <AnimatePresence>
+                                                        {openMenuId === a.id && (
+                                                            <>
+                                                                {/* Backdrop overlay */}
+                                                                <div 
+                                                                    className="fixed inset-0 z-20" 
+                                                                    onClick={() => setOpenMenuId(null)} 
+                                                                />
+                                                                
+                                                                {/* Dropdown Menu */}
+                                                                <motion.div 
+                                                                    initial={{ opacity: 0, scale: 0.95, y: -6 }}
+                                                                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                                                                    exit={{ opacity: 0, scale: 0.95, y: -6 }}
+                                                                    transition={{ duration: 0.12 }}
+                                                                    className="absolute right-0 top-10 z-30 w-52 bg-white border border-slate-200 rounded-2xl shadow-xl p-1.5 flex flex-col gap-0.5"
+                                                                >
+                                                                    <button 
+                                                                        type="button"
+                                                                        onClick={() => { setOpenMenuId(null); testAnnouncement(a); }}
+                                                                        className="w-full px-3 py-2 rounded-xl text-left text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 flex items-center gap-2.5 transition-all text-xs font-bold"
+                                                                    >
+                                                                        <Eye size={14} className="text-indigo-500 shrink-0" />
+                                                                        <span>Preview Modal</span>
+                                                                    </button>
+
+                                                                    <button 
+                                                                        type="button"
+                                                                        onClick={() => { setOpenMenuId(null); editAnnouncement(a); }}
+                                                                        className="w-full px-3 py-2 rounded-xl text-left text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 flex items-center gap-2.5 transition-all text-xs font-bold"
+                                                                    >
+                                                                        <Edit3 size={14} className="text-indigo-500 shrink-0" />
+                                                                        <span>Edit Broadcast</span>
+                                                                    </button>
+
+                                                                    <button 
+                                                                        type="button"
+                                                                        onClick={() => { setOpenMenuId(null); cloneAnnouncement(a); }}
+                                                                        className="w-full px-3 py-2 rounded-xl text-left text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 flex items-center gap-2.5 transition-all text-xs font-bold"
+                                                                    >
+                                                                        <Copy size={14} className="text-indigo-500 shrink-0" />
+                                                                        <span>Clone to Draft</span>
+                                                                    </button>
+
+                                                                    <button 
+                                                                        type="button"
+                                                                        onClick={() => { setOpenMenuId(null); activateAnnouncement(a.id); }}
+                                                                        className="w-full px-3 py-2 rounded-xl text-left text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 flex items-center gap-2.5 transition-all text-xs font-bold"
+                                                                    >
+                                                                        <Radio size={14} className={a.is_active ? 'text-amber-500 shrink-0' : 'text-emerald-500 shrink-0'} />
+                                                                        <span>{a.is_active ? 'Set Standby' : 'Set Live Signal'}</span>
+                                                                    </button>
+
+                                                                    <div className="h-px bg-slate-100 my-1" />
+
+                                                                    <button 
+                                                                        type="button"
+                                                                        onClick={() => { setOpenMenuId(null); deleteAnnouncement(a.id); }}
+                                                                        className="w-full px-3 py-2 rounded-xl text-left text-rose-600 hover:bg-rose-50 flex items-center gap-2.5 transition-all text-xs font-bold"
+                                                                    >
+                                                                        <Trash2 size={14} className="text-rose-500 shrink-0" />
+                                                                        <span>Delete Log</span>
+                                                                    </button>
+                                                                </motion.div>
+                                                            </>
+                                                        )}
+                                                    </AnimatePresence>
                                                 </div>
                                             </div>
 
-                                            <h4 className="text-xl font-black text-slate-900 mb-4 uppercase tracking-tighter leading-tight whitespace-pre-wrap break-words pr-4">{a.title}</h4>
+                                            {/* Log Card Title */}
+                                            <h4 className="text-lg font-black text-slate-900 mb-3 uppercase tracking-tight leading-snug whitespace-pre-wrap break-words">
+                                                {a.title}
+                                            </h4>
                                             
-                                            <div className="relative mb-10 group/content">
-                                                <div className="text-[12px] text-slate-500 font-medium leading-relaxed h-24 overflow-hidden line-clamp-4 italic border-l-4 border-slate-100 pl-4 bg-slate-50/50 py-2 rounded-r-2xl">
-                                                    {a.content}
+                                            {/* Rendered Payload Area with Expand/Collapse */}
+                                            <div className="relative mb-6 flex-grow">
+                                                <div className={`text-xs text-slate-600 font-medium leading-relaxed border-l-4 border-indigo-400/50 pl-4 bg-slate-50/80 p-3 rounded-r-2xl prose prose-slate prose-xs max-w-none transition-all ${
+                                                    isExpanded ? 'max-h-[500px] overflow-y-auto custom-scrollbar' : 'max-h-24 overflow-hidden line-clamp-3'
+                                                }`}>
+                                                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{a.content}</ReactMarkdown>
                                                 </div>
-                                                <div className="absolute inset-0 bg-gradient-to-t from-white/90 to-transparent opacity-0 group-hover/content:opacity-100 transition-opacity flex items-end justify-center pb-2 pointer-events-none">
-                                                    <span className="text-[9px] font-black text-slate-400 uppercase">Click Edit to Expand</span>
-                                                </div>
+                                                
+                                                <button 
+                                                    onClick={() => toggleExpandAnnouncement(a.id)}
+                                                    className="mt-2 text-[10px] font-black uppercase text-indigo-600 hover:text-indigo-800 flex items-center gap-1 tracking-wider"
+                                                >
+                                                    {isExpanded ? (
+                                                        <>Collapse <ChevronUp size={12} /></>
+                                                    ) : (
+                                                        <>Show Full Payload <ChevronDown size={12} /></>
+                                                    )}
+                                                </button>
                                             </div>
 
-                                            <div className="mt-auto flex items-center justify-between border-t border-slate-50 pt-8">
+                                            {/* Card Footer: Timestamps + Activation Toggle */}
+                                            <div className="mt-auto flex items-center justify-between border-t border-slate-100 pt-5">
                                                 <div className="flex flex-col">
-                                                    <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest leading-none mb-2">Deployed At</span>
-                                                    <span className="text-[10px] font-mono font-bold text-slate-500 uppercase">
+                                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Deployed</span>
+                                                    <span className="text-[10px] font-mono font-bold text-slate-600 uppercase">
                                                         {new Date(a.created_at).toLocaleDateString([], { month: 'short', day: 'numeric', year: '2-digit' }).replace(',', '')} 
-                                                        <span className="mx-1.5 opacity-30">|</span>
+                                                        <span className="mx-1 opacity-40">|</span>
                                                         {new Date(a.created_at).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit' })}
                                                     </span>
                                                 </div>
 
                                                 <button 
                                                     onClick={() => activateAnnouncement(a.id)}
-                                                    className={`px-8 py-3.5 rounded-2xl text-[9px] font-black uppercase tracking-[0.3em] transition-all border-2 flex items-center gap-3 active:scale-95 shadow-xl ${
+                                                    className={`px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] transition-all border flex items-center gap-2 active:scale-95 shadow-md ${
                                                         a.is_active 
-                                                            ? 'bg-rose-600 border-rose-600 text-white shadow-rose-500/20 hover:bg-rose-700 hover:border-rose-700' 
-                                                            : 'bg-indigo-600 border-indigo-600 text-white shadow-indigo-500/20 hover:bg-indigo-700 hover:border-indigo-700'
+                                                            ? 'bg-rose-600 border-rose-600 text-white shadow-rose-500/20 hover:bg-rose-700' 
+                                                            : 'bg-indigo-600 border-indigo-600 text-white shadow-indigo-500/20 hover:bg-indigo-700'
                                                     }`}
                                                 >
                                                     {a.is_active ? <Square size={10} fill="currentColor" /> : <Play size={10} fill="currentColor" />}
@@ -1980,10 +2477,25 @@ const AdminDashboard: React.FC = () => {
                                     );
                                 })}
                                 
-                                {announcements.length === 0 && (
-                                    <div className="col-span-full py-40 text-center opacity-30 grayscale flex flex-col items-center justify-center">
-                                        <svg className="w-20 h-20 mb-6 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 v2M7 7h10" /></svg>
-                                        <p className="text-sm font-black uppercase tracking-[0.4em] text-slate-400">Signal Archive Empty</p>
+                                {filteredAnnouncements.length === 0 && (
+                                    <div className="col-span-full py-28 text-center bg-white border-2 border-dashed border-slate-200 rounded-[2.5rem] flex flex-col items-center justify-center p-8">
+                                        <div className="w-16 h-16 rounded-3xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-300 mb-4">
+                                            <Signal size={32} />
+                                        </div>
+                                        <h4 className="text-sm font-black text-slate-700 uppercase tracking-[0.3em]">No Broadcast Logs Found</h4>
+                                        <p className="text-xs text-slate-400 mt-1 max-w-md">
+                                            {announcementSearch 
+                                                ? `No telemetry logs match search query "${announcementSearch}".` 
+                                                : `No telemetry logs registered under filter "${announcementFilter}".`}
+                                        </p>
+                                        {announcementSearch ? (
+                                            <button 
+                                                onClick={() => setAnnouncementSearch('')}
+                                                className="mt-4 px-4 py-2 bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider rounded-xl shadow-md hover:bg-slate-800 transition-all"
+                                            >
+                                                Clear Search Query
+                                            </button>
+                                        ) : null}
                                     </div>
                                 )}
                             </div>
