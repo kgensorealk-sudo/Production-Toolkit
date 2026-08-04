@@ -6,7 +6,7 @@ import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 import useLocalStorage from '../hooks/useLocalStorage';
-import { Download, Table as TableIcon, FileUp, Clipboard, Check, Info } from 'lucide-react';
+import { Download, Table as TableIcon, FileUp, Clipboard, Check, Info, Sparkles, Wand2, Search, Grid, ChevronDown, ChevronUp, RotateCcw, FileText, Plus, HelpCircle } from 'lucide-react';
 
 interface Issue {
     id: string;
@@ -23,6 +23,7 @@ interface ParsedAuthor {
         original: string;
         isCorrection: boolean;
         isDuplicate: boolean;
+        isUnknown?: boolean;
     }>;
     originalSegment: string;
 }
@@ -92,12 +93,18 @@ const CreditGenerator: React.FC = () => {
     const [boldOutput, setBoldOutput] = useLocalStorage<string>('credit_generator_bold_output', '');
     const [rolesOutput, setRolesOutput] = useLocalStorage<string>('credit_generator_roles_output', '');
     const [lastProcessedInput, setLastProcessedInput] = useLocalStorage<string>('credit_generator_last_input', '');
-    const [parsedAuthors, setParsedAuthors] = useState<ParsedAuthor[]>([]);
+    const [parsedAuthors, setParsedAuthors] = useLocalStorage<ParsedAuthor[]>('credit_generator_parsed_authors', []);
     
     // Report States
-    const [reportIssues, setReportIssues] = useState<Issue[]>([]);
-    const [scanStats, setScanStats] = useState({ errors: 0, authors: 0 });
+    const [reportIssues, setReportIssues] = useLocalStorage<Issue[]>('credit_generator_report_issues', []);
+    const [scanStats, setScanStats] = useLocalStorage<{ errors: number; authors: number }>('credit_generator_scan_stats', { errors: 0, authors: 0 });
+    const [copiedState, setCopiedState] = useState<{ id: string; type: 'roles' | 'xml' } | null>(null);
     
+    // Input panel enhanced states
+    const [roleSearchQuery, setRoleSearchQuery] = useState('');
+    const [isRolesExpanded, setIsRolesExpanded] = useState(false);
+    const [hoveredRole, setHoveredRole] = useState<{ name: string; definition: string } | null>(null);
+
     const [activeTab, setActiveTab] = useState<'preview' | 'matrix' | 'bold' | 'roles' | 'report'>('preview');
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -105,6 +112,34 @@ const CreditGenerator: React.FC = () => {
     
     const backdropRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    const handleInsertSample = () => {
+        const sample = `J. Doe: Conceptualization, Data Curation, Formal Analysis. A. Smith: Methodology, Writing – original draft, Writing – review & editing. C. Johnson: Supervision, Funding acquisition.`;
+        setInput(sample);
+        setToast({ msg: 'Sample statement loaded', type: 'success' });
+    };
+
+    const handleFormatText = () => {
+        if (!input.trim()) return;
+        const formatted = input
+            .replace(/\s*:\s*/g, ': ')
+            .replace(/\s*,\s*/g, ', ')
+            .replace(/\s*;\s*/g, '; ')
+            .replace(/[ \t]+/g, ' ')
+            .replace(/\s+\./g, '.');
+        setInput(formatted);
+        setToast({ msg: 'Cleaned spacing & punctuation', type: 'success' });
+    };
+
+    const filteredRoles = useMemo(() => {
+        if (!roleSearchQuery.trim()) return CREDIT_DB;
+        const q = roleSearchQuery.toLowerCase();
+        return CREDIT_DB.filter(r => 
+            r.name.toLowerCase().includes(q) || 
+            (r.definition && r.definition.toLowerCase().includes(q)) ||
+            (r.aliases && r.aliases.some(a => a.toLowerCase().includes(q)))
+        );
+    }, [roleSearchQuery]);
 
     const handleScroll = () => {
         if (backdropRef.current && textareaRef.current) {
@@ -144,9 +179,36 @@ const CreditGenerator: React.FC = () => {
 
     const copyAuthorRoles = (author: ParsedAuthor) => {
         if (!author.roles || author.roles.length === 0) return;
-        const roles = author.roles.filter(r => !r.isDuplicate).map(r => r.normalized).join(', ');
+        const validRoles = author.roles.filter(r => !r.isDuplicate && !r.isUnknown && CREDIT_DB.some(dbR => dbR.name === r.normalized));
+        if (validRoles.length === 0) {
+            setToast({ msg: `No valid CRediT roles for ${author.name}`, type: 'warn' });
+            return;
+        }
+        const roles = validRoles.map(r => r.normalized).join(', ');
         navigator.clipboard.writeText(roles).then(() => {
-            setToast({ msg: `Copied roles for ${author.name}`, type: 'success' });
+            setCopiedState({ id: author.name, type: 'roles' });
+            setTimeout(() => setCopiedState(null), 1500);
+            setToast({ msg: `Copied CRediT roles for ${author.name}`, type: 'success' });
+        });
+    };
+
+    const copyAuthorXml = (author: ParsedAuthor) => {
+        const validRoles = author.roles.filter(r => !r.isDuplicate && !r.isUnknown && CREDIT_DB.some(dbR => dbR.name === r.normalized));
+        let xml = '';
+        if (validRoles.length > 0) {
+            validRoles.forEach(r => {
+                const dbRole = CREDIT_DB.find(dbR => dbR.name === r.normalized);
+                if (dbRole) {
+                    xml += `<ce:contributor-role role="${dbRole.url}">${r.normalized}</ce:contributor-role>\n`;
+                }
+            });
+        } else {
+            xml += `<!-- No valid CRediT roles found -->\n`;
+        }
+        navigator.clipboard.writeText(xml).then(() => {
+            setCopiedState({ id: author.name, type: 'xml' });
+            setTimeout(() => setCopiedState(null), 1500);
+            setToast({ msg: `Copied XML for ${author.name}`, type: 'success' });
         });
     };
 
@@ -306,7 +368,7 @@ const CreditGenerator: React.FC = () => {
         if (parsedAuthors.length === 0) return;
         const data = parsedAuthors.map(a => ({
             name: a.name,
-            roles: a.roles.filter(r => !r.isDuplicate).map(r => r.normalized)
+            roles: a.roles.filter(r => !r.isDuplicate && !r.isUnknown && CREDIT_DB.some(dbR => dbR.name === r.normalized)).map(r => r.normalized)
         }));
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
@@ -407,7 +469,8 @@ const CreditGenerator: React.FC = () => {
                                 normalized: match.name,
                                 original: rawRole,
                                 isCorrection: false,
-                                isDuplicate: true
+                                isDuplicate: true,
+                                isUnknown: false
                             });
                         } else {
                             seenRoles.add(match.name);
@@ -430,7 +493,8 @@ const CreditGenerator: React.FC = () => {
                                 normalized: match.name,
                                 original: rawRole,
                                 isCorrection,
-                                isDuplicate: false
+                                isDuplicate: false,
+                                isUnknown: false
                             });
                         }
                     } else {
@@ -449,7 +513,8 @@ const CreditGenerator: React.FC = () => {
                             normalized: rawRole,
                             original: rawRole,
                             isCorrection: false,
-                            isDuplicate: false
+                            isDuplicate: false,
+                            isUnknown: true
                         });
                     }
                 });
@@ -553,6 +618,9 @@ const CreditGenerator: React.FC = () => {
             setBoldOutput('');
             setRolesOutput('');
             setLastProcessedInput('');
+            setParsedAuthors([]);
+            setReportIssues([]);
+            setScanStats({ errors: 0, authors: 0 });
             setToast({msg: 'All data cleared', type:'warn'});
         }
     }, [input, boldOutput, rolesOutput, activeTab, lastProcessedInput]);
@@ -582,51 +650,139 @@ const CreditGenerator: React.FC = () => {
                         </div>
                     )}
                     
-                    <div className="bg-slate-50 px-4 py-3 border-b border-slate-100 flex justify-between items-center z-20 relative">
-                        <label className="font-bold text-slate-700 flex items-center gap-2 text-sm">
-                            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white border border-slate-200 text-xs text-purple-600 font-mono shadow-sm">IN</span>
-                            Input Text
+                    <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2 z-20 relative">
+                        <label className="font-bold text-slate-800 flex items-center gap-2 text-sm">
+                            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-100 border border-purple-200 text-purple-700 shadow-sm">
+                                <FileText size={15} />
+                            </div>
+                            <span>Input Text</span>
                         </label>
-                        <div className="flex gap-2">
-                             <input 
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                            <button
+                                onClick={handleInsertSample}
+                                className="text-xs font-semibold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 active:scale-95 shadow-2xs"
+                                title="Insert sample statement for testing"
+                            >
+                                <Sparkles size={13} className="text-purple-600" />
+                                <span>Insert Sample</span>
+                            </button>
+                            <button
+                                onClick={handleFormatText}
+                                className="text-xs font-semibold text-slate-600 hover:text-indigo-600 bg-white hover:bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 active:scale-95 shadow-2xs"
+                                title="Format spacing and punctuation"
+                            >
+                                <Wand2 size={13} className="text-indigo-500" />
+                                <span>Format</span>
+                            </button>
+                            <input 
                                 type="file" 
                                 id="file-upload" 
                                 className="hidden" 
                                 accept=".txt,.xml" 
                                 onChange={handleFileUpload} 
-                             />
-                             <button 
+                            />
+                            <button 
                                 onClick={() => document.getElementById('file-upload')?.click()}
-                                className="text-xs font-semibold text-slate-500 hover:text-indigo-600 px-2 py-1 rounded transition-colors flex items-center gap-1"
-                             >
-                                <FileUp size={12} /> Import
-                             </button>
-                             <button onClick={() => {
-                                 setInput('');
-                                 setBoldOutput('');
-                                 setRolesOutput('');
-                                 setLastProcessedInput('');
-                                 setToast({msg: 'All data cleared', type:'warn'});
-                             }} title="Alt+Delete" className="text-xs font-semibold text-slate-400 hover:text-red-500 px-2 py-1 rounded transition-colors">Clear</button>
+                                className="text-xs font-semibold text-slate-600 hover:text-indigo-600 bg-white hover:bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 active:scale-95 shadow-2xs"
+                                title="Import .txt or .xml file"
+                            >
+                                <FileUp size={13} />
+                                <span>Import</span>
+                            </button>
+                            <button 
+                                onClick={() => {
+                                    setInput('');
+                                    setBoldOutput('');
+                                    setRolesOutput('');
+                                    setLastProcessedInput('');
+                                    setParsedAuthors([]);
+                                    setReportIssues([]);
+                                    setScanStats({ errors: 0, authors: 0 });
+                                    setToast({msg: 'All data cleared', type:'warn'});
+                                }} 
+                                title="Clear input text (Alt+Delete)" 
+                                className="text-xs font-semibold text-slate-500 hover:text-rose-600 bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-200 px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 active:scale-95 shadow-2xs"
+                            >
+                                <RotateCcw size={13} />
+                                <span>Clear</span>
+                            </button>
                         </div>
                     </div>
                     
-                    <div className="px-3 py-2 bg-white border-b border-slate-100 flex items-center gap-2 overflow-x-auto whitespace-nowrap custom-scrollbar z-20 relative">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1">Insert:</span>
-                        <div className="flex gap-1.5">
-                            {CREDIT_DB.map(r => {
+                    {/* Insert CRediT Roles Bar */}
+                    <div className="bg-slate-100/70 border-b border-slate-200 p-2.5 z-20 relative space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-[11px] font-extrabold text-slate-600 uppercase tracking-wider flex items-center gap-1">
+                                    <Plus size={12} className="text-purple-600" /> Quick Insert Roles
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-medium">({filteredRoles.length}/14)</span>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <div className="relative flex items-center">
+                                    <Search size={12} className="absolute left-2 text-slate-400 pointer-events-none" />
+                                    <input
+                                        type="text"
+                                        value={roleSearchQuery}
+                                        onChange={(e) => setRoleSearchQuery(e.target.value)}
+                                        placeholder="Filter roles..."
+                                        className="w-32 sm:w-40 pl-6 pr-2 py-0.5 text-xs bg-white border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-purple-500 focus:border-purple-500 text-slate-700 placeholder-slate-400"
+                                    />
+                                    {roleSearchQuery && (
+                                        <button 
+                                            onClick={() => setRoleSearchQuery('')}
+                                            className="absolute right-1 text-[10px] text-slate-400 hover:text-slate-600 px-1"
+                                        >
+                                            ✕
+                                        </button>
+                                    )}
+                                </div>
+
+                                <button
+                                    onClick={() => setIsRolesExpanded(!isRolesExpanded)}
+                                    className="p-1 text-slate-500 hover:text-purple-600 hover:bg-white rounded border border-slate-200 transition-colors"
+                                    title={isRolesExpanded ? "Collapse roles list" : "Expand all roles grid"}
+                                >
+                                    {isRolesExpanded ? <ChevronUp size={14} /> : <Grid size={14} />}
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className={`transition-all duration-200 ${
+                            isRolesExpanded 
+                                ? 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 max-h-48 overflow-auto custom-scrollbar p-1' 
+                                : 'flex gap-1.5 overflow-x-auto whitespace-nowrap custom-scrollbar py-0.5'
+                        }`}>
+                            {filteredRoles.map(r => {
                                 const colors = getRoleColor(r.name);
                                 return (
                                     <button 
                                         key={r.name} 
                                         onClick={() => insertRole(r.name)} 
-                                        className={`px-2 py-1 bg-white border border-slate-200 text-[10px] rounded transition-colors hover:border-current ${colors.text} hover:opacity-80 font-medium`}
+                                        onMouseEnter={() => setHoveredRole({ name: r.name, definition: r.definition || '' })}
+                                        onMouseLeave={() => setHoveredRole(null)}
+                                        className={`group relative flex items-center gap-1.5 px-2.5 py-1 bg-white border border-slate-200 hover:border-purple-300 text-[11px] rounded-lg transition-all hover:shadow-xs ${colors.text} active:scale-95 font-medium shrink-0`}
                                     >
-                                        {r.name}
+                                        <Plus size={10} className="opacity-60 group-hover:opacity-100" />
+                                        <span>{r.name}</span>
                                     </button>
                                 );
                             })}
+                            {filteredRoles.length === 0 && (
+                                <span className="text-xs text-slate-400 py-1 px-2 italic">No roles matching "{roleSearchQuery}"</span>
+                            )}
                         </div>
+
+                        {hoveredRole && (
+                            <div className="mt-1 px-2.5 py-1 bg-purple-900 text-purple-100 rounded-md text-[11px] font-sans flex items-start gap-1.5 animate-fade-in shadow-sm">
+                                <Info size={13} className="text-purple-300 shrink-0 mt-0.5" />
+                                <div>
+                                    <span className="font-bold text-white">{hoveredRole.name}:</span>{' '}
+                                    <span className="text-purple-200">{hoveredRole.definition}</span>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <div className="relative w-full flex-grow bg-slate-50/30">
@@ -641,16 +797,31 @@ const CreditGenerator: React.FC = () => {
                             onChange={(e) => setInput(e.target.value)}
                             onScroll={handleScroll}
                             className="absolute inset-0 w-full h-full p-6 font-mono text-sm leading-relaxed whitespace-pre-wrap break-words bg-transparent border-none text-transparent caret-slate-800 focus:ring-0 outline-none resize-none z-10 placeholder-slate-400 selection:bg-purple-500 selection:text-white"
-                            placeholder="Paste statement (e.g., 'J. Doe: Conceptualization, Data Curation. A. Smith: Writing.')..."
+                            placeholder="Paste or type author statements here (e.g., 'J. Doe: Conceptualization, Data Curation. A. Smith: Writing – original draft.')..."
                             spellCheck={false}
                         />
                     </div>
 
-                    <div className="px-4 py-2 bg-white border-t border-slate-200 flex justify-between items-center text-xs text-slate-500 font-medium z-20 relative">
-                         <div className="flex gap-4">
-                             <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-blue-400"></span> {inputStats.authors} Authors</span>
-                             <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-400"></span> {inputStats.valid} Valid</span>
-                             <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-rose-400"></span> {inputStats.invalid} Issues</span>
+                    <div className="px-4 py-2 bg-slate-50 border-t border-slate-200 flex flex-wrap justify-between items-center text-xs text-slate-500 font-medium z-20 relative gap-2">
+                         <div className="flex items-center gap-3">
+                             <span className="flex items-center gap-1.5 font-semibold text-slate-700">
+                                 <span className="w-2 h-2 rounded-full bg-blue-500"></span> 
+                                 {inputStats.authors} {inputStats.authors === 1 ? 'Author' : 'Authors'}
+                             </span>
+                             <span className="flex items-center gap-1.5 font-semibold text-emerald-700">
+                                 <span className="w-2 h-2 rounded-full bg-emerald-500"></span> 
+                                 {inputStats.valid} Valid
+                             </span>
+                             <span className="flex items-center gap-1.5 font-semibold text-rose-600">
+                                 <span className="w-2 h-2 rounded-full bg-rose-500"></span> 
+                                 {inputStats.invalid} Issues
+                             </span>
+                         </div>
+
+                         <div className="flex items-center gap-3 text-slate-400 text-[11px] font-mono">
+                             <span>{input.length} chars</span>
+                             <span>•</span>
+                             <span>{input ? input.split('\n').length : 0} lines</span>
                          </div>
                     </div>
                 </div>
@@ -744,11 +915,24 @@ const CreditGenerator: React.FC = () => {
                                                 </div>
                                                 <button 
                                                     onClick={() => copyAuthorRoles(author)}
-                                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all border border-slate-200 group/copy"
-                                                    title="Copy only roles"
+                                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all border group/copy active:scale-95 ${
+                                                        copiedState?.id === author.name && copiedState?.type === 'roles'
+                                                            ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                                                            : 'bg-slate-100 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border-slate-200'
+                                                    }`}
+                                                    title={`Copy roles for ${author.name}`}
                                                 >
-                                                    <span className="text-[10px] font-black uppercase tracking-widest hidden group-hover/copy:inline transition-all duration-300">Copy Roles</span>
-                                                    <Clipboard size={12} />
+                                                    {copiedState?.id === author.name && copiedState?.type === 'roles' ? (
+                                                        <>
+                                                            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Copied Roles!</span>
+                                                            <Check size={12} className="text-emerald-600" />
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <span className="text-[10px] font-black uppercase tracking-widest hidden group-hover/copy:inline transition-all duration-300">Copy Roles</span>
+                                                            <Clipboard size={12} />
+                                                        </>
+                                                    )}
                                                 </button>
                                             </div>
                                             <div className="flex flex-wrap gap-2">
@@ -885,10 +1069,97 @@ const CreditGenerator: React.FC = () => {
                         )}
                         
                         {activeTab === 'roles' && (
-                             <div 
-                                className="absolute inset-0 p-6 text-sm font-mono text-slate-800 bg-transparent border-0 focus:ring-0 resize-none leading-relaxed outline-none whitespace-pre-wrap break-words overflow-auto custom-scrollbar"
-                                dangerouslySetInnerHTML={{ __html: getHighlightedXmlOutput(rolesOutput) || '<span class="text-slate-400">XML roles will appear here...</span>' }}
-                            />
+                            <div className="absolute inset-0 p-4 sm:p-6 overflow-auto custom-scrollbar space-y-4">
+                                {parsedAuthors.length > 0 ? (
+                                    parsedAuthors.map((author, idx) => {
+                                        const validRoles = author.roles.filter(r => !r.isDuplicate && !r.isUnknown && CREDIT_DB.some(dbR => dbR.name === r.normalized));
+                                        let xmlBlock = '';
+                                        if (validRoles.length > 0) {
+                                            validRoles.forEach(r => {
+                                                const dbRole = CREDIT_DB.find(dbR => dbR.name === r.normalized);
+                                                if (dbRole) {
+                                                    xmlBlock += `<ce:contributor-role role="${dbRole.url}">${r.normalized}</ce:contributor-role>\n`;
+                                                }
+                                            });
+                                        } else {
+                                            xmlBlock += `<!-- No valid CRediT roles found -->\n`;
+                                        }
+
+                                        return (
+                                            <div key={idx} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
+                                                <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-100 mb-3">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 text-indigo-700 flex items-center justify-center font-mono text-xs font-bold shadow-inner">
+                                                            {author.name.charAt(0)}
+                                                        </div>
+                                                        <span className="font-bold text-slate-800 text-sm">{author.name}</span>
+                                                        <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                                                            {validRoles.length} CRediT {validRoles.length === 1 ? 'role' : 'roles'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <button 
+                                                            onClick={() => copyAuthorRoles(author)}
+                                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all active:scale-95 ${
+                                                                copiedState?.id === author.name && copiedState?.type === 'roles'
+                                                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                                                                    : 'bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200'
+                                                            }`}
+                                                            title={`Copy roles for ${author.name}`}
+                                                        >
+                                                            {copiedState?.id === author.name && copiedState?.type === 'roles' ? (
+                                                                <>
+                                                                    <Check size={13} className="text-emerald-600" />
+                                                                    <span>Copied Roles!</span>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <Clipboard size={13} />
+                                                                    <span>Copy Roles</span>
+                                                                </>
+                                                            )}
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => copyAuthorXml(author)}
+                                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all active:scale-95 ${
+                                                                copiedState?.id === author.name && copiedState?.type === 'xml'
+                                                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                                                                    : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200'
+                                                            }`}
+                                                            title={`Copy XML tags for ${author.name}`}
+                                                        >
+                                                            {copiedState?.id === author.name && copiedState?.type === 'xml' ? (
+                                                                <>
+                                                                    <Check size={13} className="text-emerald-600" />
+                                                                    <span>Copied XML!</span>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <Clipboard size={13} />
+                                                                    <span>Copy Author XML</span>
+                                                                </>
+                                                            )}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <div 
+                                                    className="p-3.5 bg-slate-900 text-slate-100 rounded-lg text-xs font-mono leading-relaxed whitespace-pre-wrap break-words overflow-x-auto selection:bg-purple-500 selection:text-white"
+                                                    dangerouslySetInnerHTML={{ __html: getHighlightedXmlOutput(xmlBlock) }}
+                                                />
+                                            </div>
+                                        );
+                                    })
+                                ) : rolesOutput ? (
+                                    <div 
+                                        className="p-6 text-sm font-mono text-slate-800 leading-relaxed whitespace-pre-wrap break-words bg-white border border-slate-200 rounded-xl shadow-sm"
+                                        dangerouslySetInnerHTML={{ __html: getHighlightedXmlOutput(rolesOutput) }}
+                                    />
+                                ) : (
+                                    <div className="h-full flex flex-col items-center justify-center text-slate-400 pt-20">
+                                        <p>XML roles will appear here...</p>
+                                    </div>
+                                )}
+                            </div>
                         )}
                         
                         {activeTab === 'report' && (
