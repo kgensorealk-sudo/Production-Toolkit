@@ -486,6 +486,24 @@ const AdminDashboard: React.FC = () => {
             updates.subscription_end = null; updates.trial_start = null; updates.trial_end = null;
         }
 
+        if (newVal) {
+            const formattedEnd = updates.subscription_end ? new Date(updates.subscription_end).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'Lifetime / Active';
+            const notice = {
+                id: `ext_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+                title: "Subscription Access Authorized",
+                email: user.email,
+                newExpiry: formattedEnd,
+                extensionLabel: durationOption?.label ? `Authorized (${durationOption.label})` : 'Authorized',
+                extendedAt: new Date().toISOString(),
+                isRead: false
+            };
+            const currentPrefs = (user.notification_preferences as any) || {};
+            updates.notification_preferences = {
+                ...currentPrefs,
+                pending_extension_notice: notice
+            };
+        }
+
         setIsLoading(true);
         try {
             await withRetry(async () => {
@@ -493,6 +511,7 @@ const AdminDashboard: React.FC = () => {
                 if (error) throw error;
             });
             setUsers(users.map(u => u.id === user.id ? { ...u, ...updates } : u));
+            window.dispatchEvent(new CustomEvent('app:subscription-extended', { detail: { notice: updates.notification_preferences?.pending_extension_notice } }));
             setToast({ msg: newVal ? `Authorized (${durationOption?.label})` : 'Access Terminated', type: 'success' });
         } catch (err: any) { setToast({ msg: 'Operation failed', type: 'error' }); } finally { setIsLoading(false); }
     };
@@ -520,9 +539,32 @@ const AdminDashboard: React.FC = () => {
                 extensionLabel = `+${durationOption?.label || 'Extended'}`;
             }
 
+            const formattedDate = new Date(newEndIso).toLocaleDateString(undefined, {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+            });
+
+            const notice = {
+                id: `ext_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+                title: "Subscription Access Extended",
+                email: user.email,
+                newExpiry: formattedDate,
+                extensionLabel: extensionLabel,
+                extendedAt: new Date().toISOString(),
+                isRead: false
+            };
+
+            const currentPrefs = (user.notification_preferences as any) || {};
             const updates: any = {
                 is_subscribed: true,
-                subscription_end: newEndIso
+                subscription_end: newEndIso,
+                trial_start: null,
+                trial_end: null,
+                notification_preferences: {
+                    ...currentPrefs,
+                    pending_extension_notice: notice
+                }
             };
 
             await withRetry(async () => {
@@ -531,12 +573,7 @@ const AdminDashboard: React.FC = () => {
             });
 
             setUsers(prev => prev.map(u => u.id === user.id ? { ...u, ...updates } : u));
-            
-            const formattedDate = new Date(newEndIso).toLocaleDateString(undefined, {
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric'
-            });
+            window.dispatchEvent(new CustomEvent('app:subscription-extended', { detail: { notice } }));
 
             setToast({ 
                 msg: `Expiry extended for ${user.email} (${extensionLabel}) -> New Expiry: ${formattedDate}`, 
@@ -2113,6 +2150,22 @@ const AdminDashboard: React.FC = () => {
                                         <div className="flex flex-col">
                                             <span className="text-[10px] font-black text-slate-800 uppercase tracking-tight group-hover:text-rose-900">Security Command</span>
                                             <span className="text-[8px] font-bold text-slate-400 uppercase">Mandatory Read</span>
+                                        </div>
+                                    </button>
+                                     <button
+                                        type="button"
+                                        onClick={() => {
+                                            setNewTitle("SUBSCRIPTION_EXTENSION_NOTICE");
+                                            setNewType("success");
+                                            setNewCategory("system_alerts");
+                                            setNewContent("### 🎉 Subscription Access Extended!\n\nYour subscription access has been successfully extended!\n\n* **Status:** AUTHORIZED / ACTIVE\n* **Feature Access:** Full Access to All Production & Experimental Tools\n\nThank you for choosing Production Toolkit Pro!");
+                                        }}
+                                        className="text-left p-2.5 rounded-xl bg-white border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/50 transition-all flex items-center gap-2 group"
+                                    >
+                                        <span className="text-sm">🎉</span>
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] font-black text-slate-800 uppercase tracking-tight group-hover:text-indigo-900">Subscription Extended</span>
+                                            <span className="text-[8px] font-bold text-slate-400 uppercase">Access Pulse</span>
                                         </div>
                                     </button>
                                     <button

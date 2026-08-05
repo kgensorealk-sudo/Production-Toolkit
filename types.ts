@@ -65,6 +65,7 @@ export interface SmartSuggestion {
 
 export enum ToolId {
     XML_RENUMBER = 'xmlRenumber',
+    XML_RENUMBER_EXP = 'xmlRenumberExp',
     CREDIT_GENERATOR = 'creditGenerator',
     QUICK_DIFF = 'quickDiff',
     TAG_CLEANER = 'tagCleaner',
@@ -81,6 +82,7 @@ export enum ToolId {
     ID_AUDITOR = 'idAuditor',
     COMMENT_REPLACER = 'commentReplacer',
     CITATION_LINKER = 'citationLinker',
+    CITATION_LINKER_EXP = 'citationLinkerExp',
     SECTION_AUDITOR = 'sectionAuditor',
     AFFILIATION_SEQUENCER = 'affiliationSequencer',
     STRUCTURAL_ARCHITECT = 'structuralArchitect',

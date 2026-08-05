@@ -11,19 +11,7 @@ import {
     PinOff,
     Cpu,
     Database,
-    SearchCode,
-    RefreshCcw,
-    GitCompare,
-    UserCheck,
-    Highlighter,
-    FileText,
-    Eraser,
-    Table,
-    Sparkles,
-    RefreshCw,
-    Hash,
-    Terminal,
-    SortAsc
+    Link
 } from 'lucide-react';
 import { ToolId } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -174,11 +162,8 @@ const Experimental: React.FC = () => {
     };
 
     const EXPERIMENTAL_TOOLS = [
-        { id: ToolId.COMMENT_REPLACER, title: "Comment Replacer", desc: "Extract and clean reference replacements buried in XML editorial comment tags.", iconBg: "bg-amber-50", iconText: "text-amber-600", borderColor: "bg-amber-500", Icon: SearchCode, isExperimental: true },
-        { id: ToolId.SECTION_AUDITOR, title: "Section Auditor", desc: "Identify and validate section labels, titles, and nesting levels within the XML structure.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: Database, isExperimental: true },
-        { id: ToolId.REF_DUPE_CHECK, title: "Ref Dupe Checker", desc: "Find and merge citations with similar titles. Auto-relinks references to the kept item.", iconBg: "bg-rose-50", iconText: "text-rose-600", borderColor: "bg-rose-500", Icon: GitCompare, isExperimental: true },
-        { id: ToolId.AFFILIATION_SEQUENCER, title: "Affiliation Sequencer", desc: "Re-maps affiliation IDs and labels to sequential order while updating cross-references.", iconBg: "bg-emerald-50", iconText: "text-emerald-600", borderColor: "bg-emerald-500", Icon: Hash, isExperimental: true },
-        { id: ToolId.REF_SORTER, title: "Reference Sorter", desc: "Alphabetically sort bibliography references by author surname and year.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: SortAsc, isExperimental: true }
+        { id: ToolId.XML_RENUMBER_EXP, title: "XML Normalizer Pro (Experimental)", desc: "Advanced sequential citation renumbering with alphabetical sorting, range compression, and other-ref isolation.", iconBg: "bg-blue-50", iconText: "text-blue-600", borderColor: "bg-blue-500", Icon: Database, isExperimental: true },
+        { id: ToolId.CITATION_LINKER_EXP, title: "Citation Linker Pro MAX", desc: "Multi-entity citation linker with fuzzy author/year resolution, float cross-refs, and auto-text detection.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: Link, isExperimental: true }
     ];
 
     const filteredTools = useMemo(() => {

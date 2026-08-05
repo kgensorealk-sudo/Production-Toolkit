@@ -720,7 +720,7 @@ const XmlRenumber: React.FC = () => {
                     </div>
                     
                     <div className="bg-white px-2 pt-2 border-b border-slate-100 flex space-x-1 shrink-0">
-                         {['raw', 'diff', 'report', 'extraction'].map((tab) => (
+                         {['raw', 'diff', 'report'].map((tab) => (
                              <button 
                                 key={tab}
                                 onClick={() => setActiveTab(tab as any)} 
@@ -731,7 +731,6 @@ const XmlRenumber: React.FC = () => {
                                 {tab === 'raw' && 'Raw XML'}
                                 {tab === 'diff' && 'Diff View'}
                                 {tab === 'report' && 'QC Report'}
-                                {tab === 'extraction' && 'Other Refs'}
                              </button>
                          ))}
                     </div>
@@ -851,18 +850,30 @@ const XmlRenumber: React.FC = () => {
                                             </thead>
                                             <tbody className="bg-white divide-y divide-slate-200">
                                                 {filteredReportData.length > 0 ? filteredReportData.map((item) => (
-                                                    <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                                                        <td className="px-6 py-3 whitespace-nowrap text-sm font-mono text-slate-500">{item.id}</td>
-                                                        <td className="px-6 py-3 whitespace-nowrap text-sm text-slate-500">{item.oldLabel}</td>
-                                                        <td className="px-6 py-3 whitespace-nowrap text-sm font-medium text-slate-900">{item.newLabel}</td>
-                                                        <td className="px-6 py-3 whitespace-nowrap">
+                                                    <tr key={item.id} className={`transition-colors ${item.changed ? 'bg-emerald-50/40 border-l-4 border-l-emerald-500 hover:bg-emerald-50/70' : 'hover:bg-slate-50 opacity-80'}`}>
+                                                        <td className="px-6 py-3 whitespace-nowrap text-sm font-mono text-slate-700 font-bold">{item.id}</td>
+                                                        <td className="px-6 py-3 whitespace-nowrap text-sm font-mono">
                                                             {item.changed ? (
-                                                                <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-amber-100 text-amber-800">Changed</span>
+                                                                <span className="line-through text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded font-semibold">{item.oldLabel}</span>
                                                             ) : (
-                                                                <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Unchanged</span>
+                                                                <span className="text-slate-500">{item.oldLabel}</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-6 py-3 whitespace-nowrap text-sm font-mono">
+                                                            {item.changed ? (
+                                                                <span className="text-emerald-950 font-black bg-emerald-200 border border-emerald-400 px-2 py-0.5 rounded shadow-2xs">→ {item.newLabel}</span>
+                                                            ) : (
+                                                                <span className="text-slate-600 font-medium">{item.newLabel}</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-6 py-3 whitespace-nowrap flex items-center gap-2">
+                                                            {item.changed ? (
+                                                                <span className="px-3 py-0.5 inline-flex text-xs leading-5 font-black rounded-full bg-emerald-600 text-white shadow-2xs uppercase tracking-wide">Renumbered</span>
+                                                            ) : (
+                                                                <span className="px-2.5 py-0.5 inline-flex text-xs leading-5 font-medium rounded-full bg-slate-100 text-slate-400">Unchanged</span>
                                                             )}
                                                             {item.isOtherRef && (
-                                                                <span className="ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">Other-Ref</span>
+                                                                <span className="px-2 inline-flex text-xs leading-5 font-bold rounded-full bg-amber-100 text-amber-800 border border-amber-200">Other-Ref</span>
                                                             )}
                                                         </td>
                                                     </tr>
@@ -876,45 +887,6 @@ const XmlRenumber: React.FC = () => {
                                             </tbody>
                                         </table>
                                     </div>
-                                </div>
-                            )}
-
-                            {activeTab === 'extraction' && (
-                                <div className="bg-white h-full flex flex-col">
-                                   <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-                                       <h3 className="font-bold text-slate-700 text-sm">Extracted Other References ({extractedRefs.length})</h3>
-                                       <button 
-                                            onClick={() => copyRichText(extractedRefs.map(r => `<p>${r}</p>`).join('\n'), true)}
-                                            title="Ctrl+Shift+C"
-                                            className="text-xs font-bold text-purple-600 border border-purple-200 bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded transition-colors flex items-center gap-1"
-                                       >
-                                           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
-                                           Copy All
-                                       </button>
-                                   </div>
-                                   <div className="flex-grow overflow-auto p-6 custom-scrollbar bg-slate-50/50">
-                                       {extractedRefs.length > 0 ? (
-                                           <div className="space-y-4 font-mono text-sm text-slate-700">
-                                               {extractedRefs.map((ref, idx) => (
-                                                   <div key={idx} className="p-4 bg-white rounded-lg border border-slate-200 shadow-sm relative group hover:border-purple-200 transition-all">
-                                                        <div className="pr-8 whitespace-pre-wrap break-all" dangerouslySetInnerHTML={{ __html: ref }}></div>
-                                                        <button 
-                                                            onClick={() => copyRichText(ref)}
-                                                            className="absolute top-3 right-3 p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded opacity-0 group-hover:opacity-100 transition-all"
-                                                            title="Copy This Item"
-                                                        >
-                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                                                        </button>
-                                                   </div>
-                                               ))}
-                                           </div>
-                                       ) : (
-                                           <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60">
-                                               <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
-                                               <p>No Other-Refs found.</p>
-                                           </div>
-                                       )}
-                                   </div>
                                 </div>
                             )}
                         </div>

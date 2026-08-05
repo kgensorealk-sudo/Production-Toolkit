@@ -22,7 +22,7 @@ const ExpiryReminderModal: React.FC = () => {
             const now = Date.now();
             const diffMs = end - now;
             const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-            const isTrialNode = !!profile.trial_end;
+            const isTrialNode = !!(profile.trial_end && profile.trial_end === profile.subscription_end);
 
             // CASE 1: ALREADY EXPIRED
             if (diffMs <= 0) {

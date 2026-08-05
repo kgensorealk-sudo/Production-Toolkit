@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { ToolId } from '../types';
 import AnnouncementModal from './AnnouncementModal';
+import SubscriptionExtensionModal from './SubscriptionExtensionModal';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
 import TrialTimer from './TrialTimer';
@@ -171,7 +172,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
         }
     };
 
-    const isTrial = !!profile?.trial_end;
+    const isTrial = !!(profile?.trial_end && profile.trial_end === profile.subscription_end);
     const headerClass = isLanding 
     ? "bg-transparent py-6" 
     : "glass-header py-3 shadow-sm";
@@ -331,6 +332,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
 
             <main className={`flex-grow w-full relative z-10 overflow-y-auto min-h-0 custom-scrollbar ${isExiting ? 'pointer-events-none blur-[2px]' : ''}`}>
                 <AnnouncementModal />
+                <SubscriptionExtensionModal />
                 <AnimatePresence mode="wait">
                     <motion.div
                         key={location.pathname}

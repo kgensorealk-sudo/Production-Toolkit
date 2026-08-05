@@ -14,6 +14,7 @@ interface ResolutionItem {
     originalTag: string;
     originalAttrs: string;
     textContent: string;
+    formattedText?: string;
     tagType: string;
     status: 'resolved' | 'failed' | 'ignored';
     existingId: string;
@@ -274,23 +275,41 @@ const CitationLinker: React.FC = () => {
         let nextIndex = currentChangeIndex;
 
         if (direction === 'next') {
-            if (currentChangeIndex === changeRows.length - 1) {
-                setToast({ msg: 'End of changes reached.', type: 'info' });
-                return;
+            if (currentChangeIndex < 0 || currentChangeIndex >= changeRows.length - 1) {
+                nextIndex = 0;
+            } else {
+                nextIndex = currentChangeIndex + 1;
             }
-            nextIndex = currentChangeIndex + 1;
         } else {
             if (currentChangeIndex <= 0) {
-                setToast({ msg: 'Start of changes reached.', type: 'info' });
-                return;
+                nextIndex = changeRows.length - 1;
+            } else {
+                nextIndex = currentChangeIndex - 1;
             }
-            nextIndex = currentChangeIndex - 1;
         }
 
         const targetRow = changeRows[nextIndex] as HTMLElement;
-        targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        setCurrentChangeIndex(nextIndex);
+        if (targetRow) {
+            targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setCurrentChangeIndex(nextIndex);
+        }
     };
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (step === 'result' && activeTab === 'diff') {
+                if (e.key === 'ArrowDown' || (e.altKey && e.key.toLowerCase() === 'n')) {
+                    e.preventDefault();
+                    scrollToChange('next');
+                } else if (e.key === 'ArrowUp' || (e.altKey && e.key.toLowerCase() === 'p')) {
+                    e.preventDefault();
+                    scrollToChange('prev');
+                }
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [step, activeTab, currentChangeIndex, totalChanges]);
 
     useEffect(() => {
         if (!diffContainerRef.current) return;
@@ -569,9 +588,24 @@ const CitationLinker: React.FC = () => {
                     const tagMatch = res.originalTag.match(/^<((?:ce:)?)(cross-refs?|intra-refs?|inter-refs?)/i);
                     const prefix = tagMatch ? tagMatch[1] : 'ce:';
                     const baseName = tagMatch ? tagMatch[2].replace(/s$/, '') : 'cross-ref';
-                    const tagName = (targetMissingRefid && res.missingRefid) ? (res.targetIsPlural ? `${prefix}${baseName}s` : `${prefix}${baseName}`) : (res.originalIsPlural ? `${prefix}${baseName}s` : `${prefix}${baseName}`);
+                    const isPluralTag = res.mappedIds.length > 1 || res.originalIsPlural || res.targetIsPlural;
+                    const tagName = isPluralTag ? `${prefix}${baseName}s` : `${prefix}${baseName}`;
+                    const contentToUse = (res.formattedText && res.mappedIds.length > 1) ? res.formattedText : res.textContent;
                     
-                    const newTag = `<${tagName}${idAttr}${refidAttr}${otherAttrs}>${res.textContent}</${tagName}>`;
+                    const origTagNameMatch = res.originalTag.match(/^<([^\s>]+)/);
+                    const origTagName = origTagNameMatch ? origTagNameMatch[1] : '';
+
+                    // If nothing has changed for this tag (ID, refid, text content, and tag name are identical), do not touch it
+                    if (
+                        targetId === res.existingId &&
+                        targetRefid === res.existingRefid &&
+                        contentToUse === res.textContent &&
+                        origTagName.toLowerCase() === tagName.toLowerCase()
+                    ) {
+                        return;
+                    }
+
+                    const newTag = `<${tagName}${idAttr}${refidAttr}${otherAttrs}>${contentToUse}</${tagName}>`;
                     result = result.replace(res.originalTag, newTag);
                 });
 
@@ -686,13 +720,13 @@ const CitationLinker: React.FC = () => {
 
             <div className="flex justify-center mb-8">
                 <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-200 flex flex-wrap items-center justify-center gap-12">
-                    <Switch id="toggle-refid" label="Resolve Links" subLabel="Missing refid" checked={targetMissingRefid} onChange={setTargetMissingRefid} color="indigo" />
+                    <Switch id="toggle-refid" label="Resolve Links" subLabel="Missing refid" checked={targetMissingRefid} onChange={setTargetMissingRefid} color="indigo" tooltip="Scans <ce:cross-ref> tags missing refid attributes and automatically links them to matching target nodes." />
                     <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
-                    <Switch id="toggle-id" label="Enforce IDs" subLabel="Missing id (cfxxxx)" checked={targetMissingId} onChange={setTargetMissingId} color="blue" />
+                    <Switch id="toggle-id" label="Enforce IDs" subLabel="Missing id (cfxxxx)" checked={targetMissingId} onChange={setTargetMissingId} color="blue" tooltip="Injects generated unique id='cfXXXX' attributes onto <ce:cross-ref> tags missing an element ID." />
                     <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
-                    <Switch id="toggle-dup" label="Fix Duplicates" subLabel="Re-assign duplicate IDs" checked={targetDuplicateId} onChange={setTargetDuplicateId} color="amber" />
+                    <Switch id="toggle-dup" label="Fix Duplicates" subLabel="Re-assign duplicate IDs" checked={targetDuplicateId} onChange={setTargetDuplicateId} color="amber" tooltip="Detects duplicate id='...' attributes across <ce:cross-ref> elements and re-assigns unique IDs." />
                     <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
-                    <Switch id="toggle-doi" label="Clean DOIs" subLabel="Convert inter-ref to ce:doi" checked={cleanDoi} onChange={setCleanDoi} color="emerald" />
+                    <Switch id="toggle-doi" label="Clean DOIs" subLabel="Convert inter-ref to ce:doi" checked={cleanDoi} onChange={setCleanDoi} color="emerald" tooltip="Converts inter-ref links or raw DOI strings in bibliography entries into standardized <ce:doi> XML tags." />
                     <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
                     
                     <div className="flex flex-col gap-1">

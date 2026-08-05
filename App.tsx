@@ -5,6 +5,7 @@ import Layout from './components/Layout';
 import Landing from './pages/Landing';
 import Dashboard from './pages/Dashboard';
 import XmlRenumber from './pages/XmlRenumber';
+import XmlRenumberExperimental from './pages/XmlRenumberExperimental';
 import CreditGenerator from './pages/CreditGenerator';
 import QuickDiff from './pages/QuickDiff';
 import TagCleaner from './pages/TagCleaner';
@@ -21,6 +22,7 @@ import GrantTagger from './pages/GrantTagger';
 import IdAuditor from './pages/IdAuditor';
 import CommentReplacer from './pages/CommentReplacer';
 import CitationLinker from './pages/CitationLinker';
+import CitationLinkerExperimental from './pages/CitationLinkerExperimental';
 import SectionAuditor from './pages/SectionAuditor';
 import AffiliationSequencer from './pages/AffiliationSequencer';
 import StructuralNodeArchitect from './pages/StructuralNodeArchitect';
@@ -137,6 +139,7 @@ const App: React.FC = () => {
                                 
                                 <Route path="/tableBeautifier" element={<ProtectedRoute><Layout currentTool={ToolId.TABLE_BEAUTIFIER}><NodeAccessController toolId={ToolId.TABLE_BEAUTIFIER} displayName="Table XML Beautifier" mode="key-exclusive"><TableBeautifier /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/xmlRenumber" element={<ProtectedRoute><Layout currentTool={ToolId.XML_RENUMBER}><NodeAccessController toolId={ToolId.XML_RENUMBER} displayName="XML Normalizer" mode="key-allowed"><XmlRenumber /></NodeAccessController></Layout></ProtectedRoute>} />
+                                <Route path="/xmlRenumberExp" element={<ProtectedRoute><Layout currentTool={ToolId.XML_RENUMBER_EXP}><NodeAccessController toolId={ToolId.XML_RENUMBER_EXP} displayName="XML Normalizer Pro (Experimental)" mode="key-allowed"><XmlRenumberExperimental /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/creditGenerator" element={<ProtectedRoute><Layout currentTool={ToolId.CREDIT_GENERATOR}><NodeAccessController toolId={ToolId.CREDIT_GENERATOR} displayName="CRediT Tagging" mode="key-allowed"><CreditGenerator /></NodeAccessController></Layout></ProtectedRoute>} />
                                 
                                 <Route path="/uncitedCleaner" element={<ProtectedRoute><Layout currentTool={ToolId.UNCITED_CLEANER}><NodeAccessController toolId={ToolId.UNCITED_CLEANER} displayName="Uncited Ref Cleaner" mode="subscription-only"><UncitedRefCleaner /></NodeAccessController></Layout></ProtectedRoute>} />
@@ -153,6 +156,7 @@ const App: React.FC = () => {
                                 <Route path="/idAuditor" element={<ProtectedRoute><Layout currentTool={ToolId.ID_AUDITOR}><NodeAccessController toolId={ToolId.ID_AUDITOR} displayName="ID Prefix Auditor" mode="subscription-only"><IdAuditor /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/commentReplacer" element={<ProtectedRoute><Layout currentTool={ToolId.COMMENT_REPLACER}><NodeAccessController toolId={ToolId.COMMENT_REPLACER} displayName="Comment Replacer" mode="subscription-only"><CommentReplacer /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/citationLinker" element={<ProtectedRoute><Layout currentTool={ToolId.CITATION_LINKER}><NodeAccessController toolId={ToolId.CITATION_LINKER} displayName="Citation Linker Pro" mode="key-exclusive"><CitationLinker /></NodeAccessController></Layout></ProtectedRoute>} />
+                                <Route path="/citationLinkerExp" element={<ProtectedRoute><Layout currentTool={ToolId.CITATION_LINKER_EXP}><NodeAccessController toolId={ToolId.CITATION_LINKER_EXP} displayName="Citation Linker Pro MAX" mode="key-exclusive"><CitationLinkerExperimental /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/sectionAuditor" element={<ProtectedRoute><Layout currentTool={ToolId.SECTION_AUDITOR}><NodeAccessController toolId={ToolId.SECTION_AUDITOR} displayName="Section Auditor" mode="subscription-only"><SectionAuditor /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/affiliationSequencer" element={<ProtectedRoute><Layout currentTool={ToolId.AFFILIATION_SEQUENCER}><NodeAccessController toolId={ToolId.AFFILIATION_SEQUENCER} displayName="Affiliation Sequencer" mode="subscription-only"><AffiliationSequencer /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/structuralArchitect" element={<ProtectedRoute><Layout currentTool={ToolId.STRUCTURAL_ARCHITECT}><NodeAccessController toolId={ToolId.STRUCTURAL_ARCHITECT} displayName="Citation Structure Repair" mode="subscription-only"><StructuralNodeArchitect /></NodeAccessController></Layout></ProtectedRoute>} />

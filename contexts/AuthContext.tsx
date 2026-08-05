@@ -189,8 +189,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch (err) {}
     }, []);
 
-    const fetchProfile = useCallback(async (userId: string, email?: string) => {
+    const fetchProfile = useCallback(async (userId: string, email?: string, force: boolean = false) => {
         if (!userId) return;
+        if (force) refreshingPromise.current = null;
         if (refreshingPromise.current) return refreshingPromise.current;
 
         refreshingPromise.current = (async () => {
@@ -349,7 +350,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     heartbeatTimerRef.current = setInterval(() => updateLastSeen(currentSession.user.id), HEARTBEAT_INTERVAL);
                     await Promise.allSettled([fetchProfile(currentSession.user.id, currentSession.user.email), fetchFreeTools()]);
 
-                    // Real-time synchronization for system settings
+                    // Real-time synchronization for system settings & user profile
                     const settingsChannel = supabase
                         .channel('system_settings_sync')
                         .on('postgres_changes', { 
@@ -361,9 +362,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                             if (payload.new) processFreeToolsPayload(payload.new);
                         })
                         .subscribe();
+
+                    const profileChannel = supabase
+                        .channel(`profile_sync_${currentSession.user.id}`)
+                        .on('postgres_changes', {
+                            event: 'UPDATE',
+                            schema: 'public',
+                            table: 'profiles',
+                            filter: `id=eq.${currentSession.user.id}`
+                        }, () => {
+                            fetchProfile(currentSession.user.id, currentSession.user.email, true);
+                        })
+                        .subscribe();
                     
                     return () => {
                         supabase.removeChannel(settingsChannel);
+                        supabase.removeChannel(profileChannel);
                     };
                 }
             } catch (err) {
@@ -461,7 +475,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         <AuthContext.Provider value={{ 
             session, user, profile, freeTools, freeToolsData, loading, isAdmin, isWakingUp,
             signOut, updateProfile, deleteAccount,
-            refreshProfile: () => user ? fetchProfile(user.id, user.email) : Promise.resolve(), 
+            refreshProfile: () => user ? fetchProfile(user.id, user.email, true) : Promise.resolve(), 
             refreshFreeTools: fetchFreeTools 
         }}>
             {children}
