@@ -185,6 +185,8 @@ const AdminDashboard: React.FC = () => {
             case ToolId.ID_AUDITOR: return "ID Prefix Auditor";
             case ToolId.COMMENT_REPLACER: return "Comment Replacer";
             case ToolId.CITATION_LINKER: return "Citation Linker Pro";
+            case ToolId.CITATION_LINKER_EXP: return "Citation Linker Pro MAX";
+            case ToolId.FORMULA_EDITOR_EXP: return "Formula Studio Pro (Experimental)";
             case 'universal': return "Universal Access";
             default: return tid;
         }

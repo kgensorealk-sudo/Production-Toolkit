@@ -32,7 +32,8 @@ import {
     Globe,
     Cpu,
     Activity,
-    MessageSquare
+    MessageSquare,
+    Sigma
 } from 'lucide-react';
 import { useAuth, withRetry } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
@@ -51,6 +52,7 @@ const TOOL_METADATA: Record<string, { title: string, Icon: React.FC<any>, color:
     [ToolId.ID_AUDITOR]: { title: "ID Prefix Auditor", Icon: ShieldAlert, color: "text-violet-600", hex: "#7c3aed" },
     [ToolId.CITATION_LINKER]: { title: "Citation Linker Pro", Icon: Link, color: "text-indigo-600", hex: "#4f46e5" },
     [ToolId.CITATION_LINKER_EXP]: { title: "Citation Linker Pro (Experimental)", Icon: Link, color: "text-indigo-600", hex: "#4f46e5" },
+    [ToolId.FORMULA_EDITOR_EXP]: { title: "Formula Studio Pro (Experimental)", Icon: Sigma, color: "text-purple-600", hex: "#9333ea" },
     [ToolId.OTHER_REF_SCANNER]: { title: "Other-Ref Scanner", Icon: Search, color: "text-amber-600", hex: "#d97706" },
     [ToolId.REFERENCE_GEN]: { title: "Reference Updater", Icon: RefreshCcw, color: "text-cyan-600", hex: "#0891b2" },
     [ToolId.CREDIT_GENERATOR]: { title: "CRediT Tagging", Icon: UserCheck, color: "text-purple-600", hex: "#9333ea" },

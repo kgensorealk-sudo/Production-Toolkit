@@ -23,6 +23,7 @@ import IdAuditor from './pages/IdAuditor';
 import CommentReplacer from './pages/CommentReplacer';
 import CitationLinker from './pages/CitationLinker';
 import CitationLinkerExperimental from './pages/CitationLinkerExperimental';
+import FormulaEditorExperimental from './pages/FormulaEditorExperimental';
 import SectionAuditor from './pages/SectionAuditor';
 import AffiliationSequencer from './pages/AffiliationSequencer';
 import StructuralNodeArchitect from './pages/StructuralNodeArchitect';
@@ -157,6 +158,7 @@ const App: React.FC = () => {
                                 <Route path="/commentReplacer" element={<ProtectedRoute><Layout currentTool={ToolId.COMMENT_REPLACER}><NodeAccessController toolId={ToolId.COMMENT_REPLACER} displayName="Comment Replacer" mode="subscription-only"><CommentReplacer /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/citationLinker" element={<ProtectedRoute><Layout currentTool={ToolId.CITATION_LINKER}><NodeAccessController toolId={ToolId.CITATION_LINKER} displayName="Citation Linker Pro" mode="key-exclusive"><CitationLinker /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/citationLinkerExp" element={<ProtectedRoute><Layout currentTool={ToolId.CITATION_LINKER_EXP}><NodeAccessController toolId={ToolId.CITATION_LINKER_EXP} displayName="Citation Linker Pro MAX" mode="key-exclusive"><CitationLinkerExperimental /></NodeAccessController></Layout></ProtectedRoute>} />
+                                <Route path="/formulaEditorExp" element={<ProtectedRoute><Layout currentTool={ToolId.FORMULA_EDITOR_EXP}><NodeAccessController toolId={ToolId.FORMULA_EDITOR_EXP} displayName="Formula Studio Pro (Experimental)" mode="key-allowed"><FormulaEditorExperimental /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/sectionAuditor" element={<ProtectedRoute><Layout currentTool={ToolId.SECTION_AUDITOR}><NodeAccessController toolId={ToolId.SECTION_AUDITOR} displayName="Section Auditor" mode="subscription-only"><SectionAuditor /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/affiliationSequencer" element={<ProtectedRoute><Layout currentTool={ToolId.AFFILIATION_SEQUENCER}><NodeAccessController toolId={ToolId.AFFILIATION_SEQUENCER} displayName="Affiliation Sequencer" mode="subscription-only"><AffiliationSequencer /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/structuralArchitect" element={<ProtectedRoute><Layout currentTool={ToolId.STRUCTURAL_ARCHITECT}><NodeAccessController toolId={ToolId.STRUCTURAL_ARCHITECT} displayName="Citation Structure Repair" mode="subscription-only"><StructuralNodeArchitect /></NodeAccessController></Layout></ProtectedRoute>} />

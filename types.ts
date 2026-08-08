@@ -83,6 +83,7 @@ export enum ToolId {
     COMMENT_REPLACER = 'commentReplacer',
     CITATION_LINKER = 'citationLinker',
     CITATION_LINKER_EXP = 'citationLinkerExp',
+    FORMULA_EDITOR_EXP = 'formulaEditorExp',
     SECTION_AUDITOR = 'sectionAuditor',
     AFFILIATION_SEQUENCER = 'affiliationSequencer',
     STRUCTURAL_ARCHITECT = 'structuralArchitect',

@@ -69,10 +69,19 @@ export async function withRetry<T>(fn: () => Promise<T>, retries = 5, delay = 15
             errorMsg.includes('jwt') || 
             errorMsg.includes('expired') || 
             errorMsg.includes('unauthorized') ||
-            errorMsg.includes('token');
+            errorMsg.includes('token') ||
+            errorMsg.includes('refresh') ||
+            errorMsg.includes('invalid_grant');
 
         if (isAuthFailure) {
             console.error("CRITICAL_AUTH_FAILURE: Terminating retry loop.", err);
+            if (errorMsg.includes('refresh') || errorMsg.includes('invalid_grant')) {
+                try {
+                    Object.keys(localStorage).forEach(key => { 
+                        if (key.includes('sb-') || key === 'auth_login_at') localStorage.removeItem(key); 
+                    });
+                } catch (e) {}
+            }
             throw err;
         }
 
@@ -124,14 +133,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setLoading(true);
         if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
         try {
-            await withTimeout(supabase.auth.signOut(), 5000);
+            await withTimeout((supabase.auth as any).signOut({ scope: 'local' }), 5000);
         } catch (e) {
             console.warn("Sign out timed out or failed, proceeding with local cleanup.");
         } finally {
             Object.keys(localStorage).forEach(key => { if (key.includes('sb-') || key === 'auth_login_at') localStorage.removeItem(key); });
             setProfile(null); setSession(null); setUser(null);
             if (isAuto) sessionStorage.setItem('session_expired', 'true');
-            window.location.replace('/');
+            setLoading(false);
         }
     }, []);
 
@@ -281,6 +290,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return refreshingPromise.current;
     }, []);
 
+    // Global interceptor for unhandled invalid refresh token rejections
+    useEffect(() => {
+        const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+            const reason = event.reason;
+            const msg = (reason?.message || reason?.error_description || String(reason || '')).toLowerCase();
+            if (
+                msg.includes('invalid refresh token') ||
+                msg.includes('refresh token not found') ||
+                msg.includes('refresh_token_not_found') ||
+                msg.includes('invalid_grant') ||
+                msg.includes('token_not_found')
+            ) {
+                console.warn("Global Interceptor: Intercepted invalid refresh token rejection. Purging local auth state.");
+                event.preventDefault();
+                try {
+                    Object.keys(localStorage).forEach(key => { 
+                        if (key.includes('sb-') || key === 'auth_login_at') localStorage.removeItem(key); 
+                    });
+                    (supabase.auth as any).signOut({ scope: 'local' }).catch(() => {});
+                } catch (e) {}
+                setSession(null);
+                setUser(null);
+                setProfile(null);
+                setLoading(false);
+            }
+        };
+
+        window.addEventListener('unhandledrejection', handleUnhandledRejection);
+        return () => {
+            window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+        };
+    }, []);
+
     useEffect(() => {
         const handleWake = () => {
             if (document.visibilityState === 'visible' && user?.id) {
@@ -295,18 +337,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 if (wakeDebounceRef.current) clearTimeout(wakeDebounceRef.current);
                 wakeDebounceRef.current = setTimeout(async () => {
                     try {
-                        const { data } = await (supabase.auth as any).getSession();
-                        if (data?.session) {
-                            // Only update if the session has actually changed (e.g. token refreshed)
-                            // This prevents unnecessary re-renders that might unmount components
+                        const { data, error } = await (supabase.auth as any).getSession();
+                        if (error || !data?.session) {
+                            console.warn("Wake sync: Refresh token expired/invalid. Purging session.");
+                            Object.keys(localStorage).forEach(key => { 
+                                if (key.includes('sb-') || key === 'auth_login_at') localStorage.removeItem(key); 
+                            });
+                            (supabase.auth as any).signOut({ scope: 'local' }).catch(() => {});
+                            setSession(null);
+                            setUser(null);
+                            setProfile(null);
+                        } else if (data?.session) {
                             if (data.session.access_token !== session?.access_token) {
                                 lastWakeSyncRef.current = Date.now();
                                 setSession(data.session);
                                 setUser(data.session.user);
                                 await Promise.allSettled([fetchProfile(data.session.user.id, data.session.user.email), fetchFreeTools()]);
                             }
-                        } else {
-                            console.warn("Wake sync: No active session found. Maintaining current state.");
                         }
                     } catch (err) {
                         console.warn("Wake sync failed.");
@@ -380,8 +427,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         supabase.removeChannel(profileChannel);
                     };
                 }
-            } catch (err) {
+            } catch (err: any) {
                 console.error("INIT_FAILED:", err);
+                const errStr = (err?.message || err?.error_description || String(err)).toLowerCase();
+                if (errStr.includes('refresh') || errStr.includes('invalid_grant') || errStr.includes('token not found') || errStr.includes('token')) {
+                    console.warn("Invalid refresh token detected during initialization. Clearing local storage session.");
+                    try {
+                        Object.keys(localStorage).forEach(key => { 
+                            if (key.includes('sb-') || key === 'auth_login_at') localStorage.removeItem(key); 
+                        });
+                        await (supabase.auth as any).signOut({ scope: 'local' }).catch(() => {});
+                    } catch (e) {}
+                    setSession(null);
+                    setUser(null);
+                    setProfile(null);
+                }
             } finally {
                 if (mounted) {
                     if (initTimeoutRef.current) clearTimeout(initTimeoutRef.current);
@@ -395,7 +455,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const { data: authListener } = (supabase.auth as any).onAuthStateChange(async (event: any, newSession: any) => {
             if (!mounted) return;
             
-            if (event === 'SIGNED_OUT') {
+            if (event === 'SIGNED_OUT' || !newSession?.user) {
                 if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
                 setProfile(null); setUser(null); setSession(null);
                 localStorage.removeItem('auth_login_at');
@@ -410,9 +470,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 // Trigger profile fetch but don't block loading state if we already have a user
                 fetchProfile(newSession.user.id, newSession.user.email).catch(() => {});
                 fetchFreeTools().catch(() => {});
-                setLoading(false);
-            } else {
-                // No user, no session
                 setLoading(false);
             }
         });

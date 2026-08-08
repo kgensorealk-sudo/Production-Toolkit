@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
+import { useAuth } from '../contexts/AuthContext';
 import { MessageSquare, Bug, Lightbulb, X, Send } from 'lucide-react';
 
 interface FeedbackModalProps {
@@ -12,6 +13,7 @@ interface FeedbackModalProps {
 }
 
 const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, onSuccess, onError, toolId }) => {
+    const { user } = useAuth();
     const [type, setType] = useState<'bug' | 'feature'>('bug');
     const [content, setContent] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -32,8 +34,6 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, onSucces
 
         setIsSubmitting(true);
         try {
-            const { data: { user } } = await supabase.auth.getUser();
-            
             const { error } = await supabase
                 .from('feedback')
                 .insert([

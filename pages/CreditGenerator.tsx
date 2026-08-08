@@ -199,7 +199,7 @@ const CreditGenerator: React.FC = () => {
             validRoles.forEach(r => {
                 const dbRole = CREDIT_DB.find(dbR => dbR.name === r.normalized);
                 if (dbRole) {
-                    xml += `<ce:contributor-role role="${dbRole.url}">${r.normalized}</ce:contributor-role>\n`;
+                    xml += `<ce:contributor-role role="${dbRole.url}">${r.normalized.replace(/&/g, '&amp;')}</ce:contributor-role>\n`;
                 }
             });
         } else {
@@ -1078,7 +1078,7 @@ const CreditGenerator: React.FC = () => {
                                             validRoles.forEach(r => {
                                                 const dbRole = CREDIT_DB.find(dbR => dbR.name === r.normalized);
                                                 if (dbRole) {
-                                                    xmlBlock += `<ce:contributor-role role="${dbRole.url}">${r.normalized}</ce:contributor-role>\n`;
+                                                    xmlBlock += `<ce:contributor-role role="${dbRole.url}">${r.normalized.replace(/&/g, '&amp;')}</ce:contributor-role>\n`;
                                                 }
                                             });
                                         } else {

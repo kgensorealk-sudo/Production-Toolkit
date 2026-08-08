@@ -246,13 +246,13 @@ const IdAuditor: React.FC = () => {
 
                         const isOtherRef = elementContent.includes('<ce:other-ref');
                         
-                        // Name Spacing Logic: Detect spaces between initials in <ce:given-name>
-                        const nameSpacingRegex = /<ce:given-name\b[^>]*>(.*?)<\/ce:given-name>/gi;
+                        // Name Spacing Logic: Detect spaces between initials in <ce:given-name> or <sb:given-name>
+                        const nameSpacingRegex = /<(?:ce|sb):given-name\b[^>]*>(.*?)<\/(?:ce|sb):given-name>/gi;
                         let hasNameSpacingViolation = false;
                         let nameMatch;
                         while ((nameMatch = nameSpacingRegex.exec(elementContent)) !== null) {
                             const nameText = nameMatch[1];
-                            if (/\b[A-Z](?![a-zA-Z\u00C0-\u024F])(?!\.)/.test(nameText) || /\. +(?=[A-Z]\.)/.test(nameText)) {
+                            if (/\b[A-Z](?!\s*[\-–—\u2010-\u2015])(?![\-–—\u2010-\u2015a-zA-Z\u00C0-\u024F\.'’ʻ])/.test(nameText) || /\. +(?=[A-Z]\.)/.test(nameText)) {
                                 hasNameSpacingViolation = true;
                                 break;
                             }
@@ -431,15 +431,26 @@ const IdAuditor: React.FC = () => {
             try {
                 let processedXml = input;
                 
-                // 1. Surgical Given-Name Spacing Fix
-                processedXml = processedXml.replace(/(<ce:given-name\b[^>]*>)(.*?)(<\/ce:given-name>)/gi, (match, open, content, close) => {
-                    let fixed = content.replace(/\b([A-Z])(?![a-zA-Z\u00C0-\u024F])(?!\.)/g, '$1.');
+                // 1. Surgical Given-Name Spacing Fix (Shield <ce:author-group> from changes)
+                const authorGroupPlaceholders: string[] = [];
+                processedXml = processedXml.replace(/<ce:author-group\b[^>]*>[\s\S]*?<\/ce:author-group>/gi, (match) => {
+                    authorGroupPlaceholders.push(match);
+                    return `___AUTHOR_GROUP_PLACEHOLDER_${authorGroupPlaceholders.length - 1}___`;
+                });
+
+                processedXml = processedXml.replace(/(<(?:ce|sb):given-name\b[^>]*>)(.*?)(<\/(?:ce|sb):given-name>)/gi, (match, open, content, close) => {
+                    let fixed = content.replace(/\b([A-Z])(?!\s*[\-–—\u2010-\u2015])(?![\-–—\u2010-\u2015a-zA-Z\u00C0-\u024F\.'’ʻ])/g, '$1.');
                     let prev;
                     do {
                         prev = fixed;
                         fixed = fixed.replace(/([A-Z]\.)\s+([A-Z]\.)/g, '$1$2');
                     } while (fixed !== prev);
                     return `${open}${fixed}${close}`;
+                });
+
+                // Restore <ce:author-group> blocks unmodified
+                processedXml = processedXml.replace(/___AUTHOR_GROUP_PLACEHOLDER_(\d+)___/g, (_, index) => {
+                    return authorGroupPlaceholders[parseInt(index, 10)] || '';
                 });
 
                 // 2. ID Mapping & Replacement Logic

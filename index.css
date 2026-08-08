@@ -75,3 +75,19 @@
   animation: slide-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* MathML mathvariant styling - ONLY mi tags */
+math mi, mi, mml\:mi {
+  font-style: italic !important;
+}
+
+math mi[mathvariant="italic"], mi[mathvariant="italic"], mml\:mi[mathvariant="italic"] {
+  font-style: italic !important;
+  font-variant: normal !important;
+}
+
+math mi[mathvariant="normal"], mi[mathvariant="normal"], mml\:mi[mathvariant="normal"] {
+  font-style: normal !important;
+  font-variant: normal !important;
+}
+
+

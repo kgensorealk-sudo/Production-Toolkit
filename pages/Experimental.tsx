@@ -11,7 +11,8 @@ import {
     PinOff,
     Cpu,
     Database,
-    Link
+    Link,
+    Sigma
 } from 'lucide-react';
 import { ToolId } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -163,7 +164,8 @@ const Experimental: React.FC = () => {
 
     const EXPERIMENTAL_TOOLS = [
         { id: ToolId.XML_RENUMBER_EXP, title: "XML Normalizer Pro (Experimental)", desc: "Advanced sequential citation renumbering with alphabetical sorting, range compression, and other-ref isolation.", iconBg: "bg-blue-50", iconText: "text-blue-600", borderColor: "bg-blue-500", Icon: Database, isExperimental: true },
-        { id: ToolId.CITATION_LINKER_EXP, title: "Citation Linker Pro MAX", desc: "Multi-entity citation linker with fuzzy author/year resolution, float cross-refs, and auto-text detection.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: Link, isExperimental: true }
+        { id: ToolId.CITATION_LINKER_EXP, title: "Citation Linker Pro MAX", desc: "Multi-entity citation linker with fuzzy author/year resolution, float cross-refs, and auto-text detection.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: Link, isExperimental: true },
+        { id: ToolId.FORMULA_EDITOR_EXP, title: "Formula Studio Pro (Experimental)", desc: "Interactive MathML formula editor with real-time two-way XML rendering, inline edit sync, and tag auto-repair.", iconBg: "bg-purple-50", iconText: "text-purple-600", borderColor: "bg-purple-500", Icon: Sigma, isExperimental: true }
     ];
 
     const filteredTools = useMemo(() => {

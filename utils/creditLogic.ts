@@ -47,6 +47,8 @@ export function findCreditRole(inputRole: string): CreditRole | null {
         .replace(/writting/g, "writing")
         .replace(/orginal/g, "original")
         .replace(/reviewand/g, "review and")
+        .replace(/&amp;/g, "and")
+        .replace(/amp;/g, "")
         .replace(/&/g, "and")
         .replace(/[–—]/g, "-") 
         .replace(/\./g, "")

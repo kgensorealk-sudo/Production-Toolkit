@@ -8,7 +8,7 @@ import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 import { 
     ChevronUp, ChevronDown, GitCompare, Lightbulb, ArrowRight, Link as LinkIcon, 
     Eraser, Hash, Trash2, RefreshCw, Box, Sparkles, Wand2, Search, Sliders, 
-    CheckCircle2, AlertTriangle, HelpCircle, FileCode, Check, Copy, Eye, RotateCcw,
+    CheckCircle2, AlertTriangle, HelpCircle, FileCode, Check, Copy, Eye, EyeOff, RotateCcw,
     Layers, Tag, Cpu, ShieldAlert, AlertCircle, FileText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -94,6 +94,7 @@ const CitationLinkerExperimental: React.FC = () => {
     });
 
     // Configuration Toggles & Controls
+    const [showProtocolToggles, setShowProtocolToggles] = useState<boolean>(true);
     const [targetMissingRefid, setTargetMissingRefid] = useState(true);
     const [targetMissingId, setTargetMissingId] = useState(true);
     const [targetDuplicateId, setTargetDuplicateId] = useState(true);
@@ -1189,145 +1190,236 @@ const CitationLinkerExperimental: React.FC = () => {
 
             {/* Configuration Panel */}
             <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-200 mb-8 transition-all">
-                <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
-                    <span className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                        <Sliders size={15} className="text-indigo-600" /> Protocol Toggles & Matching Logic
-                    </span>
-                    <button 
-                        onClick={loadSampleData}
-                        className="text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-xl border border-indigo-200 transition-all flex items-center gap-1.5 active:scale-95"
-                    >
-                        <Wand2 size={13} /> Load Experimental Sample
-                    </button>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-                    <Switch 
-                        id="exp-toggle-refid" 
-                        label="Resolve Refids" 
-                        subLabel="Link citation to refid" 
-                        checked={targetMissingRefid} 
-                        onChange={setTargetMissingRefid} 
-                        color="indigo" 
-                        tooltip="Scans <ce:cross-ref> tags missing refid attributes and automatically links them to target nodes."
-                    />
-                    <Switch 
-                        id="exp-toggle-floats" 
-                        label="Resolve Floats" 
-                        subLabel={floatCandidateCount > 0 && !resolveFloats ? `⚡ Candidate found (${floatCandidateCount})` : "Figs, Tables, Eqs, Secs"} 
-                        checked={resolveFloats} 
-                        onChange={(val) => {
-                            setResolveFloats(val);
-                            if (resolutions.length > 0) {
-                                runAnalysis({ overrideFloats: val });
-                            }
-                        }} 
-                        color="blue" 
-                        tooltip="Matches float references like 'Figure 1', 'Table 2', 'Eq. 3', or 'Section 4' in text to XML element IDs."
-                    />
-                    <Switch 
-                        id="exp-toggle-compress-floats" 
-                        label="Compress Ranges" 
-                        subLabel={rangeCandidateCount > 0 && !compressFloatRanges ? `⚡ Candidate found (${rangeCandidateCount})` : "e.g. Figs. 3–5 vs Fig. 3, 4, 5"} 
-                        checked={compressFloatRanges} 
-                        onChange={(val) => {
-                            setCompressFloatRanges(val);
-                            if (resolutions.length > 0) {
-                                runAnalysis({ overrideCompress: val });
-                            }
-                        }} 
-                        color="indigo" 
-                        tooltip="Automatically formats sequential float references into compressed ranges (e.g. 'Figures 3, 4, 5' ➔ 'Figures 3–5')."
-                    />
-                    <Switch 
-                        id="exp-toggle-autotag" 
-                        label="Auto-Tag Text" 
-                        subLabel={autoTagCandidateCount > 0 && !autoTagTextCitations ? `⚡ Candidate found (${autoTagCandidateCount})` : "Convert (Smith 2020)"} 
-                        checked={autoTagTextCitations} 
-                        onChange={(val) => {
-                            setAutoTagTextCitations(val);
-                            if (resolutions.length > 0) {
-                                runAnalysis({ overrideAutoTag: val });
-                            }
-                        }} 
-                        color="purple" 
-                        tooltip="Detects plain untagged author-year citations in text (e.g. '(Smith et al., 2020)') and converts them into linked <ce:cross-ref refid='...'> elements."
-                    />
-                    <Switch 
-                        id="exp-toggle-id" 
-                        label="Enforce IDs" 
-                        subLabel="Inject cfXXXX IDs" 
-                        checked={targetMissingId} 
-                        onChange={setTargetMissingId} 
-                        color="blue" 
-                        tooltip="Injects generated unique id='cfXXXX' attributes onto <ce:cross-ref> tags missing an element ID."
-                    />
-                    <Switch 
-                        id="exp-toggle-dup" 
-                        label="Fix Duplicates" 
-                        subLabel="Re-assign duplicate IDs" 
-                        checked={targetDuplicateId} 
-                        onChange={setTargetDuplicateId} 
-                        color="amber" 
-                        tooltip="Detects duplicate id='...' attributes across <ce:cross-ref> elements and re-assigns unique IDs."
-                    />
-                    <Switch 
-                        id="exp-toggle-doi" 
-                        label="Clean DOIs" 
-                        subLabel="Inter-ref to ce:doi" 
-                        checked={cleanDoi} 
-                        onChange={setCleanDoi} 
-                        color="emerald" 
-                        tooltip="Converts inter-ref links or raw DOI strings in bibliography entries into standardized <ce:doi> XML tags."
-                    />
-                </div>
-
-                <div className="mt-6 pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex items-center gap-6 flex-wrap">
-                        <div className="flex items-center gap-2">
-                            <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">ID Prefix:</label>
-                            <input 
-                                type="text"
-                                value={idPrefix}
-                                onChange={(e) => setIdPrefix(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
-                                className="px-3 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-700 w-20 outline-none focus:ring-2 focus:ring-indigo-100"
-                            />
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                            <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Start #:</label>
-                            <div className="relative">
-                                <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400 text-xs font-mono font-bold">{idPrefix}</span>
-                                <input 
-                                    type="number" 
-                                    value={cfStart}
-                                    onChange={(e) => setCfStart(Math.max(1, parseInt(e.target.value) || 0))}
-                                    className="pl-8 pr-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-700 w-24 outline-none focus:ring-2 focus:ring-indigo-100"
-                                />
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
+                    <div className="flex items-center gap-3">
+                        <button
+                            type="button"
+                            onClick={() => setShowProtocolToggles(prev => !prev)}
+                            className="flex items-center gap-2 text-xs font-black text-slate-700 uppercase tracking-wider hover:text-indigo-600 transition-colors group text-left focus:outline-none"
+                            title={showProtocolToggles ? "Hide Protocol Toggles & Matching Logic" : "View Protocol Toggles & Matching Logic"}
+                        >
+                            <div className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100 transition-colors">
+                                <Sliders size={15} />
                             </div>
-                        </div>
+                            <span>Protocol Toggles & Matching Logic</span>
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider transition-all ${
+                                showProtocolToggles 
+                                    ? 'bg-slate-100 text-slate-600 group-hover:bg-slate-200' 
+                                    : 'bg-indigo-100 text-indigo-700 group-hover:bg-indigo-200'
+                            }`}>
+                                {showProtocolToggles ? (
+                                    <>
+                                        <EyeOff size={12} />
+                                        <span>Hide</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Eye size={12} />
+                                        <span>View</span>
+                                    </>
+                                )}
+                            </span>
+                        </button>
 
-                        <div className="flex items-center gap-3">
-                            <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Fuzzy Match Sensitivity:</label>
-                            <input 
-                                type="range" 
-                                min="60" 
-                                max="100" 
-                                value={fuzzyThreshold}
-                                onChange={(e) => setFuzzyThreshold(parseInt(e.target.value))}
-                                className="w-28 accent-indigo-600 cursor-pointer"
-                            />
-                            <span className="text-xs font-mono font-black text-indigo-600">{fuzzyThreshold}%</span>
-                        </div>
+                        {!showProtocolToggles && (
+                            <div className="hidden sm:flex items-center gap-1.5 text-[11px] font-medium text-slate-500 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200/60 animate-fade-in">
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
+                                <span className="font-bold text-slate-700">
+                                    {[
+                                        targetMissingRefid && 'Refids',
+                                        resolveFloats && 'Floats',
+                                        compressFloatRanges && 'Compress',
+                                        autoTagTextCitations && 'Auto-Tag',
+                                        targetMissingId && 'IDs',
+                                        targetDuplicateId && 'Dups',
+                                        cleanDoi && 'DOIs'
+                                    ].filter(Boolean).length} Active
+                                </span>
+                                <span className="text-slate-400">|</span>
+                                <span className="truncate max-w-[280px]">
+                                    {[
+                                        targetMissingRefid && 'Refids',
+                                        resolveFloats && 'Floats',
+                                        compressFloatRanges && 'Compress',
+                                        autoTagTextCitations && 'Auto-Tag',
+                                        targetMissingId && 'IDs',
+                                        targetDuplicateId && 'Dups',
+                                        cleanDoi && 'DOIs'
+                                    ].filter(Boolean).join(', ') || 'None'}
+                                </span>
+                            </div>
+                        )}
                     </div>
 
-                    <button 
-                        onClick={() => { setInput(''); setResolutions([]); setStep('input'); setOutput(''); }} 
-                        className="text-xs font-bold text-slate-400 hover:text-rose-600 uppercase tracking-wider px-3 py-1 transition-colors"
-                    >
-                        Reset All
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button 
+                            type="button"
+                            onClick={() => setShowProtocolToggles(prev => !prev)}
+                            className="text-xs font-bold text-slate-600 hover:text-indigo-600 bg-slate-50 hover:bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200 transition-all flex items-center gap-1.5 active:scale-95"
+                        >
+                            {showProtocolToggles ? (
+                                <>
+                                    <EyeOff size={13} className="text-slate-500" />
+                                    <span>Hide Toggles</span>
+                                </>
+                            ) : (
+                                <>
+                                    <Eye size={13} className="text-indigo-600" />
+                                    <span>View Toggles</span>
+                                </>
+                            )}
+                        </button>
+
+                        <button 
+                            onClick={loadSampleData}
+                            className="text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-xl border border-indigo-200 transition-all flex items-center gap-1.5 active:scale-95"
+                        >
+                            <Wand2 size={13} /> Load Experimental Sample
+                        </button>
+                    </div>
                 </div>
+
+                <AnimatePresence>
+                    {showProtocolToggles && (
+                        <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.25, ease: 'easeInOut' }}
+                            className="overflow-hidden"
+                        >
+                            <div className="pt-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+                                    <Switch 
+                                        id="exp-toggle-refid" 
+                                        label="Resolve Refids" 
+                                        subLabel="Link citation to refid" 
+                                        checked={targetMissingRefid} 
+                                        onChange={setTargetMissingRefid} 
+                                        color="indigo" 
+                                        tooltip="Scans <ce:cross-ref> tags missing refid attributes and automatically links them to target nodes."
+                                    />
+                                    <Switch 
+                                        id="exp-toggle-floats" 
+                                        label="Resolve Floats" 
+                                        subLabel={floatCandidateCount > 0 && !resolveFloats ? `⚡ Candidate found (${floatCandidateCount})` : "Figs, Tables, Eqs, Secs"} 
+                                        checked={resolveFloats} 
+                                        onChange={(val) => {
+                                            setResolveFloats(val);
+                                            if (resolutions.length > 0) {
+                                                runAnalysis({ overrideFloats: val });
+                                            }
+                                        }} 
+                                        color="blue" 
+                                        tooltip="Matches float references like 'Figure 1', 'Table 2', 'Eq. 3', or 'Section 4' in text to XML element IDs."
+                                    />
+                                    <Switch 
+                                        id="exp-toggle-compress-floats" 
+                                        label="Compress Ranges" 
+                                        subLabel={rangeCandidateCount > 0 && !compressFloatRanges ? `⚡ Candidate found (${rangeCandidateCount})` : "e.g. Figs. 3–5 vs Fig. 3, 4, 5"} 
+                                        checked={compressFloatRanges} 
+                                        onChange={(val) => {
+                                            setCompressFloatRanges(val);
+                                            if (resolutions.length > 0) {
+                                                runAnalysis({ overrideCompress: val });
+                                            }
+                                        }} 
+                                        color="indigo" 
+                                        tooltip="Automatically formats sequential float references into compressed ranges (e.g. 'Figures 3, 4, 5' ➔ 'Figures 3–5')."
+                                    />
+                                    <Switch 
+                                        id="exp-toggle-autotag" 
+                                        label="Auto-Tag Text" 
+                                        subLabel={autoTagCandidateCount > 0 && !autoTagTextCitations ? `⚡ Candidate found (${autoTagCandidateCount})` : "Convert (Smith 2020)"} 
+                                        checked={autoTagTextCitations} 
+                                        onChange={(val) => {
+                                            setAutoTagTextCitations(val);
+                                            if (resolutions.length > 0) {
+                                                runAnalysis({ overrideAutoTag: val });
+                                            }
+                                        }} 
+                                        color="purple" 
+                                        tooltip="Detects plain untagged author-year citations in text (e.g. '(Smith et al., 2020)') and converts them into linked <ce:cross-ref refid='...'> elements."
+                                    />
+                                    <Switch 
+                                        id="exp-toggle-id" 
+                                        label="Enforce IDs" 
+                                        subLabel="Inject cfXXXX IDs" 
+                                        checked={targetMissingId} 
+                                        onChange={setTargetMissingId} 
+                                        color="blue" 
+                                        tooltip="Injects generated unique id='cfXXXX' attributes onto <ce:cross-ref> tags missing an element ID."
+                                    />
+                                    <Switch 
+                                        id="exp-toggle-dup" 
+                                        label="Fix Duplicates" 
+                                        subLabel="Re-assign duplicate IDs" 
+                                        checked={targetDuplicateId} 
+                                        onChange={setTargetDuplicateId} 
+                                        color="amber" 
+                                        tooltip="Detects duplicate id='...' attributes across <ce:cross-ref> elements and re-assigns unique IDs."
+                                    />
+                                    <Switch 
+                                        id="exp-toggle-doi" 
+                                        label="Clean DOIs" 
+                                        subLabel="Inter-ref to ce:doi" 
+                                        checked={cleanDoi} 
+                                        onChange={setCleanDoi} 
+                                        color="emerald" 
+                                        tooltip="Converts inter-ref links or raw DOI strings in bibliography entries into standardized <ce:doi> XML tags."
+                                    />
+                                </div>
+
+                                <div className="mt-6 pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-4">
+                                    <div className="flex items-center gap-6 flex-wrap">
+                                        <div className="flex items-center gap-2">
+                                            <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">ID Prefix:</label>
+                                            <input 
+                                                type="text"
+                                                value={idPrefix}
+                                                onChange={(e) => setIdPrefix(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
+                                                className="px-3 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-700 w-20 outline-none focus:ring-2 focus:ring-indigo-100"
+                                            />
+                                        </div>
+
+                                        <div className="flex items-center gap-2">
+                                            <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Start #:</label>
+                                            <div className="relative">
+                                                <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400 text-xs font-mono font-bold">{idPrefix}</span>
+                                                <input 
+                                                    type="number" 
+                                                    value={cfStart}
+                                                    onChange={(e) => setCfStart(Math.max(1, parseInt(e.target.value) || 0))}
+                                                    className="pl-8 pr-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-700 w-24 outline-none focus:ring-2 focus:ring-indigo-100"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-3">
+                                            <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Fuzzy Match Sensitivity:</label>
+                                            <input 
+                                                type="range" 
+                                                min="60" 
+                                                max="100" 
+                                                value={fuzzyThreshold}
+                                                onChange={(e) => setFuzzyThreshold(parseInt(e.target.value))}
+                                                className="w-28 accent-indigo-600 cursor-pointer"
+                                            />
+                                            <span className="text-xs font-mono font-black text-indigo-600">{fuzzyThreshold}%</span>
+                                        </div>
+                                    </div>
+
+                                    <button 
+                                        onClick={() => { setInput(''); setResolutions([]); setStep('input'); setOutput(''); }} 
+                                        className="text-xs font-bold text-slate-400 hover:text-rose-600 uppercase tracking-wider px-3 py-1 transition-colors"
+                                    >
+                                        Reset All
+                                    </button>
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
 
             {/* Smart Suggestions on Completion */}
