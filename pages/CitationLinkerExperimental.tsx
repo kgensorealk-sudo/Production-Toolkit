@@ -16,7 +16,7 @@ import { SmartSuggestion, ToolId } from '../types';
 
 interface TargetNode {
     id: string;
-    type: 'bib' | 'figure' | 'table' | 'formula' | 'section';
+    type: 'bib' | 'figure' | 'scheme' | 'table' | 'formula' | 'section' | 'box';
     label: string;
     displayText: string;
     normalized: string;
@@ -30,7 +30,7 @@ interface ResolutionItem {
     originalAttrs: string;
     textContent: string;
     formattedText?: string;
-    tagType: 'bib' | 'figure' | 'table' | 'formula' | 'section' | 'unknown';
+    tagType: 'bib' | 'figure' | 'scheme' | 'table' | 'formula' | 'section' | 'box' | 'unknown';
     status: 'resolved' | 'failed' | 'ignored' | 'autotag';
     existingId: string;
     existingRefid: string;
@@ -229,23 +229,33 @@ const CitationLinkerExperimental: React.FC = () => {
         const cleanText = text.replace(/<[^>]+>/g, '').trim();
         const normText = cleanText.toLowerCase();
         
-        let floatType: 'figure' | 'table' | 'formula' | 'section' | null = null;
+        let floatType: 'figure' | 'scheme' | 'table' | 'formula' | 'section' | 'box' | null = null;
         if (tagType === 'figure' || /^(fig|figure)/i.test(normText)) floatType = 'figure';
+        else if (tagType === 'scheme' || /^(sch|scheme)/i.test(normText)) floatType = 'scheme';
         else if (tagType === 'table' || /^(tbl|table)/i.test(normText)) floatType = 'table';
         else if (tagType === 'formula' || /^(eq|formula|equation)/i.test(normText)) floatType = 'formula';
         else if (tagType === 'section' || /^(sec|section)/i.test(normText)) floatType = 'section';
+        else if (tagType === 'box' || /^(box)/i.test(normText)) floatType = 'box';
 
         const candidateNodes = nodes.filter(n => floatType ? n.type === floatType : n.type !== 'bib');
         if (candidateNodes.length === 0) return { mappedIds: [], canCompressRange: false };
 
-        const numberPart = cleanText.replace(/^(figures?|figs?|tables?|tbls?|schemes?|boxes?|equations?|eqs?|formulas?|sections?|secs?)\b[\.\s]*/i, '').trim();
+        const numberPart = cleanText.replace(/^(figures?|figs?|tables?|tbls?|schemes?|schs?|sch?|boxes?|equations?|eqs?|formulas?|sections?|secs?)\b[\.\s]*/i, '').trim();
 
         const getFloatNodeId = (labelStr: string): string | null => {
             const cleanLabel = labelStr.replace(/[\(\)\[\]]/g, '').trim();
             if (!cleanLabel) return null;
 
+            // Direct exact match on label or normalized label first
+            const directMatch = candidateNodes.find(n => 
+                n.label.toLowerCase() === cleanLabel.toLowerCase() ||
+                n.normalized === normalizeCitation(cleanLabel) ||
+                n.normalized === normalizeCitation(cleanText)
+            );
+            if (directMatch) return directMatch.id;
+
             const exact = candidateNodes.find(n => {
-                const nodeLabelClean = n.label.replace(/^(figures?|figs?|tables?|tbls?|schemes?|boxes?|equations?|eqs?|formulas?|sections?|secs?)\b[\.\s]*/i, '').replace(/[\(\)\[\]]/g, '').trim();
+                const nodeLabelClean = n.label.replace(/^(figures?|figs?|tables?|tbls?|schemes?|schs?|sch?|boxes?|equations?|eqs?|formulas?|sections?|secs?)\b[\.\s]*/i, '').replace(/[\(\)\[\]]/g, '').trim();
                 return nodeLabelClean.toLowerCase() === cleanLabel.toLowerCase();
             });
             if (exact) return exact.id;
@@ -306,9 +316,11 @@ const CitationLinkerExperimental: React.FC = () => {
 
             let prefix = '';
             if (floatType === 'figure' || /^(fig|figure)/i.test(cleanText)) prefix = 'Figs.';
+            else if (floatType === 'scheme' || /^(sch|scheme)/i.test(cleanText)) prefix = 'Schemes';
             else if (floatType === 'table' || /^(tbl|table)/i.test(cleanText)) prefix = 'Tables';
             else if (floatType === 'formula' || /^(eq|formula|equation)/i.test(cleanText)) prefix = 'Eqs.';
             else if (floatType === 'section' || /^(sec|section)/i.test(cleanText)) prefix = 'Sections';
+            else if (floatType === 'box' || /^(box)/i.test(cleanText)) prefix = 'Boxes';
 
             if (prefix) {
                 if (isConsecutive && uniqueNums.length >= 2) {
@@ -562,20 +574,29 @@ const CitationLinkerExperimental: React.FC = () => {
                     });
                 }
 
-                // 2. Scan Figures
-                const figRegex = /<(?:ce:)?figure\b[^>]*?id="([^"]+)"[^>]*>([\s\S]*?)<\/(?:ce:)?figure>/gi;
+                // 2. Scan Figures, Schemes, Boxes
+                const figRegex = /<(?:ce:)?(figure|scheme|box|textbox)\b[^>]*?id="([^"]+)"[^>]*>([\s\S]*?)<\/(?:ce:)?\1>/gi;
                 let figMatch;
                 while ((figMatch = figRegex.exec(input)) !== null) {
-                    const id = figMatch[1];
-                    const content = figMatch[2];
+                    const tagKind = figMatch[1].toLowerCase();
+                    const id = figMatch[2];
+                    const content = figMatch[3];
                     idCounts.set(id, (idCounts.get(id) || 0) + 1);
                     const labelMatch = content.match(/<(?:ce:)?label>(.*?)<\/(?:ce:)?label>/i);
                     const labelText = labelMatch ? labelMatch[1].replace(/<[^>]+>/g, '').trim() : id;
+
+                    let nodeType: 'figure' | 'scheme' | 'box' = 'figure';
+                    if (tagKind === 'scheme' || /^(scheme|sch)\b/i.test(labelText) || /^sch/i.test(id)) {
+                        nodeType = 'scheme';
+                    } else if (tagKind === 'box' || tagKind === 'textbox' || /^(box|txtbox)\b/i.test(labelText) || /^box/i.test(id)) {
+                        nodeType = 'box';
+                    }
+
                     nodes.push({
                         id,
-                        type: 'figure',
+                        type: nodeType,
                         label: labelText,
-                        displayText: `${labelText} [Figure]`,
+                        displayText: `${labelText} [${nodeType.charAt(0).toUpperCase() + nodeType.slice(1)}]`,
                         normalized: normalizeCitation(labelText)
                     });
                 }
@@ -677,11 +698,13 @@ const CitationLinkerExperimental: React.FC = () => {
 
                     // Categorize Tag Type
                     const normText = normalizeCitation(text);
-                    let tagType: 'bib' | 'figure' | 'table' | 'formula' | 'section' | 'unknown' = 'unknown';
+                    let tagType: 'bib' | 'figure' | 'scheme' | 'table' | 'formula' | 'section' | 'box' | 'unknown' = 'unknown';
                     if (/^(fig|figure)/i.test(normText)) tagType = 'figure';
+                    else if (/^(sch|scheme)/i.test(normText)) tagType = 'scheme';
                     else if (/^(tbl|table)/i.test(normText)) tagType = 'table';
                     else if (/^(eq|formula|equation)/i.test(normText)) tagType = 'formula';
                     else if (/^(sec|section)/i.test(normText)) tagType = 'section';
+                    else if (/^(box)/i.test(normText)) tagType = 'box';
                     else tagType = 'bib';
 
                     let formattedText: string | undefined = undefined;
@@ -690,7 +713,7 @@ const CitationLinkerExperimental: React.FC = () => {
                         const matchedIdsSet = new Set<string>();
 
                         // 1. Try Float Matching if enabled or test candidate
-                        if (tagType !== 'bib' || /^(fig|table|scheme|box|eq)/i.test(normText)) {
+                        if (tagType !== 'bib' || /^(fig|table|scheme|box|eq|sec)/i.test(normText)) {
                             const floatRes = resolveFloatRefIds(text, tagType, nodes, activeCompress);
                             if (floatRes.mappedIds.length > 0) {
                                 detectedFloatCandidates++;
