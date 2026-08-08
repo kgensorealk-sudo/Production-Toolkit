@@ -666,7 +666,7 @@ const FormulaEditorExperimental: React.FC = () => {
             let formatted = xmlInput
                 .trim()
                 .replace(/>\s*</g, '><')
-                .replace(/></g, '>\n');
+                .replace(/></g, '>\n<');
             setXmlInput(formatted);
             setToast({ msg: "Unlinearized XML structure!", type: 'success' });
         } catch (e) {
@@ -678,6 +678,7 @@ const FormulaEditorExperimental: React.FC = () => {
     const linearizeXml = () => {
         try {
             let compressed = xmlInput
+                .replace(/>\s+</g, '><')
                 .replace(/\r?\n\s*/g, '')
                 .trim();
             setXmlInput(compressed);
@@ -699,6 +700,8 @@ const FormulaEditorExperimental: React.FC = () => {
     const renderableHtmlMathML = useMemo(() => {
         try {
             let src = xmlInput.trim();
+            if (!src) return null;
+
             if (src.includes('</mml:close>')) {
                 src = src.replace(/<\/mml:close>/gi, '</mml:msub>');
             }
@@ -719,7 +722,12 @@ const FormulaEditorExperimental: React.FC = () => {
             if (!mathBody.startsWith('<math')) {
                 mathBody = `<math xmlns="http://www.w3.org/1998/Math/MathML" display="block">${mathBody}</math>`;
             } else {
-                mathBody = mathBody.replace(/<math/i, '<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"');
+                mathBody = mathBody.replace(/<math([^>]*)>/i, (_, attrs) => {
+                    let cleanAttrs = attrs
+                        .replace(/\s*xmlns(:[a-z0-9]+)?="[^"]*"/gi, '')
+                        .replace(/\s*display="[^"]*"/gi, '');
+                    return `<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"${cleanAttrs}>`;
+                });
             }
 
             // Parse as DOM to accurately apply CSS font-style and dataset attributes for every token

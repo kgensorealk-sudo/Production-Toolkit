@@ -34,6 +34,7 @@ import {
     SortAsc
 } from 'lucide-react';
 import Toast from '../components/Toast';
+import Switch from '../components/Switch';
 import { SmartSuggestion, ToolId } from '../types';
 
 interface AuditItem {
@@ -41,7 +42,7 @@ interface AuditItem {
     status: 'fixed' | 'warning' | 'skip';
     doi?: string;
     msg: string;
-    type?: 'doi' | 'name' | 'id-fix' | 'source-text' | 'ir-fix';
+    type?: 'doi' | 'name' | 'id-fix' | 'source-text' | 'ir-fix' | 'contribution-langtype';
 }
 
 const StructuralNodeArchitect: React.FC = () => {
@@ -50,6 +51,7 @@ const StructuralNodeArchitect: React.FC = () => {
     const [input, setInput] = useState('');
     const [output, setOutput] = useState('');
     const [startId, setStartId] = useState(4000);
+    const [fixContributionLangtype, setFixContributionLangtype] = useState<boolean>(true);
     const [viewMode, setViewMode] = useState<'output' | 'diff'>('output');
     const [auditData, setAuditData] = useState<AuditItem[]>([]);
     const [isProcessing, setIsProcessing] = useState(false);
@@ -504,7 +506,31 @@ const StructuralNodeArchitect: React.FC = () => {
                     }
                 });
 
-                if (!doi && givenNames.every(gn => gn.textContent === fixGivenName(gn.textContent || ''))) {
+                // Contribution langtype Audit
+                let hasContributionIssue = false;
+                if (fixContributionLangtype) {
+                    const contributions = Array.from(ref.getElementsByTagName("*")).filter(el => el.localName === "contribution");
+                    contributions.forEach(contrib => {
+                        const hasXmlLang = contrib.hasAttribute("xml:lang") || contrib.hasAttributeNS("http://www.w3.org/XML/1998/namespace", "lang");
+                        const hasLang = contrib.hasAttribute("lang");
+                        const langVal = contrib.getAttribute("lang") || contrib.getAttribute("xml:lang") || contrib.getAttributeNS("http://www.w3.org/XML/1998/namespace", "lang");
+
+                        if (hasXmlLang || hasLang) {
+                            const langtype = contrib.getAttribute("langtype");
+                            if (hasXmlLang || langtype !== "iso") {
+                                hasContributionIssue = true;
+                                currentAudit.push({
+                                    id: refId,
+                                    status: 'fixed',
+                                    msg: `CONTRIBUTION: Standardize language attribute on <${contrib.tagName}> to lang="${langVal}" langtype="iso".`,
+                                    type: 'contribution-langtype'
+                                });
+                            }
+                        }
+                    });
+                }
+
+                if (!doi && !hasContributionIssue && givenNames.every(gn => gn.textContent === fixGivenName(gn.textContent || ''))) {
                     currentAudit.push({ id: refId, status: 'skip', msg: 'VALID: No structural issues detected.' });
                 }
             });
@@ -681,6 +707,35 @@ const StructuralNodeArchitect: React.FC = () => {
                             doiElem.textContent = doi;
                             targetHost.appendChild(doiElem);
                             finalAudit.push({ id: refId, status: 'fixed', doi, msg: 'REPAIRED: DOI migrated successfully.' });
+                        }
+                    }
+
+                    // sb:contribution langtype="iso" Repair
+                    if (fixContributionLangtype) {
+                        const contributions = Array.from(ref.getElementsByTagName("*")).filter(el => el.localName === "contribution");
+                        let contribFixed = false;
+                        contributions.forEach(contrib => {
+                            const hasXmlLang = contrib.hasAttribute("xml:lang") || contrib.hasAttributeNS("http://www.w3.org/XML/1998/namespace", "lang");
+                            const hasLang = contrib.hasAttribute("lang");
+                            const langVal = contrib.getAttribute("lang") || contrib.getAttribute("xml:lang") || contrib.getAttributeNS("http://www.w3.org/XML/1998/namespace", "lang");
+
+                            if (hasXmlLang || hasLang) {
+                                const langtype = contrib.getAttribute("langtype");
+                                if (hasXmlLang || langtype !== "iso") {
+                                    if (hasXmlLang) {
+                                        contrib.removeAttribute("xml:lang");
+                                        contrib.removeAttributeNS("http://www.w3.org/XML/1998/namespace", "lang");
+                                    }
+                                    if (langVal) {
+                                        contrib.setAttribute("lang", langVal);
+                                    }
+                                    contrib.setAttribute("langtype", "iso");
+                                    contribFixed = true;
+                                }
+                            }
+                        });
+                        if (contribFixed) {
+                            finalAudit.push({ id: refId, status: 'fixed', msg: 'REPAIRED: Standardized <sb:contribution> language attributes to lang="..." langtype="iso".' });
                         }
                     }
                 }
@@ -1270,6 +1325,21 @@ const StructuralNodeArchitect: React.FC = () => {
                                                 />
                                             </div>
                                         </div>
+                                    </div>
+                                </div>
+
+                                <div className="pt-6 border-t border-slate-100">
+                                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Repair Protocols</h3>
+                                    <div className="flex flex-col gap-3 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                        <Switch 
+                                            id="fix-contrib-langtype"
+                                            checked={fixContributionLangtype}
+                                            onChange={setFixContributionLangtype}
+                                            label="Fix sb:contribution langtype"
+                                            subLabel={fixContributionLangtype ? "ENABLED" : "DISABLED"}
+                                            color="indigo"
+                                            tooltip="Detects <sb:contribution> with a 'lang' attribute and inserts langtype='iso' if missing."
+                                        />
                                     </div>
                                 </div>
 
