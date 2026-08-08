@@ -94,7 +94,7 @@ const CitationLinkerExperimental: React.FC = () => {
     });
 
     // Configuration Toggles & Controls
-    const [showProtocolToggles, setShowProtocolToggles] = useState<boolean>(true);
+    const [showProtocolToggles, setShowProtocolToggles] = useState<boolean>(false);
     const [targetMissingRefid, setTargetMissingRefid] = useState(true);
     const [targetMissingId, setTargetMissingId] = useState(true);
     const [targetDuplicateId, setTargetDuplicateId] = useState(true);
@@ -1212,7 +1212,7 @@ const CitationLinkerExperimental: React.FC = () => {
             </div>
 
             {/* Configuration Panel */}
-            <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-200 mb-8 transition-all">
+            <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-200 mb-8 transition-all relative z-30">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
                     <div className="flex items-center gap-3">
                         <button
@@ -1309,7 +1309,8 @@ const CitationLinkerExperimental: React.FC = () => {
                             animate={{ opacity: 1, height: 'auto' }}
                             exit={{ opacity: 0, height: 0 }}
                             transition={{ duration: 0.25, ease: 'easeInOut' }}
-                            className="overflow-hidden"
+                            style={{ overflow: showProtocolToggles ? 'visible' : 'hidden' }}
+                            className="pt-1"
                         >
                             <div className="pt-4">
                                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">

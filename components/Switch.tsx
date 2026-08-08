@@ -26,7 +26,7 @@ const Switch: React.FC<SwitchProps> = ({ checked, onChange, label, subLabel, col
 
     return (
         <div 
-            className="relative group/switch inline-block"
+            className={`relative group/switch inline-block ${showTooltip ? 'z-50' : 'z-10'}`}
             onMouseEnter={() => setShowTooltip(true)}
             onMouseLeave={() => setShowTooltip(false)}
         >
@@ -65,7 +65,7 @@ const Switch: React.FC<SwitchProps> = ({ checked, onChange, label, subLabel, col
 
             {/* Hover Tooltip Popup */}
             {tooltip && showTooltip && (
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2.5 bg-slate-900 text-white text-xs font-medium rounded-xl shadow-xl z-50 pointer-events-none animate-in fade-in zoom-in-95 duration-150 border border-slate-700/50">
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2.5 bg-slate-900 text-white text-xs font-medium rounded-xl shadow-2xl z-[100] pointer-events-none animate-in fade-in zoom-in-95 duration-150 border border-slate-700/50">
                     <div className="leading-snug">{tooltip}</div>
                     {/* Tooltip Arrow */}
                     <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900"></div>
