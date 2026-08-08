@@ -254,6 +254,25 @@ const StructuralNodeArchitect: React.FC = () => {
         return fixed;
     };
 
+    const getLangAttr = (el: Element): { rawName: string, value: string } | null => {
+        if (!el) return null;
+        if (el.hasAttribute('xml:lang')) return { rawName: 'xml:lang', value: el.getAttribute('xml:lang') || '' };
+        if (el.hasAttributeNS('http://www.w3.org/XML/1998/namespace', 'lang')) {
+            return { rawName: 'xml:lang', value: el.getAttributeNS('http://www.w3.org/XML/1998/namespace', 'lang') || '' };
+        }
+        if (el.hasAttribute('lang')) return { rawName: 'lang', value: el.getAttribute('lang') || '' };
+        if (el.attributes) {
+            for (let i = 0; i < el.attributes.length; i++) {
+                const attr = el.attributes[i];
+                const aName = attr.name.toLowerCase();
+                if (aName === 'xml:lang' || aName.endsWith(':lang') || aName === 'lang') {
+                    return { rawName: attr.name, value: attr.value };
+                }
+            }
+        }
+        return null;
+    };
+
     const pruneEmptyElements = (element: Element) => {
         const children = Array.from(element.children);
         children.forEach(child => pruneEmptyElements(child));
@@ -509,20 +528,19 @@ const StructuralNodeArchitect: React.FC = () => {
                 // Contribution langtype Audit
                 let hasContributionIssue = false;
                 if (fixContributionLangtype) {
-                    const contributions = Array.from(ref.getElementsByTagName("*")).filter(el => el.localName === "contribution");
+                    const contributions = Array.from(ref.getElementsByTagName("*")).filter(el => 
+                        el.localName.toLowerCase().endsWith("contribution") || el.tagName.toLowerCase().endsWith("contribution")
+                    );
                     contributions.forEach(contrib => {
-                        const hasXmlLang = contrib.hasAttribute("xml:lang") || contrib.hasAttributeNS("http://www.w3.org/XML/1998/namespace", "lang");
-                        const hasLang = contrib.hasAttribute("lang");
-                        const langVal = contrib.getAttribute("lang") || contrib.getAttribute("xml:lang") || contrib.getAttributeNS("http://www.w3.org/XML/1998/namespace", "lang");
-
-                        if (hasXmlLang || hasLang) {
+                        const langInfo = getLangAttr(contrib);
+                        if (langInfo) {
                             const langtype = contrib.getAttribute("langtype");
-                            if (hasXmlLang || langtype !== "iso") {
+                            if (langtype !== "iso") {
                                 hasContributionIssue = true;
                                 currentAudit.push({
                                     id: refId,
                                     status: 'fixed',
-                                    msg: `CONTRIBUTION: Standardize language attribute on <${contrib.tagName}> to lang="${langVal}" langtype="iso".`,
+                                    msg: `CONTRIBUTION: Missing langtype="iso" on <${contrib.tagName} xml:lang="${langInfo.value}">.`,
                                     type: 'contribution-langtype'
                                 });
                             }
@@ -712,30 +730,26 @@ const StructuralNodeArchitect: React.FC = () => {
 
                     // sb:contribution langtype="iso" Repair
                     if (fixContributionLangtype) {
-                        const contributions = Array.from(ref.getElementsByTagName("*")).filter(el => el.localName === "contribution");
+                        const contributions = Array.from(ref.getElementsByTagName("*")).filter(el => 
+                            el.localName.toLowerCase().endsWith("contribution") || el.tagName.toLowerCase().endsWith("contribution")
+                        );
                         let contribFixed = false;
                         contributions.forEach(contrib => {
-                            const hasXmlLang = contrib.hasAttribute("xml:lang") || contrib.hasAttributeNS("http://www.w3.org/XML/1998/namespace", "lang");
-                            const hasLang = contrib.hasAttribute("lang");
-                            const langVal = contrib.getAttribute("lang") || contrib.getAttribute("xml:lang") || contrib.getAttributeNS("http://www.w3.org/XML/1998/namespace", "lang");
-
-                            if (hasXmlLang || hasLang) {
+                            const langInfo = getLangAttr(contrib);
+                            if (langInfo) {
                                 const langtype = contrib.getAttribute("langtype");
-                                if (hasXmlLang || langtype !== "iso") {
-                                    if (hasXmlLang) {
-                                        contrib.removeAttribute("xml:lang");
-                                        contrib.removeAttributeNS("http://www.w3.org/XML/1998/namespace", "lang");
+                                if (langtype !== "iso") {
+                                    if (contrib.hasAttribute("lang")) {
+                                        contrib.removeAttribute("lang");
                                     }
-                                    if (langVal) {
-                                        contrib.setAttribute("lang", langVal);
-                                    }
+                                    contrib.setAttribute("xml:lang", langInfo.value);
                                     contrib.setAttribute("langtype", "iso");
                                     contribFixed = true;
                                 }
                             }
                         });
                         if (contribFixed) {
-                            finalAudit.push({ id: refId, status: 'fixed', msg: 'REPAIRED: Standardized <sb:contribution> language attributes to lang="..." langtype="iso".' });
+                            finalAudit.push({ id: refId, status: 'fixed', msg: 'REPAIRED: Inserted langtype="iso" attribute to <sb:contribution>.' });
                         }
                     }
                 }
@@ -1386,7 +1400,7 @@ const StructuralNodeArchitect: React.FC = () => {
                                                 <button 
                                                     key={sug.id}
                                                     onClick={() => {
-                                                        navigate(sug.path, { state: { transferredXml: output, sourceTool: 'Structural Node Architect v3.2' } });
+                                                        navigate(sug.path, { state: { transferredXml: output, sourceTool: 'Reference Structure Repair v3.2' } });
                                                     }}
                                                     className="flex items-center gap-3 p-3 bg-white border border-indigo-50 rounded-xl hover:border-indigo-200 hover:shadow-sm transition-all group text-left"
                                                 >
@@ -1610,7 +1624,7 @@ const StructuralNodeArchitect: React.FC = () => {
                     <div className="flex items-center gap-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                         <span>© 2026 Elsevier_Systems</span>
                         <span className="w-1 h-1 rounded-full bg-slate-300" />
-                        <span>Structural_Node_Architect_v2.5.0</span>
+                        <span>Reference_Structure_Repair_v3.2.0</span>
                     </div>
                 </footer>
             </div>

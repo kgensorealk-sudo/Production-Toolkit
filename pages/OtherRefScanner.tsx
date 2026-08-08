@@ -325,7 +325,7 @@ const OtherRefScanner: React.FC = () => {
                     if (input.includes('<ce:source-text') || !input.includes('<sb:reference')) {
                         newSuggestions.push({
                             id: 'structural-architect',
-                            toolName: 'Structural Node Architect v3.2',
+                            toolName: 'Reference Structure Repair v3.2',
                             description: 'Convert unstructured or raw source text into structured bibliography nodes.',
                             path: '/structuralArchitect',
                             icon: <Box className="w-4 h-4" />,

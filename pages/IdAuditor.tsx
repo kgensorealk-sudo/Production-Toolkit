@@ -383,12 +383,12 @@ const IdAuditor: React.FC = () => {
                     });
                 }
 
-                // 7. Structural Node Architect
+                // 7. Reference Structure Repair
                 if (input.includes('<ce:source-text')) {
                     newSuggestions.push({
                         id: 'structural-architect',
-                        toolName: 'Structural Node Architect v3.2',
-                        description: 'It is found that the XML contains unstructured source text. Please use the Structural Node Architect to transform raw source text into valid structural bibliography nodes.',
+                        toolName: 'Reference Structure Repair v3.2',
+                        description: 'It is found that the XML contains unstructured source text. Please use Reference Structure Repair to transform raw source text into valid structural bibliography nodes.',
                         path: '/structuralArchitect',
                         icon: <Box className="w-4 h-4" />,
                         condition: 'Structural overhaul recommended'

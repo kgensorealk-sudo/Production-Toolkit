@@ -1006,7 +1006,7 @@ const CitationLinkerExperimental: React.FC = () => {
                 if (result.includes('<ce:source-text') || !result.includes('<sb:reference')) {
                     newSuggestions.push({
                         id: 'structural-architect',
-                        toolName: 'Structural Node Architect',
+                        toolName: 'Reference Structure Repair v3.2',
                         description: 'Audit and repair structural bibliography nodes, authors, and source-text.',
                         path: '/structuralArchitect',
                         icon: <Box className="w-4 h-4" />,

@@ -66,7 +66,7 @@ const TOOL_METADATA: Record<string, { title: string, Icon: React.FC<any>, color:
     [ToolId.COMMENT_REPLACER]: { title: "Comment Replacer", Icon: MessageSquare, color: "text-blue-500", hex: "#3b82f6" },
     [ToolId.SECTION_AUDITOR]: { title: "Section Auditor", Icon: FileSearch, color: "text-emerald-500", hex: "#10b981" },
     [ToolId.AFFILIATION_SEQUENCER]: { title: "Affiliation Sequencer", Icon: Link, color: "text-violet-500", hex: "#8b5cf6" },
-    [ToolId.STRUCTURAL_ARCHITECT]: { title: "Structural Node Architect", Icon: Database, color: "text-indigo-500", hex: "#6366f1" },
+    [ToolId.STRUCTURAL_ARCHITECT]: { title: "Reference Structure Repair", Icon: Database, color: "text-indigo-500", hex: "#6366f1" },
 };
 
 const UserSettings: React.FC = () => {

@@ -681,11 +681,11 @@ const CitationLinker: React.FC = () => {
                     });
                 }
 
-                // 6. Structural Node Architect
+                // 6. Reference Structure Repair
                 if (result.includes('<ce:source-text') || !result.includes('<sb:reference')) {
                     newSuggestions.push({
                         id: 'structural-architect',
-                        toolName: 'Structural Node Architect v3.2',
+                        toolName: 'Reference Structure Repair v3.2',
                         description: 'Structural overhaul recommended. Use this to transform raw source text into valid structural bibliography nodes.',
                         path: '/structuralArchitect',
                         icon: <Box className="w-4 h-4" />,
