@@ -83,15 +83,15 @@ const QuickDiff: React.FC = () => {
     };
 
     const renderRows = (data: any[]) => {
-        let localChangeCount = 0;
-        let currentBlockIdx = -1;
+        let localChangeCount = 1;
+        let currentBlockIdx = 0;
         return data.map((row: any) => {
             const { id, type, lContent, rContent, lNum, rNum, isFirstInBlock } = row;
             
             if (isFirstInBlock) {
                 currentBlockIdx = localChangeCount++;
             } else if (type === 'equal') {
-                currentBlockIdx = -1;
+                currentBlockIdx = 0;
             }
 
             let lClass = '';
@@ -327,11 +327,11 @@ const QuickDiff: React.FC = () => {
                     </div>
                 </div>
             ) : (
-                <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm bg-white animate-fade-in ring-1 ring-slate-900/5">
-                    <div className="bg-slate-50 border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-10 backdrop-blur-md bg-slate-50/90">
+                <div className="border border-slate-200 rounded-2xl shadow-sm bg-white animate-fade-in ring-1 ring-slate-900/5 relative">
+                    <div className="bg-slate-50/95 border-b border-slate-200 px-6 py-3 flex flex-wrap justify-between items-center sticky top-0 z-30 backdrop-blur-md rounded-t-2xl gap-3 shadow-2xs">
                         <div className="flex items-center gap-3">
                             <span className="text-sm font-bold text-slate-700">Comparison Result</span>
-                            <span className="text-xs font-mono font-medium text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200 shadow-sm">{diffStats}</span>
+                            <span className="text-xs font-mono font-medium text-slate-500 bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs">{diffStats}</span>
                             {isHardwareAccelerated && (
                                 <span className="flex items-center gap-1 text-[9px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100 uppercase tracking-widest">
                                     <Cpu size={10} />
@@ -339,8 +339,41 @@ const QuickDiff: React.FC = () => {
                                 </span>
                             )}
                         </div>
+
+                        {/* Top Toolbar Navigation Controls - Fixed in Header so it never obscures panel content */}
+                        {changeCount > 0 && (
+                            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-2.5 py-1 shadow-2xs">
+                                <div className="flex items-center gap-2 pr-2.5 border-r border-slate-200">
+                                    <div className="w-6 h-6 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
+                                        <GitCompare className="w-3.5 h-3.5 text-indigo-600" strokeWidth={2.5} />
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Changes:</span>
+                                        <span className="text-xs font-black text-slate-900 font-mono tabular-nums">
+                                            {currentChangeIndex} <span className="text-slate-300">/</span> {changeCount}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    <button 
+                                        onClick={() => scrollToChange('prev')}
+                                        className="p-1 hover:bg-slate-100 active:bg-slate-200 rounded-md transition-all text-slate-600 hover:text-indigo-600 group"
+                                        title="Previous Change (Shift+Tab)"
+                                    >
+                                        <ChevronUp className="w-4 h-4 group-active:-translate-y-0.5 transition-transform" strokeWidth={2.5} />
+                                    </button>
+                                    <button 
+                                        onClick={() => scrollToChange('next')}
+                                        className="p-1 hover:bg-slate-100 active:bg-slate-200 rounded-md transition-all text-slate-600 hover:text-indigo-600 group"
+                                        title="Next Change (Tab)"
+                                    >
+                                        <ChevronDown className="w-4 h-4 group-active:translate-y-0.5 transition-transform" strokeWidth={2.5} />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
-                    <div className="relative flex flex-col overflow-hidden h-full">
+                    <div className="relative flex flex-col rounded-b-2xl overflow-hidden h-full">
                         <div ref={diffContainerRef} className="max-h-[70vh] overflow-auto custom-scrollbar">
                             <table className="w-full text-sm font-mono border-collapse table-fixed bg-white">
                                 <colgroup>
@@ -354,45 +387,6 @@ const QuickDiff: React.FC = () => {
                                 </tbody>
                             </table>
                         </div>
-
-                        <AnimatePresence>
-                            {changeCount > 0 && (
-                                <motion.div 
-                                    initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                                    exit={{ opacity: 0, y: 20, scale: 0.95 }}
-                                    className="absolute bottom-8 right-8 flex items-center gap-2 bg-white/90 backdrop-blur-xl border border-slate-200/50 rounded-2xl p-2 shadow-[0_20px_50px_rgba(0,0,0,0.15)] z-30 ring-1 ring-slate-900/5"
-                                >
-                                    <div className="flex items-center gap-1 pr-2 border-r border-slate-100">
-                                        <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center">
-                                            <GitCompare className="w-4 h-4 text-indigo-600" strokeWidth={2.5} />
-                                        </div>
-                                        <div className="flex flex-col px-2">
-                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter leading-none mb-0.5">Changes</span>
-                                            <span className="text-xs font-black text-slate-900 tabular-nums leading-none">
-                                                {currentChangeIndex} <span className="text-slate-300 mx-0.5">/</span> {changeCount}
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                        <button 
-                                            onClick={() => scrollToChange('prev')}
-                                            className="p-2.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition-all text-slate-600 hover:text-indigo-600 group"
-                                            title="Previous Change (Shift+Tab)"
-                                        >
-                                            <ChevronUp className="w-5 h-5 group-active:-translate-y-0.5 transition-transform" strokeWidth={3} />
-                                        </button>
-                                        <button 
-                                            onClick={() => scrollToChange('next')}
-                                            className="p-2.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition-all text-slate-600 hover:text-indigo-600 group"
-                                            title="Next Change (Tab)"
-                                        >
-                                            <ChevronDown className="w-5 h-5 group-active:translate-y-0.5 transition-transform" strokeWidth={3} />
-                                        </button>
-                                    </div>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
                     </div>
                 </div>
             )}

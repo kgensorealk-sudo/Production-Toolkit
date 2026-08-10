@@ -64,7 +64,13 @@ const PRESET_SAMPLES = [
         name: "Integral Equation",
         id: "integral",
         desc: "Definite integral with limits, exponential power, and differentials",
-        xml: `<ce:display><ce:formula id="fo0040"><mml:math altimg="si6.svg"><mml:msubsup><mml:mo>∫</mml:mo><mml:mn>0</mml:mn><mml:mo>∞</</mml:mo></mml:msubsup><mml:msup><mml:mi>e</mml:mi><mml:mrow><mml:mo>−</mml:mo><mml:mi>x</mml:mi></mml:mrow></mml:msup><mml:mi>d</mml:mi><mml:mi>x</mml:mi><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:math></ce:formula></ce:display>`
+        xml: `<ce:display><ce:formula id="fo0040"><mml:math altimg="si6.svg"><mml:msubsup><mml:mo>∫</mml:mo><mml:mn>0</mml:mn><mml:mo>∞</mml:mo></mml:msubsup><mml:msup><mml:mi>e</mml:mi><mml:mrow><mml:mo>−</mml:mo><mml:mi>x</mml:mi></mml:mrow></mml:msup><mml:mi>d</mml:mi><mml:mi>x</mml:mi><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:math></ce:formula></ce:display>`
+    },
+    {
+        name: "Fenced Expression (mml:mfenced)",
+        id: "mfenced_sample",
+        desc: "mml:mfenced with open/close bracket attributes and nested fractions",
+        xml: `<ce:display><ce:formula id="fo0050"><mml:math altimg="si7.svg"><mml:mi>f</mml:mi><mml:mfenced open="(" close=")"><mml:mi>x</mml:mi></mml:mfenced><mml:mo>=</mml:mo><mml:mfenced open="[" close="]"><mml:mrow><mml:mfrac><mml:mrow><mml:mi>a</mml:mi><mml:mo>+</mml:mo><mml:mi>b</mml:mi></mml:mrow><mml:mrow><mml:mi>c</mml:mi><mml:mo>−</mml:mo><mml:mi>d</mml:mi></mml:mrow></mml:mfrac></mml:mrow></mml:mfenced></mml:math></ce:formula></ce:display>`
     }
 ];
 
@@ -365,6 +371,8 @@ const FormulaEditorExperimental: React.FC = () => {
             const doc = parser.parseFromString(wrapped, 'text/xml');
             if (doc.querySelector('parsererror')) throw new Error();
 
+            expandMfencesInDom(doc);
+
             const allTokens = doc.querySelectorAll('mi, mn, mo, mtext, mspace, mml\\:mi, mml\\:mn, mml\\:mo, mml\\:mtext, mml\\:mspace');
             let targetEl: Element | null = null;
 
@@ -416,6 +424,8 @@ const FormulaEditorExperimental: React.FC = () => {
             const wrapped = wrapWithNamespaces(xmlInput);
             const doc = parser.parseFromString(wrapped, 'text/xml');
             if (doc.querySelector('parsererror')) throw new Error();
+
+            expandMfencesInDom(doc);
 
             const allTokens = doc.querySelectorAll('mi, mn, mo, mtext, mspace, mml\\:mi, mml\\:mn, mml\\:mo, mml\\:mtext, mml\\:mspace');
             let targetEl: Element | null = null;
@@ -488,6 +498,8 @@ const FormulaEditorExperimental: React.FC = () => {
             const doc = parser.parseFromString(wrapped, 'text/xml');
             if (doc.querySelector('parsererror')) throw new Error();
 
+            expandMfencesInDom(doc);
+
             const allTokens = doc.querySelectorAll('mi, mn, mo, mtext, mspace, mml\\:mi, mml\\:mn, mml\\:mo, mml\\:mtext, mml\\:mspace');
             let targetEl: Element | null = null;
 
@@ -559,6 +571,84 @@ const FormulaEditorExperimental: React.FC = () => {
         }
     };
 
+    // Helper to expand MathML <mfenced open="..." close="..." separators="..."> into <mrow><mo>open</mo>...<mo>close</mo></mrow>
+    const expandMfencesInDom = (container: Document | Element) => {
+        const docObj = container.ownerDocument || (container as Document);
+        const mfences = Array.from(container.querySelectorAll('mfenced, mml\\:mfenced'));
+        
+        mfences.reverse().forEach(mfence => {
+            const openAttr = mfence.hasAttribute('open') ? mfence.getAttribute('open')! : '(';
+            const closeAttr = mfence.hasAttribute('close') ? mfence.getAttribute('close')! : ')';
+            const sepAttr = mfence.hasAttribute('separators') ? mfence.getAttribute('separators')! : ',';
+
+            const tagName = mfence.tagName;
+            const isMmlPrefix = tagName.toLowerCase().startsWith('mml:');
+            const tagPrefix = isMmlPrefix ? 'mml:' : '';
+            const ns = mfence.namespaceURI || 'http://www.w3.org/1998/Math/MathML';
+
+            const mrow = docObj.createElementNS(ns, `${tagPrefix}mrow`);
+
+            if (mfence.hasAttribute('id')) mrow.setAttribute('id', mfence.getAttribute('id')!);
+            if (mfence.hasAttribute('class')) mrow.setAttribute('class', mfence.getAttribute('class')!);
+
+            // Add opening fence <mo> if non-empty
+            if (openAttr !== '') {
+                const openMo = docObj.createElementNS(ns, `${tagPrefix}mo`);
+                openMo.textContent = openAttr;
+                mrow.appendChild(openMo);
+            }
+
+            // Add children with separators
+            const childElements = Array.from(mfence.children);
+            const childNodes = Array.from(mfence.childNodes);
+            const sepChars = sepAttr.split('').map(s => s.trim()).filter(Boolean);
+
+            if (childElements.length > 0) {
+                childElements.forEach((child, i) => {
+                    mrow.appendChild(child);
+                    if (i < childElements.length - 1 && sepAttr !== '') {
+                        const sepChar = sepChars[i] || sepChars[sepChars.length - 1] || ',';
+                        const sepMo = docObj.createElementNS(ns, `${tagPrefix}mo`);
+                        sepMo.textContent = sepChar;
+                        mrow.appendChild(sepMo);
+                    }
+                });
+            } else {
+                childNodes.forEach(child => mrow.appendChild(child));
+            }
+
+            // Add closing fence <mo> if non-empty
+            if (closeAttr !== '') {
+                const closeMo = docObj.createElementNS(ns, `${tagPrefix}mo`);
+                closeMo.textContent = closeAttr;
+                mrow.appendChild(closeMo);
+            }
+
+            mfence.replaceWith(mrow);
+        });
+    };
+
+    // Helper to normalize/convert string XML containing <mml:mfenced> into <mml:mrow><mml:mo>open</mml:mo>...<mml:mo>close</mml:mo></mrow>
+    const convertMfencesToMrow = (xmlStr: string): string => {
+        try {
+            const parser = new DOMParser();
+            const wrapped = wrapWithNamespaces(xmlStr);
+            const doc = parser.parseFromString(wrapped, 'text/xml');
+            if (doc.querySelector('parsererror')) return xmlStr;
+
+            const mfences = Array.from(doc.querySelectorAll('mfenced, mml\\:mfenced'));
+            if (mfences.length === 0) return xmlStr;
+
+            expandMfencesInDom(doc);
+
+            const serializer = new XMLSerializer();
+            let fullSerialized = serializer.serializeToString(doc);
+            return fullSerialized.replace(/^<root[^>]*>/, '').replace(/<\/root>$/, '');
+        } catch (e) {
+            return xmlStr;
+        }
+    };
+
     // Strip mathvariant attribute from non-mi tags helper
     const stripMathvariantFromNonMi = (xml: string): string => {
         try {
@@ -588,9 +678,13 @@ const FormulaEditorExperimental: React.FC = () => {
         }
     };
 
-    // Auto-fix mismatched tag helper
+    // Auto-fix mismatched tag & mfenced helper
     const autoFixXml = (input: string): string => {
         let fixed = stripMathvariantFromNonMi(input);
+        // Expand any mfenced open/close attributes into standard mrow + mo tags
+        if (fixed.includes('mfenced')) {
+            fixed = convertMfencesToMrow(fixed);
+        }
         // Fix unclosed </mml:close> -> replace with appropriate tag or </mml:msub>
         fixed = fixed.replace(/<\/mml:close>/gi, '</mml:msub>');
         // Fix missing closing tags if simple
@@ -733,6 +827,10 @@ const FormulaEditorExperimental: React.FC = () => {
             // Parse as DOM to accurately apply CSS font-style and dataset attributes for every token
             const parser = new DOMParser();
             const doc = parser.parseFromString(mathBody, 'text/html');
+
+            // Expand any <mfenced open="..." close="..."> into <mrow><mo>open</mo>...<mo>close</mo></mrow> for native HTML5 MathML rendering
+            expandMfencesInDom(doc);
+
             const mathEl = doc.querySelector('math');
 
             if (mathEl) {
@@ -794,6 +892,8 @@ const FormulaEditorExperimental: React.FC = () => {
             const wrapped = wrapWithNamespaces(xmlInput);
             const doc = parser.parseFromString(wrapped, 'text/xml');
             if (doc.querySelector('parsererror')) throw new Error();
+
+            expandMfencesInDom(doc);
 
             const allTokens = doc.querySelectorAll('mi, mn, mo, mtext, mspace, mml\\:mi, mml\\:mn, mml\\:mo, mml\\:mtext, mml\\:mspace');
             
@@ -890,6 +990,8 @@ const FormulaEditorExperimental: React.FC = () => {
             const wrapped = wrapWithNamespaces(xmlInput);
             const doc = parser.parseFromString(wrapped, 'text/xml');
             if (doc.querySelector('parsererror')) return [];
+
+            expandMfencesInDom(doc);
 
             const nodes: { id: string; index: number; tag: string; text: string; fullTag: string; mathvariant?: string }[] = [];
             const allTokens = doc.querySelectorAll('mi, mn, mo, mtext, mspace, mml\\:mi, mml\\:mn, mml\\:mo, mml\\:mtext, mml\\:mspace');
@@ -1569,27 +1671,73 @@ const FormulaEditorExperimental: React.FC = () => {
                                 >
                                     <span>Space</span>
                                 </button>
+
+                                <button
+                                    onClick={() => insertMathSnippet('<mml:mfenced open="(" close=")"><mml:mi>x</mml:mi></mml:mfenced>', 'Parentheses Fenced (x)')}
+                                    className="px-2.5 py-1 text-xs font-mono font-bold bg-white hover:bg-purple-600 hover:text-white text-purple-900 rounded-lg border border-purple-200 transition-all shadow-2xs flex items-center gap-1"
+                                    title="Fenced: <mml:mfenced open='(' close=')'>"
+                                >
+                                    <span>(x)</span>
+                                    <span className="text-[9px] opacity-75 font-sans">(mfenced)</span>
+                                </button>
+
+                                <button
+                                    onClick={() => insertMathSnippet('<mml:mfenced open="[" close="]"><mml:mi>x</mml:mi></mml:mfenced>', 'Bracket Fenced [x]')}
+                                    className="px-2.5 py-1 text-xs font-mono font-bold bg-white hover:bg-purple-600 hover:text-white text-purple-900 rounded-lg border border-purple-200 transition-all shadow-2xs flex items-center gap-1"
+                                    title="Fenced: <mml:mfenced open='[' close=']'>"
+                                >
+                                    <span>[x]</span>
+                                    <span className="text-[9px] opacity-75 font-sans">(mfenced)</span>
+                                </button>
+
+                                <button
+                                    onClick={() => insertMathSnippet('<mml:mfenced open="{" close="}"><mml:mi>x</mml:mi></mml:mfenced>', 'Brace Fenced {x}')}
+                                    className="px-2.5 py-1 text-xs font-mono font-bold bg-white hover:bg-purple-600 hover:text-white text-purple-900 rounded-lg border border-purple-200 transition-all shadow-2xs flex items-center gap-1"
+                                    title="Fenced: <mml:mfenced open='{' close='}'>"
+                                >
+                                    <span>{"{x}"}</span>
+                                    <span className="text-[9px] opacity-75 font-sans">(mfenced)</span>
+                                </button>
                             </div>
 
-                            {/* mathvariant Identifier Quick Snippets */}
-                            <div className="mt-3 pt-2.5 border-t border-purple-200/60 flex items-center gap-1.5 flex-wrap">
-                                <span className="text-[10px] font-bold text-purple-950 uppercase tracking-tight mr-1 flex items-center gap-1">
-                                    <Tag size={11} className="text-purple-600" /> mathvariant Snippets:
-                                </span>
-                                <button
-                                    onClick={() => insertMathSnippet('<mml:mi mathvariant="italic">x</mml:mi>', 'Italic Identifier')}
-                                    className="px-2 py-0.5 text-[10px] font-mono font-bold bg-white hover:bg-purple-600 hover:text-white text-purple-900 rounded border border-purple-200 transition-all shadow-2xs"
-                                    title="Insert <mml:mi mathvariant='italic'>x</mml:mi>"
-                                >
-                                    &lt;mi mathvariant="italic"&gt;x&lt;/mi&gt;
-                                </button>
-                                <button
-                                    onClick={() => insertMathSnippet('<mml:mi mathvariant="normal">t</mml:mi>', 'Upright Normal Identifier')}
-                                    className="px-2 py-0.5 text-[10px] font-mono font-bold bg-white hover:bg-purple-600 hover:text-white text-purple-900 rounded border border-purple-200 transition-all shadow-2xs"
-                                    title="Insert <mml:mi mathvariant='normal'>t</mml:mi>"
-                                >
-                                    &lt;mi mathvariant="normal"&gt;t&lt;/mi&gt;
-                                </button>
+                            {/* mathvariant Identifier Quick Snippets & mfenced Normalize */}
+                            <div className="mt-3 pt-2.5 border-t border-purple-200/60 flex items-center justify-between gap-2 flex-wrap">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-[10px] font-bold text-purple-950 uppercase tracking-tight mr-1 flex items-center gap-1">
+                                        <Tag size={11} className="text-purple-600" /> mathvariant Snippets:
+                                    </span>
+                                    <button
+                                        onClick={() => insertMathSnippet('<mml:mi mathvariant="italic">x</mml:mi>', 'Italic Identifier')}
+                                        className="px-2 py-0.5 text-[10px] font-mono font-bold bg-white hover:bg-purple-600 hover:text-white text-purple-900 rounded border border-purple-200 transition-all shadow-2xs"
+                                        title="Insert <mml:mi mathvariant='italic'>x</mml:mi>"
+                                    >
+                                        &lt;mi mathvariant="italic"&gt;x&lt;/mi&gt;
+                                    </button>
+                                    <button
+                                        onClick={() => insertMathSnippet('<mml:mi mathvariant="normal">t</mml:mi>', 'Upright Normal Identifier')}
+                                        className="px-2 py-0.5 text-[10px] font-mono font-bold bg-white hover:bg-purple-600 hover:text-white text-purple-900 rounded border border-purple-200 transition-all shadow-2xs"
+                                        title="Insert <mml:mi mathvariant='normal'>t</mml:mi>"
+                                    >
+                                        &lt;mi mathvariant="normal"&gt;t&lt;/mi&gt;
+                                    </button>
+                                </div>
+
+                                {xmlInput.includes('mfenced') && (
+                                    <button
+                                        onClick={() => {
+                                            const converted = convertMfencesToMrow(xmlInput);
+                                            if (converted !== xmlInput) {
+                                                setXmlInput(converted);
+                                                setToast({ msg: "Expanded <mml:mfenced> open/close attributes into explicit <mml:mrow><mml:mo> tags!", type: 'success' });
+                                            }
+                                        }}
+                                        className="px-2.5 py-1 text-[11px] font-mono font-bold bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-all shadow-2xs flex items-center gap-1 active:scale-95"
+                                        title="Expand <mml:mfenced open='...' close='...'> into <mml:mrow><mml:mo>...</mml:mo></mrow>"
+                                    >
+                                        <Wand2 size={12} />
+                                        <span>Expand &lt;mml:mfenced&gt; open/close</span>
+                                    </button>
+                                )}
                             </div>
                         </div>
 
