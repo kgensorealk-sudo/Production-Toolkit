@@ -278,13 +278,14 @@ const StructuralNodeArchitect: React.FC = () => {
         children.forEach(child => pruneEmptyElements(child));
 
         const tagName = element.tagName.toLowerCase();
-        if (tagName === 'sb:et-al' || tagName === 'ce:et-al') return;
+        if (tagName === 'sb:et-al' || tagName === 'ce:et-al' || tagName === 'sb:date-accessed' || tagName === 'ce:date-accessed' || tagName === 'sb:date' || tagName === 'ce:date') return;
         if (element.hasAttribute('refid') || element.hasAttribute('xlink:href')) return;
+        if (element.attributes && element.attributes.length > 0) return;
 
         const textContent = element.textContent?.trim() || '';
         const remainingChildren = element.children.length;
 
-        if (remainingChildren === 0 && textContent === '') {
+        if (remainingChildren === 0 && textContent === '' && (!element.attributes || element.attributes.length === 0)) {
             element.parentNode?.removeChild(element);
         }
     };
@@ -297,13 +298,15 @@ const StructuralNodeArchitect: React.FC = () => {
             prev = result;
             result = result.replace(/<([a-z0-9_:-]+)(?:\s+[^>]*)?>\s*<\/\1>/gi, (match, tag) => {
                 const ltag = tag.toLowerCase();
-                if (ltag === 'sb:et-al' || ltag === 'ce:et-al') return match;
+                if (ltag === 'sb:et-al' || ltag === 'ce:et-al' || ltag === 'sb:date-accessed' || ltag === 'ce:date-accessed' || ltag === 'sb:date' || ltag === 'ce:date') return match;
+                if (/\s[a-z0-9_:-]+=/i.test(match)) return match;
                 return '';
             });
             result = result.replace(/<([a-z0-9_:-]+)(?:\s+[^>]*)?\/>/gi, (match, tag) => {
                 const ltag = tag.toLowerCase();
-                if (ltag === 'sb:et-al' || ltag === 'ce:et-al' || ltag === 'ce:cross-ref' || ltag === 'ce:inter-ref') return match;
+                if (ltag === 'sb:et-al' || ltag === 'ce:et-al' || ltag === 'ce:cross-ref' || ltag === 'ce:inter-ref' || ltag === 'sb:inter-ref' || ltag === 'sb:date-accessed' || ltag === 'ce:date-accessed' || ltag === 'sb:date' || ltag === 'ce:date') return match;
                 if (match.includes('refid=') || match.includes('xlink:href=')) return match;
+                if (/\s[a-z0-9_:-]+=/i.test(match)) return match;
                 return '';
             });
         } while (prev !== result);
