@@ -18,8 +18,26 @@ interface HighlightItem {
     issues: string[];
 }
 
-const ArticleHighlights: React.FC = () => {
+export interface ArticleHighlightsProps {
+    highlightColor?: string;
+    onHighlightColorChange?: (color: string) => void;
+}
+
+export const HIGHLIGHT_COLOR_OPTIONS = [
+    { id: 'emerald', name: 'Emerald Green', text: 'text-emerald-700', bg: 'bg-emerald-500', bgLight: 'bg-emerald-50', border: 'border-emerald-300', ring: 'ring-emerald-400' },
+    { id: 'indigo', name: 'Indigo Blue', text: 'text-indigo-700', bg: 'bg-indigo-500', bgLight: 'bg-indigo-50', border: 'border-indigo-300', ring: 'ring-indigo-400' },
+    { id: 'amber', name: 'Amber Gold', text: 'text-amber-800', bg: 'bg-amber-500', bgLight: 'bg-amber-50', border: 'border-amber-300', ring: 'ring-amber-400' },
+    { id: 'rose', name: 'Rose Red', text: 'text-rose-700', bg: 'bg-rose-500', bgLight: 'bg-rose-50', border: 'border-rose-300', ring: 'ring-rose-400' },
+    { id: 'purple', name: 'Royal Purple', text: 'text-purple-700', bg: 'bg-purple-500', bgLight: 'bg-purple-50', border: 'border-purple-300', ring: 'ring-purple-400' },
+    { id: 'cyan', name: 'Cyan Blue', text: 'text-cyan-800', bg: 'bg-cyan-500', bgLight: 'bg-cyan-50', border: 'border-cyan-300', ring: 'ring-cyan-400' },
+];
+
+const ArticleHighlights: React.FC<ArticleHighlightsProps> = ({
+    highlightColor: initialColor = 'emerald',
+    onHighlightColorChange
+}) => {
     const editorRef = useRef<HTMLDivElement>(null);
+    const [selectedColor, setSelectedColor] = useState<string>(initialColor);
     const [output, setOutput] = useState('');
     const [highlightedOutput, setHighlightedOutput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -31,23 +49,54 @@ const ArticleHighlights: React.FC = () => {
 
     const CHAR_LIMIT = 125;
 
+    useEffect(() => {
+        if (initialColor && initialColor !== selectedColor) {
+            setSelectedColor(initialColor);
+        }
+    }, [initialColor]);
+
+    const handleColorChange = (colorId: string) => {
+        setSelectedColor(colorId);
+        if (onHighlightColorChange) {
+            onHighlightColorChange(colorId);
+        }
+    };
+
     const checkContent = () => {
         if (editorRef.current) {
             setHasContent(!!editorRef.current.innerText.trim());
         }
     };
 
-    const highlightXml = (xml: string) => {
+    const highlightXml = (xml: string, colorId: string) => {
         if (!xml) return '';
+        const colorOpt = HIGHLIGHT_COLOR_OPTIONS.find(c => c.id === colorId) || HIGHLIGHT_COLOR_OPTIONS[0];
         let html = xml.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const contentPalette = ['text-blue-600', 'text-emerald-600', 'text-purple-600', 'text-amber-600', 'text-rose-600', 'text-cyan-600'];
-        let pIdx = 0;
+        
+        const entryColors = [
+            { text: 'text-emerald-700', bgLight: 'bg-emerald-50', border: 'border-emerald-300' },
+            { text: 'text-cyan-800', bgLight: 'bg-cyan-50', border: 'border-cyan-300' },
+            { text: 'text-amber-800', bgLight: 'bg-amber-50', border: 'border-amber-300' },
+            { text: 'text-rose-700', bgLight: 'bg-rose-50', border: 'border-rose-300' },
+            { text: 'text-purple-700', bgLight: 'bg-purple-50', border: 'border-purple-300' },
+            { text: 'text-sky-800', bgLight: 'bg-sky-50', border: 'border-sky-300' },
+            { text: 'text-teal-700', bgLight: 'bg-teal-50', border: 'border-teal-300' },
+            { text: 'text-fuchsia-700', bgLight: 'bg-fuchsia-50', border: 'border-fuchsia-300' },
+        ];
+
+        let itemIndex = 0;
+
+        // Highlight each <ce:para> text in preview with a UNIQUE entry color for each list item!
         html = html.replace(/(&lt;ce:para\b.*?&gt;)([\s\S]*?)(&lt;\/ce:para&gt;)/g, (m, open, content, close) => {
-            const color = contentPalette[pIdx % contentPalette.length];
-            pIdx++;
-            return `${open}<span class="${color} font-medium">${content}</span>${close}`;
+            const entryColor = entryColors[itemIndex % entryColors.length];
+            itemIndex++;
+            return `${open}<span class="${entryColor.text} font-semibold ${entryColor.bgLight} px-1.5 py-0.5 rounded border ${entryColor.border}">${content}</span>${close}`;
         });
-        html = html.replace(/(&lt;ce:label&gt;)(.*?)(&lt;\/ce:label&gt;)/g, '$1<span class="text-slate-700 font-bold bg-slate-200 rounded px-1.5 border border-slate-300 text-xs">$2</span>$3');
+        
+        // Style bullet labels
+        html = html.replace(/(&lt;ce:label&gt;)(.*?)(&lt;\/ce:label&gt;)/g, `$1<span class="text-slate-900 font-bold ${colorOpt.bgLight} rounded px-1.5 py-0.5 border ${colorOpt.border} text-xs">$2</span>$3`);
+        
+        // XML tags
         html = html.replace(/(&lt;\/?)([\w:-]+)(.*?)(&gt;)/g, (m, prefix, tag, attrs, suffix) => {
             const coloredAttrs = attrs.replace(/(\s+)([\w:-]+)(=)(&quot;.*?&quot;)/g, 
                 '$1<span class="text-purple-600 italic">$2</span><span class="text-slate-400">$3</span><span class="text-blue-600">$4</span>'
@@ -57,6 +106,12 @@ const ArticleHighlights: React.FC = () => {
         html = html.replace(/(&lt;!--[\s\S]*?--&gt;)/g, '<span class="text-emerald-600 italic">$1</span>');
         return html;
     };
+
+    useEffect(() => {
+        if (output) {
+            setHighlightedOutput(highlightXml(output, selectedColor));
+        }
+    }, [output, selectedColor]);
 
     const domToXml = (node: Node): string => {
         if (node.nodeType === Node.TEXT_NODE) {
@@ -168,7 +223,7 @@ const ArticleHighlights: React.FC = () => {
 
             const finalXML = items.map(i => `<ce:list-item id="${i.id}"><ce:label>•</ce:label><ce:para id="${i.paraId}">${i.xmlContent}</ce:para></ce:list-item>`).join('\n');
             setOutput(finalXML);
-            setHighlightedOutput(highlightXml(finalXML));
+            setHighlightedOutput(highlightXml(finalXML, selectedColor));
             setProcessedItems(items);
             setQcReport(globalIssues);
             setToast({ msg: "Highlights Protocol Executed.", type: "success" });
@@ -210,9 +265,31 @@ const ArticleHighlights: React.FC = () => {
                 </div>
                 
                 <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col relative">
-                    <div className="bg-slate-50 px-8 py-2 border-b border-slate-100 flex justify-between items-center">
-                        <label className="font-black text-slate-700 text-[10px] uppercase tracking-widest flex items-center gap-2 py-4"><span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-white text-[8px]">2</span>Protocol Result</label>
-                        {output && activeTab === 'xml' && <button onClick={copyOutput} className="text-[10px] font-black text-indigo-600 hover:bg-indigo-50 px-4 py-2 rounded-xl border border-indigo-100 transition-all active:scale-95 uppercase tracking-widest">Copy Stream</button>}
+                    <div className="bg-slate-50 px-8 py-2 border-b border-slate-100 flex flex-wrap justify-between items-center gap-3">
+                        <label className="font-black text-slate-700 text-[10px] uppercase tracking-widest flex items-center gap-2 py-3"><span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-white text-[8px]">2</span>Protocol Result</label>
+                        
+                        <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-1.5 bg-slate-200/80 p-1 rounded-xl border border-slate-300/60">
+                                <span className="text-[9px] font-black uppercase tracking-wider text-slate-600 px-1.5">Color:</span>
+                                {HIGHLIGHT_COLOR_OPTIONS.map((opt) => (
+                                    <button
+                                        key={opt.id}
+                                        onClick={() => handleColorChange(opt.id)}
+                                        title={`Highlight Color: ${opt.name}`}
+                                        className={`w-5 h-5 rounded-lg flex items-center justify-center transition-all ${opt.bg} ${
+                                            selectedColor === opt.id
+                                                ? 'ring-2 ring-slate-800 scale-110 shadow-xs'
+                                                : 'opacity-70 hover:opacity-100 hover:scale-105'
+                                        }`}
+                                    >
+                                        {selectedColor === opt.id && (
+                                            <span className="w-1.5 h-1.5 rounded-full bg-white shadow-xs" />
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                            {output && activeTab === 'xml' && <button onClick={copyOutput} className="text-[10px] font-black text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-100 transition-all active:scale-95 uppercase tracking-widest">Copy Stream</button>}
+                        </div>
                     </div>
                     <div className="bg-white px-6 pt-4 border-b border-slate-100 flex space-x-3">
                          <button onClick={() => setActiveTab('xml')} className={`px-8 py-3 text-[11px] font-black uppercase tracking-[0.2em] rounded-t-2xl transition-all border-t border-x ${activeTab === 'xml' ? 'bg-slate-50 text-indigo-600 border-slate-200 translate-y-[1px]' : 'bg-white text-slate-400 border-transparent hover:bg-slate-50'}`}>XML Output</button>

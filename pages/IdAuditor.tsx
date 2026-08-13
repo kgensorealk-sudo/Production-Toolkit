@@ -562,15 +562,15 @@ const IdAuditor: React.FC = () => {
     }, [input, auditResults, step]);
 
     return (
-        <div className="max-w-full mx-auto px-2 py-8 sm:px-4 lg:px-6">
-            <div className="mb-10 text-center animate-fade-in">
-                <h1 className="text-3xl font-black text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase tracking-tighter">ID Prefix Auditor</h1>
-                <p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic tracking-tight leading-relaxed">
+        <div className={`max-w-full mx-auto px-2 sm:px-4 lg:px-6 ${step === 'result' ? 'py-3' : 'py-8'}`}>
+            <div className={`text-center animate-fade-in ${step === 'result' ? 'mb-3' : 'mb-10'}`}>
+                <h1 className="text-3xl font-black text-slate-900 tracking-tight sm:text-4xl mb-2 uppercase tracking-tighter">ID Prefix Auditor</h1>
+                <p className="text-sm text-slate-500 max-w-2xl mx-auto font-light italic tracking-tight leading-relaxed">
                     Protocol validation for bb, rf, se, ir, ca, cf, or, tr, and plural cross-refs. Enforcing strict 4-digit numeric suffixes and collapsed initials.
                 </p>
             </div>
 
-            {/* Smart Suggestions Section outside the main results container */}
+            {/* Architectural Recommendations Section matching Citation Linker Pro */}
             {suggestions.length > 0 && step === 'result' && (
                 <div className="mb-8 animate-in fade-in slide-in-from-top-4 duration-700">
                     <div className="p-6 bg-indigo-50/30 border-2 border-indigo-100 rounded-[2rem] border-dashed">
@@ -604,7 +604,7 @@ const IdAuditor: React.FC = () => {
                 </div>
             )}
 
-            <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-200 overflow-hidden h-[calc(100vh-320px)] min-h-[750px] flex flex-col relative transition-all duration-500">
+            <div className={`bg-white rounded-[2.5rem] shadow-2xl border border-slate-200 flex flex-col relative transition-all duration-500 overflow-hidden ${step === 'result' ? 'h-[calc(100vh-170px)] min-h-[650px]' : 'h-[calc(100vh-320px)] min-h-[750px]'}`}>
                 {isLoading && <LoadingOverlay message="Executing Structural Protocol Check..." color="slate" />}
 
                 {step === 'input' && (
@@ -747,80 +747,76 @@ const IdAuditor: React.FC = () => {
 
                 {step === 'result' && (
                     <div className="flex flex-col h-full animate-fade-in overflow-hidden">
-                        <div className="bg-slate-50 px-10 py-5 border-b border-slate-200 flex justify-between items-center">
-                            <h3 className="font-black text-slate-900 text-xs uppercase tracking-widest">Corrected Protocol Stream</h3>
-                            <div className="flex gap-4">
-                                <button onClick={() => { navigator.clipboard.writeText(output); setToast({msg:'Corrected XML Copied!', type:'success'}); }} className="bg-emerald-600 text-white border border-emerald-700 px-6 py-2.5 rounded-xl text-[10px] font-black hover:bg-emerald-700 shadow-lg shadow-emerald-500/20 transition-all uppercase tracking-widest">Export Result</button>
-                                <button onClick={() => { setStep('input'); setAuditResults([]); }} className="text-xs font-bold text-slate-400 hover:text-slate-600 uppercase tracking-widest">Start New Session</button>
+                        <div className="bg-white border-b border-slate-200 shrink-0 z-20 rounded-t-[2.5rem] shadow-xs">
+                            <div className="bg-slate-50 px-6 sm:px-10 py-4 border-b border-slate-200 flex justify-between items-center rounded-t-[2.5rem]">
+                                <h3 className="font-black text-slate-900 text-xs uppercase tracking-widest">Corrected Protocol Stream</h3>
+                                <div className="flex gap-4">
+                                    <button onClick={() => { navigator.clipboard.writeText(output); setToast({msg:'Corrected XML Copied!', type:'success'}); }} className="bg-emerald-600 text-white border border-emerald-700 px-6 py-2.5 rounded-xl text-[10px] font-black hover:bg-emerald-700 shadow-lg shadow-emerald-500/20 transition-all uppercase tracking-widest">Export Result</button>
+                                    <button onClick={() => { setStep('input'); setAuditResults([]); }} className="text-xs font-bold text-slate-400 hover:text-slate-600 uppercase tracking-widest">Start New Session</button>
+                                </div>
+                            </div>
+                            <div className="bg-white px-6 sm:px-10 pt-3 flex items-center justify-between">
+                                <div className="flex space-x-4">
+                                    <button onClick={() => setActiveTab('xml')} className={`px-8 py-4 text-[11px] font-black uppercase tracking-widest rounded-t-2xl transition-all border-t border-x ${activeTab === 'xml' ? 'bg-slate-50 text-indigo-600 border-slate-200 translate-y-[1px]' : 'bg-white text-slate-400 border-transparent'}`}>Normalized Source</button>
+                                    <button onClick={() => setActiveTab('diff')} className={`px-8 py-4 text-[11px] font-black uppercase tracking-widest rounded-t-2xl transition-all border-t border-x ${activeTab === 'diff' ? 'bg-slate-50 text-rose-600 border-slate-200 translate-y-[1px]' : 'bg-white text-slate-400 border-transparent'}`}>Correction Log (Diff)</button>
+                                </div>
+
+                                {activeTab === 'diff' && totalChanges > 0 && (
+                                    <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 shadow-2xs mb-2">
+                                        <div className="flex items-center gap-2 pr-2.5 border-r border-slate-200">
+                                            <div className="w-6 h-6 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
+                                                <GitCompare className="w-3.5 h-3.5 text-indigo-600" strokeWidth={2.5} />
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Changes:</span>
+                                                <span className="text-xs font-black text-slate-900 font-mono tabular-nums">
+                                                    {currentChangeIndex} <span className="text-slate-300">/</span> {totalChanges}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <button 
+                                                onClick={() => scrollToChange('prev')}
+                                                className="p-1 hover:bg-slate-200 active:bg-slate-300 rounded-md transition-all text-slate-600 hover:text-indigo-600 group"
+                                                title="Previous Change (Shift+Tab)"
+                                            >
+                                                <ChevronUp className="w-4 h-4 group-active:-translate-y-0.5 transition-transform" strokeWidth={2.5} />
+                                            </button>
+                                            <button 
+                                                onClick={() => scrollToChange('next')}
+                                                className="p-1 hover:bg-slate-200 active:bg-slate-300 rounded-md transition-all text-slate-600 hover:text-indigo-600 group"
+                                                title="Next Change (Tab)"
+                                            >
+                                                <ChevronDown className="w-4 h-4 group-active:translate-y-0.5 transition-transform" strokeWidth={2.5} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
-                        <div className="bg-white px-10 pt-4 border-b border-slate-100 flex space-x-4">
-                            <button onClick={() => setActiveTab('xml')} className={`px-8 py-4 text-[11px] font-black uppercase tracking-widest rounded-t-2xl transition-all border-t border-x ${activeTab === 'xml' ? 'bg-slate-50 text-indigo-600 border-slate-200 translate-y-[1px]' : 'bg-white text-slate-400 border-transparent'}`}>Normalized Source</button>
-                            <button onClick={() => setActiveTab('diff')} className={`px-8 py-4 text-[11px] font-black uppercase tracking-widest rounded-t-2xl transition-all border-t border-x ${activeTab === 'diff' ? 'bg-slate-50 text-rose-600 border-slate-200 translate-y-[1px]' : 'bg-white text-slate-400 border-transparent'}`}>Correction Log (Diff)</button>
-                        </div>
-                        <div className="flex-grow relative bg-slate-50 overflow-hidden flex flex-col">
+                        <div className="flex-grow relative bg-slate-50 min-h-0 overflow-hidden rounded-b-[2.5rem]">
                             {activeTab === 'xml' && (
-                                <div className="h-full relative p-8">
+                                <div className="absolute inset-0 p-6 sm:p-8">
                                     <textarea 
                                         readOnly
                                         value={output}
-                                        className="h-full w-full p-10 font-mono text-[11px] bg-white rounded-[2rem] border border-slate-200 shadow-inner focus:ring-0 resize-none leading-relaxed outline-none"
+                                        className="h-full w-full p-8 font-mono text-[11px] bg-white rounded-[2rem] border border-slate-200 shadow-inner focus:ring-0 resize-none leading-relaxed outline-none custom-scrollbar"
                                     />
                                 </div>
                             )}
                             {activeTab === 'diff' && (
-                                <div className="flex-grow relative flex flex-col overflow-hidden">
-                                    <div 
-                                        ref={diffContainerRef}
-                                        className="absolute inset-0 overflow-auto custom-scrollbar"
-                                    >
-                                        {diffElements}
-                                    </div>
-
-                                    <AnimatePresence>
-                                        {totalChanges > 0 && (
-                                            <motion.div 
-                                                initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                                                animate={{ opacity: 1, y: 0, scale: 1 }}
-                                                exit={{ opacity: 0, y: 20, scale: 0.95 }}
-                                                className="absolute bottom-8 right-8 flex items-center gap-2 bg-white/90 backdrop-blur-xl border border-slate-200/50 rounded-2xl p-2 shadow-[0_20px_50px_rgba(0,0,0,0.15)] z-30 ring-1 ring-slate-900/5"
-                                            >
-                                                <div className="flex items-center gap-1 pr-2 border-r border-slate-100">
-                                                    <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center">
-                                                        <GitCompare className="w-4 h-4 text-indigo-600" strokeWidth={2.5} />
-                                                    </div>
-                                                    <div className="flex flex-col px-2">
-                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter leading-none mb-0.5">Changes</span>
-                                                        <span className="text-xs font-black text-slate-900 tabular-nums leading-none">
-                                                            {currentChangeIndex} <span className="text-slate-300 mx-0.5">/</span> {totalChanges}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                                <div className="flex items-center gap-1">
-                                                    <button 
-                                                        onClick={() => scrollToChange('prev')}
-                                                        className="p-2.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition-all text-slate-600 hover:text-indigo-600 group"
-                                                        title="Previous Change (Shift+Tab)"
-                                                    >
-                                                        <ChevronUp className="w-5 h-5 group-active:-translate-y-0.5 transition-transform" strokeWidth={3} />
-                                                    </button>
-                                                    <button 
-                                                        onClick={() => scrollToChange('next')}
-                                                        className="p-2.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition-all text-slate-600 hover:text-indigo-600 group"
-                                                        title="Next Change (Tab)"
-                                                    >
-                                                        <ChevronDown className="w-5 h-5 group-active:translate-y-0.5 transition-transform" strokeWidth={3} />
-                                                    </button>
-                                                </div>
-                                            </motion.div>
-                                        )}
-                                    </AnimatePresence>
+                                <div 
+                                    ref={diffContainerRef}
+                                    className="absolute inset-0 overflow-auto custom-scrollbar p-6 rounded-b-[2.5rem]"
+                                >
+                                    {diffElements}
                                 </div>
                             )}
                         </div>
                     </div>
                 )}
             </div>
+
             {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
         </div>
     );

@@ -101,6 +101,9 @@ const StructuralNodeArchitect: React.FC = () => {
             }
         });
 
+        // Check for et-al tag inside authors or reference
+        const hasEtAl = sbRef.getElementsByTagName("sb:et-al").length > 0 || sbRef.getElementsByTagName("ce:et-al").length > 0;
+
         // 2. Collaboration
         const collaborations = Array.from(sbRef.getElementsByTagName("ce:collaboration")).concat(Array.from(sbRef.getElementsByTagName("sb:collaboration")));
         collaborations.forEach(collab => {
@@ -173,35 +176,74 @@ const StructuralNodeArchitect: React.FC = () => {
             });
         }
 
-        let parts: string[] = [];
-        if (authors.length > 0) parts.push(authors.join(", "));
-        if (title) parts.push(title);
-        
-        if (editors.length > 0) {
-            parts.push(`In: ${editors.join(", ")} (Eds.)`);
+        let sourceText = "";
+
+        // 1. Authors & Year
+        let authorsStr = authors.join(", ");
+        if (hasEtAl) {
+            authorsStr = authorsStr ? `${authorsStr} et al.` : "et al.";
+        }
+        if (authorsStr) {
+            if (!authorsStr.endsWith(".")) authorsStr += ".";
+            if (year) {
+                sourceText += `${authorsStr}, (${year}).`;
+            } else {
+                sourceText += `${authorsStr},`;
+            }
+        } else if (year) {
+            sourceText += `(${year}).`;
         }
 
+        // 2. Title
+        if (title) {
+            let titlePart = title.trim();
+            if (titlePart.endsWith(".")) {
+                titlePart = titlePart.slice(0, -1) + ",";
+            } else if (!titlePart.endsWith(",")) {
+                titlePart += ",";
+            }
+            sourceText += (sourceText ? " " : "") + titlePart;
+        }
+        
+        // 3. Editors
+        if (editors.length > 0) {
+            sourceText += (sourceText ? " " : "") + `In: ${editors.join(", ")} (Eds.),`;
+        }
+
+        // 4. Host (Journal/Book)
+        let hostStr = "";
         if (journal) {
-            let journalPart = journal;
-            if (year) journalPart += ` (${year})`;
-            if (volume) journalPart += ` ${volume}`;
-            if (issue) journalPart += ` (${issue})`;
-            if (pages) journalPart += ` ${pages}`;
-            if (articleNum) journalPart += ` ${articleNum}`;
-            parts.push(journalPart.trim());
+            hostStr = journal.trim();
+            let volIssuePages = "";
+            if (volume) volIssuePages += ` ${volume}`;
+            if (issue) volIssuePages += `(${issue})`;
+            const pageOrArt = pages || articleNum;
+            if (pageOrArt) volIssuePages += ` ${pageOrArt}`;
+            hostStr += volIssuePages;
         } else {
-            if (year) parts.push(`(${year})`);
-            if (volume) parts.push(volume);
-            if (issue) parts.push(`(${issue})`);
-            if (pages) parts.push(pages);
-            if (articleNum) parts.push(articleNum);
+            let volIssuePages = "";
+            if (volume) volIssuePages += `${volume}`;
+            if (issue) volIssuePages += `(${issue})`;
+            const pageOrArt = pages || articleNum;
+            if (pageOrArt) volIssuePages += volIssuePages ? ` ${pageOrArt}` : `${pageOrArt}`;
+            hostStr = volIssuePages.trim();
+        }
+
+        if (hostStr) {
+            if (hostStr.endsWith(".")) {
+                hostStr = hostStr.slice(0, -1) + ",";
+            } else if (!hostStr.endsWith(",")) {
+                hostStr += ",";
+            }
+            sourceText += (sourceText ? " " : "") + hostStr;
         }
 
         // 5. DOI
         const doiNode = sbRef.getElementsByTagName("ce:doi")[0] || sbRef.getElementsByTagName("sb:doi")[0];
         const doi = doiNode?.textContent?.trim();
         if (doi) {
-            parts.push(`https://doi.org/${doi.replace(/^doi:/i, '')}`);
+            const cleanDoi = doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i, '').replace(/^doi:/i, '');
+            sourceText += (sourceText ? " " : "") + `https://doi.org/${cleanDoi}`;
         }
 
         // 6. Inter-refs (URLs) and Date Accessed
@@ -230,16 +272,15 @@ const StructuralNodeArchitect: React.FC = () => {
                     urlPart += ` ${dateAccessedStr}`;
                     dateAccessedStr = ""; // Only append to the first URL found
                 }
-                parts.push(urlPart);
+                sourceText += (sourceText ? " " : "") + urlPart;
             }
         });
 
-        // If date exists but no URL was found to attach it to, add it as a separate part
         if (dateAccessedStr) {
-            parts.push(dateAccessedStr);
+            sourceText += (sourceText ? " " : "") + dateAccessedStr;
         }
         
-        let result = parts.filter(p => p.trim()).join(", ");
+        let result = sourceText.trim().replace(/,\s*,/g, ',').replace(/\s+/g, ' ');
         if (result && !result.endsWith(".")) result += ".";
         return result;
     };
@@ -247,10 +288,10 @@ const StructuralNodeArchitect: React.FC = () => {
     const fixGivenName = (name: string): string => {
         if (!name) return name;
         // 1. Add periods to capital letters if missing (handles "A B" -> "A. B." and "JD" -> "J.D.")
-        // Matches a capital letter NOT followed by a lowercase letter, a period, or an apostrophe
-        let fixed = name.replace(/([A-Z])(?![a-z\.\'])/g, '$1.');
+        // Matches a capital letter NOT followed by lowercase letters (including accented/Unicode letters), a period, or an apostrophe
+        let fixed = name.replace(/\b([A-Z\u00C0-\u00DE])(?!\s*[\-–—\u2010-\u2015])(?![\-–—\u2010-\u2015a-zA-Z\u00C0-\u024F\u1E00-\u1EFF\.'’ʻ])/g, '$1.');
         // 2. Remove extra spaces after periods in initials: "A. B." -> "A.B."
-        fixed = fixed.replace(/\. +(?=[A-Z]\.)/g, '.');
+        fixed = fixed.replace(/\. +(?=[A-Z\u00C0-\u00DE]\.)/g, '.');
         return fixed;
     };
 
@@ -474,8 +515,13 @@ const StructuralNodeArchitect: React.FC = () => {
                     });
                 } else if (sourceText && (urls.length > 0 || sbRef.getElementsByTagName("sb:date-accessed").length > 0)) {
                     const stContent = sourceText.textContent || "";
-                    const missingUrl = urls.some(u => u && !stContent.includes(u));
-                    const missingDate = sbRef.getElementsByTagName("sb:date-accessed").length > 0 && !stContent.includes("Accessed");
+                    const missingUrl = urls.some(u => {
+                        if (!u) return false;
+                        if (stContent.includes(u)) return false;
+                        const cleanUrl = u.replace(/^https?:\/\//i, '').replace(/\/$/, '');
+                        return !cleanUrl || !stContent.includes(cleanUrl);
+                    });
+                    const missingDate = sbRef.getElementsByTagName("sb:date-accessed").length > 0 && !/access/i.test(stContent);
                     
                     if (missingUrl || missingDate) {
                         currentAudit.push({ 
@@ -671,8 +717,13 @@ const StructuralNodeArchitect: React.FC = () => {
                         needsSourceUpdate = true;
                     } else if (sourceText && !sbRef.tagName.includes('other-ref')) {
                         const stContent = sourceText.textContent || "";
-                        const missingUrl = urlsInRef.some(u => u && !stContent.includes(u));
-                        const missingDate = dateAccessedInRef && !stContent.includes("Accessed");
+                        const missingUrl = urlsInRef.some(u => {
+                            if (!u) return false;
+                            if (stContent.includes(u)) return false;
+                            const cleanUrl = u.replace(/^https?:\/\//i, '').replace(/\/$/, '');
+                            return !cleanUrl || !stContent.includes(cleanUrl);
+                        });
+                        const missingDate = dateAccessedInRef && !/access/i.test(stContent);
                         if (missingUrl || missingDate) {
                             needsSourceUpdate = true;
                         }
@@ -681,7 +732,8 @@ const StructuralNodeArchitect: React.FC = () => {
                     if (needsSourceUpdate) {
                         if (!sourceText) {
                             sourceText = fragmentDoc.createElement("ce:source-text");
-                            const newSeId = getNextId('se');
+                            const stPrefix = trimmedInput.match(/\bid=["']srct\d+["']/i) ? 'srct' : 'se';
+                            const newSeId = getNextId(stPrefix);
                             sourceText.setAttribute("id", newSeId);
                             ref.appendChild(sourceText);
                         }
@@ -959,21 +1011,23 @@ const StructuralNodeArchitect: React.FC = () => {
         let nextIndex = currentChangeIndex;
 
         if (direction === 'next') {
-            if (currentChangeIndex === changeRows.length - 1) {
-                setToast({ msg: 'End of changes reached. Nothing follows.', type: 'warn' });
-                return;
+            if (currentChangeIndex < 0 || currentChangeIndex >= changeRows.length - 1) {
+                nextIndex = 0;
+            } else {
+                nextIndex = currentChangeIndex + 1;
             }
-            nextIndex = currentChangeIndex + 1;
         } else {
             if (currentChangeIndex <= 0) {
-                setToast({ msg: 'Start of changes reached. No previous changes.', type: 'warn' });
-                return;
+                nextIndex = changeRows.length - 1;
+            } else {
+                nextIndex = currentChangeIndex - 1;
             }
-            nextIndex = currentChangeIndex - 1;
         }
 
         const targetRow = changeRows[nextIndex] as HTMLElement;
-        targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (targetRow) {
+            targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
         setCurrentChangeIndex(nextIndex);
     };
 
@@ -1166,31 +1220,6 @@ const StructuralNodeArchitect: React.FC = () => {
                         </tbody>
                     </table>
                 </div>
-                {calculatedChangeCount > 0 && (
-                    <div className="absolute bottom-8 right-10 flex items-center gap-3 bg-white/95 backdrop-blur-md px-5 py-3 rounded-[2rem] border border-slate-200 shadow-2xl z-30 animate-in fade-in slide-in-from-bottom-4 duration-500 ring-1 ring-slate-900/5">
-                        <div className="flex flex-col items-end mr-3">
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Audit Stream</span>
-                            <span className="text-xs font-black text-indigo-600 tabular-nums leading-none">{(currentChangeIndex === -1 ? 0 : currentChangeIndex + 1)} <span className="text-slate-300 mx-0.5">/</span> {calculatedChangeCount}</span>
-                        </div>
-                        <div className="h-8 w-[1px] bg-slate-100 mx-1"></div>
-                        <div className="flex gap-1.5">
-                            <button 
-                                onClick={() => scrollToChange('prev')}
-                                className="p-2.5 hover:bg-slate-50 rounded-2xl text-slate-600 transition-all active:scale-90 hover:text-indigo-600"
-                                title="Previous Change"
-                            >
-                                <ChevronUp className="w-5 h-5" />
-                            </button>
-                            <button 
-                                onClick={() => scrollToChange('next')}
-                                className="p-2.5 hover:bg-slate-50 rounded-2xl text-slate-600 transition-all active:scale-90 hover:text-indigo-600"
-                                title="Next Change"
-                            >
-                                <ChevronDown className="w-5 h-5" />
-                            </button>
-                        </div>
-                    </div>
-                )}
             </div>
         );
     };
@@ -1555,25 +1584,35 @@ const StructuralNodeArchitect: React.FC = () => {
                                                         DIFF_VIEW
                                                     </button>
                                                 </div>
-                                                {viewMode === 'diff' && (
-                                                    <div className="flex items-center gap-1 bg-slate-200/50 p-1 rounded-lg ml-2">
-                                                        <button 
-                                                            onClick={() => scrollToChange('prev')}
-                                                            className="p-1 text-slate-500 hover:text-indigo-600 hover:bg-white rounded transition-all"
-                                                            title="Previous Change"
-                                                        >
-                                                            <ChevronUp className="w-3.5 h-3.5" />
-                                                        </button>
-                                                        <span className="text-[9px] font-bold text-slate-500 px-1 min-w-[3rem] text-center">
-                                                            {calculatedChangeCount > 0 ? (currentChangeIndex === -1 ? 0 : currentChangeIndex + 1) : 0} / {calculatedChangeCount}
-                                                        </span>
-                                                        <button 
-                                                            onClick={() => scrollToChange('next')}
-                                                            className="p-1 text-slate-500 hover:text-indigo-600 hover:bg-white rounded transition-all"
-                                                            title="Next Change"
-                                                        >
-                                                            <ChevronDown className="w-3.5 h-3.5" />
-                                                        </button>
+                                                {viewMode === 'diff' && calculatedChangeCount > 0 && (
+                                                    <div className="flex items-center gap-2 bg-slate-100 border border-slate-200/80 rounded-xl px-2.5 py-1 shadow-2xs ml-2">
+                                                        <div className="flex items-center gap-2 pr-2 border-r border-slate-200">
+                                                            <div className="w-5 h-5 rounded-md bg-indigo-50 flex items-center justify-center shrink-0">
+                                                                <GitCompare className="w-3 h-3 text-indigo-600" strokeWidth={2.5} />
+                                                            </div>
+                                                            <div className="flex items-center gap-1">
+                                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Changes:</span>
+                                                                <span className="text-xs font-black text-slate-900 font-mono tabular-nums">
+                                                                    {currentChangeIndex >= 0 ? currentChangeIndex + 1 : 1} <span className="text-slate-300">/</span> {calculatedChangeCount}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-0.5">
+                                                            <button 
+                                                                onClick={() => scrollToChange('prev')}
+                                                                className="p-1 hover:bg-slate-200 active:bg-slate-300 rounded transition-all text-slate-600 hover:text-indigo-600 group"
+                                                                title="Previous Change"
+                                                            >
+                                                                <ChevronUp className="w-4 h-4 group-active:-translate-y-0.5 transition-transform" strokeWidth={2.5} />
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => scrollToChange('next')}
+                                                                className="p-1 hover:bg-slate-200 active:bg-slate-300 rounded transition-all text-slate-600 hover:text-indigo-600 group"
+                                                                title="Next Change"
+                                                            >
+                                                                <ChevronDown className="w-4 h-4 group-active:translate-y-0.5 transition-transform" strokeWidth={2.5} />
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                 )}
                                             </div>

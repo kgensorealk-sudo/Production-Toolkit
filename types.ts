@@ -89,6 +89,7 @@ export enum ToolId {
     STRUCTURAL_ARCHITECT = 'structuralArchitect',
     REF_SORTER = 'refSorter',
     WORD_TO_XML = 'wordToXml',
+    REF_TAGGER_EXP = 'refTaggerExp',
     DOCS = 'docs',
     DASHBOARD = 'dashboard'
 }

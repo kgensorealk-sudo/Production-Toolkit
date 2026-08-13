@@ -12,7 +12,8 @@ import {
     Cpu,
     Database,
     Link,
-    Sigma
+    Sigma,
+    Tag
 } from 'lucide-react';
 import { ToolId } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -163,6 +164,7 @@ const Experimental: React.FC = () => {
     };
 
     const EXPERIMENTAL_TOOLS = [
+        { id: ToolId.REF_TAGGER_EXP, title: "Reference XML Tagger Pro (Experimental)", desc: "Batch transforms plain-text reference lists into fully structured, schema-compliant XML bibliography nodes.", iconBg: "bg-emerald-50", iconText: "text-emerald-600", borderColor: "bg-emerald-500", Icon: Tag, isExperimental: true },
         { id: ToolId.XML_RENUMBER_EXP, title: "XML Normalizer Pro (Experimental)", desc: "Advanced sequential citation renumbering with alphabetical sorting, range compression, and other-ref isolation.", iconBg: "bg-blue-50", iconText: "text-blue-600", borderColor: "bg-blue-500", Icon: Database, isExperimental: true },
         { id: ToolId.CITATION_LINKER_EXP, title: "Citation Linker Pro MAX", desc: "Multi-entity citation linker with fuzzy author/year resolution, float cross-refs, and auto-text detection.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: Link, isExperimental: true },
         { id: ToolId.FORMULA_EDITOR_EXP, title: "Formula Studio Pro (Experimental)", desc: "Interactive MathML formula editor with real-time two-way XML rendering, inline edit sync, and tag auto-repair.", iconBg: "bg-purple-50", iconText: "text-purple-600", borderColor: "bg-purple-500", Icon: Sigma, isExperimental: true }

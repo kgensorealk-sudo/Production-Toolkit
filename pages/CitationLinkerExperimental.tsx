@@ -1873,7 +1873,7 @@ const CitationLinkerExperimental: React.FC = () => {
                 {step === 'result' && (
                     <div className="flex flex-col h-full animate-fade-in">
                         {/* Result View Tab Header */}
-                        <div className="bg-slate-50 px-8 py-3 border-b border-slate-200 flex justify-between items-center">
+                        <div className="bg-slate-50/95 backdrop-blur-md px-8 py-3 border-b border-slate-200 flex justify-between items-center sticky top-0 z-30 shadow-xs">
                             <div className="flex items-center gap-2 bg-slate-200/60 p-1 rounded-xl">
                                 <button
                                     onClick={() => setActiveTab('xml')}

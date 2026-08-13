@@ -261,7 +261,12 @@ const CitationLinker: React.FC = () => {
                             <th colSpan={2} className="px-6 py-3 text-left text-[11px] font-extrabold text-slate-500 uppercase tracking-widest bg-slate-100/95 backdrop-blur border-l border-slate-200">Linked XML</th>
                         </tr>
                     </thead>
-                    <tbody>{rows}</tbody>
+                    <tbody>
+                        {rows}
+                        <tr>
+                            <td colSpan={4} className="h-32 bg-slate-50/30"></td>
+                        </tr>
+                    </tbody>
                 </table>
             </div>
         );
@@ -922,25 +927,48 @@ const CitationLinker: React.FC = () => {
 
                 {step === 'result' && (
                     <div className="flex flex-col h-full animate-fade-in overflow-hidden">
-                        <div className="bg-slate-50 px-10 py-5 border-b border-slate-200 flex justify-between items-center">
-                            <h3 className="font-black text-slate-900 text-xs uppercase tracking-widest">Validated Protocol Stream</h3>
+                        <div className="bg-slate-50/95 backdrop-blur-md px-10 py-5 border-b border-slate-200 flex justify-between items-center shrink-0 sticky top-0 z-30 shadow-xs">
+                            <h3 className="font-black text-slate-900 text-xs uppercase tracking-widest flex items-center gap-2">
+                                Validated Protocol Stream
+                            </h3>
                             <div className="flex items-center gap-6">
-                                {activeTab === 'diff' && totalChanges > 0 && (
-                                    <div className="flex items-center gap-3 bg-white px-4 py-1.5 rounded-xl border border-slate-200 shadow-sm">
-                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-2">Changes: {currentChangeIndex + 1}/{totalChanges}</span>
-                                        <div className="flex gap-1">
+                                {totalChanges > 0 && (
+                                    <div className="flex items-center gap-3 bg-white px-4 py-1.5 rounded-xl border border-slate-200/80 shadow-xs">
+                                        <div className="flex items-center gap-1.5 border-r border-slate-200 pr-3">
+                                            <GitCompare className="w-4 h-4 text-indigo-600" strokeWidth={2.5} />
+                                            <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider">
+                                                Changes: <span className="text-indigo-600">{currentChangeIndex >= 0 ? currentChangeIndex + 1 : 0}</span> / {totalChanges}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
                                             <button 
-                                                onClick={() => scrollToChange('prev')}
-                                                className="p-1 hover:bg-slate-100 rounded-md text-slate-500 transition-colors"
-                                                title="Previous Change"
+                                                onClick={() => {
+                                                    if (activeTab !== 'diff') {
+                                                        setActiveTab('diff');
+                                                        setTimeout(() => scrollToChange('prev'), 50);
+                                                    } else {
+                                                        scrollToChange('prev');
+                                                    }
+                                                }}
+                                                className="p-1 hover:bg-slate-100 rounded-md text-slate-600 hover:text-indigo-600 transition-colors flex items-center gap-1 text-[10px] font-extrabold uppercase"
+                                                title="Previous Change (Up Arrow / Alt+P)"
                                             >
                                                 <ChevronUp className="w-4 h-4" />
+                                                <span className="hidden sm:inline">Prev</span>
                                             </button>
                                             <button 
-                                                onClick={() => scrollToChange('next')}
-                                                className="p-1 hover:bg-slate-100 rounded-md text-slate-500 transition-colors"
-                                                title="Next Change"
+                                                onClick={() => {
+                                                    if (activeTab !== 'diff') {
+                                                        setActiveTab('diff');
+                                                        setTimeout(() => scrollToChange('next'), 50);
+                                                    } else {
+                                                        scrollToChange('next');
+                                                    }
+                                                }}
+                                                className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white rounded-lg transition-all text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-xs"
+                                                title="Next Change (Down Arrow / Alt+N)"
                                             >
+                                                <span>Next</span>
                                                 <ChevronDown className="w-4 h-4" />
                                             </button>
                                         </div>
@@ -952,23 +980,23 @@ const CitationLinker: React.FC = () => {
                                 </div>
                             </div>
                         </div>
-                        <div className="bg-white px-10 pt-4 border-b border-slate-100 flex space-x-4">
+                        <div className="bg-white px-10 pt-4 border-b border-slate-100 flex space-x-4 shrink-0 sticky top-[65px] z-20">
                             <button onClick={() => setActiveTab('xml')} className={`px-8 py-4 text-[11px] font-black uppercase tracking-widest rounded-t-2xl transition-all border-t border-x ${activeTab === 'xml' ? 'bg-slate-50 text-indigo-600 border-slate-200 translate-y-[1px]' : 'bg-white text-slate-400 border-transparent'}`}>Corrected XML</button>
                             <button onClick={() => setActiveTab('diff')} className={`px-8 py-4 text-[11px] font-black uppercase tracking-widest rounded-t-2xl transition-all border-t border-x ${activeTab === 'diff' ? 'bg-slate-50 text-rose-600 border-slate-200 translate-y-[1px]' : 'bg-white text-slate-400 border-transparent'}`}>Audit Log (Diff)</button>
                         </div>
-                        <div className="flex-grow relative bg-slate-50 overflow-hidden flex flex-col">
+                        <div className="flex-grow relative bg-slate-50 overflow-hidden flex flex-col min-h-0">
                             {activeTab === 'xml' && (
-                                <div className="h-full relative p-8">
+                                <div className="h-full relative p-8 pb-32 overflow-auto">
                                     <textarea 
                                         readOnly
                                         value={output}
-                                        className="h-full w-full p-10 font-mono text-[11px] bg-white rounded-[2rem] border border-slate-200 shadow-inner focus:ring-0 resize-none leading-relaxed outline-none"
+                                        className="h-full w-full p-10 pb-32 font-mono text-[11px] bg-white rounded-[2rem] border border-slate-200 shadow-inner focus:ring-0 resize-none leading-relaxed outline-none"
                                     />
                                 </div>
                             )}
                             {activeTab === 'diff' && (
                                 <div className="absolute inset-0 flex flex-col">
-                                    <div ref={diffContainerRef} className="flex-grow overflow-auto custom-scrollbar">
+                                    <div ref={diffContainerRef} className="flex-grow overflow-auto custom-scrollbar pb-32">
                                         {diffElements}
                                     </div>
                                     <AnimatePresence>

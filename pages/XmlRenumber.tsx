@@ -719,20 +719,54 @@ const XmlRenumber: React.FC = () => {
                          </div>
                     </div>
                     
-                    <div className="bg-white px-2 pt-2 border-b border-slate-100 flex space-x-1 shrink-0">
-                         {['raw', 'diff', 'report'].map((tab) => (
-                             <button 
-                                key={tab}
-                                onClick={() => setActiveTab(tab as any)} 
-                                className={`flex-1 py-2 text-xs font-bold rounded-t-lg transition-all duration-200 border-t border-x ${activeTab === tab 
-                                    ? 'bg-slate-50 text-indigo-600 border-slate-200 translate-y-[1px]' 
-                                    : 'bg-white text-slate-500 border-transparent hover:bg-slate-50 hover:text-slate-700'}`}
-                             >
-                                {tab === 'raw' && 'Raw XML'}
-                                {tab === 'diff' && 'Diff View'}
-                                {tab === 'report' && 'QC Report'}
-                             </button>
-                         ))}
+                    <div className="bg-white px-2 pt-2 border-b border-slate-100 flex items-center justify-between shrink-0">
+                         <div className="flex space-x-1 flex-grow max-w-md">
+                             {['raw', 'diff', 'report'].map((tab) => (
+                                 <button 
+                                    key={tab}
+                                    onClick={() => setActiveTab(tab as any)} 
+                                    className={`flex-1 py-2 text-xs font-bold rounded-t-lg transition-all duration-200 border-t border-x ${activeTab === tab 
+                                        ? 'bg-slate-50 text-indigo-600 border-slate-200 translate-y-[1px]' 
+                                        : 'bg-white text-slate-500 border-transparent hover:bg-slate-50 hover:text-slate-700'}`}
+                                 >
+                                    {tab === 'raw' && 'Raw XML'}
+                                    {tab === 'diff' && 'Diff View'}
+                                    {tab === 'report' && 'QC Report'}
+                                 </button>
+                             ))}
+                         </div>
+
+                         {activeTab === 'diff' && totalChanges > 0 && (
+                             <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 shadow-2xs mb-1">
+                                 <div className="flex items-center gap-2 pr-2 border-r border-slate-200">
+                                     <div className="w-5 h-5 rounded-md bg-indigo-50 flex items-center justify-center shrink-0">
+                                         <GitCompare className="w-3 h-3 text-indigo-600" strokeWidth={2.5} />
+                                     </div>
+                                     <div className="flex items-center gap-1">
+                                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Changes:</span>
+                                         <span className="text-xs font-black text-slate-900 font-mono tabular-nums">
+                                             {currentChangeIndex} <span className="text-slate-300">/</span> {totalChanges}
+                                         </span>
+                                     </div>
+                                 </div>
+                                 <div className="flex items-center gap-0.5">
+                                     <button 
+                                         onClick={() => scrollToChange('prev')}
+                                         className="p-1 hover:bg-slate-200 active:bg-slate-300 rounded transition-all text-slate-600 hover:text-indigo-600 group"
+                                         title="Previous Change (Shift+Tab)"
+                                     >
+                                         <ChevronUp className="w-4 h-4 group-active:-translate-y-0.5 transition-transform" strokeWidth={2.5} />
+                                     </button>
+                                     <button 
+                                         onClick={() => scrollToChange('next')}
+                                         className="p-1 hover:bg-slate-200 active:bg-slate-300 rounded transition-all text-slate-600 hover:text-indigo-600 group"
+                                         title="Next Change (Tab)"
+                                     >
+                                         <ChevronDown className="w-4 h-4 group-active:translate-y-0.5 transition-transform" strokeWidth={2.5} />
+                                     </button>
+                                 </div>
+                             </div>
+                         )}
                     </div>
 
                     <div className="flex-grow relative bg-slate-50 overflow-hidden flex flex-col">
@@ -756,46 +790,6 @@ const XmlRenumber: React.FC = () => {
                                             </div>
                                         )}
                                     </div>
-
-                                    {/* Floating Diff Navigation */}
-                                    <AnimatePresence>
-                                        {totalChanges > 0 && (
-                                            <motion.div 
-                                                initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                                                animate={{ opacity: 1, y: 0, scale: 1 }}
-                                                exit={{ opacity: 0, y: 20, scale: 0.95 }}
-                                                className="absolute bottom-8 right-8 flex items-center gap-2 bg-white/90 backdrop-blur-xl border border-slate-200/50 rounded-2xl p-2 shadow-[0_20px_50px_rgba(0,0,0,0.15)] z-30 ring-1 ring-slate-900/5"
-                                            >
-                                                <div className="flex items-center gap-1 pr-2 border-r border-slate-100">
-                                                    <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center">
-                                                        <GitCompare className="w-4 h-4 text-indigo-600" strokeWidth={2.5} />
-                                                    </div>
-                                                    <div className="flex flex-col px-2">
-                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter leading-none mb-0.5">Changes</span>
-                                                        <span className="text-xs font-black text-slate-900 tabular-nums leading-none">
-                                                            {currentChangeIndex} <span className="text-slate-300 mx-0.5">/</span> {totalChanges}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                                <div className="flex items-center gap-1">
-                                                    <button 
-                                                        onClick={() => scrollToChange('prev')}
-                                                        className="p-2.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition-all text-slate-600 hover:text-indigo-600 group"
-                                                        title="Previous Change (Shift+Tab)"
-                                                    >
-                                                        <ChevronUp className="w-5 h-5 group-active:-translate-y-0.5 transition-transform" strokeWidth={3} />
-                                                    </button>
-                                                    <button 
-                                                        onClick={() => scrollToChange('next')}
-                                                        className="p-2.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition-all text-slate-600 hover:text-indigo-600 group"
-                                                        title="Next Change (Tab)"
-                                                    >
-                                                        <ChevronDown className="w-5 h-5 group-active:translate-y-0.5 transition-transform" strokeWidth={3} />
-                                                    </button>
-                                                </div>
-                                            </motion.div>
-                                        )}
-                                    </AnimatePresence>
                                 </div>
                             )}
 

@@ -99,12 +99,37 @@ const UncitedRefCleaner: React.FC = () => {
         if (nextIndex > totalChanges) nextIndex = 1;
         if (nextIndex < 1) nextIndex = totalChanges;
 
-        const targetRow = diffContainerRef.current.querySelector(`tr[data-change-index-group="${nextIndex}"]`);
-        if (targetRow) {
-            targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const targetRow = diffContainerRef.current.querySelector(`tr[data-change-index-group="${nextIndex}"]`) as HTMLElement;
+        if (targetRow && diffContainerRef.current) {
+            const container = diffContainerRef.current;
+            const containerRect = container.getBoundingClientRect();
+            const targetRect = targetRow.getBoundingClientRect();
+            const relativeTop = targetRect.top - containerRect.top + container.scrollTop;
+            const targetScrollTop = relativeTop - (containerRect.height / 2) + (targetRect.height / 2);
+            
+            container.scrollTo({
+                top: Math.max(0, targetScrollTop),
+                behavior: 'smooth'
+            });
             setCurrentChangeIndex(nextIndex);
         }
     };
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (step === 'result' && activeTab === 'diff') {
+                if (e.key === 'ArrowDown' || (e.altKey && e.key.toLowerCase() === 'n')) {
+                    e.preventDefault();
+                    scrollToChange('next');
+                } else if (e.key === 'ArrowUp' || (e.altKey && e.key.toLowerCase() === 'p')) {
+                    e.preventDefault();
+                    scrollToChange('prev');
+                }
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [step, activeTab, currentChangeIndex, totalChanges]);
 
     useEffect(() => {
         if (!diffContainerRef.current) return;
@@ -568,22 +593,68 @@ const UncitedRefCleaner: React.FC = () => {
 
                 {step === 'result' && (
                     <div className="flex flex-col h-full animate-fade-in">
-                        <div className="bg-slate-50 px-10 py-5 border-b border-slate-200 flex justify-between items-center">
-                            <h3 className="font-black text-slate-900 text-xs uppercase tracking-widest">Post-Processing Audit</h3>
-                            <button onClick={() => { setStep('input'); setUncitedRefs([]); }} className="text-xs font-bold text-indigo-600 hover:underline uppercase tracking-widest">New Session</button>
+                        <div className="bg-slate-50/95 backdrop-blur-md px-10 py-5 border-b border-slate-200 flex justify-between items-center shrink-0 sticky top-0 z-30 shadow-xs">
+                            <h3 className="font-black text-slate-900 text-xs uppercase tracking-widest flex items-center gap-2">
+                                Post-Processing Audit
+                            </h3>
+                            <div className="flex items-center gap-6">
+                                {totalChanges > 0 && (
+                                    <div className="flex items-center gap-3 bg-white px-4 py-1.5 rounded-xl border border-slate-200/80 shadow-xs">
+                                        <div className="flex items-center gap-1.5 border-r border-slate-200 pr-3">
+                                            <GitCompare className="w-4 h-4 text-indigo-600" strokeWidth={2.5} />
+                                            <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider">
+                                                Changes: <span className="text-indigo-600">{currentChangeIndex > 0 ? currentChangeIndex : 1}</span> / {totalChanges}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <button 
+                                                onClick={() => {
+                                                    if (activeTab !== 'diff') {
+                                                        setActiveTab('diff');
+                                                        setTimeout(() => scrollToChange('prev'), 50);
+                                                    } else {
+                                                        scrollToChange('prev');
+                                                    }
+                                                }}
+                                                className="p-1 hover:bg-slate-100 rounded-md text-slate-600 hover:text-indigo-600 transition-colors flex items-center gap-1 text-[10px] font-extrabold uppercase"
+                                                title="Previous Change"
+                                            >
+                                                <ChevronUp className="w-4 h-4" />
+                                                <span className="hidden sm:inline">Prev</span>
+                                            </button>
+                                            <button 
+                                                onClick={() => {
+                                                    if (activeTab !== 'diff') {
+                                                        setActiveTab('diff');
+                                                        setTimeout(() => scrollToChange('next'), 50);
+                                                    } else {
+                                                        scrollToChange('next');
+                                                    }
+                                                }}
+                                                className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white rounded-lg transition-all text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-xs"
+                                                title="Next Change"
+                                            >
+                                                <span>Next</span>
+                                                <ChevronDown className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                                <button onClick={() => { setStep('input'); setUncitedRefs([]); }} className="text-xs font-bold text-indigo-600 hover:underline uppercase tracking-widest">New Session</button>
+                            </div>
                         </div>
-                                <div className="bg-white px-10 pt-4 border-b border-slate-100 flex space-x-4">
-                                    {['xml', 'report', 'diff', 'queries'].map(t => (
-                                        <button 
-                                            key={t} 
-                                            onClick={() => setActiveTab(t as any)} 
-                                            className={`px-8 py-4 text-[11px] font-black uppercase tracking-widest rounded-t-2xl transition-all border-t border-x ${activeTab === t ? 'bg-slate-50 text-rose-600 border-slate-200 translate-y-[1px]' : 'bg-white text-slate-400 border-transparent'}`}
-                                        >
-                                            {t === 'xml' ? 'Final XML Result' : (t === 'report' ? 'Action Summary' : (t === 'diff' ? 'Side-by-Side Diff' : 'JM Queries'))}
-                                        </button>
-                                    ))}
-                                </div>
-                        <div className="flex-grow relative bg-slate-50 overflow-hidden flex flex-col">
+                        <div className="bg-white/95 backdrop-blur-md px-10 pt-4 border-b border-slate-100 flex space-x-4 shrink-0 sticky top-[65px] z-20">
+                            {['xml', 'report', 'diff', 'queries'].map(t => (
+                                <button 
+                                    key={t} 
+                                    onClick={() => setActiveTab(t as any)} 
+                                    className={`px-8 py-4 text-[11px] font-black uppercase tracking-widest rounded-t-2xl transition-all border-t border-x ${activeTab === t ? 'bg-slate-50 text-rose-600 border-slate-200 translate-y-[1px]' : 'bg-white text-slate-400 border-transparent'}`}
+                                >
+                                    {t === 'xml' ? 'Final XML Result' : (t === 'report' ? 'Action Summary' : (t === 'diff' ? 'Side-by-Side Diff' : 'JM Queries'))}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="flex-grow relative bg-slate-50 overflow-hidden flex flex-col min-h-0">
                             {activeTab === 'xml' && (
                                 <div className="h-full relative p-8">
                                     <div className="absolute top-12 right-12 z-10">
@@ -653,7 +724,7 @@ const UncitedRefCleaner: React.FC = () => {
 
                             {activeTab === 'diff' && (
                                 <div className="absolute inset-0 flex flex-col overflow-hidden">
-                                    <div ref={diffContainerRef} className="flex-grow overflow-auto custom-scrollbar">
+                                    <div ref={diffContainerRef} className="flex-grow overflow-auto custom-scrollbar pb-16">
                                         <div className="rounded-lg border border-slate-200 overflow-hidden bg-white shadow-inner m-4">
                                             <table className="w-full text-sm font-mono border-collapse table-fixed">
                                                 <colgroup><col className="w-10 bg-slate-50" /><col className="w-[calc(50%-2.5rem)]" /><col className="w-10 bg-slate-50 border-l" /><col className="w-[calc(50%-2.5rem)]" /></colgroup>
@@ -661,45 +732,6 @@ const UncitedRefCleaner: React.FC = () => {
                                             </table>
                                         </div>
                                     </div>
-
-                                    <AnimatePresence>
-                                        {totalChanges > 0 && (
-                                            <motion.div 
-                                                initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                                                animate={{ opacity: 1, y: 0, scale: 1 }}
-                                                exit={{ opacity: 0, y: 20, scale: 0.95 }}
-                                                className="absolute bottom-8 right-8 flex items-center gap-2 bg-white/90 backdrop-blur-xl border border-slate-200/50 rounded-2xl p-2 shadow-[0_20px_50px_rgba(0,0,0,0.15)] z-30 ring-1 ring-slate-900/5"
-                                            >
-                                                <div className="flex items-center gap-1 pr-2 border-r border-slate-100">
-                                                    <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center">
-                                                        <GitCompare className="w-4 h-4 text-indigo-600" strokeWidth={2.5} />
-                                                    </div>
-                                                    <div className="flex flex-col px-2">
-                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter leading-none mb-0.5">Changes</span>
-                                                        <span className="text-xs font-black text-slate-900 tabular-nums leading-none">
-                                                            {currentChangeIndex} <span className="text-slate-300 mx-0.5">/</span> {totalChanges}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                                <div className="flex items-center gap-1">
-                                                    <button 
-                                                        onClick={() => scrollToChange('prev')}
-                                                        className="p-2.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition-all text-slate-600 hover:text-indigo-600 group"
-                                                        title="Previous Change (Shift+Tab)"
-                                                    >
-                                                        <ChevronUp className="w-5 h-5 group-active:-translate-y-0.5 transition-transform" strokeWidth={3} />
-                                                    </button>
-                                                    <button 
-                                                        onClick={() => scrollToChange('next')}
-                                                        className="p-2.5 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition-all text-slate-600 hover:text-indigo-600 group"
-                                                        title="Next Change (Tab)"
-                                                    >
-                                                        <ChevronDown className="w-5 h-5 group-active:translate-y-0.5 transition-transform" strokeWidth={3} />
-                                                    </button>
-                                                </div>
-                                            </motion.div>
-                                        )}
-                                    </AnimatePresence>
                                 </div>
                             )}
                             {activeTab === 'queries' && (

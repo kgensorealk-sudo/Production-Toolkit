@@ -1352,51 +1352,43 @@ const XmlRenumberExperimental: React.FC = () => {
                                                 <Eye size={13} /> {compactDiffOnly ? 'Compact Mode (Changes Only)' : 'Show Full Context'}
                                             </button>
                                         </div>
+
+                                        {totalChanges > 0 && (
+                                            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 shadow-2xs">
+                                                <div className="flex items-center gap-2 pr-2 border-r border-slate-200">
+                                                    <div className="w-5 h-5 rounded-md bg-blue-50 flex items-center justify-center shrink-0">
+                                                        <GitCompare className="w-3 h-3 text-blue-600" strokeWidth={2.5} />
+                                                    </div>
+                                                    <div className="flex items-center gap-1">
+                                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Changes:</span>
+                                                        <span className="text-xs font-black text-slate-900 font-mono tabular-nums">
+                                                            {currentChangeIndex >= 0 ? currentChangeIndex + 1 : 0} <span className="text-slate-300">/</span> {totalChanges}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    <button 
+                                                        onClick={() => scrollToChange('prev')}
+                                                        className="p-1 hover:bg-slate-200 active:bg-slate-300 rounded transition-all text-slate-600 hover:text-blue-600 group"
+                                                        title="Previous Change (Up Arrow / Alt+P)"
+                                                    >
+                                                        <ChevronUp className="w-4 h-4 group-active:-translate-y-0.5 transition-transform" strokeWidth={2.5} />
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => scrollToChange('next')}
+                                                        className="p-1 hover:bg-slate-200 active:bg-slate-300 rounded transition-all text-slate-600 hover:text-blue-600 group"
+                                                        title="Next Change (Down Arrow / Alt+N)"
+                                                    >
+                                                        <ChevronDown className="w-4 h-4 group-active:translate-y-0.5 transition-transform" strokeWidth={2.5} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="relative">
                                         <div ref={diffContainerRef} className="max-h-[550px] overflow-y-auto border border-slate-200 rounded-2xl">
                                             {diffElements}
                                         </div>
-                                        <AnimatePresence>
-                                            {totalChanges > 0 && (
-                                                <motion.div 
-                                                    initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                                                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                                                    exit={{ opacity: 0, y: 20, scale: 0.95 }}
-                                                    className="absolute bottom-6 right-8 flex items-center gap-2 bg-white/95 backdrop-blur-xl border border-slate-200/80 rounded-2xl p-2 shadow-[0_20px_50px_rgba(0,0,0,0.15)] z-30 ring-1 ring-slate-900/5"
-                                                >
-                                                    <div className="flex items-center gap-2 pr-2.5 border-r border-slate-100">
-                                                        <div className="w-8 h-8 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
-                                                            <GitCompare className="w-4 h-4 text-blue-600" strokeWidth={2.5} />
-                                                        </div>
-                                                        <div className="flex flex-col px-1">
-                                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter leading-none mb-0.5">Changes</span>
-                                                            <span className="text-xs font-black text-slate-900 tabular-nums leading-none">
-                                                                {currentChangeIndex >= 0 ? currentChangeIndex + 1 : 0} <span className="text-slate-300 mx-0.5">/</span> {totalChanges}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex items-center gap-1.5">
-                                                        <button 
-                                                            onClick={() => scrollToChange('prev')}
-                                                            className="p-2 hover:bg-slate-100 active:bg-slate-200 rounded-xl transition-all text-slate-600 hover:text-blue-600 group flex items-center gap-1 font-bold text-xs"
-                                                            title="Previous Change (Up Arrow / Alt+P)"
-                                                        >
-                                                            <ChevronUp className="w-4 h-4 group-active:-translate-y-0.5 transition-transform" strokeWidth={3} />
-                                                            <span className="hidden sm:inline">Prev</span>
-                                                        </button>
-                                                        <button 
-                                                            onClick={() => scrollToChange('next')}
-                                                            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl transition-all font-black text-xs flex items-center gap-1.5 shadow-md shadow-blue-500/20 active:scale-95 group"
-                                                            title="Next Change (Down Arrow / Alt+N)"
-                                                        >
-                                                            <span>Next Change</span>
-                                                            <ChevronDown className="w-4 h-4 group-active:translate-y-0.5 transition-transform" strokeWidth={3} />
-                                                        </button>
-                                                    </div>
-                                                </motion.div>
-                                            )}
-                                        </AnimatePresence>
                                     </div>
                                 </div>
                             )}

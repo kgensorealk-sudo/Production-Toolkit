@@ -1,6 +1,8 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router';
+import { diffLines, diffWordsWithSpace, Change } from 'diff';
+import { ChevronUp, ChevronDown, GitCompare } from 'lucide-react';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
@@ -13,6 +15,44 @@ interface ReportItem {
     action: 'Kept' | 'Removed' | 'Restored';
 }
 
+const escapeHtml = (unsafe: string) => unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+const buildLines = (diffParts: Change[], isLeft: boolean) => {
+    let lines: string[] = [];
+    let currentLine = "";
+    let activeClass: string | null = null;
+
+    const append = (text: string, cls: string | null) => {
+        if (!text) return;
+        for (let i = 0; i < text.length; i++) {
+            const char = text[i];
+            if (char === '\n') {
+                if (activeClass) currentLine += '</span>';
+                lines.push(currentLine);
+                currentLine = "";
+                if (activeClass) currentLine += `<span class="${activeClass}">`;
+            } else {
+                if (cls !== activeClass) {
+                    if (activeClass) currentLine += '</span>';
+                    activeClass = cls;
+                    if (activeClass) currentLine += `<span class="${activeClass}">`;
+                }
+                currentLine += escapeHtml(char);
+            }
+        }
+    };
+
+    diffParts.forEach(part => {
+        if (part.removed && isLeft) append(part.value, 'bg-rose-200 text-rose-950 font-semibold line-through decoration-rose-800/60 px-0.5 rounded');
+        else if (part.added && !isLeft) append(part.value, 'bg-emerald-200 text-emerald-950 font-bold px-0.5 rounded');
+        else if (!part.added && !part.removed) append(part.value, null);
+    });
+
+    if (activeClass) currentLine += '</span>';
+    lines.push(currentLine);
+    return lines;
+};
+
 const TagCleaner: React.FC = () => {
     const location = useLocation();
     const navigate = useNavigate();
@@ -20,9 +60,133 @@ const TagCleaner: React.FC = () => {
     const [output, setOutput] = useLocalStorage<string>('tag_cleaner_output', '');
     const [lastProcessedInput, setLastProcessedInput] = useLocalStorage<string>('tag_cleaner_last_input', '');
     const [reportData, setReportData] = useState<ReportItem[]>([]);
-    const [activeTab, setActiveTab] = useState<'output' | 'report'>('output');
+    const [activeTab, setActiveTab] = useState<'output' | 'report' | 'diff'>('output');
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+
+    // Diff State
+    const [rowsData, setRowsData] = useState<any[]>([]);
+    const [changeCount, setChangeCount] = useState(0);
+    const [currentChangeIndex, setCurrentChangeIndex] = useState(0);
+    const diffContainerRef = useRef<HTMLDivElement>(null);
+
+    const generateDiff = useCallback((original: string, modified: string) => {
+        if (!original && !modified) {
+            setRowsData([]);
+            setChangeCount(0);
+            setCurrentChangeIndex(0);
+            return;
+        }
+
+        const diff = diffLines(original, modified);
+        let localChangeCount = 0;
+        let rows: any[] = [];
+        let leftLineNum = 1;
+        let rightLineNum = 1;
+
+        let i = 0;
+        while (i < diff.length) {
+            const current = diff[i];
+            let type = 'equal';
+            let leftVal = '', rightVal = '';
+
+            if (current.removed && diff[i+1]?.added) {
+                type = 'replace';
+                leftVal = current.value;
+                rightVal = diff[i+1].value;
+                i += 2;
+            } else if (current.removed) {
+                type = 'delete';
+                leftVal = current.value;
+                i++;
+            } else if (current.added) {
+                type = 'insert';
+                rightVal = current.value;
+                i++;
+            } else {
+                leftVal = rightVal = current.value;
+                i++;
+            }
+
+            let leftLines: string[] = [];
+            let rightLines: string[] = [];
+
+            if (type === 'replace') {
+                const wordDiff = diffWordsWithSpace(leftVal, rightVal);
+                leftLines = buildLines(wordDiff, true);
+                rightLines = buildLines(wordDiff, false);
+            } else if (type === 'delete') {
+                leftLines = buildLines([{ removed: true, value: leftVal } as Change], true);
+            } else if (type === 'insert') {
+                rightLines = buildLines([{ added: true, value: rightVal } as Change], false);
+            } else {
+                const lines = leftVal.split('\n');
+                if (lines.length > 0 && lines[lines.length-1] === '') lines.pop(); 
+                leftLines = lines.map(escapeHtml);
+                rightLines = [...leftLines];
+            }
+
+            const maxRows = Math.max(leftLines.length, rightLines.length);
+            for (let r = 0; r < maxRows; r++) {
+                const lContent = leftLines[r];
+                const rContent = rightLines[r];
+                const lNum = lContent !== undefined ? leftLineNum++ : '';
+                const rNum = rContent !== undefined ? rightLineNum++ : '';
+                
+                const isChange = type !== 'equal';
+                const isFirstInBlock = isChange && r === 0;
+                if (isFirstInBlock) localChangeCount++;
+
+                rows.push({
+                    id: `${i}-${r}`,
+                    type,
+                    lContent,
+                    rContent,
+                    lNum,
+                    rNum,
+                    isFirstInBlock,
+                    changeIndex: isFirstInBlock ? localChangeCount : undefined,
+                    changeGroup: isChange ? localChangeCount : undefined
+                });
+            }
+        }
+        setRowsData(rows);
+        setChangeCount(localChangeCount);
+        setCurrentChangeIndex(localChangeCount > 0 ? 1 : 0);
+    }, []);
+
+    const scrollToChange = (direction: 'next' | 'prev') => {
+        if (!diffContainerRef.current || changeCount === 0) return;
+
+        let nextIndex = direction === 'next' ? currentChangeIndex + 1 : currentChangeIndex - 1;
+        if (nextIndex > changeCount) nextIndex = 1;
+        if (nextIndex < 1) nextIndex = changeCount;
+
+        const targetRow = diffContainerRef.current.querySelector(`tr[data-change-index-group="${nextIndex}"]`) as HTMLElement | null;
+        if (targetRow && diffContainerRef.current) {
+            const container = diffContainerRef.current;
+            const targetTop = targetRow.offsetTop;
+            const containerHeight = container.clientHeight;
+            const rowHeight = targetRow.clientHeight;
+            
+            container.scrollTo({
+                top: Math.max(0, targetTop - (containerHeight / 2) + (rowHeight / 2)),
+                behavior: 'smooth'
+            });
+            setCurrentChangeIndex(nextIndex);
+        }
+    };
+
+    useEffect(() => {
+        if (!diffContainerRef.current) return;
+        const oldHighlights = diffContainerRef.current.querySelectorAll('.active-change-highlight');
+        oldHighlights.forEach(el => el.classList.remove('active-change-highlight', 'bg-amber-100/60', 'ring-1', 'ring-amber-300', 'ring-inset', 'z-10', 'relative'));
+
+        if (currentChangeIndex === 0) return;
+
+        const newHighlights = diffContainerRef.current.querySelectorAll(`[data-change-index-group="${currentChangeIndex}"]`);
+        newHighlights.forEach(el => el.classList.add('active-change-highlight', 'bg-amber-100/60', 'ring-1', 'ring-amber-300', 'ring-inset', 'z-10', 'relative'));
+    }, [currentChangeIndex, rowsData]);
 
     useEffect(() => {
         if (location.state?.transferredXml) {
@@ -35,6 +199,12 @@ const TagCleaner: React.FC = () => {
             navigate(location.pathname, { replace: true, state: {} });
         }
     }, [location, navigate, setInput]);
+
+    useEffect(() => {
+        if (activeTab === 'diff' && input && output) {
+            generateDiff(input, output);
+        }
+    }, [activeTab, input, output, generateDiff]);
 
     const processTags = (action: 'accept' | 'reject') => {
         if (!input.trim()) {
@@ -98,6 +268,7 @@ const TagCleaner: React.FC = () => {
             setOutput(current);
             setLastProcessedInput(input);
             setReportData(newReport);
+            generateDiff(input, current);
             
             // If we have changes, show the report stats in toast, otherwise just success
             if (newReport.length > 0) {
@@ -153,20 +324,64 @@ const TagCleaner: React.FC = () => {
 
     const isStale = output && input !== lastProcessedInput;
 
+    const diffRows = React.useMemo(() => {
+        return rowsData.map(row => {
+            const { id, type, lContent, rContent, lNum, rNum, changeIndex, changeGroup } = row;
+            let lClass = lContent !== undefined && type === 'delete' ? 'bg-rose-50/70' : (type === 'replace' ? 'bg-rose-50/40' : '');
+            let rClass = rContent !== undefined && type === 'insert' ? 'bg-emerald-50/70' : (type === 'replace' ? 'bg-emerald-50/40' : '');
+            
+            return (
+                <tr 
+                    key={id} 
+                    className="border-b border-slate-100 hover:bg-slate-50 transition-colors duration-75"
+                    data-change-row={changeGroup ? 'true' : undefined}
+                    data-change-index={changeIndex}
+                    data-change-index-group={changeGroup}
+                >
+                    <td className={`w-10 text-right text-[10px] text-slate-400 p-1 border-r border-slate-200 select-none bg-slate-50 font-mono ${lClass}`}>{lNum}</td>
+                    <td className={`p-1.5 font-mono text-xs text-slate-700 whitespace-pre-wrap break-all leading-relaxed ${lClass}`} dangerouslySetInnerHTML={{__html: lContent || ''}}></td>
+                    <td className={`w-10 text-right text-[10px] text-slate-400 p-1 border-r border-slate-200 border-l select-none bg-slate-50 font-mono ${rClass}`}>{rNum}</td>
+                    <td className={`p-1.5 font-mono text-xs text-slate-700 whitespace-pre-wrap break-all leading-relaxed ${rClass}`} dangerouslySetInnerHTML={{__html: rContent || ''}}></td>
+                </tr>
+            );
+        });
+    }, [rowsData]);
+
     // Keyboard Shortcuts
     useKeyboardShortcuts({
         onPrimary: () => processTags('accept'),
         onSecondary: () => processTags('reject'),
         onCopy: () => {
-            if (activeTab === 'output' && output) copyOutput();
+            if ((activeTab === 'output' || activeTab === 'diff') && output) copyOutput();
         },
         onClear: () => {
             setInput('');
             setOutput('');
             setLastProcessedInput('');
+            setRowsData([]);
+            setChangeCount(0);
+            setCurrentChangeIndex(0);
             setToast({msg: 'All data cleared', type:'warn'});
         }
     }, [input, output, activeTab, lastProcessedInput]);
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (activeTab !== 'diff' || changeCount === 0) return;
+            const active = document.activeElement;
+            if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) return;
+
+            if (e.key === 'ArrowDown' || (e.altKey && e.key.toLowerCase() === 'n')) {
+                e.preventDefault();
+                scrollToChange('next');
+            } else if (e.key === 'ArrowUp' || (e.altKey && e.key.toLowerCase() === 'p')) {
+                e.preventDefault();
+                scrollToChange('prev');
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [activeTab, changeCount, currentChangeIndex]);
 
     return (
         <div className="max-w-full mx-auto px-2 py-8 sm:px-4 lg:px-6 flex flex-col min-h-[calc(100vh-120px)]">
@@ -187,6 +402,9 @@ const TagCleaner: React.FC = () => {
                             setInput('');
                             setOutput('');
                             setLastProcessedInput('');
+                            setRowsData([]);
+                            setChangeCount(0);
+                            setCurrentChangeIndex(0);
                             setToast({msg: 'All data cleared', type:'warn'});
                         }} title="Alt+Delete" className="text-xs font-semibold text-slate-400 hover:text-red-500 hover:bg-red-50 px-2 py-1 rounded transition-colors">Clear</button>
                     </div>
@@ -231,6 +449,45 @@ const TagCleaner: React.FC = () => {
                                 Export CSV
                             </button>
                         )}
+                        {activeTab === 'diff' && (
+                            <div className="flex items-center gap-2">
+                                {changeCount > 0 && (
+                                    <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-2.5 py-1 shadow-2xs">
+                                        <div className="flex items-center gap-1.5 pr-2 border-r border-slate-200">
+                                            <GitCompare className="w-3.5 h-3.5 text-teal-600" strokeWidth={2.5} />
+                                            <span className="text-xs font-bold text-slate-700 font-mono tabular-nums">
+                                                {currentChangeIndex} <span className="text-slate-300">/</span> {changeCount}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-0.5">
+                                            <button 
+                                                onClick={() => scrollToChange('prev')}
+                                                className="p-0.5 hover:bg-slate-100 active:bg-slate-200 rounded transition-all text-slate-600 hover:text-teal-600"
+                                                title="Previous Change"
+                                            >
+                                                <ChevronUp className="w-4 h-4" strokeWidth={2.5} />
+                                            </button>
+                                            <button 
+                                                onClick={() => scrollToChange('next')}
+                                                className="p-0.5 hover:bg-slate-100 active:bg-slate-200 rounded transition-all text-slate-600 hover:text-teal-600"
+                                                title="Next Change"
+                                            >
+                                                <ChevronDown className="w-4 h-4" strokeWidth={2.5} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                                {output && (
+                                    <button 
+                                        onClick={copyOutput} 
+                                        title="Copy Cleaned XML" 
+                                        className="text-xs font-bold text-teal-600 hover:bg-teal-50 px-3 py-1.5 rounded border border-teal-100 transition-all active:scale-95"
+                                    >
+                                        Copy Result
+                                    </button>
+                                )}
+                            </div>
+                        )}
                     </div>
                     
                     {/* Tabs */}
@@ -250,6 +507,17 @@ const TagCleaner: React.FC = () => {
                                 : 'bg-white text-slate-500 border-transparent hover:bg-slate-50 hover:text-slate-700'}`}
                          >
                             Change Report {reportData.length > 0 && <span className="ml-1 bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-full text-[10px]">{reportData.length}</span>}
+                         </button>
+                         <button 
+                            onClick={() => {
+                                setActiveTab('diff');
+                                if (input && output) generateDiff(input, output);
+                            }} 
+                            className={`flex-1 py-2 text-xs font-bold rounded-t-lg transition-all duration-200 border-t border-x ${activeTab === 'diff' 
+                                ? 'bg-slate-50 text-teal-600 border-slate-200 translate-y-[1px]' 
+                                : 'bg-white text-slate-500 border-transparent hover:bg-slate-50 hover:text-slate-700'}`}
+                         >
+                            Side-by-Side Diff {changeCount > 0 && <span className="ml-1 bg-teal-100 text-teal-800 px-1.5 py-0.5 rounded-full text-[10px] font-bold">{changeCount}</span>}
                          </button>
                     </div>
 
@@ -321,6 +589,79 @@ const TagCleaner: React.FC = () => {
                                             <p className="text-sm">No changes recorded yet.</p>
                                         </div>
                                     )}
+                                 </div>
+                             </div>
+                         )}
+
+                         {activeTab === 'diff' && (
+                             <div className="flex-grow flex flex-col bg-white overflow-hidden relative">
+                                 {/* Sticky Diff Sub-Header Toolbar */}
+                                 <div className="bg-slate-100/90 backdrop-blur-xs px-4 py-2 border-b border-slate-200 flex justify-between items-center shrink-0 sticky top-0 z-20 shadow-2xs">
+                                     <div className="flex items-center gap-2">
+                                         <GitCompare className="w-3.5 h-3.5 text-teal-600" strokeWidth={2.5} />
+                                         <span className="text-xs font-bold text-slate-700">
+                                             Side-by-Side Comparison
+                                         </span>
+                                         {changeCount > 0 && (
+                                             <span className="text-[10px] font-extrabold bg-teal-100 text-teal-800 px-2 py-0.5 rounded-full">
+                                                 {changeCount} {changeCount === 1 ? 'change' : 'changes'}
+                                             </span>
+                                         )}
+                                     </div>
+
+                                     {changeCount > 0 && (
+                                         <div className="flex items-center gap-2">
+                                             <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2.5 py-1 shadow-2xs">
+                                                 <span className="text-[11px] font-bold text-slate-700 font-mono tabular-nums">
+                                                     Change {currentChangeIndex} of {changeCount}
+                                                 </span>
+                                                 <div className="flex items-center gap-0.5 border-l border-slate-200 pl-1.5">
+                                                     <button 
+                                                         onClick={() => scrollToChange('prev')}
+                                                         className="p-1 hover:bg-slate-100 active:bg-slate-200 rounded transition-all text-slate-700 hover:text-teal-600"
+                                                         title="Previous Change"
+                                                     >
+                                                         <ChevronUp className="w-3.5 h-3.5" strokeWidth={2.5} />
+                                                     </button>
+                                                     <button 
+                                                         onClick={() => scrollToChange('next')}
+                                                         className="p-1 hover:bg-slate-100 active:bg-slate-200 rounded transition-all text-slate-700 hover:text-teal-600"
+                                                         title="Next Change"
+                                                     >
+                                                         <ChevronDown className="w-3.5 h-3.5" strokeWidth={2.5} />
+                                                     </button>
+                                                 </div>
+                                             </div>
+                                         </div>
+                                     )}
+                                 </div>
+
+                                 <div ref={diffContainerRef} className="flex-grow max-h-[600px] overflow-auto custom-scrollbar">
+                                     {rowsData.length > 0 ? (
+                                         <table className="w-full text-xs font-mono border-collapse table-fixed bg-white">
+                                             <colgroup>
+                                                 <col className="w-10 border-r border-slate-200" />
+                                                 <col className="w-[calc(50%-2.5rem)]" />
+                                                 <col className="w-10 border-r border-slate-200 border-l border-slate-200" />
+                                                 <col className="w-[calc(50%-2.5rem)]" />
+                                             </colgroup>
+                                             <thead className="bg-slate-50 sticky top-0 z-10 border-b border-slate-200 font-bold text-slate-500 text-[10px] uppercase tracking-wider select-none shadow-2xs">
+                                                 <tr>
+                                                     <th className="p-1.5 text-center border-r border-slate-200 bg-slate-100">#</th>
+                                                     <th className="p-1.5 text-left bg-slate-50">Original XML (Input)</th>
+                                                     <th className="p-1.5 text-center border-r border-slate-200 border-l border-slate-200 bg-slate-100">#</th>
+                                                     <th className="p-1.5 text-left bg-slate-50">Cleaned XML (Result)</th>
+                                                 </tr>
+                                             </thead>
+                                             <tbody>
+                                                 {diffRows}
+                                             </tbody>
+                                         </table>
+                                     ) : (
+                                         <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60 py-16">
+                                             <p className="text-sm">No differences to show. Process XML first.</p>
+                                         </div>
+                                     )}
                                  </div>
                              </div>
                          )}

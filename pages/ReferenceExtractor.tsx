@@ -115,8 +115,11 @@ const sanitizeFormattedHtml = (rawXml: string): string => {
         .replace(/,\s*\./g, '.')
         .replace(/\.\s*,/g, '.');
 
-    // Step 6.5: Enforce Volume and Issue before Date, with NO space between Volume and Issue number
-    step = enforceVolumeIssueBeforeDate(step);
+    // Step 6.5: Enforce Year directly after author names
+    step = enforceYearAfterAuthors(step);
+
+    // Step 6.6: Enforce Bold Volume numbers by default
+    step = enforceVolumeBold(step);
 
     step = step.trim();
 
@@ -129,41 +132,165 @@ const sanitizeFormattedHtml = (rawXml: string): string => {
 };
 
 /**
- * ENFORCES:
- * 1. Volume and Issue numbers placed BEFORE the date.
- * 2. NO space between volume number and issue number (e.g., 24(3) or <b>24</b>(3)).
+ * Bolds volume numbers by default if not already bolded
+ * e.g., "Journal, 3(6) 877–893" -> "Journal, <b>3</b>(6) 877–893"
+ * e.g., "Journal 366 439–451" -> "Journal <b>366</b> 439–451"
+ * e.g., "Sci. Bull. 70 4–6" -> "Sci. Bull. <b>70</b> 4–6"
  */
-const enforceVolumeIssueBeforeDate = (html: string): string => {
+const enforceVolumeBold = (html: string): string => {
+    if (!html) return '';
+    let step = html;
+
+    // 1. Volume before Issue in parentheses: e.g. "3(6)" or "366(2)" -> "<b>3</b>(6)"
+    step = step.replace(/(?<!<b>)\b(\d{1,4})\b(?!\s*<\/b>)(\s*\([\w\d\s-]+\))/gi, '<b>$1</b>$2');
+
+    // 2. Volume before page numbers / article numbers (1 or more digits or e-prefixed numbers, with optional colon/comma or range)
+    // e.g. "70 4–6", "366 439–451", "331 129377", "102 1166–1173", "70: 4–6", "70, 4–6", "70 e13935"
+    step = step.replace(/(?<!<b>)\b(\d{1,4})\b(?!\s*<\/b>)(?=\s*[:;,]?\s+[a-z]?\d+(?:[–-]\d+)?\b)/gi, '<b>$1</b>');
+
+    return step;
+};
+
+function splitAuthorsAndRest(step: string): { authors: string; rest: string } {
+    let workingStr = step.trim();
+
+    // Regex for ONE author:
+    // 1. Initials + Surname: e.g., "M.U. Islam", "M. W. Ullah", "G.-D. Wang", "A. R. Mahjoub", "J.K. Park", "X. R. Fan"
+    // 2. Surname + comma + Initials: e.g., "Islam, M.U.", "Abazari, R."
+    // 3. Surname + Initials (no comma): e.g., "Islam M.U.", "Park JK"
+    // 4. Single Initial + comma + Surname: e.g., "R., Abazari"
+    // 5. Given Name + Surname: e.g., "John Smith"
+    const authorRegex = /^(?:(?:[A-Z]\.(?:\s*-?\s*[A-Z]\.)*|[A-Z]\b)\s+[A-Z][a-zA-Z\-']{1,}|[A-Z][a-zA-Z\-']{1,}\s*,\s*(?:[A-Z]\.(?:\s*-?\s*[A-Z]\.)*|[A-Z]{1,3}\b)|[A-Z][a-zA-Z\-']{1,}\s+(?:[A-Z]\.(?:\s*-?\s*[A-Z]\.)*|[A-Z]{1,3}\b)|[A-Z]\.\s*,\s*[A-Z][a-zA-Z\-']{1,}|[A-Z][a-z]{1,}\s+[A-Z][a-zA-Z\-']{1,})/;
+
+    let authors: string[] = [];
+    let currentPos = 0;
+
+    while (currentPos < workingStr.length) {
+        // Skip leading punctuation/delimiters like comma, semicolon, "and", "&", whitespace
+        const delimMatch = workingStr.slice(currentPos).match(/^(?:[\s,;&]|and\b)+/i);
+        if (delimMatch) {
+            currentPos += delimMatch[0].length;
+        }
+
+        const remaining = workingStr.slice(currentPos);
+        if (!remaining) break;
+
+        const match = remaining.match(authorRegex);
+        if (!match) break;
+
+        const authorText = match[0].trim();
+
+        // Title word guard (words that look like titles or journal names rather than human authors)
+        if (/^(?:Journal|Proceedings|Advances|International|American|European|Transactions|Review|Letters|Strategies|Synthesis|Development|Effect|Analysis|Role|Impact|Characterization|Design|Fabrication|Preparation|Application|Study|Evaluation|Investigation)\b/i.test(authorText)) {
+            break;
+        }
+
+        authors.push(authorText);
+        currentPos += match[0].length;
+
+        // Look at next character after the author name
+        const nextChar = workingStr.slice(currentPos).trimStart();
+        if (nextChar.startsWith('.')) {
+            // Check if what follows the period is another author or title
+            const postPeriod = nextChar.slice(1).trimStart();
+            const postPeriodDelim = postPeriod.match(/^(?:[\s,;&]|and\b)+/i);
+            const postPeriodRest = postPeriodDelim ? postPeriod.slice(postPeriodDelim[0].length) : postPeriod;
+
+            const isNextAuthor = postPeriodRest.match(authorRegex);
+            if (!isNextAuthor) {
+                // Next segment is title! Stop author loop here.
+                const dotOffset = workingStr.slice(currentPos).indexOf('.');
+                if (dotOffset !== -1) {
+                    currentPos += dotOffset + 1;
+                }
+                break;
+            }
+        }
+    }
+
+    if (authors.length > 0) {
+        const authorsString = authors.join(', ');
+        const restString = workingStr.slice(currentPos).trim();
+        return { authors: authorsString, rest: restString };
+    }
+
+    // Fallback: match up to title boundary or first period
+    const fallbackMatch = step.match(/^([^.]+(?:\.[A-Z]\.)*?\b[A-Za-z0-9\-]+(?:\.|\b))\s+([A-Z\d][\s\S]*)$/);
+    if (fallbackMatch) {
+        return { authors: fallbackMatch[1].trim(), rest: fallbackMatch[2].trim() };
+    }
+
+    return { authors: step, rest: '' };
+}
+
+/**
+ * ENFORCES:
+ * 1. Placement of Year directly AFTER Author names: e.g. "Authors, (2023). Title..."
+ * 2. Volume(Issue) Pages formatting without spaces in volume(issue): e.g. "Susmat, 3(6) 877–893."
+ * 3. En-dash for page ranges.
+ */
+const enforceYearAfterAuthors = (html: string): string => {
     if (!html) return '';
 
     let step = html;
 
-    // 1. Remove space between Volume (number or <b>volume</b> tag) and Issue in parentheses
-    // Examples: "<b>295</b> (12)" -> "<b>295</b>(12)", "295 (12)" -> "295(12)", "<b>295</b> , (12)" -> "<b>295</b>(12)"
+    // 1. Normalize hyphens in page ranges (e.g. 877-893 -> 877–893)
+    step = step.replace(/(\b\d+)\s*-\s*(\d+\b)/g, '$1–$2');
+
+    // 2. Remove space between Volume (number or <b>volume</b>) and Issue in parentheses
     step = step.replace(/(<b\b[^>]*>[\w\d-]+<\/b>|\b\d+)\s*,\s*(\([\w\d\s-]+\))/gi, '$1$2');
     step = step.replace(/(<b\b[^>]*>[\w\d-]+<\/b>|\b\d+)\s+(\([\w\d\s-]+\))/gi, '$1$2');
 
-    // 2. Reorder if Date appears BEFORE Volume and Issue
-    // Case A: "(2020) <b>295</b>(12)" or "(2020) 295(12)" or "(2020), <b>295</b>(12)"
-    step = step.replace(
-        /\(((?:19|20)\d{2}[a-z]?)\)\s*[,;]?\s*(<b\b[^>]*>[\w\d-]+<\/b>|\b\d+)(\([\w\d\s-]+\))?/gi,
-        (match, year, vol, issue) => {
-            const issueStr = issue || '';
-            return `${vol}${issueStr} (${year})`;
-        }
-    );
+    // 3. Find 4-digit year (19xx or 20xx)
+    const yearMatch = step.match(/\b((?:19|20)\d{2}[a-z]?)\b/);
+    if (!yearMatch) {
+        return step;
+    }
+    const year = yearMatch[1];
 
-    // Case B: "2020; <b>295</b>(12)" or "2020; 295(12)" or "2020, <b>295</b>(12)"
-    step = step.replace(
-        /\b((?:19|20)\d{2}[a-z]?)\s*[,;]\s*(<b\b[^>]*>[\w\d-]+<\/b>|\b\d+)(\([\w\d\s-]+\))?/gi,
-        (match, year, vol, issue) => {
-            const issueStr = issue || '';
-            return `${vol}${issueStr} (${year})`;
-        }
-    );
+    // Check if year is ALREADY formatted right after authors near the start (e.g. "., (2023)." or ", (2023).")
+    const alreadyPositionedRegex = new RegExp(`^([^.]{2,250}?)(?:\\.,|\\.|,)?\\s*\\(${year}\\)\\.`, 'i');
+    if (alreadyPositionedRegex.test(step)) {
+        // Clean up any duplicated year at the end
+        step = step.replace(new RegExp(`[,;\\s]+\\b${year}\\b[,;\\s]*`, 'g'), ' ');
+        step = step.replace(/\s+/g, ' ').replace(/\s+([,.:;)])/g, '$1');
+        return step;
+    }
 
-    // 3. Final sanity pass to remove any remaining space between volume and issue number
-    step = step.replace(/(<b\b[^>]*>[\w\d-]+<\/b>|\b\d+)\s+(\([\w\d\s-]+\))/gi, '$1$2');
+    // 4. Remove year from journal/host/date section elsewhere in the string
+    step = step.replace(new RegExp(`[,;]?\\s*\\(${year}\\)`, 'gi'), '');
+    step = step.replace(new RegExp(`[,;]\\s*\\b${year}\\b\\s*[,;]?`, 'gi'), ', ');
+    step = step.replace(new RegExp(`\\b${year}\\b\\s*[,;:]?`, 'gi'), '');
+
+    // Clean up volume/issue/pages punctuation: e.g. "3(6): 877–893" -> "3(6) 877–893"
+    step = step.replace(/(<b\b[^>]*>[\w\d-]+<\/b>|\b\d+)(\([\w\d\s-]+\))\s*[:;,]\s*([a-z]?\d+)/gi, '$1$2 $3');
+
+    // Clean up duplicate commas, periods, spaces
+    step = step
+        .replace(/,\s*,/g, ', ')
+        .replace(/,\s*\./g, '.')
+        .replace(/\.\s*,/g, '.')
+        .replace(/\s+/g, ' ');
+
+    // 5. Match author block and rest
+    const { authors, rest } = splitAuthorsAndRest(step);
+
+    if (authors && rest) {
+        let cleanAuthors = authors.trim().replace(/[\s,;&.]+$|[\s,;&]+$/, '');
+        let cleanRest = rest.trim().replace(/^[\s,.]+/, '');
+        step = `${cleanAuthors}, (${year}). ${cleanRest}`;
+    } else if (authors) {
+        let cleanAuthors = authors.trim().replace(/[\s,;&.]+$|[\s,;&]+$/, '');
+        step = `${cleanAuthors}, (${year}).`;
+    }
+
+    // Final punctuation cleanup
+    step = step
+        .replace(/,\s*,/g, ', ')
+        .replace(/\.\s*\./g, '.')
+        .replace(/\s+/g, ' ')
+        .replace(/\s+([,.:;)])/g, '$1')
+        .trim();
 
     return step;
 };
@@ -179,12 +306,13 @@ const reconstructStructuredReference = (content: string): string => {
     while ((aMatch = authorRegex.exec(content)) !== null) {
         const authorXml = aMatch[1];
         const surnameMatch = authorXml.match(/<c[be]:surname\b[^>]*>([\s\S]*?)<\/c[be]:surname>/i);
-        const givenMatch = authorXml.match(/<c[be]:given-name\b[^>]*>([\s\S]*?)<\/c[be]:given-name>/i);
+        const givenMatch = authorXml.match(/<c[be]:given-name\b[^>]*>([\s\S]*?)<\/c[be]:given-name>/i) ||
+                           authorXml.match(/<c[be]:initials\b[^>]*>([\s\S]*?)<\/c[be]:initials>/i);
         const surname = surnameMatch ? surnameMatch[1].trim() : '';
         const given = givenMatch ? givenMatch[1].trim() : '';
         
-        if (surname && given) {
-            authorMatches.push(`${surname}, ${given}`);
+        if (given && surname) {
+            authorMatches.push(`${given} ${surname}`);
         } else if (surname) {
             authorMatches.push(surname);
         } else if (given) {
@@ -203,13 +331,15 @@ const reconstructStructuredReference = (content: string): string => {
                          content.match(/<s[be]:series\b[^>]*>[\s\S]*?<s[be]:maintitle\b[^>]*>([\s\S]*?)<\/s[be]:maintitle>/i);
     let journalStr = journalMatch ? journalMatch[1].trim() : '';
 
-    // Volume, Issue, Date, Pages, DOI
+    // Volume, Issue, Date, Pages, Article Number, DOI
     const volMatch = content.match(/<s[be]:volume-nr\b[^>]*>([\s\S]*?)<\/s[be]:volume-nr>/i);
     const issueMatch = content.match(/<s[be]:issue-nr\b[^>]*>([\s\S]*?)<\/s[be]:issue-nr>/i);
     const dateMatch = content.match(/<s[be]:date\b[^>]*>([\s\S]*?)<\/s[be]:date>/i);
     const pagesMatch = content.match(/<s[be]:first-page\b[^>]*>([\s\S]*?)<\/s[be]:first-page>/i) ||
                        content.match(/<s[be]:pages\b[^>]*>([\s\S]*?)<\/s[be]:pages>/i);
     const lastPageMatch = content.match(/<s[be]:last-page\b[^>]*>([\s\S]*?)<\/s[be]:last-page>/i);
+    const artNumMatch = content.match(/<s[be]:article-number\b[^>]*>([\s\S]*?)<\/s[be]:article-number>/i) ||
+                        content.match(/<ce:article-number\b[^>]*>([\s\S]*?)<\/ce:article-number>/i);
     const doiMatch = content.match(/<ce:doi\b[^>]*>([\s\S]*?)<\/ce:doi>/i);
 
     const vol = volMatch ? volMatch[1].trim() : '';
@@ -217,15 +347,34 @@ const reconstructStructuredReference = (content: string): string => {
     const date = dateMatch ? dateMatch[1].trim() : '';
     let pages = pagesMatch ? pagesMatch[1].trim() : '';
     if (pages && lastPageMatch && !pages.includes('–') && !pages.includes('-')) {
-        pages += `–${lastPageMatch[1].trim()}`;
+        const lp = lastPageMatch[1].trim();
+        if (lp && lp !== pages) {
+            pages += `–${lp}`;
+        }
     }
+    const artNum = artNumMatch ? artNumMatch[1].trim() : '';
     const doi = doiMatch ? doiMatch[1].trim() : '';
 
-    // Combine Parts
-    let parts: string[] = [];
-    if (authorsStr) parts.push(authorsStr);
-    if (titleStr) parts.push(titleStr);
-    
+    let result = '';
+
+    // 1. Authors & Year: "Authors., (Year)."
+    if (authorsStr) {
+        if (!authorsStr.endsWith('.')) authorsStr += '.';
+        if (date) {
+            result += `${authorsStr}, (${date}). `;
+        } else {
+            result += `${authorsStr} `;
+        }
+    } else if (date) {
+        result += `(${date}). `;
+    }
+
+    // 2. Title
+    if (titleStr) {
+        result += `${titleStr}. `;
+    }
+
+    // 3. Journal, Volume(Issue) Pages
     let hostStr = '';
     if (journalStr) {
         if (!journalStr.includes('<ce:italic>') && !journalStr.includes('<i>') && !journalStr.includes('<italic>')) {
@@ -235,28 +384,33 @@ const reconstructStructuredReference = (content: string): string => {
         }
     }
 
-    // Volume & Issue BEFORE Date, with NO space between volume and issue number
+    let volIssuePagesPart = '';
     if (vol) {
-        hostStr += ` <ce:bold>${vol}</ce:bold>`;
+        volIssuePagesPart += `<ce:bold>${vol}</ce:bold>`;
         if (issue) {
-            hostStr += `(${issue})`;
+            volIssuePagesPart += `(${issue})`;
         }
     } else if (issue) {
-        hostStr += ` (${issue})`;
+        volIssuePagesPart += `(${issue})`;
     }
 
-    if (date) {
-        hostStr += ` (${date})`;
+    const pageOrArt = pages || artNum;
+    if (pageOrArt) {
+        if (volIssuePagesPart) {
+            volIssuePagesPart += ` ${pageOrArt}`;
+        } else {
+            volIssuePagesPart += `${pageOrArt}`;
+        }
     }
 
-    if (pages) {
-        hostStr += ` ${pages}`;
+    if (volIssuePagesPart) {
+        hostStr += hostStr ? `, ${volIssuePagesPart}` : volIssuePagesPart;
     }
 
-    if (hostStr.trim()) parts.push(hostStr.trim());
-    if (doi) parts.push(`DOI: ${doi}`);
+    if (hostStr.trim()) result += hostStr.trim();
+    if (doi) result += `, DOI: ${doi}`;
 
-    return parts.join(', ');
+    return result.trim();
 };
 
 const ReferenceExtractor: React.FC = () => {

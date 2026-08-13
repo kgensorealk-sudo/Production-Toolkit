@@ -291,15 +291,26 @@ export const WordToXml: React.FC = () => {
             currNode = currNode.parentNode;
         }
 
+        const isHighlights = type === 'highlights';
+
         const wrapper = document.createElement('div');
         wrapper.setAttribute('data-ce-type', type);
         wrapper.setAttribute('data-ce-title', defaultTitle);
-        wrapper.className = 'ce-capture-box my-3 p-3.5 bg-amber-50/70 border-l-4 border-amber-500 rounded-r-2xl border border-amber-200/80 shadow-xs relative group select-text';
+        wrapper.className = isHighlights
+            ? 'ce-capture-box my-3 p-3.5 bg-emerald-50/80 border-l-4 border-emerald-500 rounded-r-2xl border border-emerald-200/90 shadow-xs relative group select-text'
+            : 'ce-capture-box my-3 p-3.5 bg-amber-50/70 border-l-4 border-amber-500 rounded-r-2xl border border-amber-200/80 shadow-xs relative group select-text';
 
         const badge = document.createElement('div');
         badge.contentEditable = 'false';
-        badge.className = 'ce-capture-badge flex items-center justify-between pb-1.5 mb-2 border-b border-amber-200/60 select-none';
-        badge.innerHTML = `<span class="text-[10px] font-black uppercase tracking-wider text-amber-900 flex items-center gap-1.5"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg> Captured as: ${label}</span><span class="text-[9px] text-amber-600 font-bold uppercase tracking-wider">CE XML</span>`;
+        badge.className = isHighlights
+            ? 'ce-capture-badge flex items-center justify-between pb-1.5 mb-2 border-b border-emerald-200/70 select-none'
+            : 'ce-capture-badge flex items-center justify-between pb-1.5 mb-2 border-b border-amber-200/60 select-none';
+
+        if (isHighlights) {
+            badge.innerHTML = `<span class="text-[10px] font-black uppercase tracking-wider text-emerald-950 flex items-center gap-1.5"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-emerald-600"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3z"/></svg> Captured as: ${label}</span><span class="text-[9px] text-emerald-700 font-bold uppercase tracking-wider bg-emerald-100/90 px-1.5 py-0.5 rounded-md">CE XML</span>`;
+        } else {
+            badge.innerHTML = `<span class="text-[10px] font-black uppercase tracking-wider text-amber-900 flex items-center gap-1.5"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg> Captured as: ${label}</span><span class="text-[9px] text-amber-600 font-bold uppercase tracking-wider">CE XML</span>`;
+        }
         wrapper.appendChild(badge);
 
         let pTarget: HTMLElement | null = null;
@@ -1091,13 +1102,83 @@ export const WordToXml: React.FC = () => {
                         if (ceType === 'highlights' && opts.schema === 'elsevier') {
                             let asIdAttr = '';
                             let spIdAttr = '';
+                            let listIdAttr = '';
                             if (opts.addParagraphIds) {
                                 const asNum = opts.paraIdStart + (asCounter++) * opts.paraIdStep;
                                 asIdAttr = ` id="as${String(asNum).padStart(4, '0')}"`;
                                 const spNum = opts.paraIdStart + (spCounter++) * opts.paraIdStep;
                                 spIdAttr = ` id="sp${String(spNum).padStart(4, '0')}"`;
+                                listIdAttr = getNextListIdAttr();
                             }
-                            const bodyContent = `<ce:abstract-sec${asIdAttr}>\n<ce:simple-para${spIdAttr}>${innerXml}</ce:simple-para>\n</ce:abstract-sec>`;
+
+                            const highlightItems: string[] = [];
+                            const addHighlightItem = (rawText: string) => {
+                                const trimmed = rawText.trim();
+                                if (!trimmed) return;
+
+                                const { labelVal, cleanText } = extractLabel(trimmed);
+                                const label = labelVal || '•';
+                                const text = (cleanText || trimmed).trim();
+
+                                const listItemIdAttr = getNextListItemIdAttr();
+                                const paraIdAttr = getNextParaIdAttr();
+
+                                highlightItems.push(`<ce:list-item${listItemIdAttr}><ce:label>${label}</ce:label><ce:para${paraIdAttr}>${text}</ce:para></ce:list-item>`);
+                            };
+
+                            const liNodes = Array.from(cleanEl.querySelectorAll('li'));
+                            if (liNodes.length > 0) {
+                                liNodes.forEach(li => {
+                                    let inlineContent = '';
+                                    Array.from(li.childNodes).forEach(child => {
+                                        if (child.nodeType === Node.ELEMENT_NODE) {
+                                            const tag = (child as HTMLElement).tagName.toLowerCase();
+                                            if (tag === 'ul' || tag === 'ol') return;
+                                        }
+                                        inlineContent += processInlineNode(child);
+                                    });
+                                    addHighlightItem(inlineContent);
+                                });
+                            } else {
+                                const blockNodes = Array.from(cleanEl.querySelectorAll('p, div')).filter(el => {
+                                    return !Array.from(el.children).some(child => {
+                                        const tag = child.tagName.toLowerCase();
+                                        return tag === 'p' || tag === 'div' || tag === 'ul' || tag === 'ol';
+                                    });
+                                });
+
+                                if (blockNodes.length > 0) {
+                                    blockNodes.forEach(block => {
+                                        const inlineContent = Array.from(block.childNodes)
+                                            .map(child => processInlineNode(child))
+                                            .join('')
+                                            .trim();
+
+                                        if (inlineContent) {
+                                            const lines = inlineContent.split(/<br\s*\/?>|\r?\n/).map(l => l.trim()).filter(Boolean);
+                                            lines.forEach(line => addHighlightItem(line));
+                                        }
+                                    });
+                                } else {
+                                    const inlineContent = Array.from(cleanEl.childNodes)
+                                        .map(child => processInlineNode(child))
+                                        .join('')
+                                        .trim();
+
+                                    if (inlineContent) {
+                                        const lines = inlineContent.split(/<br\s*\/?>|\r?\n/).map(l => l.trim()).filter(Boolean);
+                                        lines.forEach(line => addHighlightItem(line));
+                                    }
+                                }
+                            }
+
+                            if (highlightItems.length === 0) {
+                                const listItemIdAttr = getNextListItemIdAttr();
+                                const paraIdAttr = getNextParaIdAttr();
+                                highlightItems.push(`<ce:list-item${listItemIdAttr}><ce:label>•</ce:label><ce:para${paraIdAttr}></ce:para></ce:list-item>`);
+                            }
+
+                            const bodyContent = `<ce:abstract-sec${asIdAttr}>\n<ce:simple-para${spIdAttr}><ce:list${listIdAttr}>\n${highlightItems.join('\n')}\n</ce:list></ce:simple-para>\n</ce:abstract-sec>`;
                             blocks.push(`<${outerTag}${wrapperIdAttr}${wrapperExtraAttrs}>\n${titleXml}\n${bodyContent}\n</${outerTag}>`);
                         } else if ((ceType === 'jel' || ceType === 'jel-classifications') && opts.schema === 'elsevier') {
                             let kwIdAttr = '';
@@ -1295,6 +1376,13 @@ export const WordToXml: React.FC = () => {
                 .replace(/<ce:para>\s*<\/ce:para>/gi, '');
         }
 
+        // Clean carriage returns completely (\r\n -> \n, \r -> '')
+        resultXml = resultXml.replace(/\r\n/g, '\n').replace(/\r/g, '');
+
+        // Guarantee no ce:para or p element begins or ends with whitespace
+        resultXml = resultXml.replace(/<(ce:para|p)(\b[^>]*)>\s+/gi, '<$1$2>');
+        resultXml = resultXml.replace(/\s+<\/(ce:para|p)>/gi, '</$1>');
+
         // Clean multi-space artifacts
         resultXml = resultXml.replace(/ {2,}/g, ' ');
 
@@ -1366,29 +1454,86 @@ export const WordToXml: React.FC = () => {
         setToast({ msg: 'XML file downloaded', type: 'success' });
     };
 
-    // Safe Tokenizer for syntax highlighting without regex injection or broken HTML tags
-    const highlightXml = (line: string) => {
-        if (!line) return null;
-        const tokens: React.ReactNode[] = [];
-        const regex = /(<\/?[a-zA-Z0-9_:-]+(?:\s+[a-zA-Z0-9_:-]+="[^"]*")*\s*\/?>)|([^<]+)/g;
-        let match;
-        let key = 0;
-        while ((match = regex.exec(line)) !== null) {
-            if (match[1]) {
-                tokens.push(
-                    <span key={key++} className="text-indigo-400 font-bold">
-                        {match[1]}
-                    </span>
-                );
-            } else if (match[2]) {
-                tokens.push(
-                    <span key={key++} className="text-slate-100">
-                        {match[2]}
-                    </span>
-                );
+    // Safe Tokenizer for syntax highlighting with unique entry colors for each captured highlight text
+    const renderHighlightedXmlOutput = (xml: string) => {
+        if (!xml) return null;
+        const lines = xml.split('\n');
+        let itemIndex = 0;
+        let inListItem = false;
+        let inLabel = false;
+
+        const uniqueEntryColors = [
+            'text-emerald-300 font-semibold bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-700/60 shadow-xs',
+            'text-cyan-300 font-semibold bg-cyan-950/80 px-1.5 py-0.5 rounded border border-cyan-700/60 shadow-xs',
+            'text-amber-300 font-semibold bg-amber-950/80 px-1.5 py-0.5 rounded border border-amber-700/60 shadow-xs',
+            'text-rose-300 font-semibold bg-rose-950/80 px-1.5 py-0.5 rounded border border-rose-700/60 shadow-xs',
+            'text-purple-300 font-semibold bg-purple-950/80 px-1.5 py-0.5 rounded border border-purple-700/60 shadow-xs',
+            'text-sky-300 font-semibold bg-sky-950/80 px-1.5 py-0.5 rounded border border-sky-700/60 shadow-xs',
+            'text-teal-300 font-semibold bg-teal-950/80 px-1.5 py-0.5 rounded border border-teal-700/60 shadow-xs',
+            'text-fuchsia-300 font-semibold bg-fuchsia-950/80 px-1.5 py-0.5 rounded border border-fuchsia-700/60 shadow-xs',
+        ];
+
+        return lines.map((line, idx) => {
+            const tokens: React.ReactNode[] = [];
+            const regex = /(<\/?[a-zA-Z0-9_:-]+(?:\s+[a-zA-Z0-9_:-]+="[^"]*")*\s*\/?>)|([^<]+)/g;
+            let match;
+            let key = 0;
+
+            while ((match = regex.exec(line)) !== null) {
+                if (match[1]) {
+                    const tag = match[1];
+                    if (tag.startsWith('<ce:list-item')) {
+                        inListItem = true;
+                        itemIndex++;
+                    } else if (tag.startsWith('</ce:list-item>')) {
+                        inListItem = false;
+                    } else if (tag.startsWith('<ce:label')) {
+                        inLabel = true;
+                    } else if (tag.startsWith('</ce:label>')) {
+                        inLabel = false;
+                    }
+
+                    tokens.push(
+                        <span key={key++} className="text-indigo-400 font-bold">
+                            {tag}
+                        </span>
+                    );
+                } else if (match[2]) {
+                    const text = match[2];
+                    if (inListItem && !inLabel && text.trim()) {
+                        const currentColor = uniqueEntryColors[(itemIndex - 1) % uniqueEntryColors.length];
+                        tokens.push(
+                            <span key={key++} className={currentColor}>
+                                {text}
+                            </span>
+                        );
+                    } else if (inLabel && text.trim()) {
+                        tokens.push(
+                            <span key={key++} className="text-slate-200 font-black bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700 text-[11px] mr-1">
+                                {text}
+                            </span>
+                        );
+                    } else {
+                        tokens.push(
+                            <span key={key++} className="text-slate-100">
+                                {text}
+                            </span>
+                        );
+                    }
+                }
             }
-        }
-        return tokens;
+
+            return (
+                <div key={idx} className="flex hover:bg-slate-900/80 px-2 py-1 rounded transition-colors">
+                    <span className="w-12 text-slate-600 select-none text-[10px] pr-3 text-right flex-shrink-0 font-mono">
+                        {idx + 1}
+                    </span>
+                    <span className="whitespace-pre-wrap break-all">
+                        {tokens}
+                    </span>
+                </div>
+            );
+        });
     };
 
     return (
@@ -1956,16 +2101,7 @@ export const WordToXml: React.FC = () => {
                                 <div className="space-y-1">
                                     {xmlOutput ? (
                                         <div className="font-mono text-xs leading-relaxed">
-                                            {xmlOutput.split('\n').map((line, idx) => (
-                                                <div key={idx} className="flex hover:bg-slate-900/80 px-2 py-1 rounded transition-colors">
-                                                    <span className="w-12 text-slate-600 select-none text-[10px] pr-3 text-right flex-shrink-0 font-mono">
-                                                        {idx + 1}
-                                                    </span>
-                                                    <span className="whitespace-pre-wrap break-all">
-                                                        {highlightXml(line)}
-                                                    </span>
-                                                </div>
-                                            ))}
+                                            {renderHighlightedXmlOutput(xmlOutput)}
                                         </div>
                                     ) : (
                                         <div className="h-full flex flex-col items-center justify-center text-slate-600 py-24">
