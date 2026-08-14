@@ -20,6 +20,7 @@ import {
     GitCompare,
     FileText,
     CheckCircle,
+    CheckCircle2,
     Upload,
     Database,
     RefreshCw,
@@ -31,7 +32,15 @@ import {
     Hash,
     Trash2,
     Box,
-    SortAsc
+    SortAsc,
+    Shield,
+    ShieldCheck,
+    ShieldAlert,
+    Sparkles,
+    Filter,
+    Clock,
+    Layers,
+    CheckSquare
 } from 'lucide-react';
 import Toast from '../components/Toast';
 import Switch from '../components/Switch';
@@ -39,10 +48,13 @@ import { SmartSuggestion, ToolId } from '../types';
 
 interface AuditItem {
     id: string;
+    label?: string;
+    title?: string;
     status: 'fixed' | 'warning' | 'skip';
     doi?: string;
     msg: string;
-    type?: 'doi' | 'name' | 'id-fix' | 'source-text' | 'ir-fix' | 'contribution-langtype';
+    type?: 'doi' | 'name' | 'id-fix' | 'source-text' | 'ir-fix' | 'contribution-langtype' | 'publisher' | 'empty-element' | 'retain';
+    requiresConfirmation?: boolean;
 }
 
 const StructuralNodeArchitect: React.FC = () => {
@@ -52,6 +64,10 @@ const StructuralNodeArchitect: React.FC = () => {
     const [output, setOutput] = useState('');
     const [startId, setStartId] = useState(4000);
     const [fixContributionLangtype, setFixContributionLangtype] = useState<boolean>(true);
+    const [autoAcceptRepairs, setAutoAcceptRepairs] = useState<boolean>(false);
+    const [refDecisions, setRefDecisions] = useState<Record<string, 'accept' | 'retain'>>({});
+    const [matrixFilter, setMatrixFilter] = useState<'all' | 'action-required' | 'needs-confirmation' | 'automatic' | 'accepted' | 'retained' | 'valid'>('action-required');
+    const [searchQuery, setSearchQuery] = useState<string>('');
     const [viewMode, setViewMode] = useState<'output' | 'diff'>('output');
     const [auditData, setAuditData] = useState<AuditItem[]>([]);
     const [isProcessing, setIsProcessing] = useState(false);
@@ -121,8 +137,8 @@ const StructuralNodeArchitect: React.FC = () => {
             title = sbRef.getElementsByTagName("sb:maintitle")[0]?.textContent || sbRef.getElementsByTagName("ce:maintitle")[0]?.textContent || "";
         }
         
-        // 4. Host (Journal/Book info)
-        const host = sbRef.getElementsByTagName("sb:host")[0] || sbRef.getElementsByTagName("ce:host")[0];
+        // 4. Host (Journal/Book info) - check all sb:host elements
+        const hostNodes = Array.from(sbRef.getElementsByTagName("sb:host")).concat(Array.from(sbRef.getElementsByTagName("ce:host")));
         let journal = "";
         let year = "";
         let volume = "";
@@ -131,41 +147,52 @@ const StructuralNodeArchitect: React.FC = () => {
         let articleNum = "";
         let editors: string[] = [];
 
-        if (host) {
+        hostNodes.forEach(host => {
             // Journal Title
-            const mainTitles = Array.from(host.getElementsByTagName("sb:maintitle")).concat(Array.from(host.getElementsByTagName("ce:maintitle")));
-            if (mainTitles.length > 0) {
-                journal = mainTitles[0].textContent || "";
-            } else {
-                // Try series title
-                const seriesTitle = host.getElementsByTagName("sb:title")[0]?.textContent || host.getElementsByTagName("ce:title")[0]?.textContent;
-                if (seriesTitle) journal = seriesTitle;
+            if (!journal) {
+                const mainTitles = Array.from(host.getElementsByTagName("sb:maintitle")).concat(Array.from(host.getElementsByTagName("ce:maintitle")));
+                if (mainTitles.length > 0) {
+                    journal = mainTitles[0].textContent || "";
+                } else {
+                    const seriesTitle = host.getElementsByTagName("sb:title")[0]?.textContent || host.getElementsByTagName("ce:title")[0]?.textContent;
+                    if (seriesTitle) journal = seriesTitle;
+                }
             }
             
-            // Date
-            const dateNode = host.getElementsByTagName("sb:date")[0] || host.getElementsByTagName("ce:date")[0];
-            if (dateNode) year = dateNode.textContent || "";
+            // Date / Year
+            if (!year) {
+                const dateNode = host.getElementsByTagName("sb:date")[0] || host.getElementsByTagName("ce:date")[0];
+                if (dateNode) year = dateNode.textContent || "";
+            }
             
             // Volume
-            const volNode = host.getElementsByTagName("sb:volume-nr")[0] || host.getElementsByTagName("ce:volume-nr")[0];
-            if (volNode) volume = volNode.textContent || "";
+            if (!volume) {
+                const volNode = host.getElementsByTagName("sb:volume-nr")[0] || host.getElementsByTagName("ce:volume-nr")[0];
+                if (volNode) volume = volNode.textContent || "";
+            }
             
             // Issue
-            const issueNode = host.getElementsByTagName("sb:issue-nr")[0] || host.getElementsByTagName("ce:issue-nr")[0];
-            if (issueNode) issue = issueNode.textContent || "";
+            if (!issue) {
+                const issueNode = host.getElementsByTagName("sb:issue-nr")[0] || host.getElementsByTagName("ce:issue-nr")[0];
+                if (issueNode) issue = issueNode.textContent || "";
+            }
 
             // Pages
-            const firstPage = host.getElementsByTagName("sb:first-page")[0]?.textContent || host.getElementsByTagName("ce:first-page")[0]?.textContent || "";
-            const lastPage = host.getElementsByTagName("sb:last-page")[0]?.textContent || host.getElementsByTagName("ce:last-page")[0]?.textContent || "";
-            if (firstPage && lastPage) {
-                pages = `${firstPage}-${lastPage}`;
-            } else if (firstPage) {
-                pages = firstPage;
+            if (!pages) {
+                const firstPage = host.getElementsByTagName("sb:first-page")[0]?.textContent || host.getElementsByTagName("ce:first-page")[0]?.textContent || "";
+                const lastPage = host.getElementsByTagName("sb:last-page")[0]?.textContent || host.getElementsByTagName("ce:last-page")[0]?.textContent || "";
+                if (firstPage && lastPage) {
+                    pages = `${firstPage}-${lastPage}`;
+                } else if (firstPage) {
+                    pages = firstPage;
+                }
             }
 
             // Article Number
-            const artNode = host.getElementsByTagName("sb:article-number")[0] || host.getElementsByTagName("ce:article-number")[0];
-            if (artNode) articleNum = artNode.textContent || "";
+            if (!articleNum) {
+                const artNode = host.getElementsByTagName("sb:article-number")[0] || host.getElementsByTagName("ce:article-number")[0];
+                if (artNode) articleNum = artNode.textContent || "";
+            }
 
             // Editors
             const editorNodes = Array.from(host.getElementsByTagName("sb:editor")).concat(Array.from(host.getElementsByTagName("ce:editor")));
@@ -174,6 +201,12 @@ const StructuralNodeArchitect: React.FC = () => {
                 const surname = ed.getElementsByTagName("ce:surname")[0]?.textContent || ed.getElementsByTagName("sb:surname")[0]?.textContent || "";
                 if (given || surname) editors.push(`${given} ${surname}`.trim());
             });
+        });
+
+        // Fallback for date directly under sbRef
+        if (!year) {
+            const dateNode = sbRef.getElementsByTagName("sb:date")[0] || sbRef.getElementsByTagName("ce:date")[0];
+            if (dateNode) year = dateNode.textContent || "";
         }
 
         let sourceText = "";
@@ -184,7 +217,6 @@ const StructuralNodeArchitect: React.FC = () => {
             authorsStr = authorsStr ? `${authorsStr} et al.` : "et al.";
         }
         if (authorsStr) {
-            if (!authorsStr.endsWith(".")) authorsStr += ".";
             if (year) {
                 sourceText += `${authorsStr}, (${year}).`;
             } else {
@@ -319,7 +351,16 @@ const StructuralNodeArchitect: React.FC = () => {
         children.forEach(child => pruneEmptyElements(child));
 
         const tagName = element.tagName.toLowerCase();
-        if (tagName === 'sb:et-al' || tagName === 'ce:et-al' || tagName === 'sb:date-accessed' || tagName === 'ce:date-accessed' || tagName === 'sb:date' || tagName === 'ce:date') return;
+        if (
+            tagName === 'sb:et-al' || 
+            tagName === 'ce:et-al' || 
+            tagName === 'sb:ellipsis' || 
+            tagName === 'ce:ellipsis' || 
+            tagName === 'sb:date-accessed' || 
+            tagName === 'ce:date-accessed' || 
+            tagName === 'sb:date' || 
+            tagName === 'ce:date'
+        ) return;
         if (element.hasAttribute('refid') || element.hasAttribute('xlink:href')) return;
         if (element.attributes && element.attributes.length > 0) return;
 
@@ -339,13 +380,34 @@ const StructuralNodeArchitect: React.FC = () => {
             prev = result;
             result = result.replace(/<([a-z0-9_:-]+)(?:\s+[^>]*)?>\s*<\/\1>/gi, (match, tag) => {
                 const ltag = tag.toLowerCase();
-                if (ltag === 'sb:et-al' || ltag === 'ce:et-al' || ltag === 'sb:date-accessed' || ltag === 'ce:date-accessed' || ltag === 'sb:date' || ltag === 'ce:date') return match;
+                if (
+                    ltag === 'sb:et-al' || 
+                    ltag === 'ce:et-al' || 
+                    ltag === 'sb:ellipsis' || 
+                    ltag === 'ce:ellipsis' || 
+                    ltag === 'sb:date-accessed' || 
+                    ltag === 'ce:date-accessed' || 
+                    ltag === 'sb:date' || 
+                    ltag === 'ce:date'
+                ) return match;
                 if (/\s[a-z0-9_:-]+=/i.test(match)) return match;
                 return '';
             });
             result = result.replace(/<([a-z0-9_:-]+)(?:\s+[^>]*)?\/>/gi, (match, tag) => {
                 const ltag = tag.toLowerCase();
-                if (ltag === 'sb:et-al' || ltag === 'ce:et-al' || ltag === 'ce:cross-ref' || ltag === 'ce:inter-ref' || ltag === 'sb:inter-ref' || ltag === 'sb:date-accessed' || ltag === 'ce:date-accessed' || ltag === 'sb:date' || ltag === 'ce:date') return match;
+                if (
+                    ltag === 'sb:et-al' || 
+                    ltag === 'ce:et-al' || 
+                    ltag === 'sb:ellipsis' || 
+                    ltag === 'ce:ellipsis' || 
+                    ltag === 'ce:cross-ref' || 
+                    ltag === 'ce:inter-ref' || 
+                    ltag === 'sb:inter-ref' || 
+                    ltag === 'sb:date-accessed' || 
+                    ltag === 'ce:date-accessed' || 
+                    ltag === 'sb:date' || 
+                    ltag === 'ce:date'
+                ) return match;
                 if (match.includes('refid=') || match.includes('xlink:href=')) return match;
                 if (/\s[a-z0-9_:-]+=/i.test(match)) return match;
                 return '';
@@ -433,10 +495,29 @@ const StructuralNodeArchitect: React.FC = () => {
                 const ref = fragmentDoc.getElementsByTagName("ce:bib-reference")[0];
                 const refId = ref.getAttribute("id") || `REF_${index + 1}`;
                 
+                const labelNode = ref.getElementsByTagName("ce:label")[0];
+                const refLabel = labelNode?.textContent?.trim() || '';
+                const titleNode = ref.getElementsByTagName("sb:maintitle")[0] || ref.getElementsByTagName("ce:maintitle")[0] || ref.getElementsByTagName("sb:title")[0];
+                const refTitle = titleNode?.textContent?.trim() || '';
+
+                const labels = Array.from(ref.getElementsByTagName("ce:label"));
+                if (labels.length > 1) {
+                    currentAudit.push({ 
+                        id: refId, 
+                        label: refLabel,
+                        title: refTitle,
+                        status: 'fixed', 
+                        msg: `STRUCTURE: Detected ${labels.length} <ce:label> tags. Duplicate labels will be cleaned.`,
+                        type: 'empty-element'
+                    });
+                }
+
                 // Duplicate ID Warning
                 if (duplicates.has(refId)) {
                     currentAudit.push({ 
                         id: refId, 
+                        label: refLabel,
+                        title: refTitle,
                         status: 'warning', 
                         msg: `DUPLICATE ID: This ID is used multiple times in the document.`,
                         type: 'id-fix'
@@ -446,7 +527,7 @@ const StructuralNodeArchitect: React.FC = () => {
                 const sbRef = ref.getElementsByTagName("sb:reference")[0] || ref.getElementsByTagName("ce:reference")[0] || ref.getElementsByTagName("ce:other-ref")[0];
                 
                 if (!sbRef) {
-                    currentAudit.push({ id: refId, status: 'skip', msg: 'MISSING: <sb:reference> or <ce:other-ref> not found.' });
+                    currentAudit.push({ id: refId, label: refLabel, title: refTitle, status: 'skip', msg: 'MISSING: <sb:reference> or <ce:other-ref> not found.' });
                     return;
                 }
 
@@ -456,6 +537,8 @@ const StructuralNodeArchitect: React.FC = () => {
                 if (duplicates.has(sbId) && sbId) {
                     currentAudit.push({ 
                         id: refId, 
+                        label: refLabel,
+                        title: refTitle,
                         status: 'fixed', 
                         msg: `DUPLICATE ID: Sub-element ID collision (${sbId}). Regeneration required.`,
                         type: 'id-fix'
@@ -466,6 +549,8 @@ const StructuralNodeArchitect: React.FC = () => {
                     if (!sbId || !sbId.startsWith("or")) {
                         currentAudit.push({ 
                             id: refId, 
+                            label: refLabel,
+                            title: refTitle,
                             status: 'fixed', 
                             msg: `ID: Incorrect prefix for other-ref (${sbId || 'missing'} -> unique OR ID)`, 
                             type: 'id-fix' 
@@ -474,6 +559,8 @@ const StructuralNodeArchitect: React.FC = () => {
                 } else if (sbId.startsWith("or")) {
                     currentAudit.push({ 
                         id: refId, 
+                        label: refLabel,
+                        title: refTitle,
                         status: 'fixed', 
                         msg: `ID: Incorrect prefix detected (${sbId} -> unique RF ID)`, 
                         type: 'id-fix' 
@@ -490,6 +577,8 @@ const StructuralNodeArchitect: React.FC = () => {
                     if (duplicates.has(irId) && irId) {
                         currentAudit.push({ 
                             id: refId, 
+                            label: refLabel,
+                            title: refTitle,
                             status: 'fixed', 
                             msg: `DUPLICATE ID: Inter-ref collision (${irId}).`,
                             type: 'ir-fix' 
@@ -498,6 +587,8 @@ const StructuralNodeArchitect: React.FC = () => {
                     if (!irId || irId.startsWith("or")) {
                         currentAudit.push({ 
                             id: refId, 
+                            label: refLabel,
+                            title: refTitle,
                             status: 'fixed', 
                             msg: `INTER-REF: Incorrect ID detected (${irId || 'missing'} -> unique IR ID)`, 
                             type: 'ir-fix' 
@@ -509,28 +600,12 @@ const StructuralNodeArchitect: React.FC = () => {
                 if (!sourceText && !sbRef.tagName.includes('other-ref')) {
                     currentAudit.push({ 
                         id: refId, 
+                        label: refLabel,
+                        title: refTitle,
                         status: 'fixed', 
                         msg: `SOURCE: Missing <ce:source-text> element. (unique SE ID)`, 
                         type: 'source-text' 
                     });
-                } else if (sourceText && (urls.length > 0 || sbRef.getElementsByTagName("sb:date-accessed").length > 0)) {
-                    const stContent = sourceText.textContent || "";
-                    const missingUrl = urls.some(u => {
-                        if (!u) return false;
-                        if (stContent.includes(u)) return false;
-                        const cleanUrl = u.replace(/^https?:\/\//i, '').replace(/\/$/, '');
-                        return !cleanUrl || !stContent.includes(cleanUrl);
-                    });
-                    const missingDate = sbRef.getElementsByTagName("sb:date-accessed").length > 0 && !/access/i.test(stContent);
-                    
-                    if (missingUrl || missingDate) {
-                        currentAudit.push({ 
-                            id: refId, 
-                            status: 'fixed', 
-                            msg: `SOURCE: Source text missing URL(s) or Accessed Date.`, 
-                            type: 'source-text' 
-                        });
-                    }
                 }
 
                 const hosts = Array.from(sbRef.getElementsByTagName("sb:host"));
@@ -542,7 +617,7 @@ const StructuralNodeArchitect: React.FC = () => {
                     const content = host.innerHTML;
                     const doiMatch = content.match(/10\.\d{4,9}\/[-._;()/:A-Z0-9]+/i);
                     
-                    if (doiMatch && (host.getElementsByTagName("sb:e-host").length > 0 || host.textContent?.includes('doi.org'))) {
+                    if (doiMatch && (host.getElementsByTagName("sb:e-host").length > 0 || host.textContent?.includes('doi.org') || host.getElementsByTagName("ce:inter-ref").length > 0)) {
                         doi = doiMatch[0];
                         badHost = host;
                         break;
@@ -550,12 +625,52 @@ const StructuralNodeArchitect: React.FC = () => {
                 }
 
                 if (doi && badHost) {
-                    targetHost = hosts.find(h => h !== badHost && (h.getElementsByTagName("sb:issue").length > 0 || h.getElementsByTagName("sb:pages").length > 0)) || null;
+                    targetHost = hosts.find(h => h !== badHost && (
+                        h.getElementsByTagName("sb:issue").length > 0 || 
+                        h.getElementsByTagName("sb:pages").length > 0 ||
+                        h.getElementsByTagName("sb:article-number").length > 0 ||
+                        h.getElementsByTagName("sb:series").length > 0 ||
+                        h.getElementsByTagName("sb:title").length > 0
+                    )) || null;
+
+                    const comments = Array.from(sbRef.getElementsByTagName("sb:comment"));
+                    const hasInterveningComment = comments.length > 0;
                     
                     if (targetHost) {
-                        currentAudit.push({ id: refId, status: 'fixed', doi, msg: 'READY: DOI migration possible.', type: 'doi' });
+                        if (hasInterveningComment) {
+                            currentAudit.push({ 
+                                id: refId, 
+                                label: refLabel,
+                                title: refTitle,
+                                status: 'fixed', 
+                                doi, 
+                                msg: `CONFIRMATION REQUIRED: Intervening <sb:comment> detected before DOI host. Review to confirm migration to <ce:doi>${doi}</ce:doi> while retaining comment in position, or retain original structure.`, 
+                                type: 'doi',
+                                requiresConfirmation: true
+                            });
+                        } else {
+                            currentAudit.push({ 
+                                id: refId, 
+                                label: refLabel,
+                                title: refTitle,
+                                status: 'fixed', 
+                                doi, 
+                                msg: `DIRECT DOI CAPTURE: Directly migrated <ce:inter-ref> to <ce:doi>${doi}</ce:doi> in primary host.`, 
+                                type: 'doi',
+                                requiresConfirmation: false
+                            });
+                        }
                     } else {
-                        currentAudit.push({ id: refId, status: 'warning', doi, msg: 'WARNING: Target host missing for migration.', type: 'doi' });
+                        currentAudit.push({ 
+                            id: refId, 
+                            label: refLabel,
+                            title: refTitle,
+                            status: 'warning', 
+                            doi, 
+                            msg: 'WARNING: Target host missing for DOI migration.', 
+                            type: 'doi',
+                            requiresConfirmation: false
+                        });
                     }
                 }
 
@@ -567,6 +682,8 @@ const StructuralNodeArchitect: React.FC = () => {
                     if (original !== fixed) {
                         currentAudit.push({ 
                             id: refId, 
+                            label: refLabel,
+                            title: refTitle,
                             status: 'fixed', 
                             msg: `NAME: Initials standardization required (${original} -> ${fixed})`,
                             type: 'name'
@@ -588,6 +705,8 @@ const StructuralNodeArchitect: React.FC = () => {
                                 hasContributionIssue = true;
                                 currentAudit.push({
                                     id: refId,
+                                    label: refLabel,
+                                    title: refTitle,
                                     status: 'fixed',
                                     msg: `CONTRIBUTION: Missing langtype="iso" on <${contrib.tagName} xml:lang="${langInfo.value}">.`,
                                     type: 'contribution-langtype'
@@ -597,15 +716,82 @@ const StructuralNodeArchitect: React.FC = () => {
                     });
                 }
 
-                if (!doi && !hasContributionIssue && givenNames.every(gn => gn.textContent === fixGivenName(gn.textContent || ''))) {
-                    currentAudit.push({ id: refId, status: 'skip', msg: 'VALID: No structural issues detected.' });
+                // Empty / Orphaned Publisher Tag Audit (Direct Auto-Clean)
+                const publishers = Array.from(ref.getElementsByTagName("sb:publisher"));
+                let hasEmptyPublisher = false;
+                publishers.forEach(pub => {
+                    const pubText = pub.textContent?.trim() || '';
+                    if (!pubText) {
+                        hasEmptyPublisher = true;
+                    }
+                });
+                if (!hasEmptyPublisher && (/<sb:publisher\b[^>]*\/>/i.test(fullBlock) || /<sb:publisher\b[^>]*>(?:\s*<[a-z0-9_:-]+>\s*<\/[a-z0-9_:-]+>)*\s*<\/sb:publisher>/i.test(fullBlock))) {
+                    hasEmptyPublisher = true;
+                }
+
+                if (hasEmptyPublisher) {
+                    currentAudit.push({
+                        id: refId,
+                        label: refLabel,
+                        title: refTitle,
+                        status: 'fixed',
+                        msg: 'DIRECT CLEANUP: Empty <sb:publisher></sb:publisher> element removed directly.',
+                        type: 'publisher'
+                    });
+                }
+
+                // Generic Empty Tags Audit (excluding tags that are valid empty)
+                const emptyOtherMatches = fullBlock.match(/<(sb:location|sb:comment|sb:translated-title|sb:conference|sb:edition)\b[^>]*>\s*<\/\1>/gi);
+                if (emptyOtherMatches && emptyOtherMatches.length > 0) {
+                    emptyOtherMatches.forEach(tagMatch => {
+                        const tagNameMatch = tagMatch.match(/<([a-z0-9_:-]+)/i);
+                        const tagName = tagNameMatch ? tagNameMatch[1] : 'tag';
+                        currentAudit.push({
+                            id: refId,
+                            label: refLabel,
+                            title: refTitle,
+                            status: 'fixed',
+                            msg: `DIRECT CLEANUP: Empty <${tagName}></${tagName}> element removed directly.`,
+                            type: 'empty-element'
+                        });
+                    });
+                }
+
+                // If no issues were detected for this reference, mark as valid
+                const issuesForRef = currentAudit.filter(a => a.id === refId && a.status !== 'skip');
+                if (issuesForRef.length === 0) {
+                    currentAudit.push({ id: refId, label: refLabel, title: refTitle, status: 'skip', msg: 'VALID: No structural issues detected.' });
                 }
             });
+
+            // Initialize decisions specifically for items with DOI conversions needing checking (intervening sb:comment)
+            const initialDecisions: Record<string, 'accept' | 'retain'> = {};
+            let hasPendingConfirmations = false;
+            currentAudit.forEach(item => {
+                if (item.requiresConfirmation && item.status !== 'skip') {
+                    if (autoAcceptRepairs) {
+                        initialDecisions[item.id] = 'accept';
+                    } else if (refDecisions[item.id]) {
+                        initialDecisions[item.id] = refDecisions[item.id];
+                    } else {
+                        hasPendingConfirmations = true;
+                    }
+                }
+            });
+            setRefDecisions(initialDecisions);
+            if (hasPendingConfirmations && !autoAcceptRepairs) {
+                setMatrixFilter('action-required');
+            }
 
             setAuditData(currentAudit);
             setStep('analyzing');
             setActiveTab('analysis');
-            setToast({ msg: `Scanner complete. Identified ${matches.length} bibliography blocks.`, type: 'success' });
+            setToast({ 
+                msg: hasPendingConfirmations && !autoAcceptRepairs
+                    ? `Scanner complete. Action required: Please review and accept or retain references with intervening comments before repairing.`
+                    : `Scanner complete. Identified ${matches.length} bibliography blocks.`, 
+                type: hasPendingConfirmations && !autoAcceptRepairs ? 'warn' : 'success' 
+            });
         } catch (err: any) {
             setToast({ msg: err.message, type: 'error' });
         } finally {
@@ -614,6 +800,17 @@ const StructuralNodeArchitect: React.FC = () => {
     };
 
     const executeRepair = () => {
+        // Enforce: cannot execute repair unless all items requiring confirmation are accepted or retained
+        if (!autoAcceptRepairs && stats.pending > 0) {
+            setToast({ 
+                msg: `Cannot execute repair: ${stats.pending} reference(s) require action. Please select 'Accept Change' or 'Retain without change' (or 'Accept All') before executing.`, 
+                type: 'warn' 
+            });
+            setMatrixFilter('action-required');
+            setActiveTab('analysis');
+            return;
+        }
+
         setIsProcessing(true);
 
         try {
@@ -659,15 +856,29 @@ const StructuralNodeArchitect: React.FC = () => {
             const bibRegex = /<ce:bib-reference\b[^>]*>([\s\S]*?)<\/ce:bib-reference>/g;
             
             const repairedXml = input.replace(bibRegex, (fullBlock) => {
+                const idMatch = fullBlock.match(/<ce:bib-reference\b[^>]*\bid=["']([^"']+)["']/i);
+                const refId = idMatch ? idMatch[1] : `REF_${refIndex + 1}`;
+                
+                const labelMatch = fullBlock.match(/<ce:label>(.*?)<\/ce:label>/i);
+                const refLabel = labelMatch ? labelMatch[1].trim() : '';
+
+                // Decision Check for DOI Conversion: If autoAcceptRepairs is disabled and the user chose to retain without change
+                const decision = refDecisions[refId];
+                const skipDoiConversion = !autoAcceptRepairs && decision === 'retain';
+
                 const preCleanedBlock = sanitizeXmlTags(fullBlock);
                 const wrappedBlock = `<root ${NS_DECLS} xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:sa="http://www.elsevier.com/xml/common/struct-aff/dtd">${preCleanedBlock}</root>`;
                 const fragmentDoc = parser.parseFromString(wrappedBlock, "text/xml");
                 const ref = fragmentDoc.getElementsByTagName("ce:bib-reference")[0];
-                const refId = ref.getAttribute("id") || `REF_${refIndex + 1}`;
                 
-                // Track current refId to know if we need to fix it if it's a known duplicate
-                // But generally bib-reference IDs are handled by Renumber tool,
-                // however if it's a known duplicate we could log a warning.
+                // Clean duplicate labels
+                const labels = Array.from(ref.getElementsByTagName("ce:label"));
+                if (labels.length > 1) {
+                    for (let i = 1; i < labels.length; i++) {
+                        labels[i].remove();
+                    }
+                    finalAudit.push({ id: refId, label: refLabel, status: 'fixed', msg: 'REPAIRED: Removed duplicate <ce:label> tag.', type: 'empty-element' });
+                }
 
                 const sbRef = ref.getElementsByTagName("sb:reference")[0] || ref.getElementsByTagName("ce:reference")[0] || ref.getElementsByTagName("ce:other-ref")[0];
                 
@@ -687,58 +898,45 @@ const StructuralNodeArchitect: React.FC = () => {
                         if (needsIdFix) {
                             const newId = getNextId('or');
                             sbRef.setAttribute("id", newId);
-                            finalAudit.push({ id: refId, status: 'fixed', msg: `REPAIRED: other-ref ID corrected/duplicated and fixed to ${newId}.` });
+                            finalAudit.push({ id: refId, label: refLabel, status: 'fixed', msg: `REPAIRED: other-ref ID corrected/duplicated and fixed to ${newId}.`, type: 'id-fix' });
                         }
                     } else {
                         if (currentSbId.startsWith("or") || !currentSbId || needsIdFix) {
                             const newId = getNextId('rf');
                             sbRef.setAttribute("id", newId);
-                            finalAudit.push({ id: refId, status: 'fixed', msg: `REPAIRED: ID prefix/duplicate corrected to ${newId}.` });
+                            finalAudit.push({ id: refId, label: refLabel, status: 'fixed', msg: `REPAIRED: ID prefix/duplicate corrected to ${newId}.`, type: 'id-fix' });
                         }
                     }
 
                     // Inter-ref ID Repair
                     const interRefs = Array.from(ref.getElementsByTagName("ce:inter-ref")).concat(Array.from(ref.getElementsByTagName("sb:inter-ref")));
-                    const urlsInRef = interRefs.map(ir => ir.textContent?.trim()).filter(u => u && (u.startsWith("http") || u.includes("www.")));
                     
                     interRefs.forEach(ir => {
                         const irId = ir.getAttribute("id") || "";
                         if (!irId || irId.startsWith("or") || duplicatesFoundInInput.has(irId)) {
                             const newIrId = getNextId('ir');
                             ir.setAttribute("id", newIrId);
-                            finalAudit.push({ id: refId, status: 'fixed', msg: `REPAIRED: Inter-ref ID corrected/duplicated to ${newIrId}.` });
+                            finalAudit.push({ id: refId, label: refLabel, status: 'fixed', msg: `REPAIRED: Inter-ref ID corrected/duplicated to ${newIrId}.`, type: 'ir-fix' });
                         }
                     });
 
                     let sourceText = ref.getElementsByTagName("ce:source-text")[0];
-                    const dateAccessedInRef = sbRef.getElementsByTagName("sb:date-accessed")[0];
-                    let needsSourceUpdate = false;
                     if (!sourceText && !sbRef.tagName.includes('other-ref')) {
-                        needsSourceUpdate = true;
-                    } else if (sourceText && !sbRef.tagName.includes('other-ref')) {
-                        const stContent = sourceText.textContent || "";
-                        const missingUrl = urlsInRef.some(u => {
-                            if (!u) return false;
-                            if (stContent.includes(u)) return false;
-                            const cleanUrl = u.replace(/^https?:\/\//i, '').replace(/\/$/, '');
-                            return !cleanUrl || !stContent.includes(cleanUrl);
-                        });
-                        const missingDate = dateAccessedInRef && !/access/i.test(stContent);
-                        if (missingUrl || missingDate) {
-                            needsSourceUpdate = true;
-                        }
-                    }
-
-                    if (needsSourceUpdate) {
-                        if (!sourceText) {
-                            sourceText = fragmentDoc.createElement("ce:source-text");
+                        sourceText = fragmentDoc.createElement("ce:source-text");
+                        const stPrefix = trimmedInput.match(/\bid=["']srct\d+["']/i) ? 'srct' : 'se';
+                        const newSeId = getNextId(stPrefix);
+                        sourceText.setAttribute("id", newSeId);
+                        sourceText.textContent = generateSourceText(sbRef);
+                        ref.appendChild(sourceText);
+                        finalAudit.push({ id: refId, label: refLabel, status: 'fixed', msg: `REPAIRED: Generated missing <ce:source-text> (${newSeId}).`, type: 'source-text' });
+                    } else if (sourceText) {
+                        // Keep source-text content strictly as is; only assign an ID if completely missing
+                        if (!sourceText.getAttribute("id")) {
                             const stPrefix = trimmedInput.match(/\bid=["']srct\d+["']/i) ? 'srct' : 'se';
                             const newSeId = getNextId(stPrefix);
                             sourceText.setAttribute("id", newSeId);
-                            ref.appendChild(sourceText);
+                            finalAudit.push({ id: refId, label: refLabel, status: 'fixed', msg: `REPAIRED: Assigned ID to <ce:source-text> (${newSeId}).`, type: 'source-text' });
                         }
-                        sourceText.textContent = generateSourceText(sbRef);
-                        finalAudit.push({ id: refId, status: 'fixed', msg: `REPAIRED: Synchronized source text with URLs/Accessed Date.` });
                     }
 
                     // Name Repair
@@ -753,7 +951,7 @@ const StructuralNodeArchitect: React.FC = () => {
                         }
                     });
                     if (nameRepaired) {
-                        finalAudit.push({ id: refId, status: 'fixed', msg: 'REPAIRED: Initials standardized.' });
+                        finalAudit.push({ id: refId, label: refLabel, status: 'fixed', msg: 'REPAIRED: Initials standardized.', type: 'name' });
                     }
 
                     // DOI Migration
@@ -765,7 +963,7 @@ const StructuralNodeArchitect: React.FC = () => {
                     for (let host of hosts) {
                         const content = host.innerHTML;
                         const doiMatch = content.match(/10\.\d{4,9}\/[-._;()/:A-Z0-9]+/i);
-                        if (doiMatch && (host.getElementsByTagName("sb:e-host").length > 0 || host.textContent?.includes('doi.org'))) {
+                        if (doiMatch && (host.getElementsByTagName("sb:e-host").length > 0 || host.textContent?.includes('doi.org') || host.getElementsByTagName("ce:inter-ref").length > 0)) {
                             doi = doiMatch[0];
                             badHost = host;
                             break;
@@ -773,13 +971,49 @@ const StructuralNodeArchitect: React.FC = () => {
                     }
 
                     if (doi && badHost) {
-                        targetHost = hosts.find(h => h !== badHost && (h.getElementsByTagName("sb:issue").length > 0 || h.getElementsByTagName("sb:pages").length > 0)) || null;
-                        if (targetHost) {
-                            badHost.parentNode?.removeChild(badHost);
-                            const doiElem = fragmentDoc.createElement("ce:doi");
-                            doiElem.textContent = doi;
-                            targetHost.appendChild(doiElem);
-                            finalAudit.push({ id: refId, status: 'fixed', doi, msg: 'REPAIRED: DOI migrated successfully.' });
+                        const comments = Array.from(sbRef.getElementsByTagName("sb:comment"));
+                        const hasInterveningComment = comments.length > 0;
+                        const shouldSkip = hasInterveningComment && skipDoiConversion;
+
+                        if (!shouldSkip) {
+                            targetHost = hosts.find(h => h !== badHost && (
+                                h.getElementsByTagName("sb:issue").length > 0 || 
+                                h.getElementsByTagName("sb:pages").length > 0 ||
+                                h.getElementsByTagName("sb:article-number").length > 0 ||
+                                h.getElementsByTagName("sb:series").length > 0 ||
+                                h.getElementsByTagName("sb:title").length > 0
+                            )) || null;
+                            
+                            if (targetHost) {
+                                badHost.parentNode?.removeChild(badHost);
+                                const doiElem = fragmentDoc.createElement("ce:doi");
+                                doiElem.textContent = doi;
+                                targetHost.appendChild(doiElem);
+
+                                // Commented text is retained in its current position per user specification
+
+                                finalAudit.push({ 
+                                    id: refId, 
+                                    label: refLabel, 
+                                    status: 'fixed', 
+                                    doi, 
+                                    msg: hasInterveningComment 
+                                        ? `REPAIRED: DOI migrated to <ce:doi>${doi}</ce:doi> while retaining comment in position.` 
+                                        : `DIRECT CAPTURE: DOI migrated to <ce:doi>${doi}</ce:doi>.`, 
+                                    type: 'doi',
+                                    requiresConfirmation: hasInterveningComment
+                                });
+                            }
+                        } else {
+                            finalAudit.push({ 
+                                id: refId, 
+                                label: refLabel, 
+                                status: 'skip', 
+                                doi, 
+                                msg: 'RETAINED: Preserved DOI inter-ref and comment in original structure per user decision.', 
+                                type: 'doi',
+                                requiresConfirmation: true
+                            });
                         }
                     }
 
@@ -804,7 +1038,7 @@ const StructuralNodeArchitect: React.FC = () => {
                             }
                         });
                         if (contribFixed) {
-                            finalAudit.push({ id: refId, status: 'fixed', msg: 'REPAIRED: Inserted langtype="iso" attribute to <sb:contribution>.' });
+                            finalAudit.push({ id: refId, label: refLabel, status: 'fixed', msg: 'REPAIRED: Inserted langtype="iso" attribute to <sb:contribution>.', type: 'contribution-langtype' });
                         }
                     }
                 }
@@ -821,7 +1055,7 @@ const StructuralNodeArchitect: React.FC = () => {
                 // Audit report for empty/orphaned tag deletion
                 if (fullBlock !== serialized) {
                     if (/<sb:publisher\b/i.test(fullBlock) && !/<sb:publisher\b/i.test(serialized)) {
-                        finalAudit.push({ id: refId, status: 'fixed', msg: 'REPAIRED: Deleted empty/orphaned <sb:publisher> tag.' });
+                        finalAudit.push({ id: refId, label: refLabel, status: 'fixed', msg: 'REPAIRED: Deleted empty/orphaned <sb:publisher></sb:publisher> tag.', type: 'publisher' });
                     }
                 }
 
@@ -836,11 +1070,23 @@ const StructuralNodeArchitect: React.FC = () => {
                 xmlOutput = repairedMatches ? repairedMatches.join('\n\n') : "";
             }
 
-            // Restore original form of <sb:et-al /> tags
-            const originalEtAls = input.match(/<sb:et-al[^>]*?\/?>/g) || [];
+            // Restore original form of <sb:et-al /> and <sb:ellipsis /> tags
+            const originalEtAls = input.match(/<sb:et-al[^>]*?\/?>/gi) || [];
             let etAlIndex = 0;
-            xmlOutput = xmlOutput.replace(/<sb:et-al[^>]*?\/?>/g, (match) => {
-                return originalEtAls[etAlIndex++] || match;
+            xmlOutput = xmlOutput.replace(/<sb:et-al(?:\s*><\/sb:et-al>|[^>]*?\/?>)/gi, (match) => {
+                return originalEtAls[etAlIndex++] || '<sb:et-al/>';
+            });
+
+            const originalEllipses = input.match(/<sb:ellipsis[^>]*?\/?>/gi) || [];
+            let ellipsisIndex = 0;
+            xmlOutput = xmlOutput.replace(/<sb:ellipsis(?:\s*><\/sb:ellipsis>|[^>]*?\/?>)/gi, (match) => {
+                return originalEllipses[ellipsisIndex++] || '<sb:ellipsis/>';
+            });
+
+            const originalCeEllipses = input.match(/<ce:ellipsis[^>]*?\/?>/gi) || [];
+            let ceEllipsisIndex = 0;
+            xmlOutput = xmlOutput.replace(/<ce:ellipsis(?:\s*><\/ce:ellipsis>|[^>]*?\/?>)/gi, (match) => {
+                return originalCeEllipses[ceEllipsisIndex++] || '<ce:ellipsis/>';
             });
 
             setOutput(xmlOutput);
@@ -980,10 +1226,116 @@ const StructuralNodeArchitect: React.FC = () => {
         setToast({ msg: 'Buffer cleared', type: 'warn' });
     };
 
+    // Group audit items by refId for structured analysis matrix display
+    const groupedRefs = React.useMemo(() => {
+        const map = new Map<string, {
+            id: string;
+            label?: string;
+            title?: string;
+            items: AuditItem[];
+            hasIssues: boolean;
+            needsChecking: boolean;
+            isAutomaticOnly: boolean;
+        }>();
+
+        auditData.forEach(item => {
+            if (!map.has(item.id)) {
+                map.set(item.id, {
+                    id: item.id,
+                    label: item.label,
+                    title: item.title,
+                    items: [],
+                    hasIssues: false,
+                    needsChecking: false,
+                    isAutomaticOnly: false
+                });
+            }
+            const refObj = map.get(item.id)!;
+            if (item.label && !refObj.label) refObj.label = item.label;
+            if (item.title && !refObj.title) refObj.title = item.title;
+            refObj.items.push(item);
+            if (item.status !== 'skip') {
+                refObj.hasIssues = true;
+                if (item.requiresConfirmation) {
+                    refObj.needsChecking = true;
+                }
+            }
+        });
+
+        map.forEach(refObj => {
+            refObj.isAutomaticOnly = refObj.hasIssues && !refObj.needsChecking;
+        });
+
+        return Array.from(map.values());
+    }, [auditData]);
+
+    const filteredRefs = React.useMemo(() => {
+        return groupedRefs.filter(refObj => {
+            if (searchQuery.trim()) {
+                const q = searchQuery.toLowerCase();
+                const matchesId = refObj.id.toLowerCase().includes(q);
+                const matchesLabel = (refObj.label || '').toLowerCase().includes(q);
+                const matchesTitle = (refObj.title || '').toLowerCase().includes(q);
+                const matchesMsg = refObj.items.some(i => i.msg.toLowerCase().includes(q));
+                if (!matchesId && !matchesLabel && !matchesTitle && !matchesMsg) return false;
+            }
+
+            const decision = refDecisions[refObj.id];
+            if (matrixFilter === 'action-required') {
+                return refObj.hasIssues;
+            }
+            if (matrixFilter === 'needs-confirmation') {
+                return refObj.needsChecking;
+            }
+            if (matrixFilter === 'automatic') {
+                return refObj.isAutomaticOnly;
+            }
+            if (matrixFilter === 'accepted') {
+                return refObj.needsChecking && (autoAcceptRepairs || decision === 'accept');
+            }
+            if (matrixFilter === 'retained') {
+                return refObj.needsChecking && !autoAcceptRepairs && decision === 'retain';
+            }
+            if (matrixFilter === 'valid') {
+                return !refObj.hasIssues;
+            }
+            return true;
+        });
+    }, [groupedRefs, searchQuery, matrixFilter, refDecisions, autoAcceptRepairs]);
+
     const stats = {
-        total: auditData.length,
+        total: groupedRefs.length,
         fixed: auditData.filter(a => a.status === 'fixed').length,
-        warnings: auditData.filter(a => a.status === 'warning').length
+        warnings: auditData.filter(a => a.status === 'warning').length,
+        withIssues: groupedRefs.filter(r => r.hasIssues).length,
+        needsCheckingTotal: groupedRefs.filter(r => r.needsChecking).length,
+        automaticTotal: groupedRefs.filter(r => r.isAutomaticOnly).length,
+        accepted: groupedRefs.filter(r => r.needsChecking && (autoAcceptRepairs || refDecisions[r.id] === 'accept')).length,
+        retained: groupedRefs.filter(r => r.needsChecking && !autoAcceptRepairs && refDecisions[r.id] === 'retain').length,
+        pending: groupedRefs.filter(r => r.needsChecking && !autoAcceptRepairs && !refDecisions[r.id]).length,
+        valid: groupedRefs.filter(r => !r.hasIssues).length
+    };
+
+    const handleAcceptAll = () => {
+        const updated: Record<string, 'accept' | 'retain'> = {};
+        groupedRefs.forEach(r => {
+            if (r.needsChecking) {
+                updated[r.id] = 'accept';
+            }
+        });
+        setRefDecisions(prev => ({ ...prev, ...updated }));
+        setToast({ msg: "All confirmation-required DOI conversions accepted for repair.", type: 'success' });
+    };
+
+    const handleRetainAll = () => {
+        const updated: Record<string, 'accept' | 'retain'> = {};
+        groupedRefs.forEach(r => {
+            if (r.needsChecking) {
+                updated[r.id] = 'retain';
+            }
+        });
+        setRefDecisions(prev => ({ ...prev, ...updated }));
+        setToast({ msg: "All confirmation-required items set to retain original structure.", type: 'warn' });
     };
 
     const containerVariants = {
@@ -1309,11 +1661,17 @@ const StructuralNodeArchitect: React.FC = () => {
                                         ) : step === 'analyzing' ? (
                                             <button 
                                                 onClick={executeRepair}
-                                                disabled={isProcessing}
-                                                className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-100 disabled:text-slate-400 text-white rounded-xl font-bold text-sm shadow-lg shadow-emerald-100 transition-all duration-200 flex items-center justify-center gap-2"
+                                                disabled={isProcessing || (!autoAcceptRepairs && stats.pending > 0)}
+                                                className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-xl font-bold text-sm shadow-lg shadow-emerald-100 transition-all duration-200 flex items-center justify-center gap-2"
+                                                title={!autoAcceptRepairs && stats.pending > 0 ? `Cannot execute repair: ${stats.pending} reference(s) in Action Required require decision` : "Execute Repair"}
                                             >
                                                 {isProcessing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
                                                 Execute Repair
+                                                {!autoAcceptRepairs && stats.pending > 0 && (
+                                                    <span className="px-1.5 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-mono">
+                                                        {stats.pending}
+                                                    </span>
+                                                )}
                                             </button>
                                         ) : (
                                             <button 
@@ -1377,6 +1735,24 @@ const StructuralNodeArchitect: React.FC = () => {
                                 <div className="pt-6 border-t border-slate-100">
                                     <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Repair Protocols</h3>
                                     <div className="flex flex-col gap-3 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                        <Switch 
+                                            id="auto-accept-repairs"
+                                            checked={autoAcceptRepairs}
+                                            onChange={(val) => {
+                                                setAutoAcceptRepairs(val);
+                                                setToast({ 
+                                                    msg: val 
+                                                        ? "Auto-Repair enabled: All detected changes will be automatically accepted." 
+                                                        : "Auto-Repair disabled: Manual approval required (Accept Change or Retain without change).", 
+                                                    type: 'warn' 
+                                                });
+                                            }}
+                                            label="Auto-Accept Changes"
+                                            subLabel={autoAcceptRepairs ? "AUTO-ACCEPT" : "MANUAL APPROVAL"}
+                                            color="emerald"
+                                            tooltip="When toggled OFF (default), you must select 'Accept Change' or 'Retain without change' in the Analysis Matrix for each reference. When ON, all proposed repairs are automatically applied."
+                                        />
+                                        <div className="h-px bg-slate-200/60 my-1" />
                                         <Switch 
                                             id="fix-contrib-langtype"
                                             checked={fixContributionLangtype}
@@ -1487,68 +1863,665 @@ const StructuralNodeArchitect: React.FC = () => {
                                         exit={{ opacity: 0, y: -10 }}
                                         className="flex-grow flex flex-col bg-white rounded-2xl shadow-sm border border-slate-200/60 overflow-hidden"
                                     >
-                                        <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                                            <div className="flex items-center gap-2">
-                                                <Activity className="w-4 h-4 text-amber-500" />
-                                                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Analysis_Matrix</span>
+                                        {/* Matrix Header & Protocol Status */}
+                                        <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/70">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-600 shrink-0">
+                                                    <Activity className="w-4 h-4" />
+                                                </div>
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-xs font-black text-slate-800 uppercase tracking-wider">Analysis_Matrix</span>
+                                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200/70 text-slate-700 font-mono">
+                                                            {groupedRefs.length} REFS
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-[11px] text-slate-500 font-medium">
+                                                        {autoAcceptRepairs 
+                                                            ? "Auto-Repair active: All proposed structural modifications will be applied." 
+                                                            : "Interactive Approval: Review proposed fixes and select Accept Change or Retain without change."}
+                                                    </p>
+                                                </div>
                                             </div>
-                                            <div className="flex gap-4">
-                                                <div className="flex items-center gap-1.5">
-                                                    <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                                                    <span className="text-[10px] font-bold text-slate-400 uppercase">Repairable</span>
+
+                                            {/* Batch Actions & Protocol Badge */}
+                                            <div className="flex items-center flex-wrap gap-2">
+                                                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[11px] font-bold transition-all ${
+                                                    autoAcceptRepairs 
+                                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                                                        : stats.pending > 0 
+                                                            ? 'bg-amber-50 text-amber-800 border-amber-200' 
+                                                            : 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                                }`}>
+                                                    {autoAcceptRepairs ? (
+                                                        <>
+                                                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                                            <span>Auto-Accept Active</span>
+                                                        </>
+                                                    ) : stats.pending > 0 ? (
+                                                        <>
+                                                            <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                                                            <span>{stats.pending} Action Required</span>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+                                                            <span>All Decisions Set</span>
+                                                        </>
+                                                    )}
                                                 </div>
-                                                <div className="flex items-center gap-1.5">
-                                                    <div className="w-2 h-2 rounded-full bg-amber-500" />
-                                                    <span className="text-[10px] font-bold text-slate-400 uppercase">Warning</span>
-                                                </div>
+
+                                                {groupedRefs.some(r => r.needsChecking) && (
+                                                    <div className="flex items-center gap-1.5 pl-2 border-l border-slate-200">
+                                                        <button
+                                                            onClick={handleAcceptAll}
+                                                            className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center gap-1.5"
+                                                            title="Accept all proposed repairs"
+                                                        >
+                                                            <Check className="w-3.5 h-3.5" />
+                                                            Accept All
+                                                        </button>
+                                                        <button
+                                                            onClick={handleRetainAll}
+                                                            className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5"
+                                                            title="Retain all references in original state"
+                                                        >
+                                                            <Shield className="w-3.5 h-3.5 text-slate-500" />
+                                                            Retain All
+                                                        </button>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
+
+                                        {/* Filter & Search Bar */}
+                                        <div className="px-4 py-3 border-b border-slate-100 bg-white flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+                                            {/* Filter Chips */}
+                                            <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-1 md:pb-0">
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1 mr-1">
+                                                    <Filter className="w-3 h-3" /> Filter:
+                                                </span>
+                                                <button
+                                                    onClick={() => setMatrixFilter('action-required')}
+                                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                                                        matrixFilter === 'action-required' 
+                                                            ? 'bg-amber-600 text-white shadow-xs' 
+                                                            : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200/60'
+                                                    }`}
+                                                >
+                                                    <Layers className="w-3 h-3" />
+                                                    Pending Queue ({stats.withIssues})
+                                                </button>
+                                                <button
+                                                    onClick={() => setMatrixFilter('needs-confirmation')}
+                                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                                                        matrixFilter === 'needs-confirmation' 
+                                                            ? 'bg-amber-700 text-white shadow-xs' 
+                                                            : 'bg-amber-100/60 text-amber-900 hover:bg-amber-200/60 border border-amber-300/60'
+                                                    }`}
+                                                >
+                                                    <ShieldAlert className="w-3 h-3" />
+                                                    Needs Confirmation ({stats.needsCheckingTotal})
+                                                </button>
+                                                <button
+                                                    onClick={() => setMatrixFilter('automatic')}
+                                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                                                        matrixFilter === 'automatic' 
+                                                            ? 'bg-teal-600 text-white shadow-xs' 
+                                                            : 'bg-teal-50 text-teal-800 hover:bg-teal-100 border border-teal-200/60'
+                                                    }`}
+                                                >
+                                                    <Zap className="w-3 h-3" />
+                                                    Automatic ({stats.automaticTotal})
+                                                </button>
+                                                <button
+                                                    onClick={() => setMatrixFilter('accepted')}
+                                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                                                        matrixFilter === 'accepted' 
+                                                            ? 'bg-emerald-600 text-white shadow-xs' 
+                                                            : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200/60'
+                                                    }`}
+                                                >
+                                                    Accepted ({stats.accepted})
+                                                </button>
+                                                <button
+                                                    onClick={() => setMatrixFilter('retained')}
+                                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                                                        matrixFilter === 'retained' 
+                                                            ? 'bg-slate-700 text-white shadow-xs' 
+                                                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+                                                    }`}
+                                                >
+                                                    Retained ({stats.retained})
+                                                </button>
+                                                <button
+                                                    onClick={() => setMatrixFilter('valid')}
+                                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                                                        matrixFilter === 'valid' 
+                                                            ? 'bg-indigo-600 text-white shadow-xs' 
+                                                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                                    }`}
+                                                >
+                                                    Valid ({stats.valid})
+                                                </button>
+                                                <button
+                                                    onClick={() => setMatrixFilter('all')}
+                                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                                                        matrixFilter === 'all' 
+                                                            ? 'bg-indigo-600 text-white shadow-xs' 
+                                                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                                    }`}
+                                                >
+                                                    All ({stats.total})
+                                                </button>
+                                            </div>
+
+                                            {/* Search Box */}
+                                            <div className="relative min-w-[220px]">
+                                                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                                                <input
+                                                    type="text"
+                                                    value={searchQuery}
+                                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                                    placeholder="Search ID, label, title, tag..."
+                                                    className="w-full pl-8 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium"
+                                                />
+                                                {searchQuery && (
+                                                    <button
+                                                        onClick={() => setSearchQuery('')}
+                                                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                                                    >
+                                                        ×
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Matrix Items List / Queues */}
                                         <div className="flex-grow overflow-auto custom-scrollbar p-6">
-                                            {auditData.filter(item => item.status !== 'skip').length > 0 ? (
-                                                <div className="flex flex-col gap-3">
-                                                    {auditData.filter(item => item.status !== 'skip').map((item, idx) => (
-                                                        <motion.div 
-                                                            key={idx}
-                                                            initial={{ opacity: 0, x: -10 }}
-                                                            animate={{ opacity: 1, x: 0 }}
-                                                            transition={{ delay: idx * 0.03 }}
-                                                            className="flex items-start gap-4 p-4 rounded-xl border border-slate-100 hover:border-indigo-100 hover:bg-indigo-50/30 transition-all duration-200 group"
-                                                        >
-                                                            <div className={`mt-1 w-2 h-2 rounded-full shrink-0 ${
-                                                                item.status === 'fixed' ? 'bg-emerald-500' : 
-                                                                item.status === 'warning' ? 'bg-amber-500' : 'bg-slate-300'
-                                                            }`} />
-                                                            <div className="flex-grow">
-                                                                <div className="flex items-center justify-between mb-1">
+                                            {matrixFilter === 'action-required' ? (
+                                                <div className="flex flex-col gap-8">
+                                                    {/* Queue Overview Summary */}
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                        {/* Queue 1 Card: User Confirmation Required */}
+                                                        <div className="p-4 rounded-2xl bg-amber-50/50 border border-amber-200 flex flex-col justify-between gap-3 shadow-2xs">
+                                                            <div>
+                                                                <div className="flex items-center justify-between gap-2 mb-1.5">
                                                                     <div className="flex items-center gap-2">
-                                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{item.id}</span>
-                                                                        {item.type && (
-                                                                            <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${
-                                                                                item.type === 'doi' ? 'bg-indigo-100 text-indigo-600' : 
-                                                                                item.type === 'name' ? 'bg-fuchsia-100 text-fuchsia-600' :
-                                                                                item.type === 'id-fix' ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'
-                                                                            }`}>
-                                                                                {item.type}
+                                                                        <div className="w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center text-amber-700">
+                                                                            <ShieldAlert className="w-4 h-4" />
+                                                                        </div>
+                                                                        <span className="text-xs font-black text-amber-900 uppercase tracking-tight">
+                                                                            1. Needs User Confirmation
+                                                                        </span>
+                                                                    </div>
+                                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold font-mono ${
+                                                                        stats.pending > 0 
+                                                                            ? 'bg-amber-200/80 text-amber-900 animate-pulse' 
+                                                                            : 'bg-emerald-100 text-emerald-800'
+                                                                    }`}>
+                                                                        {stats.pending > 0 ? `${stats.pending} Awaiting Decision` : 'All Resolved'}
+                                                                    </span>
+                                                                </div>
+                                                                <p className="text-[11px] text-amber-800 leading-relaxed font-medium">
+                                                                    Ambiguous structures (e.g. inter-ref to DOI conversion with intervening <code className="bg-amber-100/80 px-1 py-0.2 rounded font-mono text-[10px]">&lt;sb:comment&gt;</code>). Execution is locked until confirmed or retained.
+                                                                </p>
+                                                            </div>
+                                                            {groupedRefs.some(r => r.needsChecking) && (
+                                                                <div className="flex items-center gap-2 pt-2 border-t border-amber-200/60">
+                                                                    <button
+                                                                        onClick={handleAcceptAll}
+                                                                        className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5"
+                                                                    >
+                                                                        <Check className="w-3.5 h-3.5" />
+                                                                        Accept All ({stats.needsCheckingTotal})
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={handleRetainAll}
+                                                                        className="flex-1 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+                                                                    >
+                                                                        <Shield className="w-3.5 h-3.5 text-slate-500" />
+                                                                        Retain All
+                                                                    </button>
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        {/* Queue 2 Card: Automatic Schema Repairs */}
+                                                        <div className="p-4 rounded-2xl bg-teal-50/50 border border-teal-200 flex flex-col justify-between gap-3 shadow-2xs">
+                                                            <div>
+                                                                <div className="flex items-center justify-between gap-2 mb-1.5">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <div className="w-7 h-7 rounded-lg bg-teal-100 flex items-center justify-center text-teal-700">
+                                                                            <Zap className="w-4 h-4" />
+                                                                        </div>
+                                                                        <span className="text-xs font-black text-teal-900 uppercase tracking-tight">
+                                                                            2. Handled Automatically
+                                                                        </span>
+                                                                    </div>
+                                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-teal-100 text-teal-800">
+                                                                        {stats.automaticTotal} Ready to Apply
+                                                                    </span>
+                                                                </div>
+                                                                <p className="text-[11px] text-teal-800 leading-relaxed font-medium">
+                                                                    Standard deterministic Elsevier DTD repairs (direct DOI capture, empty tag pruning, contributor <code className="bg-teal-100/80 px-1 py-0.2 rounded font-mono text-[10px]">langtype='iso'</code>, author initials). Applied automatically during execution.
+                                                                </p>
+                                                            </div>
+                                                            <div className="pt-2 border-t border-teal-200/60 flex items-center gap-1.5 text-[11px] text-teal-700 font-bold">
+                                                                <CheckCircle className="w-3.5 h-3.5 text-teal-600" />
+                                                                <span>No confirmation needed — fully compliant with Elsevier DTD</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Section 1: User Confirmation Queue */}
+                                                    <div className="flex flex-col gap-3">
+                                                        <div className="flex items-center justify-between border-b border-amber-200 pb-2">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="w-2 h-2 rounded-full bg-amber-500" />
+                                                                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                                                                    Queue 1: Requires User Confirmation ({filteredRefs.filter(r => r.needsChecking).length})
+                                                                </h4>
+                                                            </div>
+                                                            <span className="text-[11px] font-medium text-slate-500">
+                                                                Manual decision required per item
+                                                            </span>
+                                                        </div>
+
+                                                        {filteredRefs.filter(r => r.needsChecking).length > 0 ? (
+                                                            <div className="flex flex-col gap-4">
+                                                                {filteredRefs.filter(r => r.needsChecking).map((refObj, idx) => {
+                                                                    const currentDecision = refDecisions[refObj.id];
+                                                                    const isAutoAccepted = autoAcceptRepairs && refObj.needsChecking;
+                                                                    const isAccepted = isAutoAccepted || currentDecision === 'accept';
+                                                                    const isRetained = !autoAcceptRepairs && currentDecision === 'retain';
+                                                                    const isPending = refObj.needsChecking && !autoAcceptRepairs && !currentDecision;
+
+                                                                    return (
+                                                                        <motion.div 
+                                                                            key={refObj.id}
+                                                                            initial={{ opacity: 0, y: 6 }}
+                                                                            animate={{ opacity: 1, y: 0 }}
+                                                                            transition={{ delay: Math.min(idx * 0.02, 0.3) }}
+                                                                            className={`rounded-2xl border transition-all duration-200 overflow-hidden ${
+                                                                                isPending 
+                                                                                    ? 'bg-amber-50/25 border-amber-300/90 shadow-2xs' 
+                                                                                    : isRetained 
+                                                                                        ? 'bg-slate-50/60 border-slate-200' 
+                                                                                        : 'bg-emerald-50/20 border-emerald-200'
+                                                                            }`}
+                                                                        >
+                                                                            {/* Card Header */}
+                                                                            <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 bg-white/80">
+                                                                                <div className="flex items-center gap-2.5 flex-wrap">
+                                                                                    {refObj.label && (
+                                                                                        <span className="px-2 py-0.5 bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-bold rounded-lg font-mono">
+                                                                                            {refObj.label}
+                                                                                        </span>
+                                                                                    )}
+                                                                                    <span className="text-xs font-black text-slate-800 font-mono tracking-tight">
+                                                                                        {refObj.id}
+                                                                                    </span>
+                                                                                    {refObj.title && (
+                                                                                        <span className="text-xs text-slate-600 font-medium truncate max-w-[360px] italic" title={refObj.title}>
+                                                                                            "{refObj.title}"
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+
+                                                                                {/* Status Badge */}
+                                                                                <div className="flex items-center gap-2 shrink-0">
+                                                                                    {isAutoAccepted ? (
+                                                                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                                                                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                                                                            Auto-Accepted
+                                                                                        </span>
+                                                                                    ) : isAccepted ? (
+                                                                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                                                                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                                                                            Accepted for Repair
+                                                                                        </span>
+                                                                                    ) : isRetained ? (
+                                                                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                                                                            <Shield className="w-3.5 h-3.5 text-slate-500" />
+                                                                                            Retained Unchanged
+                                                                                        </span>
+                                                                                    ) : (
+                                                                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300 animate-pulse">
+                                                                                            <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                                                                                            Action Required
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                            </div>
+
+                                                                            {/* Issues List */}
+                                                                            <div className="p-4 flex flex-col gap-2.5">
+                                                                                {refObj.items.filter(i => i.status !== 'skip').map((item, iIdx) => (
+                                                                                    <div key={iIdx} className={`p-3 rounded-xl border flex items-start gap-3 text-xs ${
+                                                                                        item.requiresConfirmation 
+                                                                                            ? 'bg-amber-50/60 border-amber-200 text-amber-950' 
+                                                                                            : 'bg-slate-50 border-slate-200/70 text-slate-700'
+                                                                                    }`}>
+                                                                                        <div className="mt-0.5 shrink-0">
+                                                                                            {item.requiresConfirmation ? (
+                                                                                                <AlertCircle className="w-4 h-4 text-amber-600" />
+                                                                                            ) : (
+                                                                                                <Zap className="w-4 h-4 text-teal-600" />
+                                                                                            )}
+                                                                                        </div>
+                                                                                        <div className="flex-grow min-w-0">
+                                                                                            <div className="flex items-center gap-2 mb-1">
+                                                                                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${
+                                                                                                    item.requiresConfirmation ? 'bg-amber-200 text-amber-900' : 'bg-indigo-100 text-indigo-700'
+                                                                                                }`}>
+                                                                                                    {item.requiresConfirmation ? 'Confirmation Required' : item.type || 'Fix'}
+                                                                                                </span>
+                                                                                                <span className="text-[10px] font-mono text-amber-700 font-bold">
+                                                                                                    [Inter-ref with comment]
+                                                                                                </span>
+                                                                                            </div>
+                                                                                            <p className="font-medium leading-relaxed">{item.msg}</p>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                ))}
+                                                                            </div>
+
+                                                                            {/* Footer Decision Buttons */}
+                                                                            <div className="px-4 py-3 bg-slate-50/90 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                                                                <div className="text-[11px] text-slate-600 font-medium">
+                                                                                    {isRetained 
+                                                                                        ? "Original XML structure will be preserved without change." 
+                                                                                        : isAccepted 
+                                                                                            ? "DOI conversion will be executed and comment will be retained in position." 
+                                                                                            : "Please confirm whether to migrate to <ce:doi> or retain original tag:"}
+                                                                                </div>
+
+                                                                                <div className="flex items-center gap-2 shrink-0">
+                                                                                    <button
+                                                                                        onClick={() => {
+                                                                                            setRefDecisions(prev => ({ ...prev, [refObj.id]: 'accept' }));
+                                                                                        }}
+                                                                                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                                                                            isAccepted
+                                                                                                ? 'bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-600/20'
+                                                                                                : 'bg-white text-slate-700 border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50'
+                                                                                        }`}
+                                                                                    >
+                                                                                        <Check className="w-3.5 h-3.5" />
+                                                                                        Accept Change
+                                                                                    </button>
+                                                                                    <button
+                                                                                        onClick={() => {
+                                                                                            setRefDecisions(prev => ({ ...prev, [refObj.id]: 'retain' }));
+                                                                                        }}
+                                                                                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                                                                            isRetained
+                                                                                                ? 'bg-slate-700 text-white shadow-xs ring-2 ring-slate-700/20'
+                                                                                                : 'bg-white text-slate-700 border border-slate-200 hover:border-slate-300 hover:bg-slate-100'
+                                                                                        }`}
+                                                                                    >
+                                                                                        <Shield className="w-3.5 h-3.5 text-slate-500" />
+                                                                                        Retain without change
+                                                                                    </button>
+                                                                                </div>
+                                                                            </div>
+                                                                        </motion.div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        ) : (
+                                                            <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 text-center text-xs text-slate-400 font-medium">
+                                                                No references requiring manual confirmation.
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Section 2: Automatic Repairs Queue */}
+                                                    <div className="flex flex-col gap-3">
+                                                        <div className="flex items-center justify-between border-b border-teal-200 pb-2">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="w-2 h-2 rounded-full bg-teal-500" />
+                                                                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                                                                    Queue 2: Handled Automatically ({filteredRefs.filter(r => r.isAutomaticOnly).length})
+                                                                </h4>
+                                                            </div>
+                                                            <span className="text-[11px] font-medium text-teal-700 font-bold">
+                                                                Applied automatically on Execute Repair
+                                                            </span>
+                                                        </div>
+
+                                                        {filteredRefs.filter(r => r.isAutomaticOnly).length > 0 ? (
+                                                            <div className="flex flex-col gap-4">
+                                                                {filteredRefs.filter(r => r.isAutomaticOnly).map((refObj, idx) => (
+                                                                    <motion.div 
+                                                                        key={refObj.id}
+                                                                        initial={{ opacity: 0, y: 6 }}
+                                                                        animate={{ opacity: 1, y: 0 }}
+                                                                        transition={{ delay: Math.min(idx * 0.02, 0.3) }}
+                                                                        className="rounded-2xl border border-teal-200/80 bg-teal-50/15 overflow-hidden shadow-2xs"
+                                                                    >
+                                                                        {/* Card Header */}
+                                                                        <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 bg-white/80">
+                                                                            <div className="flex items-center gap-2.5 flex-wrap">
+                                                                                {refObj.label && (
+                                                                                    <span className="px-2 py-0.5 bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-bold rounded-lg font-mono">
+                                                                                        {refObj.label}
+                                                                                    </span>
+                                                                                )}
+                                                                                <span className="text-xs font-black text-slate-800 font-mono tracking-tight">
+                                                                                    {refObj.id}
+                                                                                </span>
+                                                                                {refObj.title && (
+                                                                                    <span className="text-xs text-slate-600 font-medium truncate max-w-[360px] italic" title={refObj.title}>
+                                                                                        "{refObj.title}"
+                                                                                    </span>
+                                                                                )}
+                                                                            </div>
+
+                                                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-teal-100 text-teal-800 border border-teal-200">
+                                                                                <Zap className="w-3.5 h-3.5 text-teal-600" />
+                                                                                Direct Auto-Clean
+                                                                            </span>
+                                                                        </div>
+
+                                                                        {/* Issues List */}
+                                                                        <div className="p-4 flex flex-col gap-2.5">
+                                                                            {refObj.items.filter(i => i.status !== 'skip').map((item, iIdx) => (
+                                                                                <div key={iIdx} className="p-3 rounded-xl border bg-white border-teal-100 text-slate-700 flex items-start gap-3 text-xs">
+                                                                                    <div className="mt-0.5 shrink-0">
+                                                                                        <CheckCircle className="w-4 h-4 text-teal-600" />
+                                                                                    </div>
+                                                                                    <div className="flex-grow min-w-0">
+                                                                                        <div className="flex items-center gap-2 mb-1">
+                                                                                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider bg-teal-100 text-teal-800 font-mono">
+                                                                                                {item.type || 'Auto-Fix'}
+                                                                                            </span>
+                                                                                            <span className="text-[10px] text-slate-400 font-mono">
+                                                                                                [Standard Protocol]
+                                                                                            </span>
+                                                                                        </div>
+                                                                                        <p className="font-medium text-slate-800 leading-relaxed">{item.msg}</p>
+                                                                                    </div>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    </motion.div>
+                                                                ))}
+                                                            </div>
+                                                        ) : (
+                                                            <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 text-center text-xs text-slate-400 font-medium">
+                                                                No automatic schema repairs detected in this dataset.
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ) : filteredRefs.length > 0 ? (
+                                                <div className="flex flex-col gap-4">
+                                                    {filteredRefs.map((refObj, idx) => {
+                                                        const currentDecision = refDecisions[refObj.id];
+                                                        const isAutoAccepted = autoAcceptRepairs && refObj.needsChecking;
+                                                        const isAccepted = isAutoAccepted || currentDecision === 'accept';
+                                                        const isRetained = !autoAcceptRepairs && currentDecision === 'retain';
+                                                        const isPending = refObj.needsChecking && !autoAcceptRepairs && !currentDecision;
+
+                                                        return (
+                                                            <motion.div 
+                                                                key={refObj.id}
+                                                                initial={{ opacity: 0, y: 6 }}
+                                                                animate={{ opacity: 1, y: 0 }}
+                                                                transition={{ delay: Math.min(idx * 0.02, 0.3) }}
+                                                                className={`rounded-2xl border transition-all duration-200 overflow-hidden ${
+                                                                    isPending 
+                                                                        ? 'bg-amber-50/20 border-amber-300/80 shadow-xs' 
+                                                                        : isRetained 
+                                                                            ? 'bg-slate-50/60 border-slate-200' 
+                                                                            : isAccepted 
+                                                                                ? 'bg-emerald-50/20 border-emerald-200' 
+                                                                                : 'bg-white border-slate-200/80'
+                                                                }`}
+                                                            >
+                                                                {/* Reference Card Header */}
+                                                                <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 bg-white/70">
+                                                                    <div className="flex items-center gap-2.5 flex-wrap">
+                                                                        {refObj.label && (
+                                                                            <span className="px-2 py-0.5 bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-bold rounded-lg font-mono">
+                                                                                {refObj.label}
+                                                                            </span>
+                                                                        )}
+                                                                        <span className="text-xs font-black text-slate-800 font-mono tracking-tight">
+                                                                            {refObj.id}
+                                                                        </span>
+                                                                        {refObj.title && (
+                                                                            <span className="text-xs text-slate-600 font-medium truncate max-w-[360px] italic" title={refObj.title}>
+                                                                                "{refObj.title}"
                                                                             </span>
                                                                         )}
                                                                     </div>
-                                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
-                                                                        item.status === 'fixed' ? 'bg-emerald-100 text-emerald-700' : 
-                                                                        item.status === 'warning' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
-                                                                    }`}>
-                                                                        {item.status.toUpperCase()}
-                                                                    </span>
+
+                                                                    {/* Decision Status Badge */}
+                                                                    <div className="flex items-center gap-2 shrink-0">
+                                                                        {refObj.needsChecking ? (
+                                                                            isAutoAccepted ? (
+                                                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                                                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                                                                    Auto-Accepted
+                                                                                </span>
+                                                                            ) : isAccepted ? (
+                                                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                                                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                                                                    Accepted for Repair
+                                                                                </span>
+                                                                            ) : isRetained ? (
+                                                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                                                                    <Shield className="w-3.5 h-3.5 text-slate-500" />
+                                                                                    Retained Unchanged
+                                                                                </span>
+                                                                            ) : (
+                                                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300 animate-pulse">
+                                                                                    <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                                                                                    Action Required
+                                                                                </span>
+                                                                            )
+                                                                        ) : refObj.hasIssues ? (
+                                                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-teal-100 text-teal-800 border border-teal-200">
+                                                                                <Zap className="w-3.5 h-3.5 text-teal-600" />
+                                                                                Direct Auto-Clean
+                                                                            </span>
+                                                                        ) : (
+                                                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-100 text-slate-500">
+                                                                                <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                                                                                Valid Schema
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
                                                                 </div>
-                                                                <p className="text-xs font-medium text-slate-700">{item.msg}</p>
-                                                            </div>
-                                                        </motion.div>
-                                                    ))}
+
+                                                                {/* Reference Card Issues List */}
+                                                                <div className="p-4 flex flex-col gap-2.5">
+                                                                    {refObj.hasIssues ? (
+                                                                        refObj.items.filter(i => i.status !== 'skip').map((item, iIdx) => (
+                                                                            <div key={iIdx} className="flex items-start gap-3 text-xs">
+                                                                                <div className={`mt-1 w-2 h-2 rounded-full shrink-0 ${
+                                                                                    item.status === 'fixed' ? 'bg-emerald-500' : 
+                                                                                    item.status === 'warning' ? 'bg-amber-500' : 'bg-slate-300'
+                                                                                }`} />
+                                                                                <div className="flex-grow">
+                                                                                    <div className="flex items-center gap-2 mb-0.5">
+                                                                                        {item.type && (
+                                                                                            <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded uppercase tracking-wider ${
+                                                                                                item.type === 'doi' ? 'bg-indigo-100 text-indigo-700' : 
+                                                                                                item.type === 'name' ? 'bg-fuchsia-100 text-fuchsia-700' :
+                                                                                                item.type === 'id-fix' ? 'bg-amber-100 text-amber-700' :
+                                                                                                item.type === 'publisher' || item.type === 'empty-element' ? 'bg-rose-100 text-rose-700' :
+                                                                                                item.type === 'contribution-langtype' ? 'bg-cyan-100 text-cyan-700' :
+                                                                                                'bg-emerald-100 text-emerald-700'
+                                                                                            }`}>
+                                                                                                {item.type}
+                                                                                            </span>
+                                                                                        )}
+                                                                                    </div>
+                                                                                    <p className="text-slate-700 font-medium">{item.msg}</p>
+                                                                                </div>
+                                                                            </div>
+                                                                        ))
+                                                                    ) : (
+                                                                        <p className="text-xs text-slate-400 font-medium">All structural nodes conform to Elsevier DTD standards.</p>
+                                                                    )}
+                                                                </div>
+
+                                                                {/* Reference Decision Action Footer (for items needing checking) */}
+                                                                {refObj.needsChecking && (
+                                                                    <div className="px-4 py-3 bg-slate-50/80 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                                                        <div className="text-[11px] text-slate-500 font-medium">
+                                                                            {isRetained 
+                                                                                ? "Original XML structure will be preserved." 
+                                                                                : isAccepted 
+                                                                                    ? "Targeted schema repairs will be applied upon execution." 
+                                                                                    : "Please choose an action for this reference:"}
+                                                                        </div>
+
+                                                                        <div className="flex items-center gap-2">
+                                                                            <button
+                                                                                onClick={() => {
+                                                                                    setRefDecisions(prev => ({ ...prev, [refObj.id]: 'accept' }));
+                                                                                }}
+                                                                                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                                                                    isAccepted
+                                                                                        ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-600/20'
+                                                                                        : 'bg-white text-slate-700 border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50'
+                                                                                }`}
+                                                                            >
+                                                                                <Check className="w-3.5 h-3.5" />
+                                                                                Accept Change
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={() => {
+                                                                                    setRefDecisions(prev => ({ ...prev, [refObj.id]: 'retain' }));
+                                                                                }}
+                                                                                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                                                                    isRetained
+                                                                                        ? 'bg-slate-700 text-white shadow-sm ring-2 ring-slate-700/20'
+                                                                                        : 'bg-white text-slate-700 border border-slate-200 hover:border-slate-300 hover:bg-slate-100'
+                                                                                }`}
+                                                                            >
+                                                                                <Shield className="w-3.5 h-3.5 text-slate-500" />
+                                                                                Retain without change
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                            </motion.div>
+                                                        );
+                                                    })}
                                                 </div>
                                             ) : (
-                                                <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-4">
+                                                <div className="h-full min-h-[280px] flex flex-col items-center justify-center text-slate-300 gap-4">
                                                     <Activity className="w-12 h-12 opacity-20" />
-                                                    <p className="text-sm font-medium">
-                                                        {auditData.length > 0 ? 'All references are structurally valid.' : 'Awaiting analysis signal...'}
+                                                    <p className="text-sm font-medium text-slate-400">
+                                                        {auditData.length > 0 
+                                                            ? (searchQuery ? 'No references matching search criteria.' : 'No references match current filter.')
+                                                            : 'Awaiting XML analysis signal...'}
                                                     </p>
                                                 </div>
                                             )}

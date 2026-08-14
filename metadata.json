@@ -1,5 +1,6 @@
 {
   "name": "Remix: Production Toolkit 03-28-2026",
   "description": "Enterprise-grade editorial automation suite. Optimized for standalone Windows (.exe) deployment with hardware acceleration and XML integrity guards.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

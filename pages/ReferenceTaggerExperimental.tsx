@@ -6,7 +6,8 @@ import {
     Code, Eye, Zap, ArrowRight, Settings, Info, Layers, Check, 
     BookOpen, Tag, HelpCircle, ArrowLeft, Send, ExternalLink, AlertTriangle,
     Book, Newspaper, GraduationCap, Globe, Landmark, Bookmark, Hash,
-    ShieldCheck, Flag, Edit3, X, Filter, AlertCircle, FileCheck
+    ShieldCheck, Flag, Edit3, X, Filter, AlertCircle, FileCheck,
+    Maximize2, Minimize2, ChevronsUpDown, ChevronDown, ChevronUp
 } from 'lucide-react';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
@@ -169,6 +170,8 @@ const ReferenceTaggerExperimental: React.FC = () => {
     const [qcViewMode, setQcViewMode] = useState<'spans' | 'matrix' | 'syntax-xml'>('spans');
     const [qcDiagnosticFilter, setQcDiagnosticFilter] = useState<'all' | 'pending' | 'validated' | 'flagged' | 'missing-doi' | 'missing-container' | 'missing-vol-pages'>('all');
     const [showLegend, setShowLegend] = useState(true);
+    const [isExpandedView, setIsExpandedView] = useState(false);
+    const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
 
     // Configuration Options
     const [labelStyle, setLabelStyle] = useState<'namedate' | 'numbered'>('namedate');
@@ -942,6 +945,27 @@ const ReferenceTaggerExperimental: React.FC = () => {
         });
     };
 
+    // Expand / Collapse card details in QC & Validation view
+    const toggleCardExpand = (bibId: string) => {
+        setExpandedCards(prev => {
+            const next = new Set(prev);
+            if (next.has(bibId)) {
+                next.delete(bibId);
+            } else {
+                next.add(bibId);
+            }
+            return next;
+        });
+    };
+
+    const handleToggleAllCardsExpand = () => {
+        if (expandedCards.size > 0) {
+            setExpandedCards(new Set());
+        } else {
+            setExpandedCards(new Set(parsedRefs.map(r => r.bibId)));
+        }
+    };
+
     // Start editing a reference
     const handleStartEdit = (ref: ParsedRefData) => {
         setEditingBibId(ref.bibId);
@@ -1409,9 +1433,9 @@ const ReferenceTaggerExperimental: React.FC = () => {
             </div>
 
             {/* Split Main Interface Panels */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-280px)] min-h-[550px]">
+            <div className={`grid gap-6 h-[calc(100vh-280px)] min-h-[550px] transition-all duration-300 ${isExpandedView ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
                 {/* Left Panel: Raw References Input */}
-                <div className="flex flex-col bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
+                <div className={`flex flex-col bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden transition-all ${isExpandedView ? 'hidden' : 'flex'}`}>
                     <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                         <div className="flex items-center gap-2">
                             <BookOpen className="w-4 h-4 text-indigo-600" />
@@ -1494,6 +1518,18 @@ const ReferenceTaggerExperimental: React.FC = () => {
                                     <Send size={12} />
                                     Transfer
                                 </button>
+                                <button
+                                    onClick={() => setIsExpandedView(!isExpandedView)}
+                                    className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 border cursor-pointer ${
+                                        isExpandedView 
+                                            ? 'bg-indigo-50 border-indigo-200 text-indigo-700 shadow-2xs' 
+                                            : 'bg-white border-slate-200 text-slate-700 hover:border-indigo-300 hover:text-indigo-600 shadow-2xs'
+                                    }`}
+                                    title={isExpandedView ? 'Collapse to Split View' : 'Expand Tagging QC to Full Width'}
+                                >
+                                    {isExpandedView ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+                                    <span className="hidden sm:inline">{isExpandedView ? 'Split View' : 'Expand View'}</span>
+                                </button>
                             </div>
                         )}
                     </div>
@@ -1530,7 +1566,27 @@ const ReferenceTaggerExperimental: React.FC = () => {
                                             </p>
                                         </div>
 
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <button
+                                                onClick={() => setIsExpandedView(!isExpandedView)}
+                                                className={`px-3 py-1.5 rounded-xl text-[10px] font-bold transition-all flex items-center gap-1.5 border cursor-pointer ${
+                                                    isExpandedView 
+                                                        ? 'bg-indigo-600 border-indigo-600 text-white shadow-xs' 
+                                                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-slate-300'
+                                                }`}
+                                                title={isExpandedView ? 'Collapse to Split View' : 'Expand Tagging QC to Full Width'}
+                                            >
+                                                {isExpandedView ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+                                                <span>{isExpandedView ? 'Split View' : 'Expand View'}</span>
+                                            </button>
+                                            <button
+                                                onClick={handleToggleAllCardsExpand}
+                                                className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-[10px] font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                                                title="Expand or collapse detailed field inspection across all cards"
+                                            >
+                                                <ChevronsUpDown size={12} />
+                                                {expandedCards.size > 0 ? 'Collapse All' : 'Expand All'}
+                                            </button>
                                             <button
                                                 onClick={() => setShowLegend(!showLegend)}
                                                 className={`px-3 py-1.5 rounded-xl text-[10px] font-bold transition-all flex items-center gap-1.5 border cursor-pointer ${
@@ -1538,7 +1594,7 @@ const ReferenceTaggerExperimental: React.FC = () => {
                                                 }`}
                                             >
                                                 <Tag size={12} />
-                                                {showLegend ? 'Hide Legend' : 'Show Color Legend'}
+                                                {showLegend ? 'Hide Legend' : 'Show Legend'}
                                             </button>
                                             <button
                                                 onClick={() => handleBatchValidate('high-confidence')}
@@ -1702,7 +1758,7 @@ const ReferenceTaggerExperimental: React.FC = () => {
                                                         {/* Validation Quick Actions */}
                                                         <div className="flex items-center gap-1.5">
                                                             <button
-                                                                onClick={() => handleStatusChange(ref.bibId, ref.validationStatus === 'validated' ? 'pending' : 'validated')}
+                                                                onClick={() => handleToggleValidation(ref.bibId, ref.validationStatus === 'validated' ? 'pending' : 'validated')}
                                                                 className={`px-2.5 py-1 rounded-xl text-[10px] font-bold transition-all flex items-center gap-1 border cursor-pointer ${
                                                                     ref.validationStatus === 'validated'
                                                                         ? 'bg-emerald-600 border-emerald-600 text-white'
@@ -1713,7 +1769,7 @@ const ReferenceTaggerExperimental: React.FC = () => {
                                                                 {ref.validationStatus === 'validated' ? 'Validated' : 'Validate'}
                                                             </button>
                                                             <button
-                                                                onClick={() => handleStatusChange(ref.bibId, ref.validationStatus === 'flagged' ? 'pending' : 'flagged')}
+                                                                onClick={() => handleToggleValidation(ref.bibId, ref.validationStatus === 'flagged' ? 'pending' : 'flagged')}
                                                                 className={`px-2.5 py-1 rounded-xl text-[10px] font-bold transition-all flex items-center gap-1 border cursor-pointer ${
                                                                     ref.validationStatus === 'flagged'
                                                                         ? 'bg-amber-500 border-amber-500 text-white'
@@ -1729,6 +1785,17 @@ const ReferenceTaggerExperimental: React.FC = () => {
                                                                 title="Edit metadata tagging"
                                                             >
                                                                 <Edit3 size={13} />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => toggleCardExpand(ref.bibId)}
+                                                                className={`p-1.5 rounded-xl border transition-all cursor-pointer ${
+                                                                    expandedCards.has(ref.bibId)
+                                                                        ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                                                                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:text-indigo-600 hover:border-indigo-300'
+                                                                }`}
+                                                                title={expandedCards.has(ref.bibId) ? 'Collapse card details' : 'Expand card details'}
+                                                            >
+                                                                {expandedCards.has(ref.bibId) ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                                                             </button>
                                                         </div>
                                                     </div>
@@ -1984,6 +2051,32 @@ const ReferenceTaggerExperimental: React.FC = () => {
                                                         <span className="font-bold text-slate-400 block mb-0.5 uppercase text-[8px]">Original Raw Source Line</span>
                                                         {ref.rawText}
                                                     </div>
+
+                                                    {/* Expanded Details Breakdown Panel */}
+                                                    {expandedCards.has(ref.bibId) && (
+                                                        <div className="mt-3 p-3.5 bg-slate-900 text-slate-200 rounded-xl border border-slate-800 space-y-2.5 text-xs font-mono">
+                                                            <div className="flex items-center justify-between pb-2 border-b border-slate-800 text-[10px]">
+                                                                <span className="font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
+                                                                    <Layers size={11} /> Detailed XML Field Inspection ({ref.bibId})
+                                                                </span>
+                                                                <span className="text-slate-400">Type: {ref.refType} ({ref.typeConfidence} confidence)</span>
+                                                            </div>
+                                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                                                                <div><span className="text-slate-400 font-sans">Title:</span> <span className="text-slate-100">{ref.title || '—'}</span></div>
+                                                                <div><span className="text-slate-400 font-sans">Container:</span> <span className="text-slate-100">{ref.containerTitle || ref.publisher?.name || '—'}</span></div>
+                                                                <div><span className="text-slate-400 font-sans">Authors:</span> <span className="text-slate-100">{ref.authors.map(a => `${a.surname}, ${a.givenName}`).join('; ') || '—'}</span></div>
+                                                                <div><span className="text-slate-400 font-sans">Year / Date:</span> <span className="text-slate-100">{ref.year || '—'}</span></div>
+                                                                <div><span className="text-slate-400 font-sans">Volume / Issue:</span> <span className="text-slate-100">{ref.volume ? `Vol. ${ref.volume}` : ''} {ref.issue ? `No. ${ref.issue}` : ''} {!ref.volume && !ref.issue ? '—' : ''}</span></div>
+                                                                <div><span className="text-slate-400 font-sans">Pages:</span> <span className="text-slate-100">{ref.pages ? `${ref.pages.first}-${ref.pages.last}` : '—'}</span></div>
+                                                                <div><span className="text-slate-400 font-sans">DOI:</span> <span className="text-indigo-300 break-all">{ref.doi || '—'}</span></div>
+                                                                <div><span className="text-slate-400 font-sans">Status / Notes:</span> <span className="text-emerald-400">{ref.validationStatus} {ref.validationNotes ? `(${ref.validationNotes})` : ''}</span></div>
+                                                            </div>
+                                                            <div className="pt-2 border-t border-slate-800">
+                                                                <span className="text-[10px] text-slate-400 uppercase tracking-widest block mb-1">Generated Tagged XML</span>
+                                                                <pre className="p-2 bg-black/50 rounded-lg text-[10px] text-emerald-400 overflow-x-auto whitespace-pre-wrap leading-relaxed">{ref.generatedXml}</pre>
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             );
                                         })

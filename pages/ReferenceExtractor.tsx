@@ -13,7 +13,7 @@ interface ExtractedRef {
     label: string;
     rawText: string;
     formattedHtml: string;
-    sourceType: 'source-text' | 'other-ref' | 'structured' | 'fallback';
+    sourceType: 'other-ref' | 'structured' | 'fallback';
     hasSuperscript: boolean;
     hasSubscript: boolean;
     hasItalic: boolean;
@@ -296,9 +296,239 @@ const enforceYearAfterAuthors = (html: string): string => {
 };
 
 /**
- * RECONSTRUCTS STRUCTURED REFERENCES IF SOURCE-TEXT IS ABSENT
+ * RECONSTRUCTS STRUCTURED REFERENCES (SOURCE-TEXT IS NOT USED)
  */
 const reconstructStructuredReference = (content: string): string => {
+    try {
+        const wrapped = `<root xmlns:ce="http://www.elsevier.com/xml/common/dtd" xmlns:sb="http://www.elsevier.com/xml/common/struct-bib/dtd" xmlns:xlink="http://www.w3.org/1999/xlink">${content}</root>`;
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(wrapped, "text/xml");
+        if (doc.getElementsByTagName("parsererror").length === 0) {
+            // Authors
+            const authorNodes = Array.from(doc.getElementsByTagName("sb:author")).concat(Array.from(doc.getElementsByTagName("ce:author")));
+            const authorList: string[] = [];
+            authorNodes.forEach(author => {
+                const surname = author.getElementsByTagName("ce:surname")[0]?.textContent?.trim() || 
+                                author.getElementsByTagName("sb:surname")[0]?.textContent?.trim() || "";
+                const given = author.getElementsByTagName("ce:given-name")[0]?.textContent?.trim() || 
+                              author.getElementsByTagName("sb:given-name")[0]?.textContent?.trim() || 
+                              author.getElementsByTagName("ce:initials")[0]?.textContent?.trim() || 
+                              author.getElementsByTagName("sb:initials")[0]?.textContent?.trim() || "";
+                if (given && surname) {
+                    authorList.push(`${given} ${surname}`);
+                } else if (surname) {
+                    authorList.push(surname);
+                } else if (given) {
+                    authorList.push(given);
+                }
+            });
+
+            // Collaboration / corporate author
+            const collabNodes = Array.from(doc.getElementsByTagName("sb:collaboration")).concat(Array.from(doc.getElementsByTagName("ce:collaboration")));
+            collabNodes.forEach(c => {
+                const text = c.textContent?.trim();
+                if (text && !authorList.includes(text)) authorList.push(text);
+            });
+
+            // Check et-al
+            const hasEtAl = doc.getElementsByTagName("sb:et-al").length > 0 || doc.getElementsByTagName("ce:et-al").length > 0;
+            let authorsStr = authorList.join(", ");
+            if (hasEtAl) {
+                authorsStr = authorsStr ? `${authorsStr}, et al.` : "et al.";
+            }
+
+            // Title
+            const titleNodes = Array.from(doc.getElementsByTagName("sb:maintitle")).concat(Array.from(doc.getElementsByTagName("ce:maintitle")));
+            let mainTitleXml = "";
+            if (titleNodes.length > 0) {
+                const contNode = doc.getElementsByTagName("sb:contribution")[0] || doc.getElementsByTagName("ce:contribution")[0];
+                const contTitle = contNode ? (contNode.getElementsByTagName("sb:maintitle")[0] || contNode.getElementsByTagName("ce:maintitle")[0] || contNode.getElementsByTagName("sb:title")[0]) : titleNodes[0];
+                if (contTitle) {
+                    mainTitleXml = contTitle.innerHTML || contTitle.textContent || "";
+                }
+            }
+
+            // Host / Journal / Book / Series
+            const hostNodes = Array.from(doc.getElementsByTagName("sb:host")).concat(Array.from(doc.getElementsByTagName("ce:host")));
+            let journalXml = "";
+            let year = "";
+            let volume = "";
+            let issue = "";
+            let pages = "";
+            let articleNum = "";
+            let edition = "";
+            let publisherName = "";
+            let publisherLoc = "";
+            const editors: string[] = [];
+            const urls: string[] = [];
+            const dois: string[] = [];
+
+            hostNodes.forEach(host => {
+                if (!journalXml) {
+                    const hostTitles = Array.from(host.getElementsByTagName("sb:maintitle")).concat(Array.from(host.getElementsByTagName("ce:maintitle")));
+                    if (hostTitles.length > 0) {
+                        journalXml = hostTitles[0].innerHTML || hostTitles[0].textContent || "";
+                    } else {
+                        const seriesTitle = host.getElementsByTagName("sb:title")[0] || host.getElementsByTagName("ce:title")[0];
+                        if (seriesTitle) journalXml = seriesTitle.innerHTML || seriesTitle.textContent || "";
+                    }
+                }
+
+                if (!year) {
+                    const dateNode = host.getElementsByTagName("sb:date")[0] || host.getElementsByTagName("ce:date")[0];
+                    if (dateNode) year = dateNode.textContent?.trim() || "";
+                }
+
+                if (!volume) {
+                    const volNode = host.getElementsByTagName("sb:volume-nr")[0] || host.getElementsByTagName("ce:volume-nr")[0];
+                    if (volNode) volume = volNode.textContent?.trim() || "";
+                }
+
+                if (!issue) {
+                    const issueNode = host.getElementsByTagName("sb:issue-nr")[0] || host.getElementsByTagName("ce:issue-nr")[0];
+                    if (issueNode) issue = issueNode.textContent?.trim() || "";
+                }
+
+                if (!pages) {
+                    const firstPage = host.getElementsByTagName("sb:first-page")[0]?.textContent?.trim() || host.getElementsByTagName("ce:first-page")[0]?.textContent?.trim() || "";
+                    const lastPage = host.getElementsByTagName("sb:last-page")[0]?.textContent?.trim() || host.getElementsByTagName("ce:last-page")[0]?.textContent?.trim() || "";
+                    if (firstPage && lastPage) {
+                        pages = `${firstPage}–${lastPage}`;
+                    } else if (firstPage) {
+                        pages = firstPage;
+                    }
+                }
+
+                if (!articleNum) {
+                    const artNode = host.getElementsByTagName("sb:article-number")[0] || host.getElementsByTagName("ce:article-number")[0];
+                    if (artNode) articleNum = artNode.textContent?.trim() || "";
+                }
+
+                if (!edition) {
+                    const edNode = host.getElementsByTagName("sb:edition")[0] || host.getElementsByTagName("ce:edition")[0];
+                    if (edNode) edition = edNode.textContent?.trim() || "";
+                }
+
+                const pubNode = host.getElementsByTagName("sb:publisher")[0] || host.getElementsByTagName("ce:publisher")[0];
+                if (pubNode) {
+                    if (!publisherName) publisherName = pubNode.getElementsByTagName("sb:name")[0]?.textContent?.trim() || pubNode.getElementsByTagName("ce:name")[0]?.textContent?.trim() || "";
+                    if (!publisherLoc) publisherLoc = pubNode.getElementsByTagName("sb:location")[0]?.textContent?.trim() || pubNode.getElementsByTagName("ce:location")[0]?.textContent?.trim() || "";
+                }
+
+                const edNodes = Array.from(host.getElementsByTagName("sb:editor")).concat(Array.from(host.getElementsByTagName("ce:editor")));
+                edNodes.forEach(ed => {
+                    const surname = ed.getElementsByTagName("ce:surname")[0]?.textContent?.trim() || ed.getElementsByTagName("sb:surname")[0]?.textContent?.trim() || "";
+                    const given = ed.getElementsByTagName("ce:given-name")[0]?.textContent?.trim() || ed.getElementsByTagName("sb:given-name")[0]?.textContent?.trim() || ed.getElementsByTagName("ce:initials")[0]?.textContent?.trim() || "";
+                    if (given || surname) editors.push(`${given} ${surname}`.trim());
+                });
+
+                // Inter-refs / URLs
+                const interRefs = Array.from(host.getElementsByTagName("ce:inter-ref")).concat(Array.from(host.getElementsByTagName("sb:inter-ref")));
+                interRefs.forEach(ir => {
+                    const href = ir.getAttribute("xlink:href") || ir.textContent?.trim() || "";
+                    if (href && !urls.includes(href)) urls.push(href);
+                });
+            });
+
+            // Fallback for date directly under sb:reference
+            if (!year) {
+                const dateNode = doc.getElementsByTagName("sb:date")[0] || doc.getElementsByTagName("ce:date")[0];
+                if (dateNode) year = dateNode.textContent?.trim() || "";
+            }
+
+            // DOIs across doc
+            const doiNodes = Array.from(doc.getElementsByTagName("ce:doi")).concat(Array.from(doc.getElementsByTagName("sb:doi")));
+            doiNodes.forEach(d => {
+                const doiText = d.textContent?.trim();
+                if (doiText && !dois.includes(doiText)) dois.push(doiText);
+            });
+
+            // Date accessed
+            const dateAccessedNode = doc.getElementsByTagName("sb:date-accessed")[0] || doc.getElementsByTagName("ce:date-accessed")[0];
+            const dateAccessed = dateAccessedNode?.textContent?.trim() || "";
+
+            // Construct reference string
+            let res = "";
+            if (authorsStr) {
+                if (year) {
+                    res += `${authorsStr}, (${year}). `;
+                } else {
+                    res += `${authorsStr}. `;
+                }
+            } else if (year) {
+                res += `(${year}). `;
+            }
+
+            if (mainTitleXml) {
+                res += `${mainTitleXml.trim()}${mainTitleXml.trim().endsWith('.') ? '' : '.'} `;
+            }
+
+            if (editors.length > 0) {
+                const edLabel = editors.length > 1 ? "Eds." : "Ed.";
+                res += `In: ${editors.join(', ')} (${edLabel}), `;
+            }
+
+            if (journalXml) {
+                let formattedJournal = journalXml.trim();
+                if (!formattedJournal.includes('<ce:italic>') && !formattedJournal.includes('<i>') && !formattedJournal.includes('<italic>')) {
+                    formattedJournal = `<ce:italic>${formattedJournal}</ce:italic>`;
+                }
+                res += formattedJournal;
+            }
+
+            if (edition) {
+                res += `, ${edition}`;
+            }
+
+            let volIssuePagesPart = "";
+            if (volume) {
+                volIssuePagesPart += `<ce:bold>${volume}</ce:bold>`;
+                if (issue) volIssuePagesPart += `(${issue})`;
+            } else if (issue) {
+                volIssuePagesPart += `(${issue})`;
+            }
+
+            const pageOrArt = pages || articleNum;
+            if (pageOrArt) {
+                if (volIssuePagesPart) {
+                    volIssuePagesPart += ` ${pageOrArt}`;
+                } else {
+                    volIssuePagesPart += `${pageOrArt}`;
+                }
+            }
+
+            if (volIssuePagesPart) {
+                res += (journalXml ? `, ${volIssuePagesPart}` : volIssuePagesPart);
+            }
+
+            if (publisherName || publisherLoc) {
+                const pubStr = [publisherName, publisherLoc].filter(Boolean).join(', ');
+                res += `, ${pubStr}`;
+            }
+
+            if (urls.length > 0) {
+                urls.forEach(u => {
+                    res += `, ${u}`;
+                });
+            }
+
+            if (dois.length > 0) {
+                dois.forEach(d => {
+                    const cleanDoi = d.startsWith('10.') ? `https://doi.org/${d}` : d;
+                    res += `, ${cleanDoi}`;
+                });
+            }
+
+            if (dateAccessed) {
+                res += ` (accessed ${dateAccessed})`;
+            }
+
+            if (res.trim()) return res.trim();
+        }
+    } catch (e) {
+        console.warn("DOM-based reconstruct fallback:", e);
+    }
+
     // Authors
     const authorMatches: string[] = [];
     const authorRegex = /<s[be]:author\b[^>]*>([\s\S]*?)<\/s[be]:author>/gi;
@@ -321,6 +551,9 @@ const reconstructStructuredReference = (content: string): string => {
     }
 
     let authorsStr = authorMatches.join(', ');
+    if (/<s[be]:et-al\b/i.test(content) || /<c[be]:et-al\b/i.test(content)) {
+        authorsStr = authorsStr ? `${authorsStr}, et al.` : 'et al.';
+    }
 
     // Main Title
     const titleMatch = content.match(/<s[be]:maintitle\b[^>]*>([\s\S]*?)<\/s[be]:maintitle>/i);
@@ -456,24 +689,23 @@ const ReferenceExtractor: React.FC = () => {
                     const displayLabel = isNumericLabel ? formattedLabel : '';
 
                     let bestSourceXml = '';
-                    let sourceType: 'source-text' | 'other-ref' | 'structured' | 'fallback' = 'fallback';
+                    let sourceType: 'other-ref' | 'structured' | 'fallback' = 'fallback';
 
-                    // 1. Priority: ce:source-text (Contains pre-formatted string)
-                    const sourceTextMatch = content.match(/<ce:source-text\b[^>]*>([\s\S]*?)<\/ce:source-text>/i);
-                    const otherRefMatch = content.match(/<ce:other-ref[^>]*>([\s\S]*?)<\/ce:other-ref>/i);
+                    // Priority: Structured XML first, then other-ref, then fallback (NEVER use ce:source-text)
                     const structuredMatch = content.match(/<(?:sb|ce):reference[^>]*>([\s\S]*?)<\/(?:sb|ce):reference>/i);
+                    const otherRefMatch = content.match(/<ce:other-ref[^>]*>([\s\S]*?)<\/ce:other-ref>/i);
 
-                    if (sourceTextMatch) {
-                        bestSourceXml = sourceTextMatch[1];
-                        sourceType = 'source-text';
+                    if (structuredMatch) {
+                        bestSourceXml = reconstructStructuredReference(structuredMatch[1]);
+                        sourceType = 'structured';
                     } else if (otherRefMatch) {
                         bestSourceXml = otherRefMatch[1];
                         sourceType = 'other-ref';
-                    } else if (structuredMatch) {
-                        bestSourceXml = reconstructStructuredReference(structuredMatch[1]);
-                        sourceType = 'structured';
                     } else {
-                        bestSourceXml = content.replace(/<ce:label>.*?<\/ce:label>/gi, '');
+                        // Fallback: Strip <ce:label> AND strip <ce:source-text> entirely
+                        bestSourceXml = content
+                            .replace(/<ce:label>.*?<\/ce:label>/gi, '')
+                            .replace(/<ce:source-text\b[^>]*>[\s\S]*?<\/ce:source-text>/gi, '');
                         sourceType = 'fallback';
                     }
 
@@ -520,7 +752,7 @@ const ReferenceExtractor: React.FC = () => {
                     setResults(found);
                     setSelectedIndices(new Set(found.map((_, i) => i)));
                     setStep('report');
-                    setToast({ msg: `Extracted ${found.length} bibliography item(s) with full format protection!`, type: "success" });
+                    setToast({ msg: `Extracted ${found.length} bibliography item(s) from structured reference markup!`, type: "success" });
                     setIsLoading(false);
                 }
             } catch (err) {

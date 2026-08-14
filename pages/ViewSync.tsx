@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { diffLines, diffWordsWithSpace, diffChars, Change } from 'diff';
-import { ChevronUp, ChevronDown, GitCompare, Search, AlertCircle, CheckCircle, Lightbulb, ArrowRight, Link as LinkIcon, Eraser, Hash, Trash2, RefreshCw, Box } from 'lucide-react';
+import { ChevronUp, ChevronDown, GitCompare, Search, AlertCircle, CheckCircle, Lightbulb, ArrowRight, Link as LinkIcon, Eraser, Hash, Trash2, RefreshCw, Box, Maximize2, Minimize2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SmartSuggestion, ToolId } from '../types';
 import Toast from '../components/Toast';
@@ -50,6 +50,7 @@ const ViewSync: React.FC = () => {
     
     // View State
     const [activeTab, setActiveTab] = useState<'raw' | 'diff' | 'report' | 'mismatches' | 'orphans'>('raw');
+    const [isExpandedView, setIsExpandedView] = useState(false);
     const [mismatches, setMismatches] = useState<{paraId: string, compactText: string, extendedText: string, index: number}[]>([]);
     const [selectedMismatches, setSelectedMismatches] = useState<Set<number>>(new Set());
     const [diffRows, setDiffRows] = useState<any[]>([]);
@@ -699,18 +700,32 @@ const ViewSync: React.FC = () => {
                 }
 
                 // 2. Map existing cf IDs from target to preserve them
-                const targetCfMap = new Map<string, string[]>();
+                const targetCfByRefId = new Map<string, string[]>();
+                const targetCfOrderedList: string[] = [];
+                const targetExistingIds = new Set<string>();
+                
+                const tIdMatches = targetFullMatch.matchAll(/\bid="([^"]+)"/g);
+                for (const tm of tIdMatches) {
+                    targetExistingIds.add(tm[1]);
+                }
+                
+                // Allow target existing IDs to be reused/preserved in the replacement block
+                targetExistingIds.forEach(id => allIds.delete(id));
+
                 const tOpenTagRegex = /<(ce:cross-refs?)\b([^>]*?)>/gi;
                 let tom;
                 while ((tom = tOpenTagRegex.exec(targetContent)) !== null) {
                     const attrs = tom[2];
                     const idMatch = attrs.match(/\bid="([^"]+)"/);
                     const refidMatch = attrs.match(/\brefid="([^"]+)"/);
-                    if (idMatch && refidMatch) {
+                    if (idMatch) {
                         const id = idMatch[1];
-                        const refid = refidMatch[1];
-                        if (!targetCfMap.has(refid)) targetCfMap.set(refid, []);
-                        targetCfMap.get(refid)!.push(id);
+                        targetCfOrderedList.push(id);
+                        if (refidMatch) {
+                            const refid = refidMatch[1];
+                            if (!targetCfByRefId.has(refid)) targetCfByRefId.set(refid, []);
+                            targetCfByRefId.get(refid)!.push(id);
+                        }
                     }
                 }
 
@@ -719,38 +734,64 @@ const ViewSync: React.FC = () => {
                 
                 // Track IDs used in this specific paragraph to avoid internal collisions
                 const usedInCurrentPara = new Set<string>();
+                if (targetParaId) {
+                    usedInCurrentPara.add(targetParaId);
+                    allIds.add(targetParaId);
+                }
 
-                let newContent = processedSource.replace(/<(ce:cross-refs?)\b([^>]*?\brefid="([^"]+)"[^>]*?)>([\s\S]*?)<\/ce:cross-refs?>/gi, (match, tagName, attrs, refid, content) => {
-                    const targetIds = targetCfMap.get(refid);
-                    const preservedId = (targetIds && targetIds.length > 0) ? targetIds.shift() : null;
+                let newContent = processedSource.replace(/<(ce:cross-refs?)\b([^>]*?)>([\s\S]*?)<\/ce:cross-refs?>/gi, (match, tagName, attrs, content) => {
+                    const refidMatch = attrs.match(/\brefid="([^"]+)"/);
+                    const refid = refidMatch ? refidMatch[1] : '';
+                    const sourceIdMatch = attrs.match(/\bid="([^"]+)"/);
+                    const sourceId = sourceIdMatch ? sourceIdMatch[1] : '';
 
-                    remappedCount++;
-                    if (preservedId && !allIds.has(preservedId)) {
-                        allIds.add(preservedId);
-                        const cleanAttrs = attrs.replace(/\bid="[^"]*"/, '').trim();
-                        return `<${tagName} id="${preservedId}"${cleanAttrs ? ' ' + cleanAttrs : ''}>${content}</${tagName}>`;
-                    } else {
-                        // Generate new globally unique ID
-                        const prefix = tagName.includes('cross-refs') ? 'cfs' : 'cf';
-                        const newId = getUniqueId(prefix);
-                        const cleanAttrs = attrs.replace(/\bid="[^"]*"/, '').trim();
-                        return `<${tagName} id="${newId}"${cleanAttrs ? ' ' + cleanAttrs : ''}>${content}</${tagName}>`;
+                    let preservedId: string | null = null;
+                    if (refid && targetCfByRefId.has(refid) && targetCfByRefId.get(refid)!.length > 0) {
+                        preservedId = targetCfByRefId.get(refid)!.shift()!;
+                    } else if (targetCfOrderedList.length > 0) {
+                        preservedId = targetCfOrderedList.shift()!;
                     }
+
+                    let assignedId = '';
+                    if (preservedId && !usedInCurrentPara.has(preservedId)) {
+                        assignedId = preservedId;
+                    } else if (sourceId && !allIds.has(sourceId) && !usedInCurrentPara.has(sourceId)) {
+                        assignedId = sourceId;
+                    } else {
+                        // Standard XML DTD prefix for both ce:cross-ref and ce:cross-refs is ALWAYS 'cf' (NEVER 'cfs')
+                        assignedId = getUniqueId('cf');
+                    }
+
+                    usedInCurrentPara.add(assignedId);
+                    allIds.add(assignedId);
+                    remappedCount++;
+
+                    const cleanAttrs = attrs.replace(/\bid="[^"]*"/, '').trim();
+                    return `<${tagName} id="${assignedId}"${cleanAttrs ? ' ' + cleanAttrs : ''}>${content}</${tagName}>`;
                 });
 
                 // Renumber existing IDs for non-cross-refs (anchors, e-components)
                 newContent = newContent.replace(/\bid="([a-zA-Z]+)(\d+)"/g, (match, prefix, oldNum) => {
                     const fullId = `${prefix}${oldNum}`;
-                    if (allIds.has(fullId)) return match; // Already handled/preserved
+                    if (usedInCurrentPara.has(fullId)) return match; // Already handled/preserved
                     
-                    const newId = getUniqueId(prefix);
-                    return `id="${newId}"`;
+                    if (allIds.has(fullId)) {
+                        const newId = getUniqueId(prefix);
+                        usedInCurrentPara.add(newId);
+                        allIds.add(newId);
+                        return `id="${newId}"`;
+                    }
+                    allIds.add(fullId);
+                    usedInCurrentPara.add(fullId);
+                    return match;
                 });
 
                 // Safety: Ensure required tags that might have lost IDs are re-anchored
                 newContent = newContent.replace(/<(ce:(?:anchor)|e-component)\b((?:(?!id=)[^>])*)>/g, (match, tagName, attrs) => {
                     const prefix = tagName === 'ce:anchor' ? 'anc' : 'ec';
                     const newId = getUniqueId(prefix);
+                    usedInCurrentPara.add(newId);
+                    allIds.add(newId);
                     return `<${tagName} id="${newId}"${attrs}>`;
                 });
 
@@ -1065,10 +1106,10 @@ const ViewSync: React.FC = () => {
             )}
 
             {/* Main Content Grid */}
-            <div className={`grid gap-6 h-[calc(100vh-320px)] min-h-[600px] transition-all duration-300 ${activeTab === 'diff' ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
+            <div className={`grid gap-6 h-[calc(100vh-320px)] min-h-[600px] transition-all duration-300 ${activeTab === 'diff' || isExpandedView ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
                 
-                {/* Input Section - Hidden in Diff Mode */}
-                <div className={`bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col focus-within:ring-2 focus-within:ring-indigo-100 transition-all ${activeTab === 'diff' ? 'hidden' : 'flex'}`}>
+                {/* Input Section - Hidden in Diff Mode or Expanded Mode */}
+                <div className={`bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col focus-within:ring-2 focus-within:ring-indigo-100 transition-all ${activeTab === 'diff' || isExpandedView ? 'hidden' : 'flex'}`}>
                     <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center">
                         <label className="font-bold text-slate-700 text-sm flex items-center gap-2">
                              <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white border border-slate-200 text-xs text-indigo-600 font-mono shadow-sm">1</span>
@@ -1088,28 +1129,47 @@ const ViewSync: React.FC = () => {
                 {/* Output Section */}
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col relative">
                     <div className="bg-slate-50 px-5 py-2 border-b border-slate-100 flex justify-between items-center">
-                        <label className="font-bold text-slate-700 text-sm flex items-center gap-2">
-                            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white border border-slate-200 text-xs text-emerald-600 font-mono shadow-sm">2</span>
-                            Results
-                            {isStale && (
-                                <span className="ml-2 px-2 py-0.5 bg-amber-100 text-amber-700 text-[9px] font-black rounded-md border border-amber-200 animate-pulse flex items-center gap-1">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                                    STALE
-                                </span>
+                        <div className="flex items-center gap-2">
+                            <label className="font-bold text-slate-700 text-sm flex items-center gap-2">
+                                <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white border border-slate-200 text-xs text-emerald-600 font-mono shadow-sm">2</span>
+                                Results
+                                {isStale && (
+                                    <span className="ml-2 px-2 py-0.5 bg-amber-100 text-amber-700 text-[9px] font-black rounded-md border border-amber-200 animate-pulse flex items-center gap-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                                        STALE
+                                    </span>
+                                )}
+                            </label>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            {output && activeTab === 'raw' && (
+                                <>
+                                    {isStale && <span className="text-[9px] font-bold text-amber-600 uppercase tracking-tighter hidden sm:block">Input changed - Re-sync required</span>}
+                                    <button 
+                                        onClick={copyOutput} 
+                                        className={`text-xs font-bold px-3 py-1.5 rounded border transition-all flex items-center gap-1 active:scale-95 ${isStale ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100' : 'text-emerald-600 hover:bg-emerald-50 border-transparent hover:border-emerald-100'}`}
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
+                                        {isStale ? 'Copy Stale XML' : 'Copy XML'}
+                                    </button>
+                                </>
                             )}
-                        </label>
-                        {output && activeTab === 'raw' && (
-                            <div className="flex items-center gap-2">
-                                {isStale && <span className="text-[9px] font-bold text-amber-600 uppercase tracking-tighter hidden sm:block">Input changed - Re-sync required</span>}
-                                <button 
-                                    onClick={copyOutput} 
-                                    className={`text-xs font-bold px-3 py-1.5 rounded border transition-all flex items-center gap-1 active:scale-95 ${isStale ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100' : 'text-emerald-600 hover:bg-emerald-50 border-transparent hover:border-emerald-100'}`}
+                            {activeTab !== 'diff' && (
+                                <button
+                                    onClick={() => setIsExpandedView(!isExpandedView)}
+                                    className={`text-xs font-bold px-2.5 py-1.5 rounded border transition-all flex items-center gap-1.5 active:scale-95 ${
+                                        isExpandedView 
+                                            ? 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100' 
+                                            : 'text-slate-600 hover:bg-slate-100 border-slate-200'
+                                    }`}
+                                    title={isExpandedView ? 'Collapse to Split View' : 'Expand View to Full Width'}
                                 >
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
-                                    {isStale ? 'Copy Stale XML' : 'Copy XML'}
+                                    {isExpandedView ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+                                    <span className="hidden sm:inline">{isExpandedView ? 'Split View' : 'Expand View'}</span>
                                 </button>
-                            </div>
-                        )}
+                            )}
+                        </div>
                     </div>
 
                     <div className="bg-white px-2 pt-2 border-b border-slate-100 flex space-x-1">
