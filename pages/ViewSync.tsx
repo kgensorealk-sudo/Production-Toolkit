@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { diffLines, diffWordsWithSpace, diffChars, Change } from 'diff';
-import { ChevronUp, ChevronDown, GitCompare, Search, AlertCircle, CheckCircle, Lightbulb, ArrowRight, Link as LinkIcon, Eraser, Hash, Trash2, RefreshCw, Box, Maximize2, Minimize2 } from 'lucide-react';
+import { ChevronUp, ChevronDown, GitCompare, Search, AlertCircle, AlertTriangle, CheckCircle, Lightbulb, ArrowRight, Link as LinkIcon, Eraser, Hash, Trash2, RefreshCw, Box, Maximize2, Minimize2, Sparkles, Copy, Check, ExternalLink, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SmartSuggestion, ToolId } from '../types';
 import Toast from '../components/Toast';
@@ -15,6 +15,22 @@ interface DetectedRef {
     refid?: string;
     text: string;
     isRestored?: boolean;
+    isModified?: boolean;
+    isAutoTagged?: boolean;
+}
+
+export interface RefModification {
+    id: string;
+    paraId: string;
+    type: 'citation_changed' | 'auto_tagged' | 'ref_restored';
+    originalRefText?: string;
+    newRefText: string;
+    originalRefId?: string;
+    newRefId?: string;
+    targetSnippet?: string;
+    resultSnippet: string;
+    message: string;
+    severity: 'warning' | 'info';
 }
 
 interface SyncLog {
@@ -25,6 +41,8 @@ interface SyncLog {
     stats?: {
         remapped: number;
         restored: number;
+        autoTagged?: number;
+        modified?: number;
         total: number;
     };
     diffStats?: {
@@ -41,6 +59,8 @@ const ViewSync: React.FC = () => {
     const [output, setOutput] = useLocalStorage<string>('view_sync_output', '');
     const [lastProcessedInput, setLastProcessedInput] = useLocalStorage<string>('view_sync_last_input', '');
     const [logs, setLogs] = useState<SyncLog[]>([]);
+    const [refModifications, setRefModifications] = useState<RefModification[]>([]);
+    const [copiedSnippetId, setCopiedSnippetId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
     const [suggestions, setSuggestions] = useState<SmartSuggestion[]>([]);
@@ -49,7 +69,7 @@ const ViewSync: React.FC = () => {
     const [orphans, setOrphans] = useState<{type: 'compact' | 'extended', id: string, text: string}[]>([]);
     
     // View State
-    const [activeTab, setActiveTab] = useState<'raw' | 'diff' | 'report' | 'mismatches' | 'orphans'>('raw');
+    const [activeTab, setActiveTab] = useState<'raw' | 'diff' | 'audit' | 'report' | 'mismatches' | 'orphans'>('raw');
     const [isExpandedView, setIsExpandedView] = useState(false);
     const [mismatches, setMismatches] = useState<{paraId: string, compactText: string, extendedText: string, index: number}[]>([]);
     const [selectedMismatches, setSelectedMismatches] = useState<Set<number>>(new Set());
@@ -220,6 +240,149 @@ const ViewSync: React.FC = () => {
     const stripTags = (xml: string) => {
         if (!xml) return '';
         return xml.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+    };
+
+    /**
+     * Restores missing cross-references and e-components from target view into source content
+     * so that supplementary/extended links (like Fig. S1, Table S1, ec####) are never lost.
+     */
+    const restoreMissingLinks = (
+        sourceXml: string,
+        targetXml: string,
+        isExtendedTarget: boolean
+    ): { updatedXml: string; restoredCount: number; restoredRefIds: Set<string> } => {
+        const targetTagRegex = /<(ce:cross-refs?|e-component)\b([^>]*)>([\s\S]*?)<\/\1>/gi;
+        
+        interface TargetLinkItem {
+            tagName: string;
+            attrs: string;
+            refid?: string;
+            innerXml: string;
+            plainText: string;
+            fullTag: string;
+        }
+
+        const targetLinks: TargetLinkItem[] = [];
+        let tm;
+        while ((tm = targetTagRegex.exec(targetXml)) !== null) {
+            const tagName = tm[1];
+            const attrs = tm[2];
+            const innerXml = tm[3];
+            const plainText = stripTags(innerXml).trim();
+            const refidMatch = attrs.match(/\brefid="([^"]+)"/);
+            const refid = refidMatch ? refidMatch[1] : undefined;
+
+            // If syncing to compact view, skip e-components and ec\d+ links per DTD
+            if (!isExtendedTarget) {
+                if (tagName === 'e-component' || (refid && /^ec\d+/i.test(refid))) {
+                    continue;
+                }
+            }
+
+            if (plainText.length > 0) {
+                targetLinks.push({
+                    tagName,
+                    attrs,
+                    refid,
+                    innerXml,
+                    plainText,
+                    fullTag: tm[0]
+                });
+            }
+        }
+
+        if (targetLinks.length === 0) {
+            return { updatedXml: sourceXml, restoredCount: 0, restoredRefIds: new Set<string>() };
+        }
+
+        let updated = sourceXml;
+        let restoredCount = 0;
+        const restoredRefIds = new Set<string>();
+
+        // Token regex to split XML into protected cross-ref/e-component blocks, other XML tags, and plain text
+        const tokenRegex = /(<(?:ce:cross-refs?|e-component)\b[^>]*>[\s\S]*?<\/(?:ce:cross-refs?|e-component)>|<[^>]+>)/gi;
+
+        for (const link of targetLinks) {
+            const escaped = link.plainText
+                .trim()
+                .split(/\s+/)
+                .map(part => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+                .join('[\\s\\u00A0]+');
+
+            const startsWithWord = /^[a-zA-Z0-9]/.test(link.plainText.trim());
+            const endsWithDigit = /\d$/.test(link.plainText.trim());
+            const endsWithLetter = /[a-zA-Z]$/.test(link.plainText.trim());
+
+            const lookbehind = startsWithWord ? '(?<![a-zA-Z0-9])' : '';
+            const lookahead = endsWithDigit ? '(?!\d)' : (endsWithLetter ? '(?![a-zA-Z0-9])' : '');
+
+            const matchRegex = new RegExp(`${lookbehind}${escaped}${lookahead}`, 'i');
+
+            const parts = updated.split(tokenRegex);
+            let linkRestored = false;
+
+            for (let j = 0; j < parts.length; j++) {
+                // Even indices (0, 2, 4...) are plain text outside tags and outside existing cross-ref blocks
+                if (j % 2 === 0 && !linkRestored) {
+                    if (matchRegex.test(parts[j])) {
+                        parts[j] = parts[j].replace(matchRegex, (matched) => {
+                            linkRestored = true;
+                            const cleanAttrs = link.attrs ? ' ' + link.attrs.trim() : '';
+                            return `<${link.tagName}${cleanAttrs}>${matched}</${link.tagName}>`;
+                        });
+                    }
+                }
+            }
+
+            if (linkRestored) {
+                updated = parts.join('');
+                restoredCount++;
+                if (link.refid) {
+                    restoredRefIds.add(link.refid);
+                }
+            }
+        }
+
+        return { updatedXml: updated, restoredCount, restoredRefIds };
+    };
+
+    /**
+     * Automatically tags unlinked figure/table/supplementary/scheme citations with <ce:cross-ref>
+     * while strictly avoiding tags inside existing cross-refs or other protected XML tags.
+     */
+    const autoTagUnlinkedCitations = (
+        xml: string
+    ): { updatedXml: string; autoTaggedCount: number; taggedRefs: { text: string; fullSnippet: string }[] } => {
+        // Token regex splits XML into protected cross-ref/e-component blocks, other XML tags, and plain text
+        const tokenRegex = /(<(?:ce:cross-refs?|e-component)\b[^>]*>[\s\S]*?<\/(?:ce:cross-refs?|e-component)>|<[^>]+>)/gi;
+        const parts = xml.split(tokenRegex);
+        let autoTaggedCount = 0;
+        const taggedRefs: { text: string; fullSnippet: string }[] = [];
+
+        // Citation regex for Fig./Figure/Table/Scheme/Movie/Supplementary refs
+        // Matches e.g. "Fig. S1", "Fig. 1", "Fig. S1B" (captures "Fig. S1"), "Figure S2", "Table S1", etc.
+        const citationRegex = /\b((?:Fig(?:ure)?s?\.?|Tables?|Schemes?|Movies?|Videos?|Supplementary\s+(?:Fig(?:ure)?|Table|Data|Note|Movie|Video))\s*S?\d+)/gi;
+
+        for (let i = 0; i < parts.length; i++) {
+            // Even indices are plain text outside XML tags and existing cross-refs
+            if (i % 2 === 0 && parts[i]) {
+                if (citationRegex.test(parts[i])) {
+                    citationRegex.lastIndex = 0;
+                    parts[i] = parts[i].replace(citationRegex, (match) => {
+                        autoTaggedCount++;
+                        const cleanText = match.trim();
+                        taggedRefs.push({ text: cleanText, fullSnippet: `<ce:cross-ref>${cleanText}</ce:cross-ref>` });
+                        return `<ce:cross-ref>${cleanText}</ce:cross-ref>`;
+                    });
+                }
+            }
+        }
+
+        return {
+            updatedXml: parts.join(''),
+            autoTaggedCount,
+            taggedRefs
+        };
     };
 
     const getValidRanges = (text: string) => {
@@ -616,6 +779,8 @@ const ViewSync: React.FC = () => {
             
             // 3. Build Replacements
             const replacements: {start: number, end: number, replacement: string}[] = [];
+            const newModifications: RefModification[] = [];
+            let modCounter = 1;
 
             for (let i = 0; i < pairs.length; i++) {
                 // If specific indices are provided, only sync those
@@ -667,37 +832,53 @@ const ViewSync: React.FC = () => {
 
                 // --- ROBUST SYNCHRONIZATION STRATEGY ---
                 
-                // 1. Pre-process source based on target view requirements
-                let processedSource = sourceContent || '';
-                
-                if (targetView !== 'extended') {
-                    // Strip e-component tags for non-extended views
-                    processedSource = processedSource.replace(/<e-component\b[^>]*>([\s\S]*?)<\/e-component>/gi, '$1');
-                    // Strip cross-ref tags pointing to supplementary files (ecXXXX) for non-extended views
-                    processedSource = processedSource.replace(/<ce:cross-refs?\b[^>]*?\brefid=["']ec\d+["'][^>]*?>([\s\S]*?)<\/ce:cross-refs?>/gi, '$1');
-                } else {
-                    // When syncing TO extended view, we want to RESTORE ec#### links if they existed in the target but are missing in the source
-                    const ecRegex = /<(ce:cross-refs?)\b([^>]*?\brefid=["']ec\d+["'][^>]*?)>([\s\S]*?)<\/ce:cross-refs?>/gi;
-                    const targetEcLinks: {text: string, fullTag: string}[] = [];
-                    let ecm;
-                    while ((ecm = ecRegex.exec(targetContent)) !== null) {
-                        targetEcLinks.push({
-                            text: stripTags(ecm[3]),
-                            fullTag: ecm[0]
-                        });
-                    }
-
-                    // For each unique supplementary text found in target, if it's unlinked in source, link it
-                    targetEcLinks.forEach(link => {
-                        const escapedText = link.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                        // Check if it's already inside any cross-ref tag
-                        const alreadyLinkedRegex = new RegExp(`<ce:cross-refs?[^>]*>([\\s\\S]*?${escapedText}[\\s\\S]*?)<\\/ce:cross-refs?>`, 'i');
-                        if (!alreadyLinkedRegex.test(processedSource)) {
-                            // Link all occurrences of this text
-                            processedSource = processedSource.replace(new RegExp(escapedText, 'g'), link.fullTag);
-                        }
+                // 0. Extract original references from target before sync to monitor changes
+                const targetOriginalRefs: { tagName: string; id?: string; refid?: string; text: string; fullSnippet: string }[] = [];
+                const tRefScanRegex = /<(ce:cross-refs?|e-component)\b([^>]*)>([\s\S]*?)<\/\1>/gi;
+                let tRefScanMatch;
+                while ((tRefScanMatch = tRefScanRegex.exec(targetContent)) !== null) {
+                    const tagName = tRefScanMatch[1];
+                    const attrs = tRefScanMatch[2];
+                    const text = stripTags(tRefScanMatch[3]).trim();
+                    const idMatch = attrs.match(/\bid="([^"]+)"/);
+                    const refidMatch = attrs.match(/\brefid="([^"]+)"/);
+                    targetOriginalRefs.push({
+                        tagName,
+                        id: idMatch ? idMatch[1] : undefined,
+                        refid: refidMatch ? refidMatch[1] : undefined,
+                        text,
+                        fullSnippet: tRefScanMatch[0]
                     });
                 }
+
+                // 1. Pre-process source based on target view requirements
+                let processedSource = sourceContent || '';
+                let restoredCount = 0;
+                const restoredRefIds = new Set<string>();
+                
+                if (targetView !== 'extended') {
+                    // Strip e-component tags for non-extended views per DTD
+                    processedSource = processedSource.replace(/<e-component\b[^>]*>([\s\S]*?)<\/e-component>/gi, '$1');
+                    // Strip cross-ref tags pointing to supplementary files (ecXXXX) for non-extended views per DTD
+                    processedSource = processedSource.replace(/<ce:cross-refs?\b[^>]*?\brefid=["']ec\d+["'][^>]*?>([\s\S]*?)<\/ce:cross-refs?>/gi, '$1');
+                    
+                    // Also restore any standard target cross-refs if unlinked in source
+                    const restored = restoreMissingLinks(processedSource, targetContent, false);
+                    processedSource = restored.updatedXml;
+                    restoredCount += restored.restoredCount;
+                    restored.restoredRefIds.forEach(id => restoredRefIds.add(id));
+                } else {
+                    // When syncing TO extended view, restore ALL cross-references (Fig. S1, Table S1, ec####, figures, tables, etc.)
+                    // and e-components that existed in the extended target but are missing/unlinked in the source
+                    const restored = restoreMissingLinks(processedSource, targetContent, true);
+                    processedSource = restored.updatedXml;
+                    restoredCount += restored.restoredCount;
+                    restored.restoredRefIds.forEach(id => restoredRefIds.add(id));
+                }
+
+                // Auto-tag any unlinked citations (Fig. S1, Table S1, etc.) in source
+                const autoTagged = autoTagUnlinkedCitations(processedSource);
+                processedSource = autoTagged.updatedXml;
 
                 // 2. Map existing cf IDs from target to preserve them
                 const targetCfByRefId = new Map<string, string[]>();
@@ -795,10 +976,6 @@ const ViewSync: React.FC = () => {
                     return `<${tagName} id="${newId}"${attrs}>`;
                 });
 
-                const restoredCount = 0; // Legacy tracking placeholder
-                const restoredRefIds = new Set<string>();
-                const restoredTagIds = new Set<string>();
-
                 // 5. Scan for FINAL Cross-Refs and e-components for reporting
                 const detectedRefs: DetectedRef[] = [];
                 const crossRefRegex = /<(ce:cross-refs?|e-component)\b([^>]*)>([\s\S]*?)<\/\1>/g;
@@ -808,13 +985,53 @@ const ViewSync: React.FC = () => {
                     const attrs = crMatch[2];
                     const text = crMatch[3];
                     const refIdMatch = attrs.match(/refid="([^"]+)"/);
+                    const currentRefId = refIdMatch ? refIdMatch[1] : undefined;
+                    const cleanText = stripTags(text).trim();
+                    const isRestored = currentRefId ? restoredRefIds.has(currentRefId) : false;
                     
                     detectedRefs.push({
                         tagName,
-                        refid: refIdMatch ? refIdMatch[1] : undefined,
-                        text: text,
-                        isRestored: true // Structural sync effectively preserves all source refs
+                        refid: currentRefId,
+                        text: cleanText,
+                        isRestored: isRestored
                     });
+                }
+
+                // 6. Compare target original refs with final detected refs to log modifications
+                const maxRefs = Math.max(targetOriginalRefs.length, detectedRefs.length);
+                for (let rIdx = 0; rIdx < maxRefs; rIdx++) {
+                    const orig = targetOriginalRefs[rIdx];
+                    const curr = detectedRefs[rIdx];
+
+                    if (orig && curr) {
+                        if (orig.text !== curr.text) {
+                            newModifications.push({
+                                id: `mod-${modCounter++}`,
+                                paraId: targetParaId,
+                                type: 'citation_changed',
+                                originalRefText: orig.text,
+                                newRefText: curr.text,
+                                originalRefId: orig.refid,
+                                targetSnippet: orig.fullSnippet,
+                                resultSnippet: `<${curr.tagName}${curr.refid ? ` refid="${curr.refid}"` : ''}>${curr.text}</${curr.tagName}>`,
+                                severity: 'warning',
+                                message: `Reference citation changed from "${orig.text}" (target) to "${curr.text}" (source synchronized & tagged)`
+                            });
+                        }
+                    } else if (!orig && curr) {
+                        newModifications.push({
+                            id: `mod-${modCounter++}`,
+                            paraId: targetParaId,
+                            type: curr.isRestored ? 'ref_restored' : 'auto_tagged',
+                            newRefText: curr.text,
+                            newRefId: curr.refid,
+                            resultSnippet: `<${curr.tagName}${curr.refid ? ` refid="${curr.refid}"` : ''}>${curr.text}</${curr.tagName}>`,
+                            severity: 'info',
+                            message: curr.isRestored 
+                                ? `Restored reference link for "${curr.text}"` 
+                                : `Auto-tagged citation <ce:cross-ref>${curr.text}</ce:cross-ref>`
+                        });
+                    }
                 }
 
                 const newBlock = `${targetOpenTag}${newContent}</${targetTagName}>`;
@@ -861,6 +1078,7 @@ const ViewSync: React.FC = () => {
             setOutput(finalOutput);
             setLastProcessedInput(input);
             setLogs(newLogs);
+            setRefModifications(newModifications);
             generateDiff(input, finalOutput);
             
             // Detect Orphans for background check
@@ -958,8 +1176,22 @@ const ViewSync: React.FC = () => {
             }
 
             setSuggestions(newSuggestions);
-            setActiveTab('report');
-            setToast({ msg: `Successfully synced ${pairs.length} paragraph pairs.`, type: "success" });
+            
+            const changedCount = newModifications.filter(m => m.type === 'citation_changed').length;
+            if (changedCount > 0) {
+                setActiveTab('audit');
+                const sampleChange = newModifications.find(m => m.type === 'citation_changed');
+                setToast({ 
+                    msg: `Synced ${pairs.length} pair(s). ⚠️ ${changedCount} reference citation changed (${sampleChange?.originalRefText} ➔ ${sampleChange?.newRefText})`, 
+                    type: "warn" 
+                });
+            } else if (newModifications.length > 0) {
+                setActiveTab('audit');
+                setToast({ msg: `Successfully synced ${pairs.length} paragraph pairs with ${newModifications.length} reference adjustments.`, type: "success" });
+            } else {
+                setActiveTab('report');
+                setToast({ msg: `Successfully synced ${pairs.length} paragraph pairs.`, type: "success" });
+            }
             setIsLoading(false);
 
         }, 800);
@@ -1128,6 +1360,49 @@ const ViewSync: React.FC = () => {
                 
                 {/* Output Section */}
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col relative">
+                    {/* Persistent Change Notification Banner */}
+                    {refModifications.length > 0 && (
+                        <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 px-4 py-2.5 text-white flex items-center justify-between shadow-sm animate-fadeIn">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/20 text-white animate-pulse">
+                                    <Sparkles className="w-3.5 h-3.5" />
+                                </span>
+                                <div className="text-xs font-medium truncate">
+                                    <span className="font-bold">
+                                        {refModifications.filter(m => m.type === 'citation_changed').length > 0 
+                                            ? `⚠️ ${refModifications.filter(m => m.type === 'citation_changed').length} Reference Citation Change Detected:` 
+                                            : `⚡ ${refModifications.length} Reference Adjustment(s):`}
+                                    </span>{' '}
+                                    <span className="text-amber-100 font-mono text-[11px]">
+                                        {refModifications.map(m => m.originalRefText ? `${m.originalRefText} ➔ ${m.newRefText}` : m.newRefText).join(', ')}
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                                <button
+                                    onClick={() => setActiveTab('audit')}
+                                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all ${
+                                        activeTab === 'audit' 
+                                            ? 'bg-white text-orange-700 shadow-sm' 
+                                            : 'bg-white/20 hover:bg-white/30 text-white'
+                                    }`}
+                                >
+                                    Review Audit Log
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('diff')}
+                                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all ${
+                                        activeTab === 'diff' 
+                                            ? 'bg-white text-orange-700 shadow-sm' 
+                                            : 'bg-white/20 hover:bg-white/30 text-white'
+                                    }`}
+                                >
+                                    Diff
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="bg-slate-50 px-5 py-2 border-b border-slate-100 flex justify-between items-center">
                         <div className="flex items-center gap-2">
                             <label className="font-bold text-slate-700 text-sm flex items-center gap-2">
@@ -1172,17 +1447,32 @@ const ViewSync: React.FC = () => {
                         </div>
                     </div>
 
-                    <div className="bg-white px-2 pt-2 border-b border-slate-100 flex space-x-1">
-                         {['raw', 'diff', 'report', 'mismatches', 'orphans'].map((tab) => (
+                    <div className="bg-white px-2 pt-2 border-b border-slate-100 flex space-x-1 overflow-x-auto custom-scrollbar">
+                         {['raw', 'diff', 'audit', 'report', 'mismatches', 'orphans'].map((tab) => (
                              <button 
                                 key={tab}
                                 onClick={() => setActiveTab(tab as any)} 
-                                className={`flex-1 py-2 text-xs font-bold rounded-t-lg transition-all duration-200 border-t border-x ${activeTab === tab 
+                                className={`py-2 px-3 text-xs font-bold rounded-t-lg transition-all duration-200 border-t border-x whitespace-nowrap flex items-center gap-1.5 ${activeTab === tab 
                                     ? 'bg-slate-50 text-indigo-600 border-slate-200 translate-y-[1px]' 
                                     : 'bg-white text-slate-500 border-transparent hover:bg-slate-50 hover:text-slate-700'}`}
                              >
                                 {tab === 'raw' && 'Raw XML'}
                                 {tab === 'diff' && 'Diff View'}
+                                {tab === 'audit' && (
+                                    <span className="flex items-center gap-1.5">
+                                        <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                                        Audit & Changes
+                                        {refModifications.length > 0 && (
+                                            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                                                refModifications.some(m => m.type === 'citation_changed') 
+                                                    ? 'bg-amber-500 text-white animate-pulse' 
+                                                    : 'bg-slate-200 text-slate-700'
+                                            }`}>
+                                                {refModifications.length}
+                                            </span>
+                                        )}
+                                    </span>
+                                )}
                                 {tab === 'report' && `Log (${logs.length})`}
                                 {tab === 'mismatches' && `Mismatches (${mismatches.length})`}
                                 {tab === 'orphans' && `Orphans (${orphans.length})`}
@@ -1202,6 +1492,100 @@ const ViewSync: React.FC = () => {
                                     placeholder="Synchronized XML will appear here..."
                                 />
                              </div>
+                         )}
+
+                         {activeTab === 'audit' && (
+                            <div className="h-full bg-white flex flex-col overflow-hidden">
+                                <div className="p-4 border-b border-slate-100 bg-amber-50/40 flex justify-between items-center">
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center text-amber-600">
+                                            <Sparkles className="w-4 h-4" />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">
+                                                Reference Modifications & Auto-Tag Audit Trail
+                                            </h4>
+                                            <p className="text-[11px] text-slate-500 font-medium">
+                                                Explicit change tracking for modified, auto-tagged, and restored cross-references.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => navigate('/citationLinker', { state: { transferredXml: output, sourceTool: 'View Synchronizer' } })}
+                                            className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5"
+                                        >
+                                            <LinkIcon className="w-3.5 h-3.5" />
+                                            Citation Linker Pro
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="flex-grow overflow-auto custom-scrollbar p-4 space-y-4">
+                                    {refModifications.length > 0 ? (
+                                        <div className="grid gap-3.5">
+                                            {refModifications.map((mod) => (
+                                                <div 
+                                                    key={mod.id} 
+                                                    className={`border rounded-xl p-4 transition-all shadow-sm ${
+                                                        mod.type === 'citation_changed' 
+                                                            ? 'border-amber-300 bg-amber-50/20 ring-1 ring-amber-100' 
+                                                            : mod.type === 'auto_tagged'
+                                                            ? 'border-indigo-200 bg-indigo-50/20'
+                                                            : 'border-emerald-200 bg-emerald-50/20'
+                                                    }`}
+                                                >
+                                                    <div className="flex items-start justify-between gap-3 mb-2.5">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${
+                                                                mod.type === 'citation_changed' 
+                                                                    ? 'bg-amber-500 text-white' 
+                                                                    : mod.type === 'auto_tagged'
+                                                                    ? 'bg-indigo-600 text-white'
+                                                                    : 'bg-emerald-600 text-white'
+                                                            }`}>
+                                                                {mod.type === 'citation_changed' && '⚠️ Citation Changed'}
+                                                                {mod.type === 'auto_tagged' && '⚡ Auto-Tagged Citation'}
+                                                                {mod.type === 'ref_restored' && '🔗 Reference Restored'}
+                                                            </span>
+                                                            <span className="font-mono text-xs font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-200 shadow-2xs">
+                                                                ID: {mod.paraId}
+                                                            </span>
+                                                        </div>
+                                                        <span className="text-[10px] font-mono text-slate-400">
+                                                            {mod.originalRefId ? `Target refid="${mod.originalRefId}"` : ''}
+                                                        </span>
+                                                    </div>
+
+                                                    <p className="text-xs text-slate-700 font-medium mb-3">
+                                                        {mod.message}
+                                                    </p>
+
+                                                    {/* Comparison view */}
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs font-mono">
+                                                        {mod.targetSnippet && (
+                                                            <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-100">
+                                                                <div className="text-[10px] font-bold text-rose-700 uppercase mb-1">Target View (Original)</div>
+                                                                <div className="text-rose-900 break-all">{mod.targetSnippet}</div>
+                                                            </div>
+                                                        )}
+                                                        <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-100">
+                                                            <div className="text-[10px] font-bold text-emerald-700 uppercase mb-1">Synchronized Output</div>
+                                                            <div className="text-emerald-900 break-all">{mod.resultSnippet}</div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60 py-16">
+                                            <CheckCircle size={44} strokeWidth={1.5} className="mb-3 text-emerald-500" />
+                                            <p className="text-sm font-semibold text-slate-700">No Reference Discrepancies</p>
+                                            <p className="text-xs mt-1 text-slate-500">All cross-references and links matched cleanly during synchronization.</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
                          )}
 
                          {activeTab === 'diff' && (

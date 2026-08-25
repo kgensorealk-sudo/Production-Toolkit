@@ -179,12 +179,17 @@ const StructuralNodeArchitect: React.FC = () => {
 
             // Pages
             if (!pages) {
-                const firstPage = host.getElementsByTagName("sb:first-page")[0]?.textContent || host.getElementsByTagName("ce:first-page")[0]?.textContent || "";
-                const lastPage = host.getElementsByTagName("sb:last-page")[0]?.textContent || host.getElementsByTagName("ce:last-page")[0]?.textContent || "";
-                if (firstPage && lastPage) {
-                    pages = `${firstPage}-${lastPage}`;
-                } else if (firstPage) {
-                    pages = firstPage;
+                const pagesNode = host.getElementsByTagName("sb:pages")[0] || host.getElementsByTagName("ce:pages")[0];
+                if (pagesNode) {
+                    pages = pagesNode.textContent?.trim() || "";
+                } else {
+                    const firstPage = host.getElementsByTagName("sb:first-page")[0]?.textContent?.trim() || host.getElementsByTagName("ce:first-page")[0]?.textContent?.trim() || "";
+                    const lastPage = host.getElementsByTagName("sb:last-page")[0]?.textContent?.trim() || host.getElementsByTagName("ce:last-page")[0]?.textContent?.trim() || "";
+                    if (firstPage && lastPage) {
+                        pages = `${firstPage}–${lastPage}`;
+                    } else if (firstPage) {
+                        pages = firstPage;
+                    }
                 }
             }
 
@@ -211,74 +216,85 @@ const StructuralNodeArchitect: React.FC = () => {
 
         let sourceText = "";
 
-        // 1. Authors & Year
+        // 1. Authors & Year / Title & Year
         let authorsStr = authors.join(", ");
         if (hasEtAl) {
-            authorsStr = authorsStr ? `${authorsStr} et al.` : "et al.";
+            authorsStr = authorsStr ? `${authorsStr}, et al.` : "et al.";
         }
         if (authorsStr) {
             if (year) {
                 sourceText += `${authorsStr}, (${year}).`;
             } else {
-                sourceText += `${authorsStr},`;
+                sourceText += `${authorsStr}.`;
             }
+            if (title) {
+                let cleanTitle = title.trim().replace(/[\s,.]*$/, '');
+                sourceText += (sourceText ? " " : "") + `${cleanTitle}.`;
+            }
+        } else if (title) {
+            // When NO authors, start with Title followed by period
+            let cleanTitle = title.trim().replace(/[\s,.]*$/, '');
+            sourceText += `${cleanTitle}.`;
         } else if (year) {
             sourceText += `(${year}).`;
         }
-
-        // 2. Title
-        if (title) {
-            let titlePart = title.trim();
-            if (titlePart.endsWith(".")) {
-                titlePart = titlePart.slice(0, -1) + ",";
-            } else if (!titlePart.endsWith(",")) {
-                titlePart += ",";
-            }
-            sourceText += (sourceText ? " " : "") + titlePart;
-        }
         
-        // 3. Editors
+        // 2. Editors
         if (editors.length > 0) {
-            sourceText += (sourceText ? " " : "") + `In: ${editors.join(", ")} (Eds.),`;
+            const edLabel = editors.length > 1 ? "Eds." : "Ed.";
+            sourceText += (sourceText ? " " : "") + `In: ${editors.join(", ")} (${edLabel}),`;
         }
 
-        // 4. Host (Journal/Book)
-        let hostStr = "";
+        // 3. Host (Journal/Book)
+        let volIssuePagesPart = "";
         if (journal) {
-            hostStr = journal.trim();
-            let volIssuePages = "";
-            if (volume) volIssuePages += ` ${volume}`;
-            if (issue) volIssuePages += `(${issue})`;
-            const pageOrArt = pages || articleNum;
-            if (pageOrArt) volIssuePages += ` ${pageOrArt}`;
-            hostStr += volIssuePages;
-        } else {
-            let volIssuePages = "";
-            if (volume) volIssuePages += `${volume}`;
-            if (issue) volIssuePages += `(${issue})`;
-            const pageOrArt = pages || articleNum;
-            if (pageOrArt) volIssuePages += volIssuePages ? ` ${pageOrArt}` : `${pageOrArt}`;
-            hostStr = volIssuePages.trim();
+            volIssuePagesPart += journal.trim();
         }
 
-        if (hostStr) {
-            if (hostStr.endsWith(".")) {
-                hostStr = hostStr.slice(0, -1) + ",";
-            } else if (!hostStr.endsWith(",")) {
-                hostStr += ",";
+        if (volume) {
+            if (volIssuePagesPart) volIssuePagesPart += `, ${volume}`;
+            else volIssuePagesPart += `${volume}`;
+        }
+
+        if (issue) {
+            volIssuePagesPart += `(${issue})`;
+        }
+
+        if (!authorsStr && year) {
+            // In numbered / STM style, authorless references place (Year) with the volume/issue:
+            // e.g. "Accounts of Materials Research, 6(8), (2025) 1020–1032"
+            if (volIssuePagesPart) {
+                volIssuePagesPart += `, (${year})`;
+            } else {
+                volIssuePagesPart += `(${year})`;
             }
-            sourceText += (sourceText ? " " : "") + hostStr;
         }
 
-        // 5. DOI
+        const pageOrArt = pages || articleNum;
+        if (pageOrArt) {
+            if (volIssuePagesPart) {
+                volIssuePagesPart += ` ${pageOrArt}`;
+            } else {
+                volIssuePagesPart += `${pageOrArt}`;
+            }
+        }
+
+        if (volIssuePagesPart) {
+            sourceText += (sourceText ? " " : "") + volIssuePagesPart;
+        }
+
+        // 4. DOI
         const doiNode = sbRef.getElementsByTagName("ce:doi")[0] || sbRef.getElementsByTagName("sb:doi")[0];
         const doi = doiNode?.textContent?.trim();
         if (doi) {
             const cleanDoi = doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i, '').replace(/^doi:/i, '');
+            if (sourceText && !sourceText.endsWith(",") && !sourceText.endsWith(".")) {
+                sourceText += ",";
+            }
             sourceText += (sourceText ? " " : "") + `https://doi.org/${cleanDoi}`;
         }
 
-        // 6. Inter-refs (URLs) and Date Accessed
+        // 5. Inter-refs (URLs) and Date Accessed
         const dateAccessedNode = sbRef.getElementsByTagName("sb:date-accessed")[0];
         let dateAccessedStr = "";
         if (dateAccessedNode) {
@@ -303,6 +319,9 @@ const StructuralNodeArchitect: React.FC = () => {
                 if (dateAccessedStr) {
                     urlPart += ` ${dateAccessedStr}`;
                     dateAccessedStr = ""; // Only append to the first URL found
+                }
+                if (sourceText && !sourceText.endsWith(",") && !sourceText.endsWith(".")) {
+                    sourceText += ",";
                 }
                 sourceText += (sourceText ? " " : "") + urlPart;
             }

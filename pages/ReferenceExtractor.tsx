@@ -111,6 +111,7 @@ const sanitizeFormattedHtml = (rawXml: string): string => {
         .replace(/(<\/(?:i|b|sup|sub|u|span)>)\s+([,.:;)])/gi, '$1$2')
         .replace(/\s+(<\/(?:i|b|sup|sub|u|span)>)/gi, '$1')
         .replace(/\(\s+/g, '(')
+        .replace(/\bet\s+al\b(?!\.)/gi, 'et al.')
         .replace(/,\s*,/g, ', ')
         .replace(/,\s*\./g, '.')
         .replace(/\.\s*,/g, '.');
@@ -155,12 +156,13 @@ function splitAuthorsAndRest(step: string): { authors: string; rest: string } {
     let workingStr = step.trim();
 
     // Regex for ONE author:
-    // 1. Initials + Surname: e.g., "M.U. Islam", "M. W. Ullah", "G.-D. Wang", "A. R. Mahjoub", "J.K. Park", "X. R. Fan"
-    // 2. Surname + comma + Initials: e.g., "Islam, M.U.", "Abazari, R."
-    // 3. Surname + Initials (no comma): e.g., "Islam M.U.", "Park JK"
-    // 4. Single Initial + comma + Surname: e.g., "R., Abazari"
-    // 5. Given Name + Surname: e.g., "John Smith"
-    const authorRegex = /^(?:(?:[A-Z]\.(?:\s*-?\s*[A-Z]\.)*|[A-Z]\b)\s+[A-Z][a-zA-Z\-']{1,}|[A-Z][a-zA-Z\-']{1,}\s*,\s*(?:[A-Z]\.(?:\s*-?\s*[A-Z]\.)*|[A-Z]{1,3}\b)|[A-Z][a-zA-Z\-']{1,}\s+(?:[A-Z]\.(?:\s*-?\s*[A-Z]\.)*|[A-Z]{1,3}\b)|[A-Z]\.\s*,\s*[A-Z][a-zA-Z\-']{1,}|[A-Z][a-z]{1,}\s+[A-Z][a-zA-Z\-']{1,})/;
+    // 1. Initials (including multi-part, hyphenated, or mixed case like E.MacA., J.-P., M.U., A.) + Surname (with optional prefixes like van, der, de, etc.)
+    // 2. Surname + comma/space + Initials
+    // 3. Given Name + Surname
+    // 4. "et al." / "and others"
+    const initialPart = `(?:[A-Z][A-Za-z0-9]?\\.(?:\\s*-?\\s*[A-Z][A-Za-z0-9]?\\.)*|[A-Z]{1,4}\\b)`;
+    const surnamePart = `(?:(?:van|von|der|de|da|del|della|du|le|la|al|bin|ibn)\\s+)*[A-Z][a-zA-Z\\-']{1,}`;
+    const authorRegex = new RegExp(`^(?:${initialPart}\\s+${surnamePart}|${surnamePart}\\s*,\\s*${initialPart}|${surnamePart}\\s+${initialPart}|[A-Z]\\.\\s*,\\s*${surnamePart}|[A-Z][a-z]{1,}\\s+${surnamePart})`, 'i');
 
     let authors: string[] = [];
     let currentPos = 0;
@@ -175,13 +177,21 @@ function splitAuthorsAndRest(step: string): { authors: string; rest: string } {
         const remaining = workingStr.slice(currentPos);
         if (!remaining) break;
 
+        // Check for "et al." or "and others"
+        const etAlMatch = remaining.match(/^(?:et\s+al\.?|and\s+others\b)/i);
+        if (etAlMatch) {
+            authors.push('et al.');
+            currentPos += etAlMatch[0].length;
+            break;
+        }
+
         const match = remaining.match(authorRegex);
         if (!match) break;
 
         const authorText = match[0].trim();
 
         // Title word guard (words that look like titles or journal names rather than human authors)
-        if (/^(?:Journal|Proceedings|Advances|International|American|European|Transactions|Review|Letters|Strategies|Synthesis|Development|Effect|Analysis|Role|Impact|Characterization|Design|Fabrication|Preparation|Application|Study|Evaluation|Investigation)\b/i.test(authorText)) {
+        if (/^(?:Journal|Proceedings|Advances|International|American|European|Transactions|Review|Letters|Strategies|Synthesis|Development|Effect|Analysis|Role|Impact|Characterization|Design|Fabrication|Preparation|Application|Study|Evaluation|Investigation|Country|Report|Guidelines|Approaches)\b/i.test(authorText)) {
             break;
         }
 
@@ -196,8 +206,9 @@ function splitAuthorsAndRest(step: string): { authors: string; rest: string } {
             const postPeriodDelim = postPeriod.match(/^(?:[\s,;&]|and\b)+/i);
             const postPeriodRest = postPeriodDelim ? postPeriod.slice(postPeriodDelim[0].length) : postPeriod;
 
+            const isEtAl = /^(?:et\s+al\.?|and\s+others\b)/i.test(postPeriodRest);
             const isNextAuthor = postPeriodRest.match(authorRegex);
-            if (!isNextAuthor) {
+            if (!isNextAuthor && !isEtAl) {
                 // Next segment is title! Stop author loop here.
                 const dotOffset = workingStr.slice(currentPos).indexOf('.');
                 if (dotOffset !== -1) {
@@ -209,18 +220,14 @@ function splitAuthorsAndRest(step: string): { authors: string; rest: string } {
     }
 
     if (authors.length > 0) {
-        const authorsString = authors.join(', ');
+        let authorsString = authors.join(', ');
+        // Clean up redundant commas before et al.
+        authorsString = authorsString.replace(/,\s*et al\./gi, ', et al.');
         const restString = workingStr.slice(currentPos).trim();
         return { authors: authorsString, rest: restString };
     }
 
-    // Fallback: match up to title boundary or first period
-    const fallbackMatch = step.match(/^([^.]+(?:\.[A-Z]\.)*?\b[A-Za-z0-9\-]+(?:\.|\b))\s+([A-Z\d][\s\S]*)$/);
-    if (fallbackMatch) {
-        return { authors: fallbackMatch[1].trim(), rest: fallbackMatch[2].trim() };
-    }
-
-    return { authors: step, rest: '' };
+    return { authors: '', rest: workingStr };
 }
 
 /**
@@ -248,13 +255,45 @@ const enforceYearAfterAuthors = (html: string): string => {
     }
     const year = yearMatch[1];
 
-    // Check if year is ALREADY formatted right after authors near the start (e.g. "., (2023)." or ", (2023).")
-    const alreadyPositionedRegex = new RegExp(`^([^.]{2,250}?)(?:\\.,|\\.|,)?\\s*\\(${year}\\)\\.`, 'i');
-    if (alreadyPositionedRegex.test(step)) {
-        // Clean up any duplicated year at the end
-        step = step.replace(new RegExp(`[,;\\s]+\\b${year}\\b[,;\\s]*`, 'g'), ' ');
-        step = step.replace(/\s+/g, ' ').replace(/\s+([,.:;)])/g, '$1');
-        return step;
+    // Check if there are authors
+    const { authors: detectedAuthors } = splitAuthorsAndRest(step);
+    if (!detectedAuthors) {
+        // If there are no authors, keep year as-is (e.g. "Title. Journal, 6(8), (2025) 1020–1032")
+        return step
+            .replace(/,\s*,/g, ', ')
+            .replace(/\.\s*\./g, '.')
+            .replace(/\s+/g, ' ')
+            .replace(/\s+([,.:;)])/g, '$1')
+            .trim();
+    }
+
+    // Check if year is ALREADY positioned right after authors near the start:
+    // e.g. "Authors, (2023)." or "Authors, et al., (2023)."
+    const alreadyPositionedMatch = step.match(new RegExp(`^([\\s\\S]{1,400}?)(?:\\.,|\\.|,)?\\s*\\(${year}\\)[.,]?\\s*([\\s\\S]*)$`, 'i'));
+    if (alreadyPositionedMatch) {
+        const potentialAuthors = alreadyPositionedMatch[1].trim();
+        const afterYear = alreadyPositionedMatch[2].trim();
+
+        // If afterYear is non-empty, year is positioned near the front after authors
+        if (afterYear.length > 0) {
+            let cleanAuthors = potentialAuthors.replace(/[\s,;&]+$/, '');
+            if (/et\s+al\.?$/i.test(cleanAuthors)) {
+                cleanAuthors = cleanAuthors.replace(/et\s+al\.?$/i, 'et al.');
+            } else {
+                cleanAuthors = cleanAuthors.replace(/[\s,;&.]+$|[\s,;&]+$/, '');
+            }
+            let cleanAfterYear = afterYear.replace(/^[\s,.]+/, '');
+
+            if (cleanAuthors) {
+                step = `${cleanAuthors}, (${year}). ${cleanAfterYear}`;
+            } else {
+                step = `(${year}). ${cleanAfterYear}`;
+            }
+            // Clean up any duplicated year at the end
+            step = step.replace(new RegExp(`[,;\\s]+\\b${year}\\b[,;\\s]*`, 'g'), ' ');
+            step = step.replace(/\s+/g, ' ').replace(/\s+([,.:;)])/g, '$1');
+            return step;
+        }
     }
 
     // 4. Remove year from journal/host/date section elsewhere in the string
@@ -276,11 +315,21 @@ const enforceYearAfterAuthors = (html: string): string => {
     const { authors, rest } = splitAuthorsAndRest(step);
 
     if (authors && rest) {
-        let cleanAuthors = authors.trim().replace(/[\s,;&.]+$|[\s,;&]+$/, '');
+        let cleanAuthors = authors.trim().replace(/[\s,;&]+$/, '');
+        if (/et\s+al\.?$/i.test(cleanAuthors)) {
+            cleanAuthors = cleanAuthors.replace(/et\s+al\.?$/i, 'et al.');
+        } else {
+            cleanAuthors = cleanAuthors.replace(/[\s,;&.]+$|[\s,;&]+$/, '');
+        }
         let cleanRest = rest.trim().replace(/^[\s,.]+/, '');
         step = `${cleanAuthors}, (${year}). ${cleanRest}`;
     } else if (authors) {
-        let cleanAuthors = authors.trim().replace(/[\s,;&.]+$|[\s,;&]+$/, '');
+        let cleanAuthors = authors.trim().replace(/[\s,;&]+$/, '');
+        if (/et\s+al\.?$/i.test(cleanAuthors)) {
+            cleanAuthors = cleanAuthors.replace(/et\s+al\.?$/i, 'et al.');
+        } else {
+            cleanAuthors = cleanAuthors.replace(/[\s,;&.]+$|[\s,;&]+$/, '');
+        }
         step = `${cleanAuthors}, (${year}).`;
     }
 
@@ -455,12 +504,13 @@ const reconstructStructuredReference = (content: string): string => {
                 } else {
                     res += `${authorsStr}. `;
                 }
-            } else if (year) {
-                res += `(${year}). `;
-            }
-
-            if (mainTitleXml) {
-                res += `${mainTitleXml.trim()}${mainTitleXml.trim().endsWith('.') ? '' : '.'} `;
+                if (mainTitleXml) {
+                    res += `${mainTitleXml.trim()}${mainTitleXml.trim().endsWith('.') ? '' : '.'} `;
+                }
+            } else if (mainTitleXml) {
+                // When NO authors, start with Title followed by period
+                const cleanTitle = mainTitleXml.trim().replace(/[\s,.]*$/, '');
+                res += `${cleanTitle}. `;
             }
 
             if (editors.length > 0) {
@@ -486,6 +536,18 @@ const reconstructStructuredReference = (content: string): string => {
                 if (issue) volIssuePagesPart += `(${issue})`;
             } else if (issue) {
                 volIssuePagesPart += `(${issue})`;
+            }
+
+            if (!authorsStr && year) {
+                // In numbered / STM style, authorless references place (Year) with the volume/issue:
+                // e.g. "Accounts of Materials Research, 6(8), (2025) 1020–1032"
+                if (volIssuePagesPart) {
+                    volIssuePagesPart += `, (${year})`;
+                } else if (journalXml) {
+                    volIssuePagesPart += `, (${year})`;
+                } else {
+                    volIssuePagesPart += `(${year})`;
+                }
             }
 
             const pageOrArt = pages || articleNum;
@@ -590,7 +652,7 @@ const reconstructStructuredReference = (content: string): string => {
 
     let result = '';
 
-    // 1. Authors & Year: "Authors., (Year)."
+    // 1. Authors & Year / Title
     if (authorsStr) {
         if (!authorsStr.endsWith('.')) authorsStr += '.';
         if (date) {
@@ -598,13 +660,12 @@ const reconstructStructuredReference = (content: string): string => {
         } else {
             result += `${authorsStr} `;
         }
-    } else if (date) {
-        result += `(${date}). `;
-    }
-
-    // 2. Title
-    if (titleStr) {
-        result += `${titleStr}. `;
+        if (titleStr) {
+            result += `${titleStr}. `;
+        }
+    } else if (titleStr) {
+        const cleanTitle = titleStr.replace(/[\s,.]*$/, '');
+        result += `${cleanTitle}. `;
     }
 
     // 3. Journal, Volume(Issue) Pages
@@ -625,6 +686,16 @@ const reconstructStructuredReference = (content: string): string => {
         }
     } else if (issue) {
         volIssuePagesPart += `(${issue})`;
+    }
+
+    if (!authorsStr && date) {
+        if (volIssuePagesPart) {
+            volIssuePagesPart += `, (${date})`;
+        } else if (journalStr) {
+            volIssuePagesPart += `, (${date})`;
+        } else {
+            volIssuePagesPart += `(${date})`;
+        }
     }
 
     const pageOrArt = pages || artNum;
