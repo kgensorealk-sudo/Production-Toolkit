@@ -556,7 +556,7 @@ const RefSorter: React.FC = () => {
                                             const moveType = delta > 0 ? 'up' : 'down';
                                             
                                             return (
-                                                <div key={ref.id} className="group relative bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all duration-300 overflow-hidden">
+                                                <div key={`${ref.id}-${ref.originalIndex}-${i}`} className="group relative bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all duration-300 overflow-hidden">
                                                     {/* Status Bar */}
                                                     <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${!hasMoved ? 'bg-slate-100' : (moveType === 'up' ? 'bg-emerald-500' : 'bg-amber-500')}`}></div>
                                                     

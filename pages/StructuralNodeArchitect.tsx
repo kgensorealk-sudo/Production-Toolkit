@@ -75,8 +75,9 @@ const StructuralNodeArchitect: React.FC = () => {
     const [suggestions, setSuggestions] = useState<SmartSuggestion[]>([]);
     const [activeTab, setActiveTab] = useState<'input' | 'analysis' | 'result'>('input');
     const [resultMode, setResultMode] = useState<'full' | 'refs'>('full');
-    const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
+    const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'|'info'} | null>(null);
     const [currentChangeIndex, setCurrentChangeIndex] = useState(-1);
+    const [showModificationDetails, setShowModificationDetails] = useState<boolean>(false);
 
     useEffect(() => {
         if (location.state?.transferredXml) {
@@ -294,7 +295,26 @@ const StructuralNodeArchitect: React.FC = () => {
             sourceText += (sourceText ? " " : "") + `https://doi.org/${cleanDoi}`;
         }
 
-        // 5. Inter-refs (URLs) and Date Accessed
+        // 5. Comments (e.g. <sb:comment>Available at</sb:comment>, <sb:comment>in press</sb:comment>)
+        const commentNodes = Array.from(sbRef.getElementsByTagName("sb:comment")).concat(Array.from(sbRef.getElementsByTagName("ce:comment")));
+        const comments: string[] = [];
+        commentNodes.forEach(c => {
+            const txt = c.textContent?.trim();
+            if (txt && !comments.includes(txt)) {
+                comments.push(txt);
+            }
+        });
+
+        if (comments.length > 0) {
+            comments.forEach(cm => {
+                if (sourceText && !sourceText.endsWith(".") && !sourceText.endsWith(",") && !sourceText.endsWith(":")) {
+                    sourceText += ".";
+                }
+                sourceText += (sourceText ? " " : "") + cm;
+            });
+        }
+
+        // 6. Inter-refs (URLs) and Date Accessed
         const dateAccessedNode = sbRef.getElementsByTagName("sb:date-accessed")[0];
         let dateAccessedStr = "";
         if (dateAccessedNode) {
@@ -320,8 +340,11 @@ const StructuralNodeArchitect: React.FC = () => {
                     urlPart += ` ${dateAccessedStr}`;
                     dateAccessedStr = ""; // Only append to the first URL found
                 }
-                if (sourceText && !sourceText.endsWith(",") && !sourceText.endsWith(".")) {
-                    sourceText += ",";
+                if (sourceText && !sourceText.endsWith(",") && !sourceText.endsWith(".") && !sourceText.endsWith(":")) {
+                    const endsWithIntroducer = /\b(available\s*(at|from|online(\s*at)?)?|url|retrieved\s*(from)?|link|see|online|accessed(\s*at)?)$/i.test(sourceText.trim());
+                    if (!endsWithIntroducer) {
+                        sourceText += ",";
+                    }
                 }
                 sourceText += (sourceText ? " " : "") + urlPart;
             }
@@ -1202,7 +1225,21 @@ const StructuralNodeArchitect: React.FC = () => {
             });
 
             setSuggestions(newSuggestions);
-            setToast({ msg: 'Structural repair protocol complete.', type: 'success' });
+
+            const fixedItems = finalAudit.filter(a => a.status === 'fixed');
+            const isModified = fixedItems.length > 0 || (input.trim() !== xmlOutput.trim());
+            if (isModified) {
+                const count = fixedItems.length > 0 ? fixedItems.length : 1;
+                setToast({ 
+                    msg: `Modification Detected: ${count} automatic structural correction${count > 1 ? 's' : ''} applied across XML tags, links, and schemas.`, 
+                    type: 'success' 
+                });
+            } else {
+                setToast({ 
+                    msg: 'XML schema verified: All references conform to Elsevier DTD with no modifications needed.', 
+                    type: 'info' 
+                });
+            }
         } catch (err: any) {
             setToast({ msg: err.message, type: 'error' });
         } finally {
@@ -1334,6 +1371,29 @@ const StructuralNodeArchitect: React.FC = () => {
         pending: groupedRefs.filter(r => r.needsChecking && !autoAcceptRepairs && !refDecisions[r.id]).length,
         valid: groupedRefs.filter(r => !r.hasIssues).length
     };
+
+    const modificationStats = React.useMemo(() => {
+        const fixedItems = auditData.filter(a => a.status === 'fixed');
+        const sourceTextCount = fixedItems.filter(a => a.type === 'source-text').length;
+        const doiCount = fixedItems.filter(a => a.type === 'doi' || a.type === 'ir-fix').length;
+        const nameCount = fixedItems.filter(a => a.type === 'name').length;
+        const langtypeCount = fixedItems.filter(a => a.type === 'contribution-langtype').length;
+        const emptyElementCount = fixedItems.filter(a => a.type === 'empty-element' || a.type === 'publisher').length;
+        const idCount = fixedItems.filter(a => a.type === 'id-fix').length;
+        const modifiedRefIds = Array.from(new Set(fixedItems.map(a => a.id)));
+
+        return {
+            totalFixed: fixedItems.length,
+            modifiedRefCount: modifiedRefIds.length,
+            sourceTextCount,
+            doiCount,
+            nameCount,
+            langtypeCount,
+            emptyElementCount,
+            idCount,
+            fixedItems
+        };
+    }, [auditData]);
 
     const handleAcceptAll = () => {
         const updated: Record<string, 'accept' | 'retain'> = {};
@@ -1658,6 +1718,18 @@ const StructuralNodeArchitect: React.FC = () => {
                         >
                             <CheckCircle className="w-4 h-4" />
                             Repaired Node
+                            {step === 'completed' && (
+                                modificationStats.totalFixed > 0 ? (
+                                    <span className="ml-1.5 px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-200 text-[10px] font-bold rounded-md flex items-center gap-1">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                        {modificationStats.totalFixed} Modified
+                                    </span>
+                                ) : (
+                                    <span className="ml-1.5 px-1.5 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-md">
+                                        Clean
+                                    </span>
+                                )
+                            )}
                         </button>
                     </nav>
 
@@ -2625,6 +2697,143 @@ const StructuralNodeArchitect: React.FC = () => {
                                                 </button>
                                             </div>
                                         </div>
+
+                                        {/* Visual 'Modification Detected' Indicator Banner */}
+                                        {modificationStats.totalFixed > 0 ? (
+                                            <div className="border-b border-amber-200/80 bg-gradient-to-r from-amber-50/90 via-emerald-50/50 to-indigo-50/40 p-4 transition-all shrink-0">
+                                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                                                    <div className="flex items-start md:items-center gap-3">
+                                                        <div className="relative w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-400/30 flex items-center justify-center text-amber-700 shrink-0 shadow-2xs">
+                                                            <Sparkles className="w-5 h-5 text-amber-600 animate-pulse" />
+                                                            <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                                                                <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+                                                            </span>
+                                                        </div>
+                                                        <div>
+                                                            <div className="flex items-center gap-2 flex-wrap">
+                                                                <span className="text-xs font-black text-amber-950 uppercase tracking-wider flex items-center gap-1.5">
+                                                                    Modification Detected
+                                                                </span>
+                                                                <span className="px-2 py-0.5 rounded-md bg-amber-200/90 text-amber-900 text-[10px] font-black font-mono">
+                                                                    {modificationStats.totalFixed} CORRECTION{modificationStats.totalFixed !== 1 ? 'S' : ''} APPLIED
+                                                                </span>
+                                                                <span className="text-[11px] text-amber-800/80 font-medium">
+                                                                    across {modificationStats.modifiedRefCount} reference node{modificationStats.modifiedRefCount !== 1 ? 's' : ''}
+                                                                </span>
+                                                            </div>
+                                                            <p className="text-[11px] text-slate-600 font-medium mt-0.5">
+                                                                Automated repair protocol corrected tags, links, and schemas to conform with Elsevier DTD standards.
+                                                            </p>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Quick Category Summary Badges & Action Buttons */}
+                                                    <div className="flex items-center flex-wrap gap-2 shrink-0">
+                                                        {viewMode === 'output' ? (
+                                                            <button
+                                                                onClick={() => setViewMode('diff')}
+                                                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-amber-300/80 text-slate-700 hover:bg-amber-50 text-xs font-bold shadow-2xs transition-all"
+                                                            >
+                                                                <GitCompare className="w-3.5 h-3.5 text-indigo-600" />
+                                                                <span>Inspect in Diff</span>
+                                                            </button>
+                                                        ) : (
+                                                            <button
+                                                                onClick={() => setViewMode('output')}
+                                                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-amber-300/80 text-slate-700 hover:bg-amber-50 text-xs font-bold shadow-2xs transition-all"
+                                                            >
+                                                                <FileCode className="w-3.5 h-3.5 text-slate-600" />
+                                                                <span>View Source</span>
+                                                            </button>
+                                                        )}
+
+                                                        <button
+                                                            onClick={() => setShowModificationDetails(!showModificationDetails)}
+                                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-sm transition-all"
+                                                        >
+                                                            <Activity className="w-3.5 h-3.5" />
+                                                            <span>{showModificationDetails ? 'Hide Audit Log' : 'View Audit Log'}</span>
+                                                            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${showModificationDetails ? 'rotate-180' : ''}`} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                {/* Category Pill Badges */}
+                                                <div className="flex items-center gap-2 mt-3 pt-3 border-t border-amber-200/50 flex-wrap">
+                                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Applied Fixes:</span>
+                                                    {modificationStats.sourceTextCount > 0 && (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-emerald-200 text-emerald-800 text-[10px] font-bold shadow-2xs">
+                                                            <CheckCircle className="w-3 h-3 text-emerald-600" />
+                                                            {modificationStats.sourceTextCount} ce:source-text Generated
+                                                        </span>
+                                                    )}
+                                                    {modificationStats.doiCount > 0 && (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-indigo-200 text-indigo-800 text-[10px] font-bold shadow-2xs">
+                                                            <LinkIcon className="w-3 h-3 text-indigo-600" />
+                                                            {modificationStats.doiCount} Link / DOI Migrations
+                                                        </span>
+                                                    )}
+                                                    {modificationStats.nameCount > 0 && (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-fuchsia-200 text-fuchsia-800 text-[10px] font-bold shadow-2xs">
+                                                            <Zap className="w-3 h-3 text-fuchsia-600" />
+                                                            {modificationStats.nameCount} Author Names Structured
+                                                        </span>
+                                                    )}
+                                                    {modificationStats.langtypeCount > 0 && (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-cyan-200 text-cyan-800 text-[10px] font-bold shadow-2xs">
+                                                            <ShieldCheck className="w-3 h-3 text-cyan-600" />
+                                                            {modificationStats.langtypeCount} langtype="iso" Injected
+                                                        </span>
+                                                    )}
+                                                    {modificationStats.emptyElementCount > 0 && (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-rose-200 text-rose-800 text-[10px] font-bold shadow-2xs">
+                                                            <Trash2 className="w-3 h-3 text-rose-600" />
+                                                            {modificationStats.emptyElementCount} Empty Elements Pruned
+                                                        </span>
+                                                    )}
+                                                    {modificationStats.idCount > 0 && (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-amber-200 text-amber-800 text-[10px] font-bold shadow-2xs">
+                                                            <Hash className="w-3 h-3 text-amber-600" />
+                                                            {modificationStats.idCount} ID Conflicts Resolved
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                {/* Expandable Modification Audit Trail */}
+                                                {showModificationDetails && (
+                                                    <div className="mt-3 pt-3 border-t border-amber-200/50 flex flex-col gap-2 max-h-56 overflow-y-auto custom-scrollbar bg-white/80 p-3 rounded-xl border border-amber-200">
+                                                        <div className="text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                                                            Detailed Applied Modifications ({modificationStats.fixedItems.length})
+                                                        </div>
+                                                        {modificationStats.fixedItems.map((item, idx) => (
+                                                            <div key={`${item.id}-${idx}`} className="flex items-start gap-2.5 text-xs bg-amber-50/60 p-2 rounded-lg border border-amber-100">
+                                                                <span className="px-1.5 py-0.5 rounded bg-slate-800 text-white font-mono text-[10px] font-bold shrink-0">
+                                                                    {item.id}
+                                                                </span>
+                                                                {item.label && (
+                                                                    <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 font-mono text-[10px] font-bold shrink-0">
+                                                                        {item.label}
+                                                                    </span>
+                                                                )}
+                                                                <span className="text-slate-700 font-medium leading-relaxed">
+                                                                    {item.msg}
+                                                                </span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <div className="border-b border-emerald-200/60 bg-emerald-50/50 p-3 flex items-center justify-between shrink-0">
+                                                <div className="flex items-center gap-2">
+                                                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                                                    <span className="text-xs font-bold text-emerald-900">No XML Modifications Required</span>
+                                                    <span className="text-[11px] text-emerald-700/80 font-medium">— All input references already conform to Elsevier DTD standards.</span>
+                                                </div>
+                                            </div>
+                                        )}
+
                                         <div className="flex-grow flex flex-col overflow-hidden">
                                             {viewMode === 'output' ? (
                                                 <textarea

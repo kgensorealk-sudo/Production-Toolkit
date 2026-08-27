@@ -75,8 +75,10 @@ const ToolCard: React.FC<ToolCardProps> = ({ id, title, desc, iconBg, iconText, 
             if (diff <= 0) return setTimeLeft('Expiring...');
             const days = Math.floor(diff / (1000 * 60 * 60 * 24));
             const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-            if (days > 0) setTimeLeft(`${days}d ${hours}h`);
-            else setTimeLeft(`${hours}h remaining`);
+            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            if (days > 0) setTimeLeft(`${days}d ${hours}h ${minutes}m`);
+            else if (hours > 0) setTimeLeft(`${hours}h ${minutes}m remaining`);
+            else setTimeLeft(`${minutes}m remaining`);
         };
 
         update();
@@ -349,7 +351,7 @@ const Dashboard: React.FC = () => {
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                             {sections.featured.map((tool) => (
-                                <ToolCard key={tool.id} {...tool} delay={50} isPinned={pinnedTools.includes(tool.id)} onPinClick={() => handlePinClick(tool.id)} lockType={getLockType(tool.id)} isFree={freeTools.includes(tool.id)} expiry={freeToolsData[tool.id]} onClick={() => navigate(`/${tool.id}`)} onTipClick={(e) => handleTipClick(tool.id, tool.title, e)} />
+                                <ToolCard key={`featured-${tool.id}`} {...tool} delay={50} isPinned={pinnedTools.includes(tool.id)} onPinClick={() => handlePinClick(tool.id)} lockType={getLockType(tool.id)} isFree={freeTools.includes(tool.id)} expiry={freeToolsData[tool.id]} onClick={() => navigate(`/${tool.id}`)} onTipClick={(e) => handleTipClick(tool.id, tool.title, e)} />
                             ))}
                         </div>
                     </section>
@@ -366,7 +368,7 @@ const Dashboard: React.FC = () => {
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                             {sections.pinned.map((tool) => (
-                                <ToolCard key={tool.id} {...tool} delay={50} isPinned={true} onPinClick={() => handlePinClick(tool.id)} lockType={getLockType(tool.id)} isFree={freeTools.includes(tool.id)} expiry={freeToolsData[tool.id]} onClick={() => navigate(`/${tool.id}`)} onTipClick={(e) => handleTipClick(tool.id, tool.title, e)} />
+                                <ToolCard key={`pinned-${tool.id}`} {...tool} delay={50} isPinned={true} onPinClick={() => handlePinClick(tool.id)} lockType={getLockType(tool.id)} isFree={freeTools.includes(tool.id)} expiry={freeToolsData[tool.id]} onClick={() => navigate(`/${tool.id}`)} onTipClick={(e) => handleTipClick(tool.id, tool.title, e)} />
                             ))}
                         </div>
                     </section>
@@ -380,7 +382,7 @@ const Dashboard: React.FC = () => {
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                             {sections.active.map((tool, index) => (
-                                <ToolCard key={tool.id} {...tool} delay={100 + (index * 20)} isPinned={false} onPinClick={() => handlePinClick(tool.id)} lockType={getLockType(tool.id)} isFree={freeTools.includes(tool.id)} expiry={freeToolsData[tool.id]} onClick={() => navigate(`/${tool.id}`)} onTipClick={(e) => handleTipClick(tool.id, tool.title, e)} />
+                                <ToolCard key={`active-${tool.id}`} {...tool} delay={100 + (index * 20)} isPinned={false} onPinClick={() => handlePinClick(tool.id)} lockType={getLockType(tool.id)} isFree={freeTools.includes(tool.id)} expiry={freeToolsData[tool.id]} onClick={() => navigate(`/${tool.id}`)} onTipClick={(e) => handleTipClick(tool.id, tool.title, e)} />
                             ))}
                         </div>
                     </section>
@@ -394,7 +396,7 @@ const Dashboard: React.FC = () => {
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                             {sections.locked.map((tool, index) => (
-                                <ToolCard key={tool.id} {...tool} delay={200 + (index * 20)} isPinned={false} onPinClick={() => handlePinClick(tool.id)} lockType={getLockType(tool.id)} isFree={freeTools.includes(tool.id)} onClick={() => navigate(`/${tool.id}`)} onTipClick={(e) => handleTipClick(tool.id, tool.title, e)} />
+                                <ToolCard key={`locked-${tool.id}`} {...tool} delay={200 + (index * 20)} isPinned={false} onPinClick={() => handlePinClick(tool.id)} lockType={getLockType(tool.id)} isFree={freeTools.includes(tool.id)} onClick={() => navigate(`/${tool.id}`)} onTipClick={(e) => handleTipClick(tool.id, tool.title, e)} />
                             ))}
                         </div>
                     </section>

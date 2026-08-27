@@ -911,8 +911,8 @@ const CitationLinker: React.FC = () => {
                                         </div>
                                         {res.status === 'resolved' && res.mappedIds.length > 0 && (
                                             <div className="flex gap-1">
-                                                {res.mappedIds.slice(0, 2).map(id => (
-                                                    <span key={id} className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 uppercase">{id}</span>
+                                                {res.mappedIds.slice(0, 2).map((id, idIdx) => (
+                                                    <span key={`${id}-${idIdx}`} className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 uppercase">{id}</span>
                                                 ))}
                                                 {res.mappedIds.length > 2 && <span className="text-[10px] text-slate-400 font-black">+{res.mappedIds.length - 2}</span>}
                                             </div>

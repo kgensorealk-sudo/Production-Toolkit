@@ -1517,7 +1517,7 @@ export const WordToXml: React.FC = () => {
                     }
 
                     tokens.push(
-                        <span key={key++} className="text-indigo-400 font-bold">
+                        <span key={`line-${idx}-tok-${key++}`} className="text-indigo-400 font-bold">
                             {tag}
                         </span>
                     );
@@ -1526,19 +1526,19 @@ export const WordToXml: React.FC = () => {
                     if (inListItem && !inLabel && text.trim()) {
                         const currentColor = uniqueEntryColors[(itemIndex - 1) % uniqueEntryColors.length];
                         tokens.push(
-                            <span key={key++} className={currentColor}>
+                            <span key={`line-${idx}-tok-${key++}`} className={currentColor}>
                                 {text}
                             </span>
                         );
                     } else if (inLabel && text.trim()) {
                         tokens.push(
-                            <span key={key++} className="text-slate-200 font-black bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700 text-[11px] mr-1">
+                            <span key={`line-${idx}-tok-${key++}`} className="text-slate-200 font-black bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700 text-[11px] mr-1">
                                 {text}
                             </span>
                         );
                     } else {
                         tokens.push(
-                            <span key={key++} className="text-slate-100">
+                            <span key={`line-${idx}-tok-${key++}`} className="text-slate-100">
                                 {text}
                             </span>
                         );

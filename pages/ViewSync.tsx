@@ -1602,14 +1602,14 @@ const ViewSync: React.FC = () => {
                                                         <col className="w-[calc(50%-2.5rem)]" />
                                                     </colgroup>
                                                     <tbody>
-                                                        {diffRows.map((row) => {
+                                                        {diffRows.map((row, rIdx) => {
                                                             let lClass = row.leftNum !== null && row.type === 'delete' ? 'bg-rose-50/50' : (row.type === 'replace' ? 'bg-rose-50/30' : '');
                                                             let rClass = row.rightNum !== null && row.type === 'insert' ? 'bg-emerald-50/50' : (row.type === 'replace' ? 'bg-emerald-50/30' : '');
                                                             if (row.type === 'equal') { lClass = ''; rClass = ''; }
 
                                                             return (
                                                                 <tr 
-                                                                    key={row.id} 
+                                                                    key={`sync-diff-${row.id || ''}-${rIdx}`} 
                                                                     className="hover:bg-slate-50 transition-colors duration-75 group"
                                                                     data-change-index={row.changeIndex}
                                                                     data-change-index-group={row.isFirstInGroup ? row.changeIndex : undefined}

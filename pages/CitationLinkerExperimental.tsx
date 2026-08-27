@@ -1831,8 +1831,8 @@ const CitationLinkerExperimental: React.FC = () => {
                                     <div className="flex items-center gap-3 shrink-0">
                                         <div className="flex items-center gap-1.5 flex-wrap max-w-md">
                                             {item.mappedIds.length > 0 ? (
-                                                item.mappedIds.map(mid => (
-                                                    <span key={mid} className="px-2.5 py-1 bg-indigo-50 border border-indigo-200 text-indigo-700 font-mono text-xs font-extrabold rounded-lg flex items-center gap-1">
+                                                item.mappedIds.map((mid, midx) => (
+                                                    <span key={`${mid}-${midx}`} className="px-2.5 py-1 bg-indigo-50 border border-indigo-200 text-indigo-700 font-mono text-xs font-extrabold rounded-lg flex items-center gap-1">
                                                         {mid}
                                                     </span>
                                                 ))

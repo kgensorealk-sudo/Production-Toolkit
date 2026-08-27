@@ -1721,14 +1721,14 @@ const ReferenceTaggerExperimental: React.FC = () => {
                                             </button>
                                         </div>
                                     ) : (
-                                        qcFilteredRefs.map((ref) => {
+                                        qcFilteredRefs.map((ref, rIdx) => {
                                             const isEditing = editingBibId === ref.bibId;
                                             const typeMeta = REF_TYPE_META[ref.refType] || REF_TYPE_META.journal;
                                             const TypeIcon = typeMeta.icon;
 
                                             return (
                                                 <div 
-                                                    key={ref.bibId} 
+                                                    key={`${ref.bibId}-${ref.index}-${rIdx}`} 
                                                     className={`p-4 bg-white rounded-2xl border transition-all ${
                                                         ref.validationStatus === 'validated'
                                                             ? 'border-emerald-300 shadow-2xs'
@@ -2212,14 +2212,14 @@ const ReferenceTaggerExperimental: React.FC = () => {
                                         <p className="text-xs font-semibold">No references match the selected filter.</p>
                                     </div>
                                 ) : (
-                                    filteredParsedRefs.map((ref) => {
+                                    filteredParsedRefs.map((ref, rIdx) => {
                                         const meta = REF_TYPE_META[ref.refType];
                                         const TypeIcon = meta.icon;
                                         const isEditing = editingBibId === ref.bibId;
 
                                         return (
                                             <div 
-                                                key={ref.bibId} 
+                                                key={`${ref.bibId}-${ref.index}-${rIdx}`} 
                                                 className={`p-4 bg-white border rounded-2xl transition-all shadow-2xs ${
                                                     ref.validationStatus === 'validated'
                                                         ? 'border-emerald-200/80 bg-emerald-50/10'

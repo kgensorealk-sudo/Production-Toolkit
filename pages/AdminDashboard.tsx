@@ -1147,10 +1147,26 @@ const AdminDashboard: React.FC = () => {
 
     const getCountdown = (expiry: string) => {
         const diff = new Date(expiry).getTime() - Date.now();
-        if (diff <= 0) return 'Expired';
-        const h = Math.floor(diff / (1000 * 60 * 60));
+        if (diff <= 0) {
+            const absDiff = Math.abs(diff);
+            const d = Math.floor(absDiff / (1000 * 60 * 60 * 24));
+            const h = Math.floor((absDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const m = Math.floor((absDiff % (1000 * 60 * 60)) / (1000 * 60));
+            if (d > 0) return `${d}d ${h}h ${m}m ago`;
+            if (h > 0) return `${h}h ${m}m ago`;
+            if (m > 0) return `${m}m ago`;
+            return 'Just now';
+        }
+        const d = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const h = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
         const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-        return `${h}h ${m}m remaining`;
+        if (d > 0) {
+            return `${d}d ${h}h ${m}m remaining`;
+        }
+        if (h > 0) {
+            return `${h}h ${m}m remaining`;
+        }
+        return `${m}m remaining`;
     };
 
     return (
@@ -1713,8 +1729,8 @@ const AdminDashboard: React.FC = () => {
                                     <span className="text-[9px] font-black text-indigo-400/40 uppercase tracking-widest ml-auto">Real-time Stream</span>
                                 </div>
                                 <div className="space-y-2 max-h-[240px] overflow-y-auto custom-scrollbar pr-1 relative z-10">
-                                    {intelligenceMetrics.recentActivity.length > 0 ? intelligenceMetrics.recentActivity.map((act) => (
-                                        <div key={act.id} onClick={() => setFocusedUserId(act.userId)} className="flex items-center gap-3 p-2 bg-white/5 rounded-lg border border-white/5 hover:bg-white/10 transition-colors cursor-pointer group/item">
+                                    {intelligenceMetrics.recentActivity.length > 0 ? intelligenceMetrics.recentActivity.map((act, actIdx) => (
+                                        <div key={`act-${act.id || ''}-${actIdx}`} onClick={() => setFocusedUserId(act.userId)} className="flex items-center gap-3 p-2 bg-white/5 rounded-lg border border-white/5 hover:bg-white/10 transition-colors cursor-pointer group/item">
                                             <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex-shrink-0 flex items-center justify-center text-[10px] font-black text-indigo-400 border border-indigo-500/20 overflow-hidden">
                                                 {act.avatar_url ? (
                                                     <img src={act.avatar_url} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
@@ -1750,12 +1766,12 @@ const AdminDashboard: React.FC = () => {
                                     <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-auto">Utilization Ranking</span>
                                 </div>
                                 <div className="space-y-4 max-h-[350px] overflow-y-auto custom-scrollbar pr-2">
-                                    {intelligenceMetrics.globalRanking.length > 0 ? intelligenceMetrics.globalRanking.map((tool) => {
+                                    {intelligenceMetrics.globalRanking.length > 0 ? intelligenceMetrics.globalRanking.map((tool, tIdx) => {
                                         const premCount = intelligenceMetrics.segments.segmentCounts.premium[tool.id] || 0;
                                         const stdCount = intelligenceMetrics.segments.segmentCounts.standard[tool.id] || 0;
                                         const premPercent = tool.count > 0 ? (premCount / tool.count) * 100 : 0;
                                         return (
-                                            <div key={tool.id} className="relative group p-2 rounded-xl hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-100">
+                                            <div key={`rank-${tool.id}-${tIdx}`} className="relative group p-2 rounded-xl hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-100">
                                                 <div className="flex justify-between items-end mb-1">
                                                     <div className="flex flex-col">
                                                         <span className="text-[11px] font-black text-slate-800 uppercase tracking-widest">{tool.name}</span>
@@ -1795,8 +1811,8 @@ const AdminDashboard: React.FC = () => {
                                 </div>
                                 <div className="grid grid-cols-2 gap-3">
                                     {intelligenceMetrics.rareTools.length > 0 ? (
-                                        intelligenceMetrics.rareTools.slice(0, 4).map(tool => (
-                                            <div key={tool.id} className="p-4 bg-slate-50 border border-slate-100 rounded-xl flex flex-col items-center text-center hover:border-rose-200 transition-colors">
+                                        intelligenceMetrics.rareTools.slice(0, 4).map((tool, rtIdx) => (
+                                            <div key={`rare-${tool.id}-${rtIdx}`} className="p-4 bg-slate-50 border border-slate-100 rounded-xl flex flex-col items-center text-center hover:border-rose-200 transition-colors">
                                                 <span className="text-[9px] font-black text-rose-500 uppercase tracking-widest mb-1">Low Velocity</span>
                                                 <h4 className="text-[11px] font-bold text-slate-800 uppercase mb-2 truncate w-full">{tool.name}</h4>
                                                 <span className="text-[10px] font-mono font-black text-slate-400">{tool.count} HITS</span>
@@ -1845,7 +1861,7 @@ const AdminDashboard: React.FC = () => {
                                                 </thead>
                                                 <tbody className="divide-y divide-slate-100">
                                                     {intelligenceMetrics.anomalies.map((anomaly, idx) => (
-                                                        <tr key={idx} className="hover:bg-rose-50/30 transition-colors group">
+                                                        <tr key={`anomaly-${anomaly.id || idx}`} className="hover:bg-rose-50/30 transition-colors group">
                                                             <td className="px-4 py-3">
                                                                 <div className="flex items-center gap-3">
                                                                     <div className="w-8 h-8 rounded-lg bg-slate-100 flex-shrink-0 flex items-center justify-center text-[10px] font-black text-slate-400 border border-slate-200 overflow-hidden">
@@ -1911,8 +1927,8 @@ const AdminDashboard: React.FC = () => {
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-slate-100">
-                                                    {intelligenceMetrics.userAffinities.length > 0 ? intelligenceMetrics.userAffinities.map((ua) => (
-                                                        <tr key={ua.id} onClick={() => setFocusedUserId(ua.id)} className={`cursor-pointer transition-all ${focusedUserId === ua.id ? 'bg-indigo-600' : 'hover:bg-slate-50'}`}>
+                                                    {intelligenceMetrics.userAffinities.length > 0 ? intelligenceMetrics.userAffinities.map((ua, uaIdx) => (
+                                                        <tr key={`ua-${ua.id}-${uaIdx}`} onClick={() => setFocusedUserId(ua.id)} className={`cursor-pointer transition-all ${focusedUserId === ua.id ? 'bg-indigo-600' : 'hover:bg-slate-50'}`}>
                                                             <td className={`px-4 py-3 text-xs font-bold ${focusedUserId === ua.id ? 'text-white' : 'text-slate-900'}`}>
                                                                 <div className="flex items-center gap-2">
                                                                     <div className={`w-6 h-6 rounded-lg flex-shrink-0 flex items-center justify-center text-[10px] font-black border ${focusedUserId === ua.id ? 'bg-white/20 border-white/30 text-white' : 'bg-indigo-50 border-indigo-100 text-indigo-600'} overflow-hidden`}>

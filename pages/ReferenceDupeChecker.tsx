@@ -1023,11 +1023,11 @@ const ReferenceDupeChecker: React.FC = () => {
                                             </div>
                                         </div>
                                         <div className={`divide-y divide-slate-100 transition-opacity duration-300 ${group.resolutionMode === 'ignore' ? 'opacity-40 grayscale pointer-events-none cursor-not-allowed' : 'opacity-100'}`}>
-                                            {group.items.map(item => {
+                                            {group.items.map((item, itIdx) => {
                                                 const isSelected = item.id === group.selectedId;
                                                 return (
                                                     <div 
-                                                        key={item.id} 
+                                                        key={`${item.id}-${itIdx}`} 
                                                         onClick={() => handleSelection(group.id, item.id)} 
                                                         className={`p-10 cursor-pointer transition-all flex gap-10 group relative ${isSelected ? 'bg-indigo-50/30' : 'hover:bg-slate-50/50'}`}
                                                     >
@@ -1291,7 +1291,7 @@ const ReferenceDupeChecker: React.FC = () => {
                                                                 <col className="w-[calc(50%-3rem)]" />
                                                             </colgroup>
                                                             <tbody>
-                                                                {diffRows.map((row) => {
+                                                                {diffRows.map((row, rIdx) => {
                                                                     let lClass = '';
                                                                     let rClass = '';
                                                                     let lNumClass = 'bg-white text-slate-300'; 
@@ -1316,7 +1316,7 @@ const ReferenceDupeChecker: React.FC = () => {
 
                                                                     return (
                                                                         <tr 
-                                                                            key={row.id} 
+                                                                            key={`diff-row-${row.id || ''}-${rIdx}`} 
                                                                             className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors"
                                                                             data-change-index={row.changeIndex}
                                                                             data-change-index-group={row.isFirstInGroup ? row.changeIndex : undefined}

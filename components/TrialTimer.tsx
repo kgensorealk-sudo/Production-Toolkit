@@ -69,8 +69,8 @@ const TrialTimer: React.FC<TrialTimerProps> = ({ endDate, label = "Trial", isTri
             const urgencyThreshold = isTrial ? 1000 * 60 * 60 : 1000 * 60 * 60 * 48;
             setIsUrgent(diff < urgencyThreshold);
 
-            if (days > 0) return `${days}d ${hours}h`;
-            if (hours > 0) return `${hours}h ${minutes}m`;
+            if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+            if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
             return `${minutes}m ${seconds}s`;
         };
 
