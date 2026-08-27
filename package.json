@@ -52,7 +52,7 @@
   "build": {
     "appId": "com.prodtoolkit.pro",
     "productName": "Production Toolkit Pro",
-    "copyright": "Copyright © 2025 Editorial Systems",
+    "copyright": "© 2026 Editorial Systems Pro. All rights reserved.",
     "files": [
       "dist/**/*",
       "electron/**/*",

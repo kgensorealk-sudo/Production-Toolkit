@@ -277,7 +277,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 if (email === SUPER_ADMIN_EMAIL || profileData.email === SUPER_ADMIN_EMAIL) isActive = true;
                 else if (profileData.subscription_end && new Date(profileData.subscription_end) < new Date()) isActive = false;
 
-                setProfile({ ...profileData, is_subscribed: isActive, unlocked_tools: unlockedTools });
+                const localTermsAccepted = localStorage.getItem(`terms_accepted_${userId}`) === 'true';
+                const isTermsAccepted = Boolean(
+                    profileData.terms_accepted || 
+                    profileData.accepted_terms_at || 
+                    localTermsAccepted || 
+                    email === SUPER_ADMIN_EMAIL || 
+                    email === SECONDARY_ADMIN_EMAIL
+                );
+
+                setProfile({ 
+                    ...profileData, 
+                    is_subscribed: isActive, 
+                    unlocked_tools: unlockedTools,
+                    terms_accepted: isTermsAccepted,
+                    accepted_terms_at: profileData.accepted_terms_at || (isTermsAccepted ? (profileData.created_at || new Date().toISOString()) : undefined)
+                });
                 updateLastSeen(userId).catch(() => {});
             } catch (e) {
                 console.warn("Profile sync notice:", e);
@@ -484,31 +499,65 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const updateProfile = async (updates: Partial<UserProfile>) => {
         if (!user?.id || !profile) return;
+        
+        if (updates.terms_accepted) {
+            try {
+                localStorage.setItem(`terms_accepted_${user.id}`, 'true');
+            } catch (e) {}
+        }
+
         try {
-            const data = await withRetry(async () => {
-                const { data, error } = await supabase
-                    .from('profiles')
-                    .update(updates)
-                    .eq('id', user.id)
-                    .select()
-                    .single();
-                
-                if (error) throw error;
-                return data;
-            });
+            let data: any = null;
+            try {
+                data = await withRetry(async () => {
+                    const { data: dbData, error } = await supabase
+                        .from('profiles')
+                        .update(updates)
+                        .eq('id', user.id)
+                        .select()
+                        .single();
+                    
+                    if (error) throw error;
+                    return dbData;
+                }, 2);
+            } catch (dbErr) {
+                console.warn("Direct DB column update fallback triggered:", dbErr);
+                // If a column like terms_accepted doesn't exist in the DB schema, remove it and update base fields
+                const { terms_accepted, accepted_terms_at, ...cleanUpdates } = updates;
+                if (Object.keys(cleanUpdates).length > 0) {
+                    data = await withRetry(async () => {
+                        const { data: fallbackData, error } = await supabase
+                            .from('profiles')
+                            .update(cleanUpdates)
+                            .eq('id', user.id)
+                            .select()
+                            .single();
+                        if (error) throw error;
+                        return fallbackData;
+                    }, 2);
+                }
+            }
             
-            if (data) {
-                // Preserve the virtual fields (unlocked_tools, is_subscribed) that aren't in the DB table
+            setProfile({
+                ...profile,
+                ...(data || {}),
+                ...updates,
+                unlocked_tools: profile.unlocked_tools,
+                is_subscribed: profile.is_subscribed
+            });
+        } catch (err) {
+            console.error("Profile Update Failed:", err);
+            // Even if network fails, apply updates locally if it's terms acceptance
+            if (updates.terms_accepted) {
                 setProfile({
                     ...profile,
-                    ...data,
+                    ...updates,
                     unlocked_tools: profile.unlocked_tools,
                     is_subscribed: profile.is_subscribed
                 });
+            } else {
+                throw err;
             }
-        } catch (err) {
-            console.error("Profile Update Failed:", err);
-            throw err;
         }
     };
 

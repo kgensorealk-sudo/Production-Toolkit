@@ -22,8 +22,10 @@ import TrialTimer from './TrialTimer';
 import ExpiryReminderModal from './ExpiryReminderModal';
 import LoadingOverlay from './LoadingOverlay';
 import FeedbackModal from './FeedbackModal';
+import TermsModal from './TermsModal';
+import TermsGateModal from './TermsGateModal';
 import Toast from './Toast';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, Scale } from 'lucide-react';
 
 interface LayoutProps {
     children: React.ReactNode;
@@ -40,6 +42,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
     const [isAnnouncementUnread, setIsAnnouncementUnread] = useState(false);
     const [isExiting, setIsExiting] = useState(false);
     const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+    const [isTermsOpen, setIsTermsOpen] = useState(false);
     const [toast, setToast] = useState<{ msg: string, type: 'success' | 'warn' | 'error' | 'info' } | null>(null);
     
     const isVercel = window.location.hostname.includes('vercel.app');
@@ -147,12 +150,15 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
         checkBroadcastStatus();
         const interval = setInterval(checkBroadcastStatus, 60000 * 5);
         const handleSync = () => checkBroadcastStatus();
+        const handleShowTerms = () => setIsTermsOpen(true);
         window.addEventListener('app:announcement-sync', handleSync);
+        window.addEventListener('app:show-terms', handleShowTerms);
 
         return () => {
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('offline', handleOffline);
             window.removeEventListener('app:announcement-sync', handleSync);
+            window.removeEventListener('app:show-terms', handleShowTerms);
             clearInterval(interval);
         };
     }, [user?.id]);
@@ -355,12 +361,29 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                 toolId={currentTool}
             />
 
+            <TermsModal 
+                isOpen={isTermsOpen}
+                onClose={() => setIsTermsOpen(false)}
+            />
+
+            <TermsGateModal 
+                isOpen={Boolean(user && profile && !profile.terms_accepted && !isAdmin && location.pathname !== '/terms')}
+            />
+
             {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
 
             <footer className="bg-white border-t border-slate-200/60 py-4 mt-auto">
                 <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-4 text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em]">
-                    <p>&copy; 2025 Editorial Systems Pro • Precision Engineering</p>
+                    <p>&copy; 2026 Editorial Systems Pro. All rights reserved.</p>
                     <div className="flex items-center gap-6">
+                        <button 
+                            onClick={() => setIsTermsOpen(true)}
+                            className="hover:text-indigo-600 transition-colors flex items-center gap-1.5 group"
+                            title="Terms and Conditions of Use"
+                        >
+                            <Scale size={10} className="group-hover:scale-110 transition-transform" />
+                            <span>TERMS & CONDITIONS</span>
+                        </button>
                         {!isExiting && (
                             <button 
                                 onClick={() => setIsFeedbackOpen(true)}

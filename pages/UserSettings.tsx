@@ -33,7 +33,8 @@ import {
     Cpu,
     Activity,
     MessageSquare,
-    Sigma
+    Sigma,
+    Scale
 } from 'lucide-react';
 import { useAuth, withRetry } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
@@ -41,6 +42,7 @@ import { supabase, supabaseUrl } from '../supabaseClient';
 import { getDeviceId } from '../utils/device';
 import LoadingOverlay from '../components/LoadingOverlay';
 import Switch from '../components/Switch';
+import TermsModal from '../components/TermsModal';
 import { ToolId, UserProfile, DefaultAvatar } from '../types';
 
 const TOOL_METADATA: Record<string, { title: string, Icon: React.FC<any>, color: string, hex: string }> = {
@@ -82,6 +84,8 @@ const UserSettings: React.FC = () => {
     // Profile State
     const [displayName, setDisplayName] = useState(profile?.display_name || '');
     const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url || '');
+    const [termsAcknowledged, setTermsAcknowledged] = useState(Boolean(profile?.terms_accepted ?? true));
+    const [isTermsOpen, setIsTermsOpen] = useState(false);
     const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
     const [defaultAvatars, setDefaultAvatars] = useState<DefaultAvatar[]>([]);
     const [showAvatarPresets, setShowAvatarPresets] = useState(false);
@@ -202,9 +206,11 @@ const UserSettings: React.FC = () => {
         try {
             await updateProfile({
                 display_name: displayName,
-                avatar_url: avatarUrl
+                avatar_url: avatarUrl,
+                terms_accepted: termsAcknowledged,
+                accepted_terms_at: termsAcknowledged ? (profile?.accepted_terms_at || new Date().toISOString()) : undefined
             });
-            setKeySuccess("Profile updated successfully");
+            setKeySuccess("Profile and terms compliance updated successfully");
             setTimeout(() => setKeySuccess(null), 3000);
         } catch (err) {
             setKeyError("Failed to update profile");
@@ -436,6 +442,66 @@ const UserSettings: React.FC = () => {
                                                         <span className="bg-emerald-100 text-emerald-600 text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest">Verified</span>
                                                     )}
                                                 </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Terms & Conditions Acceptance & Compliance Section */}
+                                        <div className="mt-8 pt-8 border-t border-slate-100">
+                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-10 h-10 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 border border-indigo-100 shrink-0">
+                                                        <Scale size={20} />
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">Terms of Use Compliance</h4>
+                                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                                            {profile.terms_accepted 
+                                                                ? (profile.accepted_terms_at ? `Acknowledged on ${new Date(profile.accepted_terms_at).toLocaleDateString()}` : 'Acknowledged & Bound') 
+                                                                : 'Action Required: Explicit acceptance required'}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-2 self-start sm:self-auto">
+                                                    <span className={`text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-widest border ${profile.terms_accepted ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-amber-50 text-amber-600 border-amber-200'}`}>
+                                                        {profile.terms_accepted ? 'Terms Accepted' : 'Pending Acceptance'}
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setIsTermsOpen(true)}
+                                                        className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[9px] font-black uppercase tracking-widest rounded-full transition-colors"
+                                                    >
+                                                        Read Terms
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
+                                                <label className="flex items-start gap-3 cursor-pointer select-none">
+                                                    <input 
+                                                        type="checkbox"
+                                                        id="profile-terms-checkbox"
+                                                        checked={termsAcknowledged}
+                                                        onChange={(e) => setTermsAcknowledged(e.target.checked)}
+                                                        className="mt-0.5 w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600 shrink-0"
+                                                    />
+                                                    <span className="text-xs font-bold text-slate-700 leading-snug">
+                                                        I acknowledge and explicitly accept the{' '}
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setIsTermsOpen(true);
+                                                            }}
+                                                            className="text-indigo-600 hover:underline font-black"
+                                                        >
+                                                            Terms and Conditions of Use
+                                                        </button>
+                                                        {' '}(Individual non-transferable license, no account sharing, no proxy processing or unauthorized reselling).
+                                                    </span>
+                                                </label>
+                                                <p className="text-[10px] text-slate-400 pl-7">
+                                                    Required by platform policy to access XML normalization, reference extraction, and automated editorial tools.
+                                                </p>
                                             </div>
                                         </div>
                                     </div>
@@ -749,6 +815,10 @@ const UserSettings: React.FC = () => {
                     </div>
                 </div>
             </div>
+            <TermsModal 
+                isOpen={isTermsOpen}
+                onClose={() => setIsTermsOpen(false)}
+            />
         </div>
     );
 };

@@ -52,6 +52,8 @@ export interface UserProfile {
         maintenance_windows: boolean;
     };
     created_at?: string;
+    terms_accepted?: boolean;
+    accepted_terms_at?: string;
 }
 
 export interface SmartSuggestion {

@@ -19,6 +19,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import Toast from '../components/Toast';
+import TermsModal from '../components/TermsModal';
+import { Scale } from 'lucide-react';
 
 const TOOLS_INFO = [
     {
@@ -73,6 +75,7 @@ const Landing: React.FC = () => {
     const [isPaused, setIsPaused] = useState(false);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'|'info'} | null>(null);
     const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
+    const [isTermsModalOpen, setIsTermsModalOpen] = useState(false);
 
     const isSubscribed = profile?.is_subscribed;
 
@@ -285,35 +288,69 @@ const Landing: React.FC = () => {
                                 </div>
                             </div>
 
-                            <div className="p-12 space-y-8">
-                                <p className="text-slate-600 leading-relaxed text-center font-medium text-lg">
-                                    To unlock the full suite without individual keys, please contact the <span className="text-indigo-600 font-bold">Administrator</span> directly.
+                            <div className="p-8 md:p-10 space-y-6">
+                                <p className="text-slate-600 leading-relaxed text-center font-medium text-sm">
+                                    To activate an Individual License or Group Subscription, contact the <span className="text-indigo-600 font-bold">Administrator</span> directly.
                                 </p>
-                                
-                                <div className="bg-slate-50 rounded-3xl p-6 border border-slate-100">
-                                    <div className="flex items-center gap-3 text-[10px] text-slate-400 font-black uppercase tracking-widest mb-4">
-                                        <span className="w-2 h-2 rounded-full bg-indigo-400"></span>
-                                        Onboarding Protocol
+
+                                {/* Pricing Cards */}
+                                <div className="space-y-2">
+                                    <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 text-center">Designated Monthly Rates</div>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        <div className="p-3 rounded-2xl bg-slate-50 border border-slate-100 text-center">
+                                            <div className="text-[9px] font-bold text-slate-400 uppercase">Solo</div>
+                                            <div className="text-base font-black text-slate-900 mt-0.5">₱300</div>
+                                            <div className="text-[8px] text-slate-500">per month</div>
+                                        </div>
+                                        <div className="p-3 rounded-2xl bg-slate-50 border border-slate-100 text-center">
+                                            <div className="text-[9px] font-bold text-slate-400 uppercase">2 Users</div>
+                                            <div className="text-base font-black text-slate-900 mt-0.5">₱250</div>
+                                            <div className="text-[8px] text-slate-500">each / mo</div>
+                                        </div>
+                                        <div className="p-3 rounded-2xl bg-indigo-50/70 border border-indigo-200 text-center">
+                                            <div className="text-[9px] font-bold text-indigo-700 uppercase">3+ Users</div>
+                                            <div className="text-base font-black text-indigo-700 mt-0.5">₱175</div>
+                                            <div className="text-[8px] text-indigo-600">each / mo</div>
+                                        </div>
                                     </div>
-                                    <ul className="space-y-4">
-                                        <li className="flex items-start gap-4 text-sm text-slate-600">
-                                            <div className="mt-1 w-5 h-5 rounded-full bg-indigo-100 flex-shrink-0 flex items-center justify-center text-[11px] font-bold text-indigo-600">1</div>
-                                            <span>Open Facebook Messenger</span>
+                                    <p className="text-[10px] text-slate-400 text-center italic">
+                                        Group rates apply to separate individual active subscribers.
+                                    </p>
+                                </div>
+                                
+                                <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100">
+                                    <div className="flex items-center gap-3 text-[10px] text-slate-400 font-black uppercase tracking-widest mb-3">
+                                        <span className="w-2 h-2 rounded-full bg-indigo-400"></span>
+                                        Activation Protocol
+                                    </div>
+                                    <ul className="space-y-2.5 text-xs text-slate-600">
+                                        <li className="flex items-center gap-3">
+                                            <div className="w-4 h-4 rounded-full bg-indigo-100 flex-shrink-0 flex items-center justify-center text-[10px] font-bold text-indigo-600">1</div>
+                                            <span>Message the Administrator on Facebook Messenger</span>
                                         </li>
-                                        <li className="flex items-start gap-4 text-sm text-slate-600">
-                                            <div className="mt-1 w-5 h-5 rounded-full bg-indigo-100 flex-shrink-0 flex items-center justify-center text-[11px] font-bold text-indigo-600">2</div>
-                                            <span>Message the Administrator</span>
-                                        </li>
-                                        <li className="flex items-start gap-4 text-sm text-slate-600">
-                                            <div className="mt-1 w-5 h-5 rounded-full bg-indigo-100 flex-shrink-0 flex items-center justify-center text-[11px] font-bold text-indigo-600">3</div>
-                                            <span>Provide your registration email</span>
+                                        <li className="flex items-center gap-3">
+                                            <div className="w-4 h-4 rounded-full bg-indigo-100 flex-shrink-0 flex items-center justify-center text-[10px] font-bold text-indigo-600">2</div>
+                                            <span>Provide your registered account email</span>
                                         </li>
                                     </ul>
                                 </div>
 
+                                <div className="pt-1 flex items-center justify-center">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setIsTermsModalOpen(true);
+                                        }}
+                                        className="text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:underline flex items-center gap-1.5 transition-colors"
+                                    >
+                                        <Scale size={13} />
+                                        <span>View Terms and Conditions of Use</span>
+                                    </button>
+                                </div>
+
                                 <button 
                                     onClick={() => setIsRequestModalOpen(false)}
-                                    className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-5 px-8 rounded-2xl transition-all active:scale-95 shadow-xl shadow-slate-200 uppercase tracking-widest text-xs"
+                                    className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-4 px-6 rounded-xl transition-all active:scale-95 shadow-lg shadow-slate-200 uppercase tracking-widest text-xs"
                                 >
                                     Acknowledge Protocol
                                 </button>
@@ -322,6 +359,11 @@ const Landing: React.FC = () => {
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            <TermsModal 
+                isOpen={isTermsModalOpen}
+                onClose={() => setIsTermsModalOpen(false)}
+            />
 
             {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
         </div>

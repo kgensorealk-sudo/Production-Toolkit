@@ -3,12 +3,16 @@ import { supabase } from '../supabaseClient';
 /* Import useNavigate from react-router to resolve potential named export issues in react-router-dom types */
 import { useNavigate } from 'react-router';
 import Toast from '../components/Toast';
+import TermsModal from '../components/TermsModal';
+import { Scale } from 'lucide-react';
 
 const Login: React.FC = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isSignUp, setIsSignUp] = useState(false);
+    const [termsAccepted, setTermsAccepted] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [isTermsOpen, setIsTermsOpen] = useState(false);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'|'info'} | null>(null);
     const navigate = useNavigate();
 
@@ -22,23 +26,39 @@ const Login: React.FC = () => {
 
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (isSignUp && !termsAccepted) {
+            setToast({ msg: "Please accept the Terms and Conditions to create an account.", type: "error" });
+            return;
+        }
+
         setLoading(true);
 
         try {
             if (isSignUp) {
-                // Fix: Use any casting to bypass incorrect type definition for signUp
+                // Pass terms acceptance metadata upon sign up
                 const { data, error } = await (supabase.auth as any).signUp({
                     email,
                     password,
+                    options: {
+                        data: {
+                            terms_accepted: true,
+                            accepted_terms_at: new Date().toISOString()
+                        }
+                    }
                 });
                 if (error) throw error;
                 
                 if (data.user) {
+                    try {
+                        localStorage.setItem(`terms_accepted_${data.user.id}`, 'true');
+                    } catch (err) {}
                     // Profile creation is handled by the DB trigger, but we ensure 
                     // the frontend doesn't assume immediate access.
                     setToast({ msg: "Account created! Access is pending administrator approval.", type: "info" });
                 }
                 setIsSignUp(false);
+                setTermsAccepted(false);
             } else {
                 // Fix: Use any casting to bypass incorrect type definition for signInWithPassword
                 const { error } = await (supabase.auth as any).signInWithPassword({
@@ -95,24 +115,71 @@ const Login: React.FC = () => {
                         />
                     </div>
 
+                    {isSignUp && (
+                        <div className="p-4 rounded-2xl bg-indigo-50/70 border border-indigo-100 text-left space-y-2 animate-fade-in">
+                            <label className="flex items-start gap-3 cursor-pointer select-none">
+                                <input 
+                                    type="checkbox" 
+                                    id="signup-terms-checkbox"
+                                    checked={termsAccepted}
+                                    onChange={(e) => setTermsAccepted(e.target.checked)}
+                                    className="mt-0.5 w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600 shrink-0"
+                                />
+                                <span className="text-xs text-slate-700 leading-snug">
+                                    I have read, acknowledge, and agree to the{' '}
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setIsTermsOpen(true);
+                                        }}
+                                        className="font-bold text-indigo-600 hover:text-indigo-800 underline inline-flex items-center gap-0.5"
+                                    >
+                                        Terms and Conditions of Use
+                                    </button>
+                                </span>
+                            </label>
+                            <p className="text-[10px] text-slate-500 pl-7 leading-relaxed">
+                                Required: Prohibits account sharing, proxy processing, and unapproved commercial reselling.
+                            </p>
+                        </div>
+                    )}
+
                     <button 
                         type="submit" 
-                        disabled={loading}
-                        className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-bold py-4 px-6 rounded-xl shadow-lg shadow-indigo-500/30 transform transition-all active:scale-95 hover:-translate-y-0.5 mt-2"
+                        disabled={loading || (isSignUp && !termsAccepted)}
+                        className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed text-white font-bold py-4 px-6 rounded-xl shadow-lg shadow-indigo-500/30 transform transition-all active:scale-95 hover:-translate-y-0.5 mt-2"
                     >
-                        {loading ? 'Processing...' : (isSignUp ? 'Create Account' : 'Sign In')}
+                        {loading ? 'Processing...' : (isSignUp ? 'Accept Terms & Create Account' : 'Sign In')}
                     </button>
                 </form>
 
-                <div className="mt-6 text-center">
+                <div className="mt-6 text-center space-y-3">
                     <button 
                         onClick={() => setIsSignUp(!isSignUp)}
                         className="text-sm font-medium text-slate-500 hover:text-indigo-600 transition-colors"
                     >
                         {isSignUp ? "Already have an account? Sign In" : "Need an account? Sign Up"}
                     </button>
+
+                    <div className="pt-3 border-t border-slate-100 flex items-center justify-center gap-1.5 text-[11px] text-slate-400">
+                        <span>By continuing, you agree to our</span>
+                        <button 
+                            type="button"
+                            onClick={() => setIsTermsOpen(true)}
+                            className="font-bold text-indigo-600 hover:text-indigo-800 hover:underline transition-colors inline-flex items-center gap-0.5"
+                        >
+                            Terms & Conditions
+                        </button>
+                    </div>
                 </div>
             </div>
+
+            <TermsModal 
+                isOpen={isTermsOpen}
+                onClose={() => setIsTermsOpen(false)}
+            />
+
             {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
         </div>
     );

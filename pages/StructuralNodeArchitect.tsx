@@ -2656,7 +2656,7 @@ const StructuralNodeArchitect: React.FC = () => {
                         </div>
                     </div>
                     <div className="flex items-center gap-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                        <span>© 2026 Elsevier_Systems</span>
+                        <span>© 2026 Editorial Systems Pro. All rights reserved.</span>
                         <span className="w-1 h-1 rounded-full bg-slate-300" />
                         <span>Reference_Structure_Repair_v3.2.0</span>
                     </div>

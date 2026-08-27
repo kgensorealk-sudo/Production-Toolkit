@@ -36,6 +36,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import Experimental from './pages/Experimental';
 import UserSettings from './pages/UserSettings';
 import HtmlViewer from './pages/HtmlViewer';
+import Terms from './pages/Terms';
 import AuthModal from './components/AuthModal';
 import InactivityTracker from './components/InactivityTracker';
 import { ToolId } from './types';
@@ -131,6 +132,7 @@ const App: React.FC = () => {
                         <HashRouter>
                             <Routes>
                                 <Route path="/login" element={<Login />} />
+                                <Route path="/terms" element={<Terms />} />
                                 <Route path="/" element={<ProtectedRoute><Layout isLanding={true}><Landing /></Layout></ProtectedRoute>} />
                                 <Route path="/admin" element={<AdminRoute><Layout><AdminDashboard /></Layout></AdminRoute>} />
                                 <Route path="/dashboard" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />

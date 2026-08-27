@@ -33,6 +33,8 @@ const Docs: React.FC = () => {
                     <NavBtn id="diff" label="Quick Text Diff" />
                     <NavBtn id="tag" label="XML Tag Cleaner" />
                     <NavBtn id="ref-repair" label="Reference Structure Repair" />
+                    <div className="pt-4 pb-2 px-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Legal & Policies</div>
+                    <NavBtn id="terms" label="Terms of Use" />
                 </nav>
             </aside>
             <div className="flex-1 overflow-y-auto p-8 bg-slate-50 scroll-smooth">
@@ -222,6 +224,45 @@ const Docs: React.FC = () => {
                                 <p className="text-slate-600 mb-4">
                                     Audits and auto-repairs XML reference structures, reference ID sequences, author given-name initials, empty tags (e.g., &lt;sb:publisher&gt;), and source text blocks.
                                 </p>
+                            </div>
+                        </section>
+                    )}
+                    {section === 'terms' && (
+                        <section className="animate-fade-in space-y-6">
+                            <h2 className="text-3xl font-extrabold text-slate-900 mb-2 uppercase tracking-tight">Terms and Conditions of Use</h2>
+                            <p className="text-slate-600 text-sm">
+                                By subscribing to or using these tools, you agree to comply with and be bound by the following Terms and Conditions. Please read them carefully.
+                            </p>
+
+                            <div className="space-y-4 text-sm text-slate-700">
+                                <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-2">
+                                    <h3 className="text-base font-bold text-slate-900">1. Subscription & Account Access</h3>
+                                    <p><strong>Individual License:</strong> Each subscription grants a non-transferable, non-exclusive license for one individual user only.</p>
+                                    <p><strong>No Account Sharing:</strong> Sharing credentials, login details, or tool access with non-subscribers is strictly prohibited.</p>
+                                </div>
+
+                                <div className="p-5 rounded-2xl bg-rose-50/50 border border-rose-200 shadow-2xs space-y-2">
+                                    <h3 className="text-base font-bold text-rose-950">2. Prohibited Activities & Unauthorized Commercial Use</h3>
+                                    <p><strong>No Proxy Processing:</strong> You are strictly forbidden from running XML conversions, renumbering, or executing scripts/tools on behalf of non-subscribed users.</p>
+                                    <p><strong>No Reselling or Outsourcing Services:</strong> You may not sell, rent, or monetize services using these tools to third parties or non-members.</p>
+                                </div>
+
+                                <div className="p-5 rounded-2xl bg-emerald-50/50 border border-emerald-200 shadow-2xs space-y-2">
+                                    <h3 className="text-base font-bold text-emerald-950">3. Pricing & Group Rates</h3>
+                                    <p>Subscriptions are billed on a monthly basis at designated rates (Solo: ₱300/mo, 2 Users: ₱250/mo each, 3+ Users: ₱175/mo each).</p>
+                                    <p>Group rates apply strictly to separate, individual active subscribers joining together and do not grant shared account access.</p>
+                                </div>
+
+                                <div className="p-5 rounded-2xl bg-amber-50/50 border border-amber-200 shadow-2xs space-y-2">
+                                    <h3 className="text-base font-bold text-amber-950">4. Account Banning, Subscription Cancellation, & Service Termination</h3>
+                                    <p>Anyone caught sharing their account, acting as a proxy for non-paying users, or selling services using these tools will be permanently banned and have their subscription discontinued immediately by the Admin without a refund.</p>
+                                    <p>If widespread system abuse or proxy usage persists, the Admin reserves the right to permanently shut down public access for all users without prior notice.</p>
+                                </div>
+
+                                <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-2">
+                                    <h3 className="text-base font-bold text-slate-900">5. Service Availability & Modifications</h3>
+                                    <p>Tools are provided on an "as-is" and "as-available" basis. Features, security protocols, and pricing tiers are subject to modification at the sole discretion of the Admin to maintain system sustainability.</p>
+                                </div>
                             </div>
                         </section>
                     )}
