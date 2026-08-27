@@ -38,6 +38,7 @@ type NamespaceSchema = 'elsevier' | 'jats' | 'generic';
 
 interface ConversionOptions {
     schema: NamespaceSchema;
+    wrapInParagraphs: boolean;
     addParagraphIds: boolean;
     paraIdPrefix: string;
     sectionTitleIdPrefix: string;
@@ -108,6 +109,7 @@ export const WordToXml: React.FC = () => {
 
     const [options, setOptions] = useState<ConversionOptions>({
         schema: 'elsevier',
+        wrapInParagraphs: false,
         addParagraphIds: true,
         paraIdPrefix: 'p',
         sectionTitleIdPrefix: 'st',
@@ -825,6 +827,9 @@ export const WordToXml: React.FC = () => {
                         const paraIdAttr = getParaId();
                         const listItemIdAttr = getNextListItemIdAttr();
                         const labelXml = (opts.addListLabels && finalLabel) ? `\n<${tagMap.label}>${finalLabel}</${tagMap.label}>` : '';
+                        const itemParaContent = (opts.wrapInParagraphs !== false)
+                            ? `<${tagMap.para}${paraIdAttr}>${cleanText}</${tagMap.para}>`
+                            : cleanText;
 
                         const nestedXmls = nestedListElements
                             .map(nl => processListNode(nl, listDepth + 1, customGetParaIdAttr))
@@ -832,18 +837,18 @@ export const WordToXml: React.FC = () => {
 
                         if (nestedXmls.length > 0) {
                             const combinedNested = nestedXmls.join('\n');
-                            if (opts.embedListInPara) {
+                            if (opts.embedListInPara && opts.wrapInParagraphs !== false) {
                                 listItemsXml.push(
                                     `<${tagMap.listItem}${listItemIdAttr}>${labelXml}\n<${tagMap.para}${paraIdAttr}>${cleanText}\n${combinedNested}\n</${tagMap.para}>\n</${tagMap.listItem}>`
                                 );
                             } else {
                                 listItemsXml.push(
-                                    `<${tagMap.listItem}${listItemIdAttr}>${labelXml}\n<${tagMap.para}${paraIdAttr}>${cleanText}</${tagMap.para}>\n${combinedNested}\n</${tagMap.listItem}>`
+                                    `<${tagMap.listItem}${listItemIdAttr}>${labelXml}\n${itemParaContent}\n${combinedNested}\n</${tagMap.listItem}>`
                                 );
                             }
                         } else {
                             listItemsXml.push(
-                                `<${tagMap.listItem}${listItemIdAttr}>${labelXml}\n<${tagMap.para}${paraIdAttr}>${cleanText}</${tagMap.para}>\n</${tagMap.listItem}>`
+                                `<${tagMap.listItem}${listItemIdAttr}>${labelXml}\n${itemParaContent}\n</${tagMap.listItem}>`
                             );
                         }
                     } else if (childTag === 'ul' || childTag === 'ol') {
@@ -962,14 +967,21 @@ export const WordToXml: React.FC = () => {
                             const paraIdAttr = getParaId();
                             const listItemIdAttr = getNextListItemIdAttr();
                             const labelXml = (opts.addListLabels && finalLabel) ? `\n<${tagMap.label}>${finalLabel}</${tagMap.label}>` : '';
+                            const itemParaContent = (opts.wrapInParagraphs !== false)
+                                ? `<${tagMap.para}${paraIdAttr}>${cleanText}</${tagMap.para}>`
+                                : cleanText;
                             pendingListItems.push({
-                                xml: `<${tagMap.listItem}${listItemIdAttr}>${labelXml}\n<${tagMap.para}${paraIdAttr}>${cleanText}</${tagMap.para}>\n</${tagMap.listItem}>`,
+                                xml: `<${tagMap.listItem}${listItemIdAttr}>${labelXml}\n${itemParaContent}\n</${tagMap.listItem}>`,
                                 category
                             });
                         } else {
                             flushListItems();
-                            const idAttr = getParaId();
-                            blocks.push(`<${tagMap.para}${idAttr}>${trimmedLine}</${tagMap.para}>`);
+                            if (opts.wrapInParagraphs !== false) {
+                                const idAttr = getParaId();
+                                blocks.push(`<${tagMap.para}${idAttr}>${trimmedLine}</${tagMap.para}>`);
+                            } else {
+                                blocks.push(trimmedLine);
+                            }
                         }
                     }
                 });
@@ -1097,7 +1109,7 @@ export const WordToXml: React.FC = () => {
                         const titleXml = `<${titleTag}${titleIdAttr}>${titleVal}</${titleTag}>`;
                         const innerXml = subBlocks.length > 0 
                             ? subBlocks.join('\n') 
-                            : `<${tagMap.para}${getParaId()}></${tagMap.para}>`;
+                            : (opts.wrapInParagraphs !== false ? `<${tagMap.para}${getParaId()}></${tagMap.para}>` : '');
 
                         if (ceType === 'highlights' && opts.schema === 'elsevier') {
                             let asIdAttr = '';
@@ -1243,14 +1255,21 @@ export const WordToXml: React.FC = () => {
                                     const paraIdAttr = getParaId();
                                     const listItemIdAttr = getNextListItemIdAttr();
                                     const labelXml = (opts.addListLabels && finalLabel) ? `\n<${tagMap.label}>${finalLabel}</${tagMap.label}>` : '';
+                                    const itemParaContent = (opts.wrapInParagraphs !== false)
+                                        ? `<${tagMap.para}${paraIdAttr}>${cleanText}</${tagMap.para}>`
+                                        : cleanText;
                                     pendingListItems.push({
-                                        xml: `<${tagMap.listItem}${listItemIdAttr}>${labelXml}\n<${tagMap.para}${paraIdAttr}>${cleanText}</${tagMap.para}>\n</${tagMap.listItem}>`,
+                                        xml: `<${tagMap.listItem}${listItemIdAttr}>${labelXml}\n${itemParaContent}\n</${tagMap.listItem}>`,
                                         category
                                     });
                                 } else {
                                     flushListItems();
-                                    const idAttr = getParaId();
-                                    blocks.push(`<${tagMap.para}${idAttr}>${content}</${tagMap.para}>`);
+                                    if (opts.wrapInParagraphs !== false) {
+                                        const idAttr = getParaId();
+                                        blocks.push(`<${tagMap.para}${idAttr}>${content}</${tagMap.para}>`);
+                                    } else {
+                                        blocks.push(content);
+                                    }
                                 }
                             }
                         } else if ((tagName === 'div' || tagName === 'p') && hasBlockChildren(el)) {
@@ -1265,8 +1284,12 @@ export const WordToXml: React.FC = () => {
                                     const titleIdAttr = getNextSectionTitleIdAttr();
                                     blocks.push(`<${tagMap.title}${titleIdAttr}>${content}</${tagMap.title}>`);
                                 } else {
-                                    const idAttr = getParaId();
-                                    blocks.push(`<${tagMap.para}${idAttr}><${tagMap.bold}>${content}</${tagMap.bold}></${tagMap.para}>`);
+                                    if (opts.wrapInParagraphs !== false) {
+                                        const idAttr = getParaId();
+                                        blocks.push(`<${tagMap.para}${idAttr}><${tagMap.bold}>${content}</${tagMap.bold}></${tagMap.para}>`);
+                                    } else {
+                                        blocks.push(`<${tagMap.bold}>${content}</${tagMap.bold}>`);
+                                    }
                                 }
                             }
                         } else if (tagName === 'ul' || tagName === 'ol') {
@@ -1316,7 +1339,7 @@ export const WordToXml: React.FC = () => {
         const parsedBlocks = processBlockContainer(container);
 
         let mergedBlocks = parsedBlocks;
-        if (opts.embedListInPara) {
+        if (opts.embedListInPara && opts.wrapInParagraphs !== false) {
             const finalBlocks: string[] = [];
             const paraCloseRegex = new RegExp(`</${tagMap.para}>$`, 'i');
             
@@ -1681,6 +1704,30 @@ export const WordToXml: React.FC = () => {
 
                         {/* Structural & Tagging Toggles */}
                         <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <label className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-indigo-50/90 border border-indigo-200/90 cursor-pointer hover:bg-indigo-100/90 transition-all sm:col-span-2 shadow-2xs">
+                                <input
+                                    type="checkbox"
+                                    checked={options.wrapInParagraphs}
+                                    onChange={(e) => setOptions(prev => ({ ...prev, wrapInParagraphs: e.target.checked }))}
+                                    className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 cursor-pointer"
+                                />
+                                <div className="flex flex-col">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs font-black text-indigo-950 uppercase tracking-wider">
+                                            Enclose Inputted Text in &lt;ce:para&gt; Tags
+                                        </span>
+                                        {!options.wrapInParagraphs && (
+                                            <span className="text-[9px] font-mono font-bold px-2 py-0.5 bg-amber-200 text-amber-900 rounded-full">
+                                                No &lt;ce:para&gt; Wrapper Active
+                                            </span>
+                                        )}
+                                    </div>
+                                    <span className="text-[11px] font-medium text-slate-600 mt-0.5">
+                                        When checked, paragraphs are wrapped in <code className="font-mono text-indigo-700 bg-indigo-100/80 px-1 py-0.5 rounded">&lt;ce:para&gt;...&lt;/ce:para&gt;</code>. Uncheck this option so words and text inputted will NOT be enclosed with <code className="font-mono text-indigo-700 bg-indigo-100/80 px-1 py-0.5 rounded">&lt;ce:para&gt;</code>.
+                                    </span>
+                                </div>
+                            </label>
+
                             <label className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-200/60 cursor-pointer hover:bg-slate-100 transition-all">
                                 <input
                                     type="checkbox"
@@ -1955,6 +2002,27 @@ export const WordToXml: React.FC = () => {
 
                             <div className="flex items-center gap-2">
                                 <button
+                                    type="button"
+                                    onClick={() => {
+                                        const nextVal = !options.wrapInParagraphs;
+                                        setOptions(prev => ({ ...prev, wrapInParagraphs: nextVal }));
+                                        setToast({
+                                            msg: nextVal ? 'Enabled <ce:para> paragraph wrapping' : 'Disabled <ce:para> (outputting raw words / text)',
+                                            type: nextVal ? 'info' : 'warn'
+                                        });
+                                    }}
+                                    className={`px-2.5 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 border shadow-2xs ${
+                                        options.wrapInParagraphs
+                                            ? 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200'
+                                            : 'bg-amber-100 text-amber-900 border-amber-300 font-black'
+                                    }`}
+                                    title={options.wrapInParagraphs ? 'Click to omit <ce:para> tags' : 'Click to enclose in <ce:para> tags'}
+                                >
+                                    <Type size={12} className={options.wrapInParagraphs ? 'text-indigo-600' : 'text-amber-700'} />
+                                    <span>{options.wrapInParagraphs ? '<ce:para> ON' : '<ce:para> OFF'}</span>
+                                </button>
+
+                                <button
                                     onClick={() => setIsHtmlMode(!isHtmlMode)}
                                     className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${isHtmlMode ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                                     title="Toggle Source Code / Rich Canvas"
@@ -2157,6 +2225,12 @@ export const WordToXml: React.FC = () => {
                                             <div className="flex justify-between py-1 border-b border-slate-800">
                                                 <span>Selected Namespace Schema:</span>
                                                 <span className="font-bold text-slate-200 uppercase">{options.schema}</span>
+                                            </div>
+                                            <div className="flex justify-between py-1 border-b border-slate-800">
+                                                <span>Enclose in &lt;ce:para&gt;:</span>
+                                                <span className={`font-bold ${options.wrapInParagraphs ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                                    {options.wrapInParagraphs ? 'Enabled (<ce:para>)' : 'Disabled (Raw Words / Plain Text)'}
+                                                </span>
                                             </div>
                                             <div className="flex justify-between py-1 border-b border-slate-800">
                                                 <span>Paragraph IDs Enabled:</span>
