@@ -1286,6 +1286,26 @@ const ReferenceTaggerExperimental: React.FC = () => {
                 </div>
             </div>
 
+            {/* Keeper Advisory Warning Banner */}
+            <div className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3.5 text-amber-950 shadow-xs">
+                <div className="p-2 rounded-xl bg-amber-500/20 text-amber-800 shrink-0 mt-0.5 shadow-2xs">
+                    <AlertTriangle size={18} className="text-amber-700" />
+                </div>
+                <div className="flex-1 text-xs">
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-black text-amber-950 uppercase tracking-wider text-[11px]">
+                            ⚠️ Keeper Advisory: Experimental Version
+                        </span>
+                        <span className="text-[9px] px-2 py-0.5 rounded-full bg-amber-200/90 text-amber-950 font-extrabold uppercase tracking-widest border border-amber-300">
+                            Not Yet Fully Established
+                        </span>
+                    </div>
+                    <p className="text-amber-900/90 mt-1 text-[11px] leading-relaxed">
+                        Reference XML Tagger Pro is an <strong>experimental version</strong> utilizing heuristic token parsing to classify bibliographic entries. Because non-standard citation patterns, obscure journal abbreviations, or foreign titles may not always map accurately, this tool is <strong>not yet fully established</strong>. Always inspect the generated XML and author tags before publishing.
+                    </p>
+                </div>
+            </div>
+
             {/* Config & Settings Drawer */}
             <div className="mb-6 p-4 bg-white border border-slate-200 rounded-3xl shadow-xs space-y-4">
                 {/* Labeling Style Selector Header */}

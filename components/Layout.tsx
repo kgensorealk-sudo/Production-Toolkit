@@ -25,6 +25,7 @@ import FeedbackModal from './FeedbackModal';
 import TermsModal from './TermsModal';
 import TermsGateModal from './TermsGateModal';
 import Toast from './Toast';
+import AIAssistantBubble from './AIAssistantBubble';
 import { MessageSquare, Scale } from 'lucide-react';
 
 interface LayoutProps {
@@ -44,8 +45,25 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
     const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
     const [isTermsOpen, setIsTermsOpen] = useState(false);
     const [toast, setToast] = useState<{ msg: string, type: 'success' | 'warn' | 'error' | 'info' } | null>(null);
+    const [isKeeperOpen, setIsKeeperOpen] = useState(false);
+    const [isKeeperUnread, setIsKeeperUnread] = useState(false);
     
     const isVercel = window.location.hostname.includes('vercel.app');
+
+    useEffect(() => {
+        const handleKeeperStatus = (e: any) => {
+            if (e.detail) {
+                setIsKeeperOpen(Boolean(e.detail.isOpen));
+                setIsKeeperUnread(Boolean(e.detail.hasUnread));
+            }
+        };
+        window.addEventListener('app:keeper-status', handleKeeperStatus);
+        return () => window.removeEventListener('app:keeper-status', handleKeeperStatus);
+    }, []);
+
+    const handleToggleKeeper = () => {
+        window.dispatchEvent(new CustomEvent('app:toggle-keeper'));
+    };
 
     useEffect(() => {
         if (!currentTool || !user?.id || authLoading) return;
@@ -247,13 +265,53 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                         )}
 
                         <div className="flex items-center gap-2 bg-slate-100/50 p-1 rounded-2xl border border-slate-200/50">
-                            {hasActiveAnnouncement && !isExiting && (
+                            {/* Announcements Bell Icon */}
+                            {!isExiting && (
                                 <button 
+                                    id="announcements-bell-btn"
                                     onClick={triggerAnnouncement}
-                                    className={`p-2 rounded-xl transition-all relative ${isAnnouncementUnread ? 'text-indigo-600 bg-white shadow-sm' : 'text-slate-400 hover:text-indigo-600'}`}
+                                    className={`p-2 rounded-xl transition-all relative cursor-pointer ${
+                                        isAnnouncementUnread 
+                                            ? 'text-indigo-600 bg-white shadow-sm ring-2 ring-indigo-300' 
+                                            : 'text-slate-400 hover:text-indigo-600 hover:bg-white/60'
+                                    }`}
+                                    title={hasActiveAnnouncement ? (isAnnouncementUnread ? "New Announcements & Alerts" : "System Announcements") : "System Announcements"}
                                 >
                                     <Bell size={18} />
-                                    {isAnnouncementUnread && <span className="absolute top-2 right-2 w-2 h-2 bg-indigo-600 rounded-full ring-2 ring-white"></span>}
+                                    {isAnnouncementUnread && (
+                                        <span className="absolute top-2 right-2 w-2 h-2 bg-indigo-600 rounded-full ring-2 ring-white animate-ping" />
+                                    )}
+                                    {isAnnouncementUnread && (
+                                        <span className="absolute top-2 right-2 w-2 h-2 bg-indigo-600 rounded-full ring-2 ring-white" />
+                                    )}
+                                </button>
+                            )}
+
+                            {/* Dedicated Keeper AI Assistant Floater Icon */}
+                            {!isExiting && (
+                                <button 
+                                    id="keeper-header-toggle-btn"
+                                    onClick={handleToggleKeeper}
+                                    className={`p-1.5 rounded-xl transition-all relative group flex items-center justify-center cursor-pointer ${
+                                        isKeeperOpen 
+                                            ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/80 ring-2 ring-indigo-400/40' 
+                                            : 'text-slate-400 hover:text-indigo-600 hover:bg-white/70'
+                                    }`}
+                                    title={isKeeperOpen ? "Keeper AI Assistant (Open - Click to minimize)" : "Keeper AI Assistant (Click to open chat floater)"}
+                                    aria-label="Toggle Keeper AI Chat Floater"
+                                >
+                                    <div className="relative w-5 h-5 rounded-full overflow-hidden border border-indigo-200 shadow-2xs shrink-0 bg-slate-900">
+                                        <img 
+                                            src="/keeper_avatar.jpg" 
+                                            alt="Keeper Dog Mascot" 
+                                            className="w-full h-full object-cover"
+                                            referrerPolicy="no-referrer"
+                                        />
+                                        <span className="absolute bottom-0 right-0 w-1.5 h-1.5 rounded-full bg-emerald-400 ring-1 ring-white" />
+                                    </div>
+                                    {isKeeperUnread && (
+                                        <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-rose-500 rounded-full ring-2 ring-white animate-bounce" />
+                                    )}
                                 </button>
                             )}
 
@@ -371,6 +429,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
             />
 
             {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
+
+            {!isExiting && <AIAssistantBubble currentTool={currentTool} />}
 
             <footer className="bg-white border-t border-slate-200/60 py-4 mt-auto">
                 <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-4 text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em]">

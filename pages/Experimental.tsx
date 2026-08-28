@@ -13,7 +13,8 @@ import {
     Database,
     Link,
     Sigma,
-    Tag
+    Tag,
+    AlertTriangle
 } from 'lucide-react';
 import { ToolId } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -227,6 +228,30 @@ const Experimental: React.FC = () => {
                     </div>
                 </motion.div>
             </div>
+
+            {/* Keeper Advisory Warning Banner */}
+            <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-8 p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-amber-500/15 border border-amber-500/30 flex items-start gap-3.5 text-amber-950 shadow-xs"
+            >
+                <div className="p-2 rounded-xl bg-amber-500/25 text-amber-800 shrink-0 mt-0.5 shadow-2xs">
+                    <AlertTriangle size={18} className="text-amber-700" />
+                </div>
+                <div className="flex-1 text-xs">
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-black text-amber-950 uppercase tracking-wider text-[11px]">
+                            ⚠️ Keeper Advisory: Experimental Versions Active
+                        </span>
+                        <span className="text-[9px] px-2 py-0.5 rounded-full bg-amber-200/90 text-amber-950 font-extrabold uppercase tracking-widest border border-amber-300">
+                            Not Yet Fully Established
+                        </span>
+                    </div>
+                    <p className="text-amber-900/90 mt-1 text-[11px] leading-relaxed">
+                        Protocols listed below are <strong>Experimental Versions</strong> under active development and testing. They are <strong>not yet fully established</strong> and may produce unexpected edge-case tags, renumbering shifts, or formatting artifacts. Keeper strongly advises verifying all XML output, citation cross-references, and formulas against standard DTD v5.6 / JATS XML guidelines before publishing. Ask Keeper in the bottom right corner if you need help deciding between an experimental version and its established counterpart!
+                    </p>
+                </div>
+            </motion.div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {filteredTools.map((tool, index) => (

@@ -136,7 +136,7 @@ const App: React.FC = () => {
                                 <Route path="/" element={<ProtectedRoute><Layout isLanding={true}><Landing /></Layout></ProtectedRoute>} />
                                 <Route path="/admin" element={<AdminRoute><Layout><AdminDashboard /></Layout></AdminRoute>} />
                                 <Route path="/dashboard" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />
-                                <Route path="/experimental" element={<ProtectedRoute><Layout><Experimental /></Layout></ProtectedRoute>} />
+                                <Route path="/experimental" element={<ProtectedRoute><Layout currentTool={'experimental' as any}><Experimental /></Layout></ProtectedRoute>} />
                                 <Route path="/docs" element={<ProtectedRoute><Layout><Docs /></Layout></ProtectedRoute>} />
                                 <Route path="/settings" element={<ProtectedRoute><Layout><UserSettings /></Layout></ProtectedRoute>} />
                                 <Route path="/view-html" element={<ProtectedRoute><HtmlViewer /></ProtectedRoute>} />

@@ -1209,6 +1209,26 @@ const CitationLinkerExperimental: React.FC = () => {
                         </div>
                     </div>
                 </div>
+
+                {/* Keeper Advisory Warning Banner */}
+                <div className="mt-4 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3 text-amber-950 shadow-xs max-w-3xl mx-auto text-left">
+                    <div className="p-2 rounded-xl bg-amber-500/20 text-amber-800 shrink-0 mt-0.5 shadow-2xs">
+                        <AlertTriangle size={18} className="text-amber-700" />
+                    </div>
+                    <div className="flex-1 text-xs">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-black text-amber-950 uppercase tracking-wider text-[11px]">
+                                ⚠️ Keeper Advisory: Experimental Version
+                            </span>
+                            <span className="text-[9px] px-2 py-0.5 rounded-full bg-amber-200/90 text-amber-950 font-extrabold uppercase tracking-widest border border-amber-300">
+                                Not Yet Fully Established
+                            </span>
+                        </div>
+                        <p className="text-amber-900/90 mt-1 text-[11px] leading-relaxed">
+                            You are using an <strong>experimental version</strong> with fuzzy author-year matching and multi-entity cross-linking that is not yet fully established. Please review candidate matches carefully before applying them. For verified stability on standard citations, you may use the established <button onClick={() => navigate('/citationLinker')} className="font-bold underline text-amber-950 hover:text-indigo-700 cursor-pointer">Citation Linker Pro (Established)</button>.
+                        </p>
+                    </div>
+                </div>
             </div>
 
             {/* Configuration Panel */}

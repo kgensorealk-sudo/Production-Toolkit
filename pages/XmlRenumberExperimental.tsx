@@ -833,7 +833,7 @@ const XmlRenumberExperimental: React.FC = () => {
             {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
             {/* Header Title */}
-            <div className="mb-8 text-center animate-fade-in relative">
+            <div className="mb-6 text-center animate-fade-in relative">
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100 border border-blue-200 text-blue-800 text-xs font-black uppercase tracking-widest mb-3">
                     <Sparkles size={13} className="text-blue-600" />
                     <span>Experimental Normalizer Protocol v2.5</span>
@@ -844,6 +844,26 @@ const XmlRenumberExperimental: React.FC = () => {
                 <p className="text-slate-500 max-w-3xl mx-auto font-medium text-sm leading-relaxed">
                     Advanced sequential citation renumbering with alphabetical sorting, range compression, and normalized cross-references.
                 </p>
+            </div>
+
+            {/* Experimental Warning Notice Banner */}
+            <div className="mb-8 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3.5 text-amber-950 shadow-xs max-w-4xl mx-auto">
+                <div className="p-2 rounded-xl bg-amber-500/20 text-amber-800 shrink-0 mt-0.5 shadow-2xs">
+                    <AlertCircle size={18} className="text-amber-700" />
+                </div>
+                <div className="flex-1 text-xs">
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-black text-amber-950 uppercase tracking-wider text-[11px]">
+                            ⚠️ Notice: Experimental Version
+                        </span>
+                        <span className="text-[9px] px-2 py-0.5 rounded-full bg-amber-200/90 text-amber-950 font-extrabold uppercase tracking-widest border border-amber-300">
+                            Not Yet Fully Established
+                        </span>
+                    </div>
+                    <p className="text-amber-900/90 mt-1 text-[11px] leading-relaxed">
+                        This is an <strong>experimental version</strong> of the XML Normalizer with algorithmic sorting and compression features that are still being refined. Please review the visual matrix and diff before outputting XML into production manuscripts. For standard production files, you can switch to the established <button onClick={() => navigate('/xmlRenumber')} className="font-bold underline text-amber-950 hover:text-indigo-700 cursor-pointer">XML Normalizer (Production Version)</button>. Ask Keeper anytime for guidance!
+                    </p>
+                </div>
             </div>
 
             {/* Configuration Controls */}
