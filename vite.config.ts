@@ -4,11 +4,11 @@ import react from '@vitejs/plugin-react';
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, (process as any).cwd(), '');
+  const isVercel = process.env.VERCEL === '1';
   
   return {
     plugins: [react()],
-    // Base '' ensures relative paths for .exe compatibility
-    base: '', 
+    base: isVercel ? '/' : '',
     build: {
       outDir: 'dist',
       emptyOutDir: true,
