@@ -53,8 +53,10 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
     useEffect(() => {
         const handleKeeperStatus = (e: any) => {
             if (e.detail) {
-                setIsKeeperOpen(Boolean(e.detail.isOpen));
-                setIsKeeperUnread(Boolean(e.detail.hasUnread));
+                const nextOpen = Boolean(e.detail.isOpen);
+                const nextUnread = Boolean(e.detail.hasUnread);
+                setIsKeeperOpen(prev => (prev !== nextOpen ? nextOpen : prev));
+                setIsKeeperUnread(prev => (prev !== nextUnread ? nextUnread : prev));
             }
         };
         window.addEventListener('app:keeper-status', handleKeeperStatus);

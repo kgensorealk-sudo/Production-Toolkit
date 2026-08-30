@@ -170,13 +170,14 @@ const RefSorter: React.FC = () => {
         );
     }, []);
 
+    const isGeneratingDiffRef = useRef(false);
     useEffect(() => {
-        if (activeTab === 'diff' && !diffElements && lastProcessedInput && output) {
-            // Use a temporary state or check to prevent multiple calls before the first one finishes
-            setDiffElements(<div className="h-full flex items-center justify-center text-slate-400 uppercase tracking-widest text-[10px] font-black">Generating Differential Audit...</div>);
+        if (activeTab === 'diff' && !diffElements && lastProcessedInput && output && !isGeneratingDiffRef.current) {
+            isGeneratingDiffRef.current = true;
             generateDiff(lastProcessedInput, output);
+            isGeneratingDiffRef.current = false;
         }
-    }, [activeTab, diffElements, lastProcessedInput, output, generateDiff]);
+    }, [activeTab, lastProcessedInput, output, generateDiff]);
 
     const runSort = () => {
         if (!input.trim()) {

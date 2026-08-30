@@ -21,12 +21,15 @@ import {
     ArrowRight,
     FileText,
     GripHorizontal,
-    Pin
+    Pin,
+    Zap
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ToolId } from '../types';
 import { isExperimentalTool, getToolInfo } from '../utils/toolRegistry';
+import { startTypingSimulation, TypingSimulatorController } from '../utils/typingSimulator';
+import { generateOfflineKeeperResponse, sanitizeOutput } from '../utils/keeperEngine';
 
 const keeperAvatar = '/keeper_avatar.jpg';
 
@@ -58,63 +61,84 @@ export const getTimeOfDayDogGreeting = (date: Date = new Date()): DogGreetingInf
     if (hour >= 5 && hour < 12) {
         return {
             period: 'morning',
-            timeLabel: 'Morning',
+            timeLabel: 'Morning Shift',
             greeting: 'Good morning!',
-            action: '*Perks up fluffy white ears with an energetic morning stretch and happy tail wag!*',
-            tagline: 'Ready for the morning editorial watch!',
-            bark: 'Woof! Good morning!'
+            action: '*Perks up fluffy white ears with a happy stretch and tail wag.* 🐾',
+            tagline: 'Ready for today\'s editorial proofs!',
+            bark: 'Woof woof! Good morning!'
         };
     } else if (hour >= 12 && hour < 17) {
         return {
             period: 'afternoon',
-            timeLabel: 'Afternoon',
+            timeLabel: 'Afternoon Shift',
             greeting: 'Good afternoon!',
-            action: '*Trots over happily with an enthusiastic tail wag and bright, cheerful eyes!*',
-            tagline: 'Sniffing out citation mismatches and ready to fetch tools!',
+            action: '*Trots over with a cheerful tail wag.* 🐾',
+            tagline: 'Ready to power through proofs and clean up citations!',
             bark: 'Arf arf! Good afternoon!'
         };
     } else if (hour >= 17 && hour < 22) {
         return {
             period: 'evening',
-            timeLabel: 'Evening',
+            timeLabel: 'Evening Shift',
             greeting: 'Good evening!',
-            action: '*Gives a friendly bark and wags tail attentively, on evening patrol!*',
-            tagline: 'Guarding your production manuscripts this evening!',
+            action: '*Rests paws attentively on the desk with a friendly woof.* 🐾',
+            tagline: 'Ready to double-check references and tags before sign-off!',
             bark: 'Woof! Good evening!'
         };
     } else {
         return {
             period: 'night',
-            timeLabel: 'Late Night',
-            greeting: 'Good evening! Burning the midnight oil?',
-            action: '*Sits loyally beside your desk on faithful night-shift watch!*',
-            tagline: 'Always by your side to help you polish your files!',
-            bark: 'Arf! Working late?'
+            timeLabel: 'Late Night Shift',
+            greeting: 'Burning the midnight oil?',
+            action: '*Curls up loyally beside your workstation.* 🐾',
+            tagline: 'Working late together—ready to lend a paw anytime!',
+            bark: 'Arf! Working late together!'
         };
     }
 };
 
 /**
- * Generates the dynamic welcome greeting message with time-of-day canine persona.
+ * Generates the full, enthusiastic editorial welcome message for Keeper Japanese Spitz mascot.
  */
 export const generateKeeperWelcomeMessage = (): Message => {
-    const { greeting, action, tagline } = getTimeOfDayDogGreeting();
+    const hour = new Date().getHours();
+    let timeGreeting = "Good afternoon, superstar!";
+    let sprintTime = "Afternoon";
+    if (hour >= 5 && hour < 12) {
+        timeGreeting = "Good morning, superstar!";
+        sprintTime = "Morning";
+    } else if (hour >= 12 && hour < 17) {
+        timeGreeting = "Good afternoon, superstar!";
+        sprintTime = "Afternoon";
+    } else if (hour >= 17 && hour < 22) {
+        timeGreeting = "Good evening, superstar!";
+        sprintTime = "Evening";
+    } else {
+        timeGreeting = "Good evening, superstar!";
+        sprintTime = "Late night";
+    }
+
+    const content = `👋 **Woof woof! ${timeGreeting}** *Trots over with an enthusiastic bounce, bright inquisitive eyes, and a happy little bark!* 🐾
+
+I'm **Keeper**, your Japanese Spitz Editorial AI Companion & Mascot! ${sprintTime} production sprint? Bring it on! We will power through proofs, link citations, and clear files in record time!
+
+🌟 **What can I fetch or solve for you right now?**
+
+📝 **Draft Standardized Journal Manager (JM) Queries:**
+- \`Query to JM: Author requested to change the author name from "Original Name" to "Amended Name"\`
+- \`Query to JM: The author provided a replacement for Figure 3 with data changes\`
+- \`Query to JM: Reference [14] is uncited in the text body\`
+
+🧭 **Instant Tool Finder & Workflow Navigator:**
+Need to renumber citations? Link plain-text references? Convert formatted Word text to XML? Just ask and I'll fetch the exact tool!
+
+📜 **DTD v5.6 & JATS XML Mastery:**
+Ask me about bibliography structures (\`<sb:reference>\`), CRediT taxonomy roles, table footnote positioning, or grant markup!`;
+
     return {
-        id: `init-${Date.now()}`,
+        id: `init-welcome`,
         role: 'assistant',
-        content: `👋 **Woof! ${greeting}** ${action} 🐾
-
-I'm **Keeper**, your Japanese Spitz Editorial AI Companion & Mascot! ${tagline}
-
-### 🐾 What I can fetch for you:
-- 📝 **Master JM Query Generator**: Standardized \`TO THE JM:\` queries with proper protocol!
-  - Try: \`Query to JM: Author requested name change from X to Y\`
-  - Try: \`Query to JM: Figure 3 replaced with content changes\`
-  - Try: \`Query to JM: Reference [14] is uncited in the text body\`
-- 🧭 **Tool & Scenario Finder**: Tell me your production problem (*"Renumber references"*, *"Connect unlinked citations"*, *"Word to Journal XML"*) and I'll fetch the right tool and route.
-- 📜 **DTD v5.6 & JATS XML**: Structuring \`<ce:bib-reference>\`, checking table syntax, and validating CRediT roles.
-
-How can I lend a paw with your manuscripts right now?`,
+        content,
         timestamp: Date.now()
     };
 };
@@ -123,32 +147,36 @@ const SCENARIO_CATEGORIES = [
     {
         category: '📝 Master JM Queries',
         items: [
-            { label: 'Generate JM Query', prompt: 'Help me create a JM Query' },
             { label: 'Author Name Change Query', prompt: 'Query to JM: Author requested to change the author name from Muhammed Afnas "Villayateri" to "Vilayatteri"' },
-            { label: 'Figure Replacement Query', prompt: 'Query to JM: Author provided a replacement for Figure 3 with data changes but without detailed explanation' },
-            { label: 'Uncited Reference Query', prompt: 'Query to JM: Reference [14] is uncited in the text body' }
+            { label: 'Figure Replacement Query', prompt: 'Query to JM: The author provided a replacement for Figure 3 that includes content changes compared to the current version' },
+            { label: 'Uncited Reference in Text Body', prompt: 'Query to JM: Reference [14] is uncited in the text body. Kindly ask author for citation or confirmation to delete.' },
+            { label: 'Figure Panel Label Mismatch', prompt: 'Query to JM: Panels (c) and (d) are mentioned in the caption for Figure 2 but are not found in the artwork. Please check and amend as necessary.' },
+            { label: 'Technical Image Quality Fault', prompt: 'Query to JM: Figure 5 artwork is unusable in present format due to pixelated text and blurry data. Kindly request new high-res PDF or TIF.' }
         ]
     },
     {
         category: '🔢 Citations & References',
         items: [
-            { label: 'Renumber references & citations', prompt: 'Which tool within this web app should I use when references or citations are out of order, and how does it work?' },
-            { label: 'Fix broken cross-ref links', prompt: 'What tool should I use to connect unlinked citation text to bibliography entries with <ce:cross-ref> tags?' },
-            { label: 'Remove uncited references', prompt: 'Which tool detects and cleans up bibliography references that are never cited in the body of the article?' },
-            { label: 'Deduplicate bibliography', prompt: 'Which tool within this app detects duplicate bibliography entries and merges them?' }
+            { label: 'Renumber references & callouts', prompt: 'Which tool should I use when references or citation callouts are out of order in the body text, and how does it work?' },
+            { label: 'Link plain-text citations', prompt: 'What tool connects unlinked in-text citations like "[1-3]" or "(Smith et al., 2021)" to bibliography entries with <ce:cross-ref> tags?' },
+            { label: 'Repair broken XML reference nodes', prompt: 'How do I audit and auto-repair malformed reference XML, missing <sb:reference> tags, and unformatted author initials using Reference Structure Repair?' },
+            { label: 'Purge uncited bibliography entries', prompt: 'Which tool detects bibliography references that are never cited in the text body and allows safe purging?' },
+            { label: 'Deduplicate bibliography entries', prompt: 'Which tool detects duplicate bibliography entries cited under different numbers and merges them?' }
         ]
     },
     {
-        category: '🛠️ XML & Word Tools',
+        category: '🛠️ XML Markup & Document Utilities',
         items: [
-            { label: 'Convert Word to Journal XML', prompt: 'Which tool converts formatted text from MS Word with bold, italics, superscripts, and subscripts into standard Journal CE XML?' },
-            { label: 'Tag author CRediT roles', prompt: 'How do I use the CRediT Tagging tool to convert author contributions statements into NISO CRediT XML?' },
-            { label: 'Experimental vs Established tools', prompt: 'Which tools in this app are Experimental Versions, why are they not yet fully established, and when should I use the standard established versions instead?' }
+            { label: 'Convert Word text to Journal XML', prompt: 'Which tool converts formatted text from MS Word with bold, italics, chemical subscripts (<ce:inf>), and superscripts (<ce:sup>) into standard Journal CE XML?' },
+            { label: 'Tag author CRediT roles', prompt: 'How do I use the CRediT Tagging tool to convert informal author contribution statements into NISO CRediT XML (<ce:contributor-role>)?' },
+            { label: 'Table footnotes & legend notes', prompt: 'Which tool manages and relocates table footnotes (<ce:table-footnote>) and table legend notes?' },
+            { label: 'Tag research grants & sponsors', prompt: 'How do I tag funding sponsors and award numbers with <ce:grant-sponsor> and <ce:grant-number>?' },
+            { label: 'Experimental vs Established Tools', prompt: 'Which tools in Production Toolkit Pro are Experimental Versions, why are they not yet fully established, and when should I use the standard established versions instead?' }
         ]
     }
 ];
 
-const STORAGE_KEY = 'prod_toolkit_keeper_messages_v3';
+const STORAGE_KEY = 'prod_toolkit_keeper_messages_v5';
 
 export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentTool }) => {
     const navigate = useNavigate();
@@ -172,6 +200,7 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
     const [isExpanded, setIsExpanded] = useState(false);
     const [inputPrompt, setInputPrompt] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [currentlyTypingId, setCurrentlyTypingId] = useState<string | null>(null);
     const [copiedId, setCopiedId] = useState<string | null>(null);
     const [hasUnread, setHasUnread] = useState(false);
 
@@ -203,9 +232,15 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
         }
     });
 
-    // Chat messages with dog-like time of day greeting
+    // Chat messages - starts with Keeper's signature greeting by default
     const [messages, setMessages] = useState<Message[]>(() => {
         try {
+            // Clean up legacy storage versions
+            localStorage.removeItem('prod_toolkit_keeper_messages_v1');
+            localStorage.removeItem('prod_toolkit_keeper_messages_v2');
+            localStorage.removeItem('prod_toolkit_keeper_messages_v3');
+            localStorage.removeItem('prod_toolkit_keeper_messages_v4');
+
             const saved = localStorage.getItem(STORAGE_KEY);
             if (saved) {
                 const parsed = JSON.parse(saved);
@@ -213,13 +248,7 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
                     return parsed.map((m: Message) => ({
                         ...m,
                         content: typeof m.content === 'string'
-                            ? m.content
-                                .replace(/Elsevier\s*DTD\s*v5\.6/gi, 'DTD v5.6')
-                                .replace(/Elsevier\s*XML/gi, 'Journal CE XML')
-                                .replace(/Elsevier\s*DTD/gi, 'Journal DTD')
-                                .replace(/Elsevier\s*guidelines/gi, 'standard editorial guidelines')
-                                .replace(/Elsevier\s*format/gi, 'standard journal format')
-                                .replace(/Elsevier/gi, 'Journal Publishing')
+                            ? sanitizeOutput(m.content)
                             : m.content
                     }));
                 }
@@ -230,6 +259,14 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const typingControllerRef = useRef<TypingSimulatorController | null>(null);
+
+    // Cleanup typing animation if component unmounts
+    useEffect(() => {
+        return () => {
+            typingControllerRef.current?.stop();
+        };
+    }, []);
 
     // Dragging tracking refs
     const isDraggingRef = useRef(false);
@@ -240,24 +277,6 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
         posY: 0
     });
     const hasMovedRef = useRef(false);
-
-    // Ensure greeting occurs at least once per day/session
-    useEffect(() => {
-        try {
-            const today = new Date().toISOString().split('T')[0];
-            const lastGreetDate = localStorage.getItem('keeper_last_greet_date');
-            if (lastGreetDate !== today) {
-                localStorage.setItem('keeper_last_greet_date', today);
-                // If the user's chat is just starting with a single initial message, ensure it matches today's time of day
-                setMessages(prev => {
-                    if (prev.length === 1 && prev[0].id.startsWith('init-')) {
-                        return [generateKeeperWelcomeMessage()];
-                    }
-                    return prev;
-                });
-            }
-        } catch (e) {}
-    }, []);
 
     // Sync status with dedicated header icon in Layout.tsx
     useEffect(() => {
@@ -296,19 +315,28 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
     useEffect(() => {
         if (isOpen) {
             scrollToBottom();
-            setHasUnread(false);
-            setTimeout(() => {
+            setHasUnread(prev => (prev ? false : prev));
+            const timer = setTimeout(() => {
                 textareaRef.current?.focus();
             }, 150);
+            return () => clearTimeout(timer);
         }
-    }, [isOpen, messages]);
+    }, [isOpen]);
 
-    // Persist messages to local storage
     useEffect(() => {
-        try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
-        } catch (e) {}
-    }, [messages]);
+        if (isOpen) {
+            scrollToBottom();
+        }
+    }, [isOpen, messages.length]);
+
+    // Persist messages to local storage (only when not actively typing keystrokes)
+    useEffect(() => {
+        if (!currentlyTypingId) {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+            } catch (e) {}
+        }
+    }, [messages, currentlyTypingId]);
 
     // Persist position
     useEffect(() => {
@@ -416,23 +444,36 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
     };
 
     const executeResetChat = () => {
-        const freshWelcome = generateKeeperWelcomeMessage();
-        setMessages([freshWelcome]);
+        typingControllerRef.current?.stop();
+        setCurrentlyTypingId(null);
+        const welcome = generateKeeperWelcomeMessage();
+        setMessages([welcome]);
         try {
-            localStorage.removeItem(STORAGE_KEY);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify([welcome]));
         } catch (e) {}
         setShowResetConfirm(false);
         setInputPrompt('');
-        setResetNotice('Chat reset! Keeper greeted with fresh energy. 🐾');
-        setTimeout(() => setResetNotice(null), 3500);
+        setResetNotice('Chat refreshed! Keeper is ready for your next manuscript task. 🐾');
+        setTimeout(() => setResetNotice(null), 3000);
         setTimeout(() => {
             textareaRef.current?.focus();
         }, 100);
     };
 
+    const handleSkipTyping = () => {
+        if (typingControllerRef.current) {
+            typingControllerRef.current.skip();
+        }
+    };
+
     const handleSendMessage = async (textToSend?: string) => {
         const text = (textToSend || inputPrompt).trim();
         if (!text || isLoading) return;
+
+        // If Keeper is currently typing out a previous message, skip to end before sending new message
+        if (currentlyTypingId) {
+            handleSkipTyping();
+        }
 
         const userMessage: Message = {
             id: `usr-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
@@ -499,33 +540,82 @@ ${timeContext}`
                 .replace(/Elsevier\s*standards/gi, 'standard publishing schemas')
                 .replace(/Elsevier/gi, 'Journal Publishing');
 
-            const assistantMessage: Message = {
-                id: `ast-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+            const assistantMessageId = `ast-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+            const initialAssistantMessage: Message = {
+                id: assistantMessageId,
                 role: 'assistant',
-                content: sanitizedContent,
+                content: '',
                 timestamp: Date.now()
             };
 
-            setMessages(prev => [...prev, assistantMessage]);
+            // Switch from "sniffing out" spinner to active typing simulation
+            setIsLoading(false);
+            setMessages(prev => [...prev, initialAssistantMessage]);
+            setCurrentlyTypingId(assistantMessageId);
             if (!isOpen) {
                 setHasUnread(true);
             }
+
+            // Start human-like typing simulation with realistic mistype, pause & deletion correction
+            typingControllerRef.current = startTypingSimulation({
+                fullText: sanitizedContent,
+                onUpdate: (displayedText) => {
+                    setMessages(prev => prev.map(m => m.id === assistantMessageId ? { ...m, content: displayedText } : m));
+                    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+                },
+                onComplete: () => {
+                    setCurrentlyTypingId(null);
+                    typingControllerRef.current = null;
+                    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+                }
+            });
+
         } catch (err: any) {
-            const errorMessage: Message = {
-                id: `err-${Date.now()}`,
+            console.warn("AI Chat server fallback to Keeper smart offline engine:", err?.message || err);
+            const offlineReply = generateOfflineKeeperResponse(text);
+            const sanitizedContent = sanitizeOutput(offlineReply);
+
+            const assistantMessageId = `ast-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+            const initialAssistantMessage: Message = {
+                id: assistantMessageId,
                 role: 'assistant',
-                content: `⚠️ **Error communicating with Keeper:**\n\n${err.message || 'Unable to connect to server.'}\n\n*Note: Make sure your GEMINI_API_KEY is configured in your project settings.*`,
+                content: '',
                 timestamp: Date.now()
             };
-            setMessages(prev => [...prev, errorMessage]);
-        } finally {
+
             setIsLoading(false);
+            setMessages(prev => [...prev, initialAssistantMessage]);
+            setCurrentlyTypingId(assistantMessageId);
+            if (!isOpen) {
+                setHasUnread(true);
+            }
+
+            typingControllerRef.current = startTypingSimulation({
+                fullText: sanitizedContent,
+                onUpdate: (displayedText) => {
+                    setMessages(prev => prev.map(m => m.id === assistantMessageId ? { ...m, content: displayedText } : m));
+                    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+                },
+                onComplete: () => {
+                    setCurrentlyTypingId(null);
+                    typingControllerRef.current = null;
+                    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+                }
+            });
         }
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (e.key === 'Escape' && currentlyTypingId) {
+            e.preventDefault();
+            handleSkipTyping();
+            return;
+        }
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
+            if (currentlyTypingId) {
+                handleSkipTyping();
+            }
             handleSendMessage();
         }
     };
@@ -635,9 +725,18 @@ ${timeContext}`
                                             </span>
                                         </div>
                                         <span className="text-[10px] text-slate-300/90 font-medium flex items-center gap-1">
-                                            <span>🐾 {currentDogGreeting.timeLabel} Shift</span>
-                                            <span className="text-slate-500">•</span>
-                                            <span className="text-indigo-200/80">Japanese Spitz</span>
+                                            {currentlyTypingId ? (
+                                                <span className="text-emerald-300 font-bold flex items-center gap-1 animate-pulse">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                                                    <span>🐾 Typing with paws...</span>
+                                                </span>
+                                            ) : (
+                                                <>
+                                                    <span>🐾 {currentDogGreeting.timeLabel} Shift</span>
+                                                    <span className="text-slate-500">•</span>
+                                                    <span className="text-indigo-200/80">Japanese Spitz</span>
+                                                </>
+                                            )}
                                         </span>
                                     </div>
                                 </div>
@@ -794,7 +893,86 @@ ${timeContext}`
 
                             {/* Messages Chat Stream */}
                             <div className="flex-grow overflow-y-auto p-4 custom-scrollbar space-y-4 bg-slate-50/50">
-                                {messages.map((message) => {
+                                {messages.length === 0 ? (
+                                    <div className="h-full min-h-[280px] flex flex-col items-center justify-center text-center p-4 my-auto">
+                                        <div className="relative mb-3">
+                                            <div className="w-16 h-16 rounded-2xl overflow-hidden shadow-md border-2 border-indigo-200/80 bg-indigo-50 mx-auto">
+                                                <img 
+                                                    src={keeperAvatar} 
+                                                    alt="Keeper Mascot" 
+                                                    referrerPolicy="no-referrer" 
+                                                    className="w-full h-full object-cover" 
+                                                />
+                                            </div>
+                                            <span className="absolute -bottom-1 -right-1 bg-emerald-500 text-white p-1 rounded-full text-[9px] shadow-xs" title="Keeper is ready">
+                                                🐾
+                                            </span>
+                                        </div>
+
+                                        <h3 className="text-sm font-bold text-slate-800 flex items-center justify-center gap-1.5">
+                                            <span>👋 Woof! {currentDogGreeting.greeting}</span>
+                                        </h3>
+                                        <p className="text-xs text-slate-500 mt-1 max-w-xs leading-relaxed">
+                                            I'm <strong className="text-slate-700 font-semibold">Keeper</strong>, your Japanese Spitz editorial mascot. How can I lend a paw with your proofs, JM queries, or XML tools today?
+                                        </p>
+
+                                        {/* Quick Starter Suggestion Cards */}
+                                        <div className="mt-4 w-full max-w-xs space-y-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setInputPrompt('Query to JM: Author requested to change the author name from "" to ""');
+                                                    textareaRef.current?.focus();
+                                                }}
+                                                className="w-full px-3 py-2 rounded-xl bg-white hover:bg-indigo-50/80 border border-slate-200/80 hover:border-indigo-300 text-left transition-all shadow-2xs hover:shadow-xs group cursor-pointer flex items-center justify-between"
+                                            >
+                                                <div className="flex items-center gap-2.5">
+                                                    <span className="w-6 h-6 rounded-lg bg-indigo-100/80 text-indigo-700 text-xs flex items-center justify-center shrink-0">📝</span>
+                                                    <div>
+                                                        <div className="text-xs font-semibold text-slate-800 group-hover:text-indigo-900">Draft Standardized JM Query</div>
+                                                        <div className="text-[10px] text-slate-400">Author name changes, figure replacement...</div>
+                                                    </div>
+                                                </div>
+                                                <ArrowRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-indigo-600 transition-transform group-hover:translate-x-0.5 shrink-0" />
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    handleSendMessage('Which tool should I use when references or citation callouts are out of order in the body text?');
+                                                }}
+                                                className="w-full px-3 py-2 rounded-xl bg-white hover:bg-emerald-50/80 border border-slate-200/80 hover:border-emerald-300 text-left transition-all shadow-2xs hover:shadow-xs group cursor-pointer flex items-center justify-between"
+                                            >
+                                                <div className="flex items-center gap-2.5">
+                                                    <span className="w-6 h-6 rounded-lg bg-emerald-100/80 text-emerald-700 text-xs flex items-center justify-center shrink-0">🧭</span>
+                                                    <div>
+                                                        <div className="text-xs font-semibold text-slate-800 group-hover:text-emerald-900">Find an Editorial Tool</div>
+                                                        <div className="text-[10px] text-slate-400">Renumbering, citation linking, table fixes...</div>
+                                                    </div>
+                                                </div>
+                                                <ArrowRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-emerald-600 transition-transform group-hover:translate-x-0.5 shrink-0" />
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    handleSendMessage('What are the standard DTD v5.6 rules for bibliography references and CRediT contributor roles?');
+                                                }}
+                                                className="w-full px-3 py-2 rounded-xl bg-white hover:bg-purple-50/80 border border-slate-200/80 hover:border-purple-300 text-left transition-all shadow-2xs hover:shadow-xs group cursor-pointer flex items-center justify-between"
+                                            >
+                                                <div className="flex items-center gap-2.5">
+                                                    <span className="w-6 h-6 rounded-lg bg-purple-100/80 text-purple-700 text-xs flex items-center justify-center shrink-0">📜</span>
+                                                    <div>
+                                                        <div className="text-xs font-semibold text-slate-800 group-hover:text-purple-900">DTD v5.6 & XML Rules</div>
+                                                        <div className="text-[10px] text-slate-400">Bibliography tags, CRediT roles, footnotes...</div>
+                                                    </div>
+                                                </div>
+                                                <ArrowRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-purple-600 transition-transform group-hover:translate-x-0.5 shrink-0" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    messages.map((message) => {
                                     const isUser = message.role === 'user';
                                     return (
                                         <div
@@ -914,8 +1092,15 @@ ${timeContext}`
                                                             {message.content}
                                                         </ReactMarkdown>
 
-                                                        {/* One-click copy for general messages containing queries */}
-                                                        {message.content.includes('TO THE JM:') && (
+                                                        {/* Animated Blinking Cursor while typing */}
+                                                        {message.role === 'assistant' && currentlyTypingId === message.id && (
+                                                            <span className="inline-flex items-center ml-0.5 select-none align-middle" title="Keeper is typing with paws...">
+                                                                <span className="w-1.5 h-3.5 bg-indigo-600 rounded-2xs inline-block animate-pulse" />
+                                                            </span>
+                                                        )}
+
+                                                        {/* One-click copy for general messages containing queries if not already formatted in a code card */}
+                                                        {!currentlyTypingId && !message.content.includes('```') && message.content.includes('TO THE JM:') && (
                                                             <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-end">
                                                                 <button
                                                                     onClick={() => {
@@ -923,10 +1108,32 @@ ${timeContext}`
                                                                         const textToCopy = match ? match[0] : message.content;
                                                                         copyToClipboard(textToCopy, `query-${message.id}`);
                                                                     }}
-                                                                    className="px-2 py-1 rounded bg-slate-100 hover:bg-indigo-50 text-indigo-700 hover:text-indigo-900 text-[10px] font-bold flex items-center gap-1 transition-all border border-slate-200 cursor-pointer"
+                                                                    className="px-2.5 py-1 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-900 text-[10.5px] font-bold flex items-center gap-1.5 transition-all border border-indigo-200 cursor-pointer shadow-xs"
                                                                 >
-                                                                    {copiedId === `query-${message.id}` ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3 text-indigo-600" />}
-                                                                    <span>{copiedId === `query-${message.id}` ? 'Copied JM Query!' : 'Copy Query to Clipboard'}</span>
+                                                                    {copiedId === `query-${message.id}` ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-indigo-600" />}
+                                                                    <span>{copiedId === `query-${message.id}` ? 'Copied JM Query!' : 'Copy TO THE JM Query'}</span>
+                                                                </button>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Active Live Typing Status Pill & Quick Skip Button */}
+                                                        {message.role === 'assistant' && currentlyTypingId === message.id && (
+                                                            <div className="mt-2.5 pt-2 border-t border-indigo-100/70 flex items-center justify-between text-[10.5px] text-slate-500 select-none">
+                                                                <span className="flex items-center gap-1.5 text-indigo-700 font-bold">
+                                                                    <span className="w-2 h-2 rounded-full bg-indigo-600 animate-ping" />
+                                                                    <span>🐾 Keeper is typing with paws...</span>
+                                                                </span>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleSkipTyping();
+                                                                    }}
+                                                                    className="px-2 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold transition-all border border-indigo-200 cursor-pointer flex items-center gap-1 shadow-2xs hover:scale-102 active:scale-95"
+                                                                    title="Skip typing animation and show full text immediately (or press Esc)"
+                                                                >
+                                                                    <span>Skip</span>
+                                                                    <Zap className="w-2.5 h-2.5 text-indigo-600 fill-indigo-600" />
                                                                 </button>
                                                             </div>
                                                         )}
@@ -935,7 +1142,8 @@ ${timeContext}`
                                             </div>
                                         </div>
                                     );
-                                })}
+                                })
+                            )}
 
                                 {isLoading && (
                                     <div className="flex items-start gap-2.5">
@@ -948,9 +1156,9 @@ ${timeContext}`
                                             />
                                         </div>
                                         <div className="bg-white border border-slate-200/80 rounded-2xl rounded-tl-xs px-4 py-3 shadow-2xs">
-                                            <div className="flex items-center gap-2 text-xs text-slate-500">
+                                            <div className="flex items-center gap-2 text-xs text-slate-600">
                                                 <span className="w-2 h-2 rounded-full bg-indigo-600 animate-ping" />
-                                                <span className="font-medium">Keeper is fetching the best tool & formulation...</span>
+                                                <span className="font-semibold text-indigo-900">🐾 Keeper is sniffing out the best solution & guidelines...</span>
                                             </div>
                                         </div>
                                     </div>
@@ -959,7 +1167,7 @@ ${timeContext}`
                                 <div ref={messagesEndRef} />
                             </div>
 
-                            {/* Space-Saving Collapsible Editorial Scenarios Bar (Takes only ~26px when collapsed!) */}
+                            {/* Space-Saving Collapsible Editorial Scenarios Bar */}
                             <div className="border-t border-slate-200/70 bg-slate-50/90 shrink-0 transition-all">
                                 <div className="px-3 py-1.5 flex items-center justify-between text-[11px]">
                                     <button
@@ -1054,7 +1262,7 @@ ${timeContext}`
                                         className="px-2 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold shrink-0 transition-colors cursor-pointer border border-indigo-200/60 flex items-center gap-1"
                                         title="Insert 'Query to JM: ' prefix"
                                     >
-                                        <span>+ Prefix "Query to JM:"</span>
+                                        <span>+ "Query to JM:"</span>
                                     </button>
                                     <button
                                         type="button"
@@ -1070,7 +1278,7 @@ ${timeContext}`
                                     <button
                                         type="button"
                                         onClick={() => {
-                                            setInputPrompt('Query to JM: The author provided a replacement for Figure  with content changes');
+                                            setInputPrompt('Query to JM: The author provided a replacement for Figure  that includes content changes compared to the current version');
                                             textareaRef.current?.focus();
                                         }}
                                         className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium shrink-0 transition-colors cursor-pointer"
@@ -1081,13 +1289,24 @@ ${timeContext}`
                                     <button
                                         type="button"
                                         onClick={() => {
-                                            setInputPrompt('Query to JM: Reference [] is uncited in the text body');
+                                            setInputPrompt('Query to JM: Reference [] is uncited in the text body. Kindly ask author to provide citation in text body or confirm deletion.');
                                             textareaRef.current?.focus();
                                         }}
                                         className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium shrink-0 transition-colors cursor-pointer"
                                         title="Uncited item query template"
                                     >
-                                        Uncited Item
+                                        Uncited in Text Body
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setInputPrompt('What are the key XML structure rules for DTD v5.6 references and citations?');
+                                            textareaRef.current?.focus();
+                                        }}
+                                        className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium shrink-0 transition-colors cursor-pointer"
+                                        title="DTD v5.6 XML guide"
+                                    >
+                                        DTD v5.6 Guide
                                     </button>
                                 </div>
 
@@ -1103,7 +1322,7 @@ ${timeContext}`
                                         value={inputPrompt}
                                         onChange={(e) => setInputPrompt(e.target.value)}
                                         onKeyDown={handleKeyDown}
-                                        placeholder="Type 'Query to JM: [paste note]', ask about tools, or paste XML..."
+                                        placeholder="Ask Keeper anything, paste author notes for a JM Query, or drop XML... 🐾"
                                         rows={1}
                                         disabled={isLoading}
                                         className="flex-grow bg-transparent text-xs text-slate-800 placeholder-slate-400 outline-hidden resize-none px-2.5 py-1.5 max-h-28 custom-scrollbar leading-relaxed font-sans"
@@ -1120,9 +1339,22 @@ ${timeContext}`
                                 </form>
                                 <div className="mt-1.5 px-1 flex items-center justify-between text-[9px] text-slate-400">
                                     <span>Press <kbd className="font-mono bg-slate-100 px-1 py-0.5 rounded border border-slate-200 text-slate-600">Enter</kbd> to send</span>
-                                    <span className="flex items-center gap-1 font-medium text-slate-500">
-                                        <span>🐾 Keeper Editorial Companion</span>
-                                    </span>
+                                    {currentlyTypingId ? (
+                                        <button
+                                            type="button"
+                                            onClick={handleSkipTyping}
+                                            className="flex items-center gap-1 font-bold text-indigo-600 hover:text-indigo-800 cursor-pointer transition-colors"
+                                            title="Click to display full message immediately (Esc)"
+                                        >
+                                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-ping" />
+                                            <span>Typing... Skip (Esc)</span>
+                                            <Zap className="w-2.5 h-2.5 text-indigo-600 fill-indigo-600" />
+                                        </button>
+                                    ) : (
+                                        <span className="flex items-center gap-1 font-medium text-slate-500">
+                                            <span>🐾 Keeper Japanese Spitz Mascot</span>
+                                        </span>
+                                    )}
                                 </div>
                             </div>
                         </motion.div>

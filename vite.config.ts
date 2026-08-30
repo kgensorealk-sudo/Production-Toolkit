@@ -8,7 +8,8 @@ export default defineConfig(({ mode }) => {
   
   return {
     plugins: [react()],
-    base: isVercel ? '/' : '',
+    // Root '/' for Vercel web hosting, relative '' for Electron .exe compatibility
+    base: isVercel ? '/' : '', 
     build: {
       outDir: 'dist',
       emptyOutDir: true,

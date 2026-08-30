@@ -577,11 +577,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     };
 
+    const refreshProfile = useCallback(() => {
+        return user ? fetchProfile(user.id, user.email, true) : Promise.resolve();
+    }, [user?.id, user?.email, fetchProfile]);
+
     return (
         <AuthContext.Provider value={{ 
             session, user, profile, freeTools, freeToolsData, loading, isAdmin, isWakingUp,
             signOut, updateProfile, deleteAccount,
-            refreshProfile: () => user ? fetchProfile(user.id, user.email, true) : Promise.resolve(), 
+            refreshProfile, 
             refreshFreeTools: fetchFreeTools 
         }}>
             {children}

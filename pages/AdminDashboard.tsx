@@ -338,10 +338,15 @@ const AdminDashboard: React.FC = () => {
         }
     }, [activeTab, fetchUsers, fetchAnnouncements, fetchAccessKeys, refreshFreeTools, fetchIntelligence, fetchFeedbacks]);
 
+    const refreshActiveTabRef = useRef(refreshActiveTab);
+    useEffect(() => {
+        refreshActiveTabRef.current = refreshActiveTab;
+    }, [refreshActiveTab]);
+
     useEffect(() => {
         const handleWake = () => {
             if (document.visibilityState === 'visible') {
-                refreshActiveTab(true);
+                refreshActiveTabRef.current?.(true);
             }
         };
         window.addEventListener('visibilitychange', handleWake);
@@ -350,7 +355,7 @@ const AdminDashboard: React.FC = () => {
             window.removeEventListener('visibilitychange', handleWake);
             window.removeEventListener('focus', handleWake);
         };
-    }, [refreshActiveTab]);
+    }, []);
 
     useEffect(() => {
         refreshActiveTab(false);
@@ -362,7 +367,7 @@ const AdminDashboard: React.FC = () => {
         if (isLoading) {
             timeout = setTimeout(() => {
                 console.warn("Operation timed out. Forcing loading state to false.");
-                setIsLoading(false);
+                setIsLoading(prev => prev ? false : prev);
                 setToast({ msg: "System response delayed. Please try again.", type: 'warn' });
             }, 30000); // 30s safety cutoff
         }
