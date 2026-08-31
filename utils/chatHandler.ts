@@ -94,10 +94,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           contents,
           config: {
             systemInstruction,
-            // Lowered from 0.7 — Keeper's job (JM queries, tool routing, DTD rules) is
-            // precision/consistency work, not creative writing. Lower temperature reduces
-            // phrasing drift and hallucinated details across repeated similar requests.
-            temperature: 0.3,
+            // NOTE: temperature/top_p/top_k intentionally omitted. Gemini 3.x models
+            // (gemini-3.7-flash, and gemini-flash-latest when it points at a 3.x build)
+            // do not support these legacy sampling parameters — sending them was causing
+            // every call to those two models to fail, silently pushing every request down
+            // to gemini-3.1-flash-lite or the offline fallback engine. If output consistency
+            // becomes an issue again, use the model's thinking_level parameter instead.
           },
         });
 
