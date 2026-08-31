@@ -4,12 +4,10 @@ import react from '@vitejs/plugin-react';
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, (process as any).cwd(), '');
-  const isVercel = process.env.VERCEL === '1';
   
   return {
     plugins: [react()],
-    // Root '/' for Vercel web hosting, relative '' for Electron .exe compatibility
-    base: isVercel ? '/' : '', 
+    base: '/', 
     build: {
       outDir: 'dist',
       emptyOutDir: true,
@@ -17,25 +15,7 @@ export default defineConfig(({ mode }) => {
       target: 'esnext',
       sourcemap: mode === 'development',
       minify: 'esbuild',
-      rollupOptions: {
-        output: {
-          manualChunks(id) {
-            if (id.includes('node_modules')) {
-              if (id.includes('react') || id.includes('router')) {
-                return 'vendor-react';
-              }
-              if (id.includes('lucide') || id.includes('motion')) {
-                return 'vendor-ui';
-              }
-              if (id.includes('supabase') || id.includes('google') || id.includes('diff')) {
-                return 'vendor-utils';
-              }
-              return 'vendor-others';
-            }
-          }
-        }
-      },
-      chunkSizeWarningLimit: 1000,
+      chunkSizeWarningLimit: 1500,
     },
     server: {
       port: 3000,

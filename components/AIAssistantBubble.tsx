@@ -27,9 +27,10 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ToolId } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 import { isExperimentalTool, getToolInfo } from '../utils/toolRegistry';
 import { startTypingSimulation, TypingSimulatorController } from '../utils/typingSimulator';
-import { generateOfflineKeeperResponse, sanitizeOutput } from '../utils/keeperEngine';
+import { generateOfflineKeeperResponse, sanitizeOutput, KeeperUserContext } from '../utils/keeperEngine';
 
 const keeperAvatar = '/keeper_avatar.jpg';
 
@@ -48,13 +49,11 @@ export interface DogGreetingInfo {
     period: 'morning' | 'afternoon' | 'evening' | 'night';
     timeLabel: string;
     greeting: string;
-    action: string;
     tagline: string;
-    bark: string;
 }
 
 /**
- * Returns a warm, dog-like greeting based on the user's current local time of day.
+ * Returns greeting info based on the user's current local time of day.
  */
 export const getTimeOfDayDogGreeting = (date: Date = new Date()): DogGreetingInfo => {
     const hour = date.getHours();
@@ -63,80 +62,83 @@ export const getTimeOfDayDogGreeting = (date: Date = new Date()): DogGreetingInf
             period: 'morning',
             timeLabel: 'Morning Shift',
             greeting: 'Good morning!',
-            action: '*Perks up fluffy white ears with a happy stretch and tail wag.* 🐾',
-            tagline: 'Ready for today\'s editorial proofs!',
-            bark: 'Woof woof! Good morning!'
+            tagline: 'Ready for today\'s editorial proofs!'
         };
     } else if (hour >= 12 && hour < 17) {
         return {
             period: 'afternoon',
             timeLabel: 'Afternoon Shift',
             greeting: 'Good afternoon!',
-            action: '*Trots over with a cheerful tail wag.* 🐾',
-            tagline: 'Ready to power through proofs and clean up citations!',
-            bark: 'Arf arf! Good afternoon!'
+            tagline: 'Ready to power through proofs and clean up citations!'
         };
     } else if (hour >= 17 && hour < 22) {
         return {
             period: 'evening',
             timeLabel: 'Evening Shift',
             greeting: 'Good evening!',
-            action: '*Rests paws attentively on the desk with a friendly woof.* 🐾',
-            tagline: 'Ready to double-check references and tags before sign-off!',
-            bark: 'Woof! Good evening!'
+            tagline: 'Ready to double-check references and tags before sign-off!'
         };
     } else {
         return {
             period: 'night',
             timeLabel: 'Late Night Shift',
-            greeting: 'Burning the midnight oil?',
-            action: '*Curls up loyally beside your workstation.* 🐾',
-            tagline: 'Working late together—ready to lend a paw anytime!',
-            bark: 'Arf! Working late together!'
+            greeting: 'Good evening!',
+            tagline: 'Ready to assist with late-night production proofing!'
         };
     }
 };
 
 /**
- * Generates the full, enthusiastic editorial welcome message for Keeper Japanese Spitz mascot.
+ * Helper to get the current date in YYYY-MM-DD local format for daily reset tracking.
+ */
+export const getTodayDateKey = (date: Date = new Date()): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
+/**
+ * Generates the clean, direct editorial welcome message for Keeper.
  */
 export const generateKeeperWelcomeMessage = (): Message => {
     const hour = new Date().getHours();
-    let timeGreeting = "Good afternoon, superstar!";
-    let sprintTime = "Afternoon";
+    let timeGreeting = "Good afternoon";
     if (hour >= 5 && hour < 12) {
-        timeGreeting = "Good morning, superstar!";
-        sprintTime = "Morning";
+        timeGreeting = "Good morning";
     } else if (hour >= 12 && hour < 17) {
-        timeGreeting = "Good afternoon, superstar!";
-        sprintTime = "Afternoon";
-    } else if (hour >= 17 && hour < 22) {
-        timeGreeting = "Good evening, superstar!";
-        sprintTime = "Evening";
+        timeGreeting = "Good afternoon";
     } else {
-        timeGreeting = "Good evening, superstar!";
-        sprintTime = "Late night";
+        timeGreeting = "Good evening";
     }
 
-    const content = `👋 **Woof woof! ${timeGreeting}** *Trots over with an enthusiastic bounce, bright inquisitive eyes, and a happy little bark!* 🐾
+    const content = `### **${timeGreeting}. Welcome to Production Toolkit Pro.**
 
-I'm **Keeper**, your Japanese Spitz Editorial AI Companion & Mascot! ${sprintTime} production sprint? Bring it on! We will power through proofs, link citations, and clear files in record time!
+I am **Keeper**, your Editorial AI Assistant for journal production, XML markup, and Journal Manager (JM) query drafting.
 
-🌟 **What can I fetch or solve for you right now?**
+---
 
-📝 **Draft Standardized Journal Manager (JM) Queries:**
-- \`Query to JM: Author requested to change the author name from "Original Name" to "Amended Name"\`
-- \`Query to JM: The author provided a replacement for Figure 3 with data changes\`
-- \`Query to JM: Reference [14] is uncited in the text body\`
+#### **Core Editorial Capabilities**
 
-🧭 **Instant Tool Finder & Workflow Navigator:**
-Need to renumber citations? Link plain-text references? Convert formatted Word text to XML? Just ask and I'll fetch the exact tool!
+**1. Standardized Journal Manager (JM) Queries**
+Formulate clear, protocol-compliant queries for editorial decision-making:
+* **Authorship & Order Changes:** *Query to JM: The authors requested to exchange the positions of the second and third authors (Yiqi Wang and Wei Peng). A signed authorship change form has been submitted to the journal.*
+* **Author Name Corrections:** *Query to JM: Author requested to change the author name from [Original] to [Amended]*
+* **Corresponding Author Email:** *Query to JM: Corresponding author email address is required, so either disregard or let the author provide*
+* **Figure & Artwork Updates:** *Query to JM: The author provided a replacement for Figure 3 with data changes*
+* **Uncited Citations:** *Query to JM: Reference [14] is uncited in the text body*
 
-📜 **DTD v5.6 & JATS XML Mastery:**
-Ask me about bibliography structures (\`<sb:reference>\`), CRediT taxonomy roles, table footnote positioning, or grant markup!`;
+**2. DTD v5.6 & JATS XML Specifications**
+* Guidance on \`<sb:reference>\` structures, \`<ce:cross-ref>\` linking, CRediT contributor taxonomy, and table footnotes.
+
+**3. Workflow Navigation & Tool Discovery**
+* Identify and direct you to the ideal tool for citation renumbering, reference linking, or text-to-XML conversion.
+
+---
+*Select a quick scenario below or enter your query details in the prompt box.*`;
 
     return {
-        id: `init-welcome`,
+        id: `init-welcome-${Date.now()}`,
         role: 'assistant',
         content,
         timestamp: Date.now()
@@ -147,11 +149,12 @@ const SCENARIO_CATEGORIES = [
     {
         category: '📝 Master JM Queries',
         items: [
+            { label: 'Author Order / Authorship Query', prompt: 'Query to JM: The authors requested to exchange the positions of the second and third authors (Yiqi Wang and Wei Peng). A signed authorship change form has been submitted to the journal.' },
             { label: 'Author Name Change Query', prompt: 'Query to JM: Author requested to change the author name from Muhammed Afnas "Villayateri" to "Vilayatteri"' },
-            { label: 'Figure Replacement Query', prompt: 'Query to JM: The author provided a replacement for Figure 3 that includes content changes compared to the current version' },
+            { label: 'Corresponding Author Email Query', prompt: 'Query to JM: Corresponding author email address is required, so either disregard or let the author provide' },
+            { label: 'Figure Replacement Query', prompt: 'Query to JM: The author provided a replacement for Figure 3. However, it\'s unclear whether the reason for this replacement is quality improvement, the addition or removal of elements, or changed content. Could you please validate if we can proceed with the new version?' },
             { label: 'Uncited Reference in Text Body', prompt: 'Query to JM: Reference [14] is uncited in the text body. Kindly ask author for citation or confirmation to delete.' },
-            { label: 'Figure Panel Label Mismatch', prompt: 'Query to JM: Panels (c) and (d) are mentioned in the caption for Figure 2 but are not found in the artwork. Please check and amend as necessary.' },
-            { label: 'Technical Image Quality Fault', prompt: 'Query to JM: Figure 5 artwork is unusable in present format due to pixelated text and blurry data. Kindly request new high-res PDF or TIF.' }
+            { label: 'Figure Panel Label Mismatch', prompt: 'Query to JM: Panels (c) and (d) are mentioned in the caption for Figure 2 but are not found in the artwork. Please check and amend as necessary.' }
         ]
     },
     {
@@ -161,7 +164,7 @@ const SCENARIO_CATEGORIES = [
             { label: 'Link plain-text citations', prompt: 'What tool connects unlinked in-text citations like "[1-3]" or "(Smith et al., 2021)" to bibliography entries with <ce:cross-ref> tags?' },
             { label: 'Repair broken XML reference nodes', prompt: 'How do I audit and auto-repair malformed reference XML, missing <sb:reference> tags, and unformatted author initials using Reference Structure Repair?' },
             { label: 'Purge uncited bibliography entries', prompt: 'Which tool detects bibliography references that are never cited in the text body and allows safe purging?' },
-            { label: 'Deduplicate bibliography entries', prompt: 'Which tool detects duplicate bibliography entries cited under different numbers and merges them?' }
+            { label: 'Audit ID prefixes & cross-links', prompt: 'Which tool audits and normalizes reference ID prefixes (e.g. bib0010 vs b1) and synchronizes internal document cross-links?' }
         ]
     },
     {
@@ -171,14 +174,24 @@ const SCENARIO_CATEGORIES = [
             { label: 'Tag author CRediT roles', prompt: 'How do I use the CRediT Tagging tool to convert informal author contribution statements into NISO CRediT XML (<ce:contributor-role>)?' },
             { label: 'Table footnotes & legend notes', prompt: 'Which tool manages and relocates table footnotes (<ce:table-footnote>) and table legend notes?' },
             { label: 'Tag research grants & sponsors', prompt: 'How do I tag funding sponsors and award numbers with <ce:grant-sponsor> and <ce:grant-number>?' },
-            { label: 'Experimental vs Established Tools', prompt: 'Which tools in Production Toolkit Pro are Experimental Versions, why are they not yet fully established, and when should I use the standard established versions instead?' }
+            { label: 'Dashboard Editorial Tools Guide', prompt: 'Which tools are available in the Production Toolkit Pro dashboard console, and how do they streamline production workflows?' }
+        ]
+    },
+    {
+        category: '👤 Account, Subscription & Access',
+        items: [
+            { label: 'Check My Subscription & Role', prompt: 'What is my current subscription status, account tier, and system role (Admin or not)?' },
+            { label: 'Identify User Subscription Status', prompt: 'Can you identify user subscription statuses and explain how subscription tiers and admin privileges work in Production Toolkit Pro?' },
+            { label: 'How to unlock tools or renew', prompt: 'How do I activate or renew my subscription and unlock production tools using an access key?' }
         ]
     }
 ];
 
-const STORAGE_KEY = 'prod_toolkit_keeper_messages_v5';
+const STORAGE_KEY = 'prod_toolkit_keeper_messages_v9';
+const LAST_DATE_KEY = 'prod_toolkit_keeper_last_date';
 
 export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentTool }) => {
+    const { user, profile, isAdmin, freeTools } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
     const isExpLocation = location.pathname === '/experimental' || location.pathname.toLowerCase().includes('exp');
@@ -232,7 +245,7 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
         }
     });
 
-    // Chat messages - starts with Keeper's signature greeting by default
+    // Chat messages - starts empty by default so user sees the clean centered Keeper welcome hero profile
     const [messages, setMessages] = useState<Message[]>(() => {
         try {
             // Clean up legacy storage versions
@@ -240,6 +253,19 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
             localStorage.removeItem('prod_toolkit_keeper_messages_v2');
             localStorage.removeItem('prod_toolkit_keeper_messages_v3');
             localStorage.removeItem('prod_toolkit_keeper_messages_v4');
+            localStorage.removeItem('prod_toolkit_keeper_messages_v6');
+            localStorage.removeItem('prod_toolkit_keeper_messages_v8');
+            localStorage.removeItem('prod_toolkit_keeper_messages_v9');
+
+            const today = getTodayDateKey();
+            const lastActiveDate = localStorage.getItem(LAST_DATE_KEY);
+
+            // If it's a new day or first session, start fresh for the day
+            if (lastActiveDate !== today) {
+                localStorage.setItem(LAST_DATE_KEY, today);
+                localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
+                return [];
+            }
 
             const saved = localStorage.getItem(STORAGE_KEY);
             if (saved) {
@@ -254,7 +280,11 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
                 }
             }
         } catch (e) {}
-        return [generateKeeperWelcomeMessage()];
+        try {
+            localStorage.setItem(LAST_DATE_KEY, getTodayDateKey());
+            localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
+        } catch (e) {}
+        return [];
     });
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -265,6 +295,33 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
     useEffect(() => {
         return () => {
             typingControllerRef.current?.stop();
+        };
+    }, []);
+
+    // Daily reset watcher: Checks if date changed while tab was open or focused
+    useEffect(() => {
+        const checkDailyRollover = () => {
+            try {
+                const today = getTodayDateKey();
+                const lastDate = localStorage.getItem(LAST_DATE_KEY);
+                if (lastDate && lastDate !== today) {
+                    localStorage.setItem(LAST_DATE_KEY, today);
+                    typingControllerRef.current?.stop();
+                    setCurrentlyTypingId(null);
+                    setMessages([]);
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
+                }
+            } catch (e) {}
+        };
+
+        window.addEventListener('focus', checkDailyRollover);
+        document.addEventListener('visibilitychange', checkDailyRollover);
+        const intervalId = setInterval(checkDailyRollover, 60000); // Check every minute
+
+        return () => {
+            window.removeEventListener('focus', checkDailyRollover);
+            document.removeEventListener('visibilitychange', checkDailyRollover);
+            clearInterval(intervalId);
         };
     }, []);
 
@@ -446,10 +503,10 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
     const executeResetChat = () => {
         typingControllerRef.current?.stop();
         setCurrentlyTypingId(null);
-        const welcome = generateKeeperWelcomeMessage();
-        setMessages([welcome]);
+        setMessages([]);
         try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify([welcome]));
+            localStorage.setItem(LAST_DATE_KEY, getTodayDateKey());
+            localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
         } catch (e) {}
         setShowResetConfirm(false);
         setInputPrompt('');
@@ -489,10 +546,29 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
 
         try {
             const dogGreeting = getTimeOfDayDogGreeting();
-            const timeContext = `User's local time of day: ${dogGreeting.timeLabel} (${new Date().toLocaleTimeString()}). Dog persona: Japanese Spitz (${dogGreeting.bark}).`;
+            const timeContext = `User's local time of day: ${dogGreeting.timeLabel} (${new Date().toLocaleTimeString()}).`;
+
+            const userAuthContext = user ? `
+User Account & Subscription Context:
+- User Email: ${user.email || 'Unknown'}
+- Display Name: ${profile?.display_name || user.email?.split('@')[0] || 'User'}
+- System Role: ${isAdmin ? 'Admin (Full Master Privileges & Unrestricted Access)' : (profile?.role || 'Standard User')}
+- Is Admin: ${isAdmin ? 'Yes' : 'No'}
+- Subscription Status: ${isAdmin ? 'Active (Admin Master Tier)' : (profile?.is_subscribed ? 'Active' : 'Inactive / Expired')}
+- Subscription Tier: ${profile?.subscription_tier || (isAdmin ? 'master_admin' : 'none')}
+- Subscription Expiry: ${profile?.subscription_end ? new Date(profile?.subscription_end).toLocaleDateString() : (isAdmin ? 'Unlimited / Perpetual' : 'Not set')}
+- Unlocked Tools: ${profile?.unlocked_tools && profile.unlocked_tools.length > 0 ? profile.unlocked_tools.join(', ') : 'None'}
+- Active Free Trial Tools: ${freeTools && freeTools.length > 0 ? freeTools.join(', ') : 'None'}
+` : `
+User Account & Subscription Context:
+- Authentication: Guest / Unauthenticated
+- Subscription Status: Inactive (Guest)
+- System Role: Guest (Not Admin)
+- Is Admin: No
+`;
 
             // Context description
-            const contextInfo = isExperimental
+            const contextInfo = `${isExperimental
                 ? `CRITICAL DIRECTIVE: The user is currently WORKING WITH AN EXPERIMENTAL VERSION in Production Toolkit Pro ("${currentToolInfo?.name || currentTool || 'Experimental Protocol'}").
 ⚠️ MANDATORY INSTRUCTION: Because this tool is an EXPERIMENTAL VERSION, it is NOT YET FULLY ESTABLISHED.
 In your response:
@@ -503,7 +579,20 @@ In your response:
 ${timeContext}`
                 : currentTool
                     ? `The user is currently using the "${currentToolInfo?.name || currentTool}" module in Production Toolkit Pro. ${timeContext}`
-                    : `The user is on the main workspace of Production Toolkit Pro. ${timeContext}`;
+                    : `The user is on the main workspace of Production Toolkit Pro. ${timeContext}`}
+
+${userAuthContext}`;
+
+            const userContextPayload: KeeperUserContext = {
+                email: user?.email,
+                displayName: profile?.display_name || user?.email?.split('@')[0],
+                isAdmin,
+                isSubscribed: profile?.is_subscribed,
+                subscriptionTier: profile?.subscription_tier,
+                subscriptionEnd: profile?.subscription_end ? new Date(profile.subscription_end).toLocaleDateString() : undefined,
+                unlockedTools: profile?.unlocked_tools,
+                freeTools
+            };
 
             const payloadMessages = newMessages
                 .filter(m => !m.id.startsWith('init-'))
@@ -572,7 +661,17 @@ ${timeContext}`
 
         } catch (err: any) {
             console.warn("AI Chat server fallback to Keeper smart offline engine:", err?.message || err);
-            const offlineReply = generateOfflineKeeperResponse(text);
+            const userContextPayload: KeeperUserContext = {
+                email: user?.email,
+                displayName: profile?.display_name || user?.email?.split('@')[0],
+                isAdmin,
+                isSubscribed: profile?.is_subscribed,
+                subscriptionTier: profile?.subscription_tier,
+                subscriptionEnd: profile?.subscription_end ? new Date(profile.subscription_end).toLocaleDateString() : undefined,
+                unlockedTools: profile?.unlocked_tools,
+                freeTools
+            };
+            const offlineReply = generateOfflineKeeperResponse(text, userContextPayload);
             const sanitizedContent = sanitizeOutput(offlineReply);
 
             const assistantMessageId = `ast-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
@@ -891,46 +990,102 @@ ${timeContext}`
                                 )
                             )}
 
-                            {/* Messages Chat Stream */}
-                            <div className="flex-grow overflow-y-auto p-4 custom-scrollbar space-y-4 bg-slate-50/50">
+                            {/* Messages Chat Stream / Conversation Area */}
+                            <div className="flex-grow overflow-y-auto p-4 custom-scrollbar space-y-4 bg-white">
                                 {messages.length === 0 ? (
-                                    <div className="h-full min-h-[280px] flex flex-col items-center justify-center text-center p-4 my-auto">
-                                        <div className="relative mb-3">
-                                            <div className="w-16 h-16 rounded-2xl overflow-hidden shadow-md border-2 border-indigo-200/80 bg-indigo-50 mx-auto">
+                                    <div className="h-full min-h-[320px] flex flex-col items-center justify-center text-center px-4 py-8 my-auto">
+                                        {/* Contact Circular Profile Picture */}
+                                        <div className="relative mb-3.5">
+                                            <div className="w-20 h-20 rounded-full overflow-hidden shadow-lg border-2 border-indigo-200/90 bg-indigo-50 mx-auto ring-4 ring-indigo-50/60">
                                                 <img 
                                                     src={keeperAvatar} 
-                                                    alt="Keeper Mascot" 
+                                                    alt="Keeper" 
                                                     referrerPolicy="no-referrer" 
                                                     className="w-full h-full object-cover" 
                                                 />
                                             </div>
-                                            <span className="absolute -bottom-1 -right-1 bg-emerald-500 text-white p-1 rounded-full text-[9px] shadow-xs" title="Keeper is ready">
+                                            <span className="absolute bottom-0 right-0 bg-emerald-500 text-white w-5 h-5 rounded-full text-[10px] flex items-center justify-center shadow-md ring-2 ring-white" title="Keeper is online and ready">
                                                 🐾
                                             </span>
                                         </div>
 
-                                        <h3 className="text-sm font-bold text-slate-800 flex items-center justify-center gap-1.5">
-                                            <span>👋 Woof! {currentDogGreeting.greeting}</span>
+                                        {/* Keeper Bold Title */}
+                                        <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
+                                            Keeper
                                         </h3>
-                                        <p className="text-xs text-slate-500 mt-1 max-w-xs leading-relaxed">
-                                            I'm <strong className="text-slate-700 font-semibold">Keeper</strong>, your Japanese Spitz editorial mascot. How can I lend a paw with your proofs, JM queries, or XML tools today?
+
+                                        {/* Gray Status Line */}
+                                        <p className="text-xs text-slate-400 font-medium mt-0.5">
+                                            Your Furry Companion &amp; Editorial Assistant
                                         </p>
 
+                                        {/* Centered Status Message */}
+                                        <div className="mt-4 px-3 py-1 rounded-full bg-slate-100/90 text-[11px] font-medium text-slate-500 inline-flex items-center gap-1.5 border border-slate-200/70 shadow-2xs">
+                                            <Sparkles className="w-3 h-3 text-indigo-500" />
+                                            <span>Start chatting with Keeper</span>
+                                        </div>
+
+                                        {/* Dynamic User Identity & Subscription Status Pill */}
+                                        <div className="mt-2.5 flex items-center justify-center">
+                                            {user ? (
+                                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${
+                                                    isAdmin 
+                                                        ? 'bg-purple-50 text-purple-700 border-purple-200/80 shadow-2xs'
+                                                        : profile?.is_subscribed 
+                                                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80 shadow-2xs' 
+                                                            : 'bg-amber-50 text-amber-700 border-amber-200/80 shadow-2xs'
+                                                }`}>
+                                                    <span className={`w-1.5 h-1.5 rounded-full ${
+                                                        isAdmin ? 'bg-purple-500' : profile?.is_subscribed ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+                                                    }`} />
+                                                    <span>
+                                                        {isAdmin 
+                                                            ? '🛡️ Admin • Master Access' 
+                                                            : profile?.is_subscribed 
+                                                                ? `✨ Active Subscription (${profile?.subscription_tier?.toUpperCase() || 'PRO'})` 
+                                                                : '⚠️ Inactive / Free Tier'}
+                                                    </span>
+                                                </span>
+                                            ) : (
+                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-50 text-slate-500 border border-slate-200/80">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                                                    <span>👤 Guest Mode</span>
+                                                </span>
+                                            )}
+                                        </div>
+
                                         {/* Quick Starter Suggestion Cards */}
-                                        <div className="mt-4 w-full max-w-xs space-y-2">
+                                        <div className="mt-5 w-full max-w-xs space-y-2">
                                             <button
                                                 type="button"
                                                 onClick={() => {
-                                                    setInputPrompt('Query to JM: Author requested to change the author name from "" to ""');
-                                                    textareaRef.current?.focus();
+                                                    handleSendMessage('What is my current subscription status, account tier, and system role (Admin or not)?');
                                                 }}
-                                                className="w-full px-3 py-2 rounded-xl bg-white hover:bg-indigo-50/80 border border-slate-200/80 hover:border-indigo-300 text-left transition-all shadow-2xs hover:shadow-xs group cursor-pointer flex items-center justify-between"
+                                                className="w-full px-3 py-2 rounded-xl bg-slate-50/80 hover:bg-amber-50/90 border border-slate-200/80 hover:border-amber-300 text-left transition-all shadow-2xs hover:shadow-xs group cursor-pointer flex items-center justify-between"
                                             >
                                                 <div className="flex items-center gap-2.5">
-                                                    <span className="w-6 h-6 rounded-lg bg-indigo-100/80 text-indigo-700 text-xs flex items-center justify-center shrink-0">📝</span>
+                                                    <span className="w-6 h-6 rounded-lg bg-amber-100 text-amber-700 text-xs flex items-center justify-center shrink-0">👤</span>
                                                     <div>
-                                                        <div className="text-xs font-semibold text-slate-800 group-hover:text-indigo-900">Draft Standardized JM Query</div>
-                                                        <div className="text-[10px] text-slate-400">Author name changes, figure replacement...</div>
+                                                        <div className="text-xs font-bold text-slate-800 group-hover:text-amber-900">Check Subscription &amp; Admin Status</div>
+                                                        <div className="text-[10px] text-slate-400">Active status, account tier, unlocked tools...</div>
+                                                    </div>
+                                                </div>
+                                                <ArrowRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-amber-600 transition-transform group-hover:translate-x-0.5 shrink-0" />
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setInputPrompt('Query to JM: The authors requested to exchange the positions of the second and third authors (Yiqi Wang and Wei Peng). A signed authorship change form has been submitted to the journal.');
+                                                    textareaRef.current?.focus();
+                                                }}
+                                                className="w-full px-3 py-2 rounded-xl bg-slate-50/80 hover:bg-indigo-50/90 border border-slate-200/80 hover:border-indigo-300 text-left transition-all shadow-2xs hover:shadow-xs group cursor-pointer flex items-center justify-between"
+                                            >
+                                                <div className="flex items-center gap-2.5">
+                                                    <span className="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-700 text-xs flex items-center justify-center shrink-0">📝</span>
+                                                    <div>
+                                                        <div className="text-xs font-bold text-slate-800 group-hover:text-indigo-900">Draft Standardized JM Query</div>
+                                                        <div className="text-[10px] text-slate-400">Authorship, name corrections, figure swaps...</div>
                                                     </div>
                                                 </div>
                                                 <ArrowRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-indigo-600 transition-transform group-hover:translate-x-0.5 shrink-0" />
@@ -939,15 +1094,15 @@ ${timeContext}`
                                             <button
                                                 type="button"
                                                 onClick={() => {
-                                                    handleSendMessage('Which tool should I use when references or citation callouts are out of order in the body text?');
+                                                    handleSendMessage('Can you provide a complete categorized guide of all available editorial tools in Production Toolkit Pro and what each tool does?');
                                                 }}
-                                                className="w-full px-3 py-2 rounded-xl bg-white hover:bg-emerald-50/80 border border-slate-200/80 hover:border-emerald-300 text-left transition-all shadow-2xs hover:shadow-xs group cursor-pointer flex items-center justify-between"
+                                                className="w-full px-3 py-2 rounded-xl bg-slate-50/80 hover:bg-emerald-50/90 border border-slate-200/80 hover:border-emerald-300 text-left transition-all shadow-2xs hover:shadow-xs group cursor-pointer flex items-center justify-between"
                                             >
                                                 <div className="flex items-center gap-2.5">
-                                                    <span className="w-6 h-6 rounded-lg bg-emerald-100/80 text-emerald-700 text-xs flex items-center justify-center shrink-0">🧭</span>
+                                                    <span className="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-700 text-xs flex items-center justify-center shrink-0">🧭</span>
                                                     <div>
-                                                        <div className="text-xs font-semibold text-slate-800 group-hover:text-emerald-900">Find an Editorial Tool</div>
-                                                        <div className="text-[10px] text-slate-400">Renumbering, citation linking, table fixes...</div>
+                                                        <div className="text-xs font-bold text-slate-800 group-hover:text-emerald-900">Find an Editorial Tool</div>
+                                                        <div className="text-[10px] text-slate-400">All tools: citations, structure, tables, conversion...</div>
                                                     </div>
                                                 </div>
                                                 <ArrowRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-emerald-600 transition-transform group-hover:translate-x-0.5 shrink-0" />
@@ -958,12 +1113,12 @@ ${timeContext}`
                                                 onClick={() => {
                                                     handleSendMessage('What are the standard DTD v5.6 rules for bibliography references and CRediT contributor roles?');
                                                 }}
-                                                className="w-full px-3 py-2 rounded-xl bg-white hover:bg-purple-50/80 border border-slate-200/80 hover:border-purple-300 text-left transition-all shadow-2xs hover:shadow-xs group cursor-pointer flex items-center justify-between"
+                                                className="w-full px-3 py-2 rounded-xl bg-slate-50/80 hover:bg-purple-50/90 border border-slate-200/80 hover:border-purple-300 text-left transition-all shadow-2xs hover:shadow-xs group cursor-pointer flex items-center justify-between"
                                             >
                                                 <div className="flex items-center gap-2.5">
-                                                    <span className="w-6 h-6 rounded-lg bg-purple-100/80 text-purple-700 text-xs flex items-center justify-center shrink-0">📜</span>
+                                                    <span className="w-6 h-6 rounded-lg bg-purple-100 text-purple-700 text-xs flex items-center justify-center shrink-0">📜</span>
                                                     <div>
-                                                        <div className="text-xs font-semibold text-slate-800 group-hover:text-purple-900">DTD v5.6 & XML Rules</div>
+                                                        <div className="text-xs font-bold text-slate-800 group-hover:text-purple-900">DTD v5.6 & XML Specifications</div>
                                                         <div className="text-[10px] text-slate-400">Bibliography tags, CRediT roles, footnotes...</div>
                                                     </div>
                                                 </div>
@@ -974,6 +1129,8 @@ ${timeContext}`
                                 ) : (
                                     messages.map((message) => {
                                     const isUser = message.role === 'user';
+                                    const cleanContent = sanitizeOutput(message.content);
+
                                     return (
                                         <div
                                             key={message.id}
@@ -998,147 +1155,157 @@ ${timeContext}`
                                                 )}
                                             </div>
 
-                                            <div
-                                                className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-xs shadow-2xs ${
-                                                    isUser
-                                                        ? 'bg-indigo-600 text-white rounded-tr-xs'
-                                                        : 'bg-white border border-slate-200/80 text-slate-800 rounded-tl-xs'
-                                                }`}
-                                            >
-                                                {isUser ? (
-                                                    <p className="whitespace-pre-wrap leading-relaxed font-normal">{message.content}</p>
-                                                ) : (
-                                                    <div className="prose prose-xs max-w-none text-slate-800 leading-relaxed">
-                                                        <ReactMarkdown
-                                                            remarkPlugins={[remarkGfm]}
-                                                            components={{
-                                                                a({ href, children }: any) {
-                                                                    if (href && (href.startsWith('#/') || href.startsWith('/'))) {
-                                                                        const route = href.replace(/^#/, '');
-                                                                        return (
-                                                                            <button
-                                                                                onClick={(e) => {
-                                                                                    e.preventDefault();
-                                                                                    navigate(route);
-                                                                                }}
-                                                                                className="inline-flex items-center gap-1.5 my-1 px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] shadow-xs transition-all hover:scale-102 active:scale-95 cursor-pointer select-none"
-                                                                                title={`Open ${route}`}
-                                                                            >
-                                                                                <Compass className="w-3 h-3 text-indigo-200" />
-                                                                                <span>{children}</span>
-                                                                                <ExternalLink className="w-2.5 h-2.5 opacity-80" />
-                                                                            </button>
-                                                                        );
-                                                                    }
-                                                                    return (
-                                                                        <a 
-                                                                            href={href} 
-                                                                            target="_blank" 
-                                                                            rel="noreferrer" 
-                                                                            className="text-indigo-600 font-semibold underline hover:text-indigo-800" 
-                                                                        >
-                                                                            {children}
-                                                                        </a>
-                                                                    );
-                                                                },
-                                                                pre({ children }: any) {
-                                                                    return (
-                                                                        <pre className="bg-slate-900 text-slate-100 p-2.5 rounded-xl my-2 overflow-x-auto text-[11px] font-mono border border-slate-800">
-                                                                            {children}
-                                                                        </pre>
-                                                                    );
-                                                                },
-                                                                code({ className, children, ...props }: any) {
-                                                                    const codeContent = String(children).replace(/\n$/, '');
-                                                                    const isJMQuery = codeContent.startsWith('TO THE JM:') || codeContent.includes('TO THE JM:');
-
-                                                                    if (isJMQuery) {
-                                                                        const isCopied = copiedId === message.id;
-                                                                        return (
-                                                                            <div className="relative my-2 rounded-xl overflow-hidden border-2 border-indigo-500/40 bg-slate-900 text-slate-100 shadow-md">
-                                                                                <div className="bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-950 px-3 py-1.5 border-b border-indigo-800/40 flex items-center justify-between">
-                                                                                    <span className="text-[10px] font-black uppercase tracking-wider text-indigo-300 flex items-center gap-1.5">
-                                                                                        <FileText className="w-3 h-3 text-indigo-400" />
-                                                                                        <span>Standard TO THE JM Query</span>
-                                                                                    </span>
+                                            <div className={`max-w-[85%] flex flex-col ${isUser ? 'items-end' : 'items-start'} w-full`}>
+                                                {/* Main Clean Editorial Chat Bubble */}
+                                                <div
+                                                    className={`w-full rounded-2xl px-3.5 py-2.5 text-xs shadow-2xs ${
+                                                        isUser
+                                                            ? 'bg-indigo-600 text-white rounded-tr-xs'
+                                                            : 'bg-white border border-slate-200/80 text-slate-800 rounded-tl-xs'
+                                                    }`}
+                                                >
+                                                    {isUser ? (
+                                                        <p className="whitespace-pre-wrap leading-relaxed font-normal">{message.content}</p>
+                                                    ) : (
+                                                        <div className="prose prose-xs max-w-none text-slate-800 leading-relaxed">
+                                                            {cleanContent ? (
+                                                                <ReactMarkdown
+                                                                    remarkPlugins={[remarkGfm]}
+                                                                    components={{
+                                                                        a({ href, children }: any) {
+                                                                            if (href && (href.startsWith('#/') || href.startsWith('/'))) {
+                                                                                const route = href.replace(/^#/, '');
+                                                                                return (
                                                                                     <button
-                                                                                        type="button"
-                                                                                        onClick={() => copyToClipboard(codeContent, message.id)}
-                                                                                        className={`px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
-                                                                                            isCopied
-                                                                                                ? 'bg-emerald-500 text-white'
-                                                                                                : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs'
-                                                                                        }`}
+                                                                                        onClick={(e) => {
+                                                                                            e.preventDefault();
+                                                                                            navigate(route);
+                                                                                        }}
+                                                                                        className="inline-flex items-center gap-1.5 my-1 px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] shadow-xs transition-all hover:scale-102 active:scale-95 cursor-pointer select-none"
+                                                                                        title={`Open ${route}`}
                                                                                     >
-                                                                                        {isCopied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                                                                                        <span>{isCopied ? 'Copied Query!' : 'Copy TO THE JM Query'}</span>
+                                                                                        <Compass className="w-3 h-3 text-indigo-200" />
+                                                                                        <span>{children}</span>
+                                                                                        <ExternalLink className="w-2.5 h-2.5 opacity-80" />
                                                                                     </button>
-                                                                                </div>
-                                                                                <pre className="p-3 text-[11px] font-mono leading-relaxed overflow-x-auto text-emerald-300 select-all whitespace-pre-wrap">
-                                                                                    {codeContent}
+                                                                                );
+                                                                            }
+                                                                            return (
+                                                                                <a 
+                                                                                    href={href} 
+                                                                                    target="_blank" 
+                                                                                    rel="noreferrer" 
+                                                                                    className="text-indigo-600 font-semibold underline hover:text-indigo-800" 
+                                                                                >
+                                                                                    {children}
+                                                                                </a>
+                                                                            );
+                                                                        },
+                                                                        pre({ children }: any) {
+                                                                            return (
+                                                                                <pre className="bg-slate-900 text-slate-100 p-2.5 rounded-xl my-2 overflow-x-auto text-[11px] font-mono border border-slate-800">
+                                                                                    {children}
                                                                                 </pre>
-                                                                            </div>
-                                                                        );
-                                                                    }
+                                                                            );
+                                                                        },
+                                                                        code({ className, children, ...props }: any) {
+                                                                            const codeContent = String(children).replace(/\n$/, '');
+                                                                            const isJMQuery = codeContent.startsWith('TO THE JM:') || codeContent.includes('TO THE JM:');
 
-                                                                    return (
-                                                                        <code className="bg-slate-100 text-indigo-700 px-1 py-0.5 rounded font-mono text-[11px] font-semibold" {...props}>
-                                                                            {children}
-                                                                        </code>
-                                                                    );
-                                                                }
-                                                            }}
-                                                        >
-                                                            {message.content}
-                                                        </ReactMarkdown>
+                                                                            if (isJMQuery) {
+                                                                                const isCopied = copiedId === message.id;
+                                                                                return (
+                                                                                    <div className="relative my-2 rounded-xl overflow-hidden border-2 border-indigo-500/40 bg-slate-900 text-slate-100 shadow-md">
+                                                                                        <div className="bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-950 px-3 py-1.5 border-b border-indigo-800/40 flex items-center justify-between">
+                                                                                            <span className="text-[10px] font-black uppercase tracking-wider text-indigo-300 flex items-center gap-1.5">
+                                                                                                <FileText className="w-3 h-3 text-indigo-400" />
+                                                                                                <span>Standard TO THE JM Query</span>
+                                                                                            </span>
+                                                                                            <button
+                                                                                                type="button"
+                                                                                                onClick={() => copyToClipboard(codeContent, message.id)}
+                                                                                                className={`px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                                                                                                    isCopied
+                                                                                                        ? 'bg-emerald-500 text-white'
+                                                                                                        : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs'
+                                                                                                }`}
+                                                                                            >
+                                                                                                {isCopied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                                                                                                <span>{isCopied ? 'Copied Query!' : 'Copy TO THE JM Query'}</span>
+                                                                                            </button>
+                                                                                        </div>
+                                                                                        <pre className="p-3 text-[11px] font-mono leading-relaxed overflow-x-auto text-emerald-300 select-all whitespace-pre-wrap">
+                                                                                            {codeContent}
+                                                                                        </pre>
+                                                                                    </div>
+                                                                                );
+                                                                            }
 
-                                                        {/* Animated Blinking Cursor while typing */}
-                                                        {message.role === 'assistant' && currentlyTypingId === message.id && (
-                                                            <span className="inline-flex items-center ml-0.5 select-none align-middle" title="Keeper is typing with paws...">
-                                                                <span className="w-1.5 h-3.5 bg-indigo-600 rounded-2xs inline-block animate-pulse" />
-                                                            </span>
-                                                        )}
-
-                                                        {/* One-click copy for general messages containing queries if not already formatted in a code card */}
-                                                        {!currentlyTypingId && !message.content.includes('```') && message.content.includes('TO THE JM:') && (
-                                                            <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-end">
-                                                                <button
-                                                                    onClick={() => {
-                                                                        const match = message.content.match(/TO THE JM:[\s\S]*?(?:File is on pending status until matter is resolved\. Thank you\.|$)/);
-                                                                        const textToCopy = match ? match[0] : message.content;
-                                                                        copyToClipboard(textToCopy, `query-${message.id}`);
+                                                                            return (
+                                                                                <code className="bg-slate-100 text-indigo-700 px-1 py-0.5 rounded font-mono text-[11px] font-semibold" {...props}>
+                                                                                    {children}
+                                                                                </code>
+                                                                            );
+                                                                        }
                                                                     }}
-                                                                    className="px-2.5 py-1 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-900 text-[10.5px] font-bold flex items-center gap-1.5 transition-all border border-indigo-200 cursor-pointer shadow-xs"
                                                                 >
-                                                                    {copiedId === `query-${message.id}` ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-indigo-600" />}
-                                                                    <span>{copiedId === `query-${message.id}` ? 'Copied JM Query!' : 'Copy TO THE JM Query'}</span>
-                                                                </button>
-                                                            </div>
-                                                        )}
+                                                                    {cleanContent}
+                                                                </ReactMarkdown>
+                                                            ) : currentlyTypingId === message.id ? (
+                                                                <div className="flex items-center gap-1.5 text-[11px] text-slate-500 py-1 font-medium">
+                                                                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-ping" />
+                                                                    <span>🐾 Formulating clean editorial output...</span>
+                                                                </div>
+                                                            ) : null}
 
-                                                        {/* Active Live Typing Status Pill & Quick Skip Button */}
-                                                        {message.role === 'assistant' && currentlyTypingId === message.id && (
-                                                            <div className="mt-2.5 pt-2 border-t border-indigo-100/70 flex items-center justify-between text-[10.5px] text-slate-500 select-none">
-                                                                <span className="flex items-center gap-1.5 text-indigo-700 font-bold">
-                                                                    <span className="w-2 h-2 rounded-full bg-indigo-600 animate-ping" />
-                                                                    <span>🐾 Keeper is typing with paws...</span>
+                                                            {/* Animated Blinking Cursor while typing */}
+                                                            {message.role === 'assistant' && currentlyTypingId === message.id && cleanContent && (
+                                                                <span className="inline-flex items-center ml-0.5 select-none align-middle" title="Keeper is typing with paws...">
+                                                                    <span className="w-1.5 h-3.5 bg-indigo-600 rounded-2xs inline-block animate-pulse" />
                                                                 </span>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        handleSkipTyping();
-                                                                    }}
-                                                                    className="px-2 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold transition-all border border-indigo-200 cursor-pointer flex items-center gap-1 shadow-2xs hover:scale-102 active:scale-95"
-                                                                    title="Skip typing animation and show full text immediately (or press Esc)"
-                                                                >
-                                                                    <span>Skip</span>
-                                                                    <Zap className="w-2.5 h-2.5 text-indigo-600 fill-indigo-600" />
-                                                                </button>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                )}
+                                                            )}
+
+                                                            {/* One-click copy for general messages containing queries if not already formatted in a code card */}
+                                                            {!currentlyTypingId && cleanContent && !cleanContent.includes('```') && cleanContent.includes('TO THE JM:') && (
+                                                                <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-end">
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            const match = cleanContent.match(/TO THE JM:[\s\S]*?(?:File is on pending status until matter is resolved\. Thank you\.|$)/);
+                                                                            const textToCopy = match ? match[0] : cleanContent;
+                                                                            copyToClipboard(textToCopy, `query-${message.id}`);
+                                                                        }}
+                                                                        className="px-2.5 py-1 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-900 text-[10.5px] font-bold flex items-center gap-1.5 transition-all border border-indigo-200 cursor-pointer shadow-xs"
+                                                                    >
+                                                                        {copiedId === `query-${message.id}` ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-indigo-600" />}
+                                                                        <span>{copiedId === `query-${message.id}` ? 'Copied JM Query!' : 'Copy TO THE JM Query'}</span>
+                                                                    </button>
+                                                                </div>
+                                                            )}
+
+                                                            {/* Active Live Typing Status Pill & Quick Skip Button */}
+                                                            {message.role === 'assistant' && currentlyTypingId === message.id && (
+                                                                <div className="mt-2.5 pt-2 border-t border-indigo-100/70 flex items-center justify-between text-[10.5px] text-slate-500 select-none">
+                                                                    <span className="flex items-center gap-1.5 text-indigo-700 font-bold">
+                                                                        <span className="w-2 h-2 rounded-full bg-indigo-600 animate-ping" />
+                                                                        <span>🐾 Keeper is typing with paws...</span>
+                                                                    </span>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            handleSkipTyping();
+                                                                        }}
+                                                                        className="px-2 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold transition-all border border-indigo-200 cursor-pointer flex items-center gap-1 shadow-2xs hover:scale-102 active:scale-95"
+                                                                        title="Skip typing animation and show full text immediately (or press Esc)"
+                                                                    >
+                                                                        <span>Skip</span>
+                                                                        <Zap className="w-2.5 h-2.5 text-indigo-600 fill-indigo-600" />
+                                                                    </button>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     );

@@ -52,8 +52,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!ai) {
       const lastUserMessage = [...messages].reverse().find((m: any) => m.role === 'user');
       const offlineReply = lastUserMessage
-        ? generateOfflineKeeperResponse(lastUserMessage.content || '')
-        : generateOfflineKeeperResponse('hello');
+        ? generateOfflineKeeperResponse(lastUserMessage.content || '', context)
+        : generateOfflineKeeperResponse('hello', context);
       return res.json({
         reply: sanitizeOutput(offlineReply),
         modelUsed: 'offline-keeper',
@@ -102,8 +102,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!reply) {
       const lastUserMessage = [...messages].reverse().find((m: any) => m.role === 'user');
       const fallbackReply = lastUserMessage
-        ? generateOfflineKeeperResponse(lastUserMessage.content || '')
-        : generateOfflineKeeperResponse('hello');
+        ? generateOfflineKeeperResponse(lastUserMessage.content || '', context)
+        : generateOfflineKeeperResponse('hello', context);
       return res.json({
         reply: sanitizeOutput(fallbackReply),
         modelUsed: 'offline-keeper-fallback',
@@ -114,12 +114,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.json({ reply: sanitizeOutput(reply), modelUsed: activeModel });
   } catch (err: any) {
     console.error('Gemini API Error (Vercel):', err);
+    const context = req.body?.context;
     const lastUserMessage = Array.isArray(req.body?.messages)
       ? [...req.body.messages].reverse().find((m: any) => m.role === 'user')
       : null;
     const offlineReply = lastUserMessage
-      ? generateOfflineKeeperResponse(lastUserMessage.content || '')
-      : generateOfflineKeeperResponse('hello');
+      ? generateOfflineKeeperResponse(lastUserMessage.content || '', context)
+      : generateOfflineKeeperResponse('hello', context);
 
     return res.json({
       reply: sanitizeOutput(offlineReply),

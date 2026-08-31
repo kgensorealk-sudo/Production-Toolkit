@@ -25,7 +25,7 @@ const LoadingOverlay: React.FC<LoadingOverlayProps> = ({ message = 'Processing..
     const theme = themes[color];
 
     return (
-        <div className="absolute inset-0 z-50 bg-white/80 backdrop-blur-[2px] flex items-center justify-center rounded-2xl animate-fade-in transition-all duration-300">
+        <div className="fixed inset-0 z-50 bg-white/90 backdrop-blur-[2px] flex items-center justify-center animate-fade-in transition-all duration-300">
             <div className="flex flex-col items-center">
                 <div className="relative w-16 h-16 mb-5">
                     <div className={`absolute inset-0 rounded-full border-[3px] opacity-20 ${theme.border}`}></div>

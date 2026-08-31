@@ -392,17 +392,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 if (checkHardExpiry()) return;
 
                 initTimeoutRef.current = setTimeout(() => { 
-                    if (mounted && loading) {
-                        console.warn("Auth initialization timed out. Forcing loading to false.");
+                    if (mounted) {
+                        console.warn("Auth initialization safety timer elapsed. Clearing initial loading screen.");
                         setLoading(false);
                     }
-                }, 15000); 
+                }, 3500); 
 
-                const { data, error } = await withRetry(async () => {
-                    const result = await (supabase.auth as any).getSession();
-                    if (result.error) throw result.error;
-                    return result;
-                });
+                const sessionRes: any = await withTimeout((supabase.auth as any).getSession(), 3000).catch(() => ({ data: { session: null }, error: null }));
+                const data = sessionRes?.data;
                 
                 const currentSession = data?.session;
                 if (currentSession && mounted) {

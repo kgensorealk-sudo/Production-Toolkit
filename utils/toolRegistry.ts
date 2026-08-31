@@ -377,6 +377,26 @@ export const TOOL_REGISTRY: ToolInfo[] = [
     }
 ];
 
+export const DASHBOARD_TOOL_IDS: ToolId[] = [
+    ToolId.XML_RENUMBER,
+    ToolId.REF_EXTRACTOR,
+    ToolId.GRANT_TAGGER,
+    ToolId.UNCITED_CLEANER,
+    ToolId.ID_AUDITOR,
+    ToolId.CITATION_LINKER,
+    ToolId.OTHER_REF_SCANNER,
+    ToolId.REFERENCE_GEN,
+    ToolId.CREDIT_GENERATOR,
+    ToolId.HIGHLIGHTS_GEN,
+    ToolId.QUICK_DIFF,
+    ToolId.TAG_CLEANER,
+    ToolId.TABLE_FIXER,
+    ToolId.TABLE_BEAUTIFIER,
+    ToolId.WORD_TO_XML,
+    ToolId.VIEW_SYNC,
+    ToolId.STRUCTURAL_ARCHITECT
+];
+
 export const EXPERIMENTAL_TOOL_IDS: (ToolId | string)[] = [
     ToolId.XML_RENUMBER_EXP,
     ToolId.CITATION_LINKER_EXP,
@@ -385,6 +405,15 @@ export const EXPERIMENTAL_TOOL_IDS: (ToolId | string)[] = [
     ToolId.REF_SORTER,
     'experimental'
 ];
+
+/**
+ * Checks whether a given tool ID or route is present on the main Dashboard.
+ */
+export function isDashboardTool(id?: ToolId | string | null): boolean {
+    if (!id) return false;
+    const normalized = String(id).replace(/^#?\/?/, '');
+    return DASHBOARD_TOOL_IDS.some(t => t === id || t === normalized || t.toLowerCase() === normalized.toLowerCase());
+}
 
 /**
  * Checks whether a given tool ID or route represents an experimental version.
@@ -425,12 +454,16 @@ export function getExperimentalWarning(id?: ToolId | string | null): string {
 
 /**
  * Finds matching tools based on a user's natural language scenario query.
+ * Only returns official established tools present in the Dashboard console.
  */
-export function findToolsForScenario(query: string): ToolInfo[] {
+export function findToolsForScenario(query: string, includeNonDashboard: boolean = false): ToolInfo[] {
     const q = query.toLowerCase().trim();
     if (!q) return [];
 
     return TOOL_REGISTRY.filter(tool => {
+        if (!includeNonDashboard && (!isDashboardTool(tool.id) || tool.isExperimental)) {
+            return false;
+        }
         const matchName = tool.name.toLowerCase().includes(q);
         const matchDesc = tool.shortDesc.toLowerCase().includes(q);
         const matchKeywords = tool.keywords.some(k => k.toLowerCase().includes(q) || q.includes(k.toLowerCase()));

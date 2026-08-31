@@ -1,6 +1,5 @@
 import express from 'express';
 import path from 'path';
-import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import {
   CANDIDATE_MODELS,
@@ -54,8 +53,8 @@ async function startServer() {
       if (!ai) {
         const lastUserMessage = [...messages].reverse().find((m: any) => m.role === 'user');
         const offlineReply = lastUserMessage 
-          ? generateOfflineKeeperResponse(lastUserMessage.content || '')
-          : generateOfflineKeeperResponse('hello');
+          ? generateOfflineKeeperResponse(lastUserMessage.content || '', context)
+          : generateOfflineKeeperResponse('hello', context);
         return res.json({
           reply: sanitizeOutput(offlineReply),
           modelUsed: 'offline-keeper',
@@ -105,8 +104,8 @@ async function startServer() {
       if (!reply) {
         const lastUserMessage = [...messages].reverse().find((m: any) => m.role === 'user');
         const fallbackReply = lastUserMessage 
-          ? generateOfflineKeeperResponse(lastUserMessage.content || '')
-          : generateOfflineKeeperResponse('hello');
+          ? generateOfflineKeeperResponse(lastUserMessage.content || '', context)
+          : generateOfflineKeeperResponse('hello', context);
         return res.json({
           reply: sanitizeOutput(fallbackReply),
           modelUsed: 'offline-keeper-fallback',
@@ -117,12 +116,13 @@ async function startServer() {
       return res.json({ reply: sanitizeOutput(reply), modelUsed: activeModel });
     } catch (err: any) {
       console.error('Gemini API Error:', err);
+      const context = req.body?.context;
       const lastUserMessage = Array.isArray(req.body?.messages)
         ? [...req.body.messages].reverse().find((m: any) => m.role === 'user')
         : null;
       const offlineReply = lastUserMessage
-        ? generateOfflineKeeperResponse(lastUserMessage.content || '')
-        : generateOfflineKeeperResponse('hello');
+        ? generateOfflineKeeperResponse(lastUserMessage.content || '', context)
+        : generateOfflineKeeperResponse('hello', context);
 
       return res.json({
         reply: sanitizeOutput(offlineReply),
@@ -134,6 +134,7 @@ async function startServer() {
 
   // Vite middleware for development vs static build in production
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
@@ -142,8 +143,7 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    // In Express v5, wildcard route must be '*all'
-    app.get('*all', (req, res) => {
+    app.use((req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
