@@ -68,18 +68,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       parts: [{ text: m.content }],
     }));
 
+    // Per-model timeout budget. These must sum to comfortably less than the
+    // function's maxDuration (30s in vercel.json) — otherwise a slow/hanging
+    // first model can push the *whole function* past the platform limit and
+    // Vercel kills it with a bare 500 before our own try/catch ever gets a
+    // chance to return the graceful offline fallback. Strongest model gets
+    // the most budget since it's tried first and most likely to succeed;
+    // later fallbacks get progressively less. Sum: 12 + 8 + 5 = 25s, leaving
+    // a ~5s cushion for network/JSON overhead.
+    const TIMEOUT_BUDGET_MS = [12000, 8000, 5000];
+
     let reply = '';
     let activeModel = '';
     let lastError: any = null;
 
-    for (const model of CANDIDATE_MODELS) {
+    for (let i = 0; i < CANDIDATE_MODELS.length; i++) {
+      const model = CANDIDATE_MODELS[i];
+      const timeoutMs = TIMEOUT_BUDGET_MS[i] ?? 5000;
       try {
-        // Was 7.5s — too aggressive for the strongest model (gemini-3.7-flash) under
-        // any real latency, which caused premature fallback to the offline regex engine
-        // even when the API key was configured and working. 20s leaves headroom under
-        // the 30s function maxDuration while still allowing the loop to try a second model.
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error(`Model ${model} request timed out after 20s`)), 20000)
+          setTimeout(() => reject(new Error(`Model ${model} request timed out after ${timeoutMs / 1000}s`)), timeoutMs)
         );
         const modelPromise = ai.models.generateContent({
           model,
