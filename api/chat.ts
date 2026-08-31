@@ -74,15 +74,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     for (const model of CANDIDATE_MODELS) {
       try {
+        // Was 7.5s — too aggressive for the strongest model (gemini-3.7-flash) under
+        // any real latency, which caused premature fallback to the offline regex engine
+        // even when the API key was configured and working. 20s leaves headroom under
+        // the 30s function maxDuration while still allowing the loop to try a second model.
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error(`Model ${model} request timed out after 7.5s`)), 7500)
+          setTimeout(() => reject(new Error(`Model ${model} request timed out after 20s`)), 20000)
         );
         const modelPromise = ai.models.generateContent({
           model,
           contents,
           config: {
             systemInstruction,
-            temperature: 0.7,
+            // Lowered from 0.7 — Keeper's job (JM queries, tool routing, DTD rules) is
+            // precision/consistency work, not creative writing. Lower temperature reduces
+            // phrasing drift and hallucinated details across repeated similar requests.
+            temperature: 0.3,
           },
         });
 

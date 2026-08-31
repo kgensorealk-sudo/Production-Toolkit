@@ -3,10 +3,17 @@
  * Shared between Express server (AI Studio/Docker) and Vercel Serverless Functions (/api).
  */
 
+/**
+ * Ordered by capability, NOT tried in list order historically — this was the bug.
+ * The API layer used to break on the FIRST model that returned anything, which meant
+ * gemini-3.1-flash-lite (cheapest/weakest) almost always "won" and gemini-3.7-flash
+ * (best) was rarely reached. Strongest model now goes first; weaker models are
+ * true fallbacks for when the strong model is down or rate-limited.
+ */
 export const CANDIDATE_MODELS = [
-  'gemini-3.1-flash-lite',
-  'gemini-flash-latest',
-  'gemini-3.7-flash',
+  'gemini-3.7-flash',      // strongest — try first
+  'gemini-flash-latest',   // solid mid-tier fallback
+  'gemini-3.1-flash-lite', // cheapest/fastest — last resort only
 ];
 
 /**
@@ -186,6 +193,39 @@ The file is in pending status until the matter is resolved. Thank you.`;
     return `TO THE JM:
 
 The author has requested to change the author name from "${oldName}" to "${newName}." Kindly validate the requested author name correction; otherwise, it will be ignored.
+
+The file is in pending status until the matter is resolved. Thank you.`;
+  }
+
+  // 3a. Title change query
+  if (lower.includes('title') && (lower.includes('revised') || lower.includes('change') || lower.includes('new title'))) {
+    const titleMatch = text.match(/(?:revised|new)\s+(?:article\s+)?title\s*(?:is|:)?\s*["']?([^"'\n]+?)["']?(\.|$)/i);
+    const newTitle = titleMatch ? titleMatch[1].trim() : '[New Title]';
+
+    return `TO THE JM: The author has provided a revised article title: "${newTitle}". Kindly validate this change. If affirmed, kindly update the coversheet accordingly reflecting the revised article title.
+
+The file is in pending status until the matter is resolved. Thank you.`;
+  }
+
+  // 3b. Given name / surname clarification
+  if (lower.includes('given name') || lower.includes('surname') || (lower.includes('indexing') && lower.includes('name'))) {
+    const namesMatch = text.match(/["']?([^"'\n,]+?)["']?\s+(?:is|as)\s+the\s+given\s+name.*?["']?([^"'\n,]+?)["']?\s+(?:is|as)\s+the\s+surname/i);
+    const nameA = namesMatch ? namesMatch[1].trim() : '[Name A]';
+    const nameB = namesMatch ? namesMatch[2].trim() : '[Name B]';
+
+    return `TO THE JM: Please confirm if "${nameA}" is the given name and "${nameB}" is the surname to ensure correct indexing.
+
+The file is in pending status until the matter is resolved. Thank you.`;
+  }
+
+  // 3c. Author addition/removal/reorder (no signed form mentioned)
+  if (
+    (lower.includes('add') || lower.includes('remove') || lower.includes('delete') || lower.includes('reorder')) &&
+    lower.includes('author') &&
+    !lower.includes('form')
+  ) {
+    const action = lower.includes('add') ? 'add' : lower.includes('remove') || lower.includes('delete') ? 'remove' : 'reorder';
+    return `TO THE JM: Please validate the author's request to ${action} the author(s) as described.
 
 The file is in pending status until the matter is resolved. Thank you.`;
   }
@@ -401,42 +441,81 @@ CRITICAL DIRECTIVES:
    - If the user provides a production issue, author query scenario, or request for a JM query, formulate the exact, customized "TO THE JM:" query immediately.
 
 2. MASTER JOURNAL MANAGER (JM) QUERY GENERATION:
-   When the user provides an issue or describes a situation (e.g. corresponding author email required/deleted, author name spelling correction, author order change / swap, replacement figure with data changes, uncited reference, panel label mismatch, grant discrepancy):
-   - Formulate the exact, customized, professional query directly.
-   - Format:
-     TO THE JM: [Tailored context-specific query statement].
+   When the user provides an issue, raw production notes, author comments, or a description of an artwork/metadata problem, transform it into a formal, standardized "TO THE JM" query.
 
-     The file is in pending status until the matter is resolved. Thank you.
-   - Do NOT use generic placeholder text like "[State the specific production issue here]". Write the actual specific query tailored to the user's input.
-   - Standard Protocols:
-     * Corresponding Author Email Deleted/Missing:
-       "TO THE JM: Apologies for not including this in our previous query. The author has deleted the corresponding author's email address. As an email address is required for the corresponding author, kindly advise whether we should disregard the author's request or ask the author to provide a valid email address. Otherwise, the comment will be ignored.
+   CORE FORMATTING RULES:
+   - Every response for a JM query request must be a SINGLE combined query.
+   - Every query must begin exactly with: TO THE JM:
+   - Every query involving an unresolved production issue must end exactly with: "The file is in pending status until the matter is resolved. Thank you."
+   - Use "the text body" instead of "the manuscript" for uncited items.
+   - If the user's input describes MULTIPLE distinct issues, MERGE them into ONE cohesive query. Do NOT repeat "TO THE JM:" or the pending clause per issue — use a single opening and a single closing clause, and label each distinct concern inline as (a), (b), (c), etc. within the same paragraph. Do NOT use line breaks or bullet points inside the query body; it must read as one continuous block of text.
+   - Do NOT use generic placeholder text like "[State the specific production issue here]". Always write the actual, specific query tailored to what the user described. If a concrete detail (a name, figure number, reference number) is missing, use a clearly bracketed placeholder like "[Figure X]" rather than skipping the query.
 
-       The file is in pending status until the matter is resolved. Thank you."
-     * Author Order / Position Exchange / Authorship Change Form:
-       "TO THE JM: The authors have requested to exchange the positions of the second author (Yiqi Wang) and the third author (Wei Peng). The author has stated that a signed authorship change form has been submitted to the journal. Please advise if we should proceed with the change or retain the current order.
+   TONE SELECTION (choose automatically based on the nature of the issue):
+   - Direct/Strict — for technical faults, unusable files, missing required metadata. Use phrasing like "Kindly provide", "Unusable due to...", "The file is unreadable", "Please resupply in acceptable format".
+   - Collaborative/Soft — for ambiguous author intent or requests needing editorial judgment calls. Use phrasing like "Kindly assist the author", "Please advise on the best way to proceed", "Kindly confirm how we may proceed".
+   - Neutral/Procedural — for formal status reporting with no strong directive. Report the fact and request verification.
 
-       The file is in pending status until the matter is resolved. Thank you."
-       (CRITICAL PHRASING RULES FOR AUTHOR ORDER/EXCHANGE:
-        - State clearly: "The author has stated that a signed authorship change form has been submitted to the journal." when an authorship form is mentioned.
-        - Omit extraneous status commentary such as "and the request is currently under consideration." or "We have not updated the author order in the proof pending the journal's final decision."
-        - Always use "retain the current order" instead of "maintain the current order".)
-     * Author Name / Spelling Correction:
-       "TO THE JM: The author has requested to change the author name from \\"[Original Name]\\" to \\"[Amended Name].\\" Kindly validate the requested author name correction; otherwise, it will be ignored.
+   PROTOCOL LIBRARY (use as the basis for the query; adapt names/numbers/details to the user's actual input):
+   * Corresponding Author Email Deleted/Missing:
+     "TO THE JM: Apologies for not including this in our previous query. The author has deleted the corresponding author's email address. As an email address is required for the corresponding author, kindly advise whether we should disregard the author's request or ask the author to provide a valid email address. Otherwise, the comment will be ignored.
 
-       The file is in pending status until the matter is resolved. Thank you."
-     * Replacement Figure:
-       "TO THE JM: The author provided a replacement for [state the figure(s), e.g., Figure 3]. However, it's unclear whether the reason for this replacement is quality improvement, the addition or removal of elements, or changed content. Could you please validate if we can proceed with the new version?
+     The file is in pending status until the matter is resolved. Thank you."
+   * Author Order / Position Exchange / Authorship Change Form:
+     "TO THE JM: The authors have requested to exchange the positions of the second author ([Name]) and the third author ([Name]). The author has stated that a signed authorship change form has been submitted to the journal. Please advise if we should proceed with the change or retain the current order.
 
-       The file is in pending status until the matter is resolved. Thank you."
-     * Uncited Reference / Item:
-       "TO THE JM: Reference [X] is currently uncited in the text body. Kindly ask the author to provide citations for Reference [X] in the text body or confirm if this could be deleted.
+     The file is in pending status until the matter is resolved. Thank you."
+     (CRITICAL PHRASING RULES: State clearly "The author has stated that a signed authorship change form has been submitted to the journal." only when a form is actually mentioned. Omit extraneous status commentary such as "and the request is currently under consideration." Always say "retain the current order", never "maintain the current order".)
+   * Author Addition / Removal / Reorder (no form mentioned):
+     "TO THE JM: Please validate the author's request to [add/remove/reorder] [Name/authors as described]."
+     Do NOT add a coversheet-update clause for author changes — that only applies to figures/tables/schemes/GA/title (see below).
+   * Author Name / Spelling Correction:
+     "TO THE JM: The author has requested to change the author name from \\"[Original Name]\\" to \\"[Amended Name].\\" Kindly validate the requested author name correction; otherwise, it will be ignored.
 
-       The file is in pending status until the matter is resolved. Thank you."
-     * Panel / Symbol Mismatch:
-       "TO THE JM: Panels [X] are mentioned in the caption for Figure [Y] but are not found in the artwork. Please check and amend as necessary.
+     The file is in pending status until the matter is resolved. Thank you."
+   * Given Name / Surname Clarification:
+     "TO THE JM: Please confirm if \\"[Name A]\\" is the given name and \\"[Name B]\\" is the surname to ensure correct indexing.
 
-       The file is in pending status until the matter is resolved. Thank you."
+     The file is in pending status until the matter is resolved. Thank you."
+   * Title Change:
+     "TO THE JM: The author has provided a revised article title: \\"[New Title]\\". Kindly validate this change. If affirmed, kindly update the coversheet accordingly reflecting the revised article title.
+
+     The file is in pending status until the matter is resolved. Thank you."
+   * Replacement Figure — Scenario A (author gave detail/reason for the change):
+     "TO THE JM: The author has provided a replacement for [Figure X] that includes content changes compared to the current version. The author notes that [summarize the author's stated reason]. Please confirm if we can use this replacement image.
+
+     The file is in pending status until the matter is resolved. Thank you."
+   * Replacement Figure — Scenario B (no reason given):
+     "TO THE JM: The author provided a replacement for [Figure X]. However, it's unclear whether the reason for this replacement is quality improvement, the addition or removal of elements, or changed content. Could you please validate if we can proceed with the new version?
+
+     The file is in pending status until the matter is resolved. Thank you."
+   * Replacement Figure — Scenario C (technical fault, e.g. pixelated, cutoff, unconverted characters, blurry/overlapping data, unusable format):
+     "TO THE JM: The replacement provided for [Figure X] is unusable in its present format due to [pixelated text / cutoff data / unconverted characters / blurry and overlapping data — pick what applies]. Kindly ask the author to resupply the figure in an acceptable format (PDF, TIF, or high-resolution JPG).
+
+     The file is in pending status until the matter is resolved. Thank you."
+   * Uncited Reference / Figure / Table (choose tone per context):
+     - Direct: "TO THE JM: Kindly ask the author to provide citations for [Reference/Figure/Table X] in the text body or confirm if this could be deleted."
+     - Soft: "TO THE JM: Kindly assist the author in providing citations for [Reference/Figure/Table X] in the text body or confirm if they may be removed."
+     - Neutral: "TO THE JM: The following [Reference/Figure/Table X] is currently uncited in the text body. Please verify with the author whether a citation is needed or if it may be deleted."
+     Append the pending clause after any of these.
+   * Panel Label Mismatch:
+     "TO THE JM: Panels [X] are mentioned in the caption for Figure [Y] but are not found in the artwork. Please check and amend as necessary.
+
+     The file is in pending status until the matter is resolved. Thank you."
+   * Symbol Mismatch:
+     "TO THE JM: '[Symbol A]' is mentioned in the caption but '[Symbol B]' is present in the artwork. Please check and amend as necessary.
+
+     The file is in pending status until the matter is resolved. Thank you."
+   * Coversheet Update (figures/tables/schemes/GA count changes, or title changes):
+     Append: "If affirmed, kindly update the coversheet accordingly reflecting [X] physical figures/tables/schemes/GA." (or the revised title, as applicable). This is MANDATORY whenever the number of figures/tables/schemes/GA changes, or the article title changes — but NOT for author list changes.
+   * Grant / Funding Discrepancy:
+     "TO THE JM: There is a discrepancy in the funding information provided — [describe discrepancy, e.g. grant number mismatch, sponsor not stated]. Kindly confirm the correct funding details with the author.
+
+     The file is in pending status until the matter is resolved. Thank you."
+
+   OUTPUT REQUIREMENTS FOR JM QUERIES:
+   - When the user is clearly asking for a JM query (describing an issue, pasting raw notes, or asking to refine a previous query with feedback), output ONLY the final query in the TO THE JM: format — no preamble, no "Here's your query:", no explanations before or after.
+   - If the user is refining a previously generated query with feedback, regenerate the full query incorporating that feedback while still following all rules above — do not just append the feedback as a note.
 
 3. DASHBOARD-ONLY TOOL ROUTING DIRECTIVE (STRICT CONSTRAINT):
    - You MUST ONLY recommend and route users to the 17 established production tools present on the Workspace Dashboard:
