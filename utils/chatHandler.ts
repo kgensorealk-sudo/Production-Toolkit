@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI } from '@google/genai';
+import OpenAI from 'openai';
 import {
   CANDIDATE_MODELS,
   sanitizeOutput,
@@ -27,6 +28,14 @@ function getGeminiClient(): GoogleGenAI | null {
   });
 }
 
+function getOpenAIClient(): OpenAI | null {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return null;
+  }
+  return new OpenAI({ apiKey });
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Setup standard CORS headers for cross-origin and Vercel preview environments
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -48,8 +57,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Messages array is required.' });
     }
 
-    const ai = getGeminiClient();
-    if (!ai) {
+    const geminiClient = getGeminiClient();
+    const openaiClient = getOpenAIClient();
+
+    // If NEITHER provider has a key configured, go straight to the offline engine —
+    // there's nothing live to even attempt.
+    if (!geminiClient && !openaiClient) {
       const lastUserMessage = [...messages].reverse().find((m: any) => m.role === 'user');
       const offlineReply = lastUserMessage
         ? generateOfflineKeeperResponse(lastUserMessage.content || '', context)
@@ -57,16 +70,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({
         reply: sanitizeOutput(offlineReply),
         modelUsed: 'offline-keeper',
-        note: 'GEMINI_API_KEY not configured. Running in Offline Editorial Engine mode.',
+        note: 'No AI provider API keys configured (GEMINI_API_KEY / OPENAI_API_KEY). Running in Offline Editorial Engine mode.',
       });
     }
 
     const systemInstruction = buildKeeperSystemInstruction(context);
 
-    const contents = messages.map((m: { role: string; content: string }) => ({
+    // Gemini-shaped message format.
+    const geminiContents = messages.map((m: { role: string; content: string }) => ({
       role: m.role === 'assistant' || m.role === 'model' ? 'model' : 'user',
       parts: [{ text: m.content }],
     }));
+
+    // OpenAI-shaped message format — system prompt is its own message, and
+    // roles are 'user' | 'assistant' rather than Gemini's 'user' | 'model'.
+    const openaiMessages = [
+      { role: 'system' as const, content: systemInstruction },
+      ...messages.map((m: { role: string; content: string }) => ({
+        role: (m.role === 'assistant' || m.role === 'model' ? 'assistant' : 'user') as 'assistant' | 'user',
+        content: m.content,
+      })),
+    ];
 
     // Per-model timeout budget. These must sum to comfortably less than the
     // function's maxDuration (30s in vercel.json) — otherwise a slow/hanging
@@ -83,35 +107,57 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let lastError: any = null;
 
     for (let i = 0; i < CANDIDATE_MODELS.length; i++) {
-      const model = CANDIDATE_MODELS[i];
+      const candidate = CANDIDATE_MODELS[i];
       const timeoutMs = TIMEOUT_BUDGET_MS[i] ?? 5000;
+
+      // Skip a candidate outright if its provider has no API key configured,
+      // rather than burning a timeout slot on a call we know will fail.
+      if (candidate.provider === 'gemini' && !geminiClient) continue;
+      if (candidate.provider === 'openai' && !openaiClient) continue;
+
       try {
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error(`Model ${model} request timed out after ${timeoutMs / 1000}s`)), timeoutMs)
+          setTimeout(
+            () => reject(new Error(`Model ${candidate.model} request timed out after ${timeoutMs / 1000}s`)),
+            timeoutMs
+          )
         );
-        const modelPromise = ai.models.generateContent({
-          model,
-          contents,
-          config: {
-            systemInstruction,
-            // NOTE: temperature/top_p/top_k intentionally omitted. Gemini 3.x models
-            // (gemini-3.7-flash, and gemini-flash-latest when it points at a 3.x build)
-            // do not support these legacy sampling parameters — sending them was causing
-            // every call to those two models to fail, silently pushing every request down
-            // to gemini-3.1-flash-lite or the offline fallback engine. If output consistency
-            // becomes an issue again, use the model's thinking_level parameter instead.
-          },
-        });
 
-        const response: any = await Promise.race([modelPromise, timeoutPromise]);
+        let text = '';
 
-        if (response?.text) {
-          reply = response.text;
-          activeModel = model;
+        if (candidate.provider === 'gemini') {
+          const modelPromise = geminiClient!.models.generateContent({
+            model: candidate.model,
+            contents: geminiContents,
+            config: {
+              systemInstruction,
+              // NOTE: temperature/top_p/top_k intentionally omitted. Gemini 3.x models
+              // (gemini-3.7-flash, and gemini-flash-latest when it points at a 3.x build)
+              // do not support these legacy sampling parameters — sending them was causing
+              // every call to those two models to fail, silently pushing every request down
+              // to gemini-3.1-flash-lite or the offline fallback engine. If output consistency
+              // becomes an issue again, use the model's thinking_level parameter instead.
+            },
+          });
+          const response: any = await Promise.race([modelPromise, timeoutPromise]);
+          text = response?.text || '';
+        } else {
+          // OpenAI provider
+          const modelPromise = openaiClient!.chat.completions.create({
+            model: candidate.model,
+            messages: openaiMessages,
+          });
+          const response: any = await Promise.race([modelPromise, timeoutPromise]);
+          text = response?.choices?.[0]?.message?.content || '';
+        }
+
+        if (text) {
+          reply = text;
+          activeModel = candidate.model;
           break;
         }
       } catch (modelErr: any) {
-        console.warn(`[AI Copilot - Vercel] Model ${model} encountered error:`, modelErr?.message || modelErr);
+        console.warn(`[AI Copilot - Vercel] Model ${candidate.model} (${candidate.provider}) encountered error:`, modelErr?.message || modelErr);
         lastError = modelErr;
       }
     }
@@ -130,7 +176,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.json({ reply: sanitizeOutput(reply), modelUsed: activeModel });
   } catch (err: any) {
-    console.error('Gemini API Error (Vercel):', err);
+    console.error('AI Copilot API Error (Vercel):', err);
     const context = req.body?.context;
     const lastUserMessage = Array.isArray(req.body?.messages)
       ? [...req.body.messages].reverse().find((m: any) => m.role === 'user')

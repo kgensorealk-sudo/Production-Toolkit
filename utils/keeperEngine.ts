@@ -9,11 +9,18 @@
  * gemini-3.1-flash-lite (cheapest/weakest) almost always "won" and gemini-3.7-flash
  * (best) was rarely reached. Strongest model now goes first; weaker models are
  * true fallbacks for when the strong model is down or rate-limited.
+ *
+ * Each candidate now also declares its provider. This used to be an all-Gemini
+ * chain, which meant a single Google-side outage or quota exhaustion (see: the
+ * "free tier, 20 requests/day" incident) could take out every fallback at once,
+ * since gemini-flash-latest shared the same quota bucket as gemini-3.7-flash.
+ * The second slot is now OpenAI — a genuinely independent provider with its own
+ * billing/quota — so a Gemini-side outage no longer kills the whole chain.
  */
-export const CANDIDATE_MODELS = [
-  'gemini-3.7-flash',      // strongest — try first
-  'gemini-flash-latest',   // solid mid-tier fallback
-  'gemini-3.1-flash-lite', // cheapest/fastest — last resort only
+export const CANDIDATE_MODELS: { provider: 'gemini' | 'openai'; model: string }[] = [
+  { provider: 'gemini', model: 'gemini-3.7-flash' },      // strongest — try first
+  { provider: 'openai', model: 'gpt-5.4-mini' },           // independent provider — real backup, not a shared-quota illusion
+  { provider: 'gemini', model: 'gemini-3.1-flash-lite' },  // cheapest/fastest Gemini — last resort only
 ];
 
 /**
@@ -556,5 +563,3 @@ CRITICAL DIRECTIVES:
 
 ${context ? `Current user workspace context:\n${context}` : ''}`;
 };
-
-
