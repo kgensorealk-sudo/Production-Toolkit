@@ -5,7 +5,7 @@ import {
   sanitizeOutput,
   generateOfflineKeeperResponse,
   buildKeeperSystemInstruction,
-} from './keeperEngine';
+} from './keeperEngine.js';
 
 export const config = {
   runtime: 'nodejs',

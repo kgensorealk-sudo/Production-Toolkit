@@ -6,4 +6,4 @@
 // api/chat.ts's import path here verbatim — '../utils/chatHandler' from this
 // location resolves to the nonexistent api/utils/chatHandler and will crash
 // with ERR_MODULE_NOT_FOUND at runtime.
-export { default, config } from '../../utils/chatHandler';
+export { default, config } from '../../utils/chatHandler.js';
