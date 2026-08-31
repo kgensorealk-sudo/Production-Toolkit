@@ -1,11 +1,9 @@
-// Thin re-export only. The real handler used to live here, but api/ai/chat.ts
-// imported it as `../chat`, which is one API route importing another API route
-// as a module. Vercel bundles every file directly under /api as its own isolated
-// serverless function, so that cross-function import was never reliable — it
-// broke in production with:
-//   Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/var/task/api/chat'
-//     imported from /var/task/api/ai/chat.js
-// The actual implementation now lives in utils/chatHandler.ts (outside /api,
-// so it isn't itself treated as a route) and both api/chat.ts and
-// api/ai/chat.ts import it from there instead of from each other.
-export { default, config } from '../utils/chatHandler';
+// Thin re-export only — see api/chat.ts for the full explanation. Both routes
+// import the real handler from utils/chatHandler.ts instead of from each other.
+//
+// IMPORTANT: this file lives one folder deeper than api/chat.ts (api/ai/ vs api/),
+// so it needs an EXTRA "../" to reach the root-level utils/ folder. Do not copy
+// api/chat.ts's import path here verbatim — '../utils/chatHandler' from this
+// location resolves to the nonexistent api/utils/chatHandler and will crash
+// with ERR_MODULE_NOT_FOUND at runtime.
+export { default, config } from '../../utils/chatHandler';
