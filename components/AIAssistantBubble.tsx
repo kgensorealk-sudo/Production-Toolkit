@@ -1210,7 +1210,10 @@ ${userAuthContext}`;
                                                                         },
                                                                         code({ className, children, ...props }: any) {
                                                                             const codeContent = String(children).replace(/\n$/, '');
-                                                                            const isJMQuery = codeContent.startsWith('TO THE JM:') || codeContent.includes('TO THE JM:');
+                                                                            // Require the block to actually START with the phrase (after trimming),
+                                                                            // not just contain it anywhere — same false-positive fix as the prose
+                                                                            // version below, applied here for consistency.
+                                                                            const isJMQuery = codeContent.trim().startsWith('TO THE JM:');
 
                                                                             if (isJMQuery) {
                                                                                 const isCopied = copiedId === message.id;
@@ -1265,13 +1268,23 @@ ${userAuthContext}`;
                                                                 </span>
                                                             )}
 
-                                                            {/* One-click copy for general messages containing queries if not already formatted in a code card */}
-                                                            {!currentlyTypingId && cleanContent && !cleanContent.includes('```') && cleanContent.includes('TO THE JM:') && (
+                                                            {/* One-click copy for general messages containing queries if not already formatted in a code card.
+                                                                NOTE: this must check that the message actually STARTS with "TO THE JM:" (after trimming),
+                                                                not just that the phrase appears somewhere inside it. A plain .includes() check was
+                                                                showing this button on any message that merely mentioned or explained the "TO THE JM:"
+                                                                format (e.g. answering "how should a JM query be formatted?"), even when no real query
+                                                                was present to copy. */}
+                                                            {!currentlyTypingId && cleanContent && !cleanContent.includes('```') && cleanContent.trim().startsWith('TO THE JM:') && (
                                                                 <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-end">
                                                                     <button
                                                                         onClick={() => {
-                                                                            const match = cleanContent.match(/TO THE JM:[\s\S]*?(?:File is on pending status until matter is resolved\. Thank you\.|$)/);
-                                                                            const textToCopy = match ? match[0] : cleanContent;
+                                                                            // NOTE: closing clause text corrected to match what Keeper actually outputs
+                                                                            // ("The file is in pending status until the matter is resolved. Thank you.") —
+                                                                            // it previously read "File is on pending status until matter is resolved.",
+                                                                            // which never matched, so this silently fell through to copying everything
+                                                                            // to the end of the message instead of stopping at the query's natural end.
+                                                                            const match = cleanContent.match(/TO THE JM:[\s\S]*?(?:The file is in pending status until the matter is resolved\. Thank you\.|$)/i);
+                                                                            const textToCopy = match ? match[0].trim() : cleanContent;
                                                                             copyToClipboard(textToCopy, `query-${message.id}`);
                                                                         }}
                                                                         className="px-2.5 py-1 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-900 text-[10.5px] font-bold flex items-center gap-1.5 transition-all border border-indigo-200 cursor-pointer shadow-xs"
