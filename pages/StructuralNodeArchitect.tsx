@@ -181,16 +181,29 @@ const StructuralNodeArchitect: React.FC = () => {
             // Pages
             if (!pages) {
                 const pagesNode = host.getElementsByTagName("sb:pages")[0] || host.getElementsByTagName("ce:pages")[0];
-                if (pagesNode) {
-                    pages = pagesNode.textContent?.trim() || "";
-                } else {
-                    const firstPage = host.getElementsByTagName("sb:first-page")[0]?.textContent?.trim() || host.getElementsByTagName("ce:first-page")[0]?.textContent?.trim() || "";
-                    const lastPage = host.getElementsByTagName("sb:last-page")[0]?.textContent?.trim() || host.getElementsByTagName("ce:last-page")[0]?.textContent?.trim() || "";
-                    if (firstPage && lastPage) {
-                        pages = `${firstPage}–${lastPage}`;
-                    } else if (firstPage) {
-                        pages = firstPage;
+                const firstPage = host.getElementsByTagName("sb:first-page")[0]?.textContent?.trim() || host.getElementsByTagName("ce:first-page")[0]?.textContent?.trim() || "";
+                const lastPage = host.getElementsByTagName("sb:last-page")[0]?.textContent?.trim() || host.getElementsByTagName("ce:last-page")[0]?.textContent?.trim() || "";
+
+                if (firstPage && lastPage) {
+                    pages = `${firstPage}–${lastPage}`;
+                } else if (pagesNode) {
+                    // Check if pagesNode contains nested first-page/last-page
+                    const innerFirst = pagesNode.getElementsByTagName("sb:first-page")[0]?.textContent?.trim() || pagesNode.getElementsByTagName("ce:first-page")[0]?.textContent?.trim() || "";
+                    const innerLast = pagesNode.getElementsByTagName("sb:last-page")[0]?.textContent?.trim() || pagesNode.getElementsByTagName("ce:last-page")[0]?.textContent?.trim() || "";
+                    if (innerFirst && innerLast) {
+                        pages = `${innerFirst}–${innerLast}`;
+                    } else if (innerFirst) {
+                        pages = innerFirst;
+                    } else {
+                        let rawPages = pagesNode.textContent?.trim() || "";
+                        // If pages has raw consecutive numbers without dash or hyphen (e.g. 123-321 or split), ensure standard en-dash
+                        if (/^(\d+)[-\u2010\u2011\u2012\u2013\u2014\u2015\s]+(\d+)$/.test(rawPages)) {
+                            rawPages = rawPages.replace(/^(\d+)[-\u2010\u2011\u2012\u2013\u2014\u2015\s]+(\d+)$/, '$1–$2');
+                        }
+                        pages = rawPages;
                     }
+                } else if (firstPage) {
+                    pages = firstPage;
                 }
             }
 
@@ -1236,7 +1249,7 @@ const StructuralNodeArchitect: React.FC = () => {
                 });
             } else {
                 setToast({ 
-                    msg: 'XML schema verified: All references conform to Elsevier DTD with no modifications needed.', 
+                    msg: 'XML schema verified: All references conform to standard DTD with no modifications needed.', 
                     type: 'info' 
                 });
             }
@@ -1666,7 +1679,7 @@ const StructuralNodeArchitect: React.FC = () => {
                         </div>
                         <div>
                             <h1 className="text-xl font-bold tracking-tight text-slate-800">Reference Structure Repair <span className="text-indigo-600">v3.2</span></h1>
-                            <p className="text-xs font-medium text-slate-400 uppercase tracking-widest">Elsevier Reference Repair Protocol</p>
+                            <p className="text-xs font-medium text-slate-400 uppercase tracking-widest">Journal XML Reference Repair Protocol</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-3">
@@ -1882,7 +1895,7 @@ const StructuralNodeArchitect: React.FC = () => {
                                     Architect Mode
                                 </h4>
                                 <p className="text-xs text-indigo-100 leading-relaxed">
-                                    The protocol is currently optimized for Elsevier XML standards. All repairs are validated against DTD schemas.
+                                    The protocol is currently optimized for standard Journal XML DTD schemas. All repairs are validated in-engine.
                                 </p>
                             </div>
 
@@ -2195,12 +2208,12 @@ const StructuralNodeArchitect: React.FC = () => {
                                                                     </span>
                                                                 </div>
                                                                 <p className="text-[11px] text-teal-800 leading-relaxed font-medium">
-                                                                    Standard deterministic Elsevier DTD repairs (direct DOI capture, empty tag pruning, contributor <code className="bg-teal-100/80 px-1 py-0.2 rounded font-mono text-[10px]">langtype='iso'</code>, author initials). Applied automatically during execution.
+                                                                    Standard deterministic Journal DTD repairs (direct DOI capture, empty tag pruning, contributor <code className="bg-teal-100/80 px-1 py-0.2 rounded font-mono text-[10px]">langtype='iso'</code>, author initials). Applied automatically during execution.
                                                                 </p>
                                                             </div>
                                                             <div className="pt-2 border-t border-teal-200/60 flex items-center gap-1.5 text-[11px] text-teal-700 font-bold">
                                                                 <CheckCircle className="w-3.5 h-3.5 text-teal-600" />
-                                                                <span>No confirmation needed — fully compliant with Elsevier DTD</span>
+                                                                <span>No confirmation needed — fully compliant with Journal DTD</span>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -2557,7 +2570,7 @@ const StructuralNodeArchitect: React.FC = () => {
                                                                             </div>
                                                                         ))
                                                                     ) : (
-                                                                        <p className="text-xs text-slate-400 font-medium">All structural nodes conform to Elsevier DTD standards.</p>
+                                                                        <p className="text-xs text-slate-400 font-medium">All structural nodes conform to standard DTD standards.</p>
                                                                     )}
                                                                 </div>
 
@@ -2723,7 +2736,7 @@ const StructuralNodeArchitect: React.FC = () => {
                                                                 </span>
                                                             </div>
                                                             <p className="text-[11px] text-slate-600 font-medium mt-0.5">
-                                                                Automated repair protocol corrected tags, links, and schemas to conform with Elsevier DTD standards.
+                                                                Automated repair protocol corrected tags, links, and schemas to conform with standard DTD specifications.
                                                             </p>
                                                         </div>
                                                     </div>
@@ -2829,7 +2842,7 @@ const StructuralNodeArchitect: React.FC = () => {
                                                 <div className="flex items-center gap-2">
                                                     <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                                                     <span className="text-xs font-bold text-emerald-900">No XML Modifications Required</span>
-                                                    <span className="text-[11px] text-emerald-700/80 font-medium">— All input references already conform to Elsevier DTD standards.</span>
+                                                    <span className="text-[11px] text-emerald-700/80 font-medium">— All input references already conform to standard DTD specifications.</span>
                                                 </div>
                                             </div>
                                         )}
