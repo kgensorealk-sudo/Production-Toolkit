@@ -39,7 +39,46 @@ interface Message {
     role: 'user' | 'assistant';
     content: string;
     timestamp: number;
+    /** Which backend produced this reply — e.g. 'gemini-3.7-flash', 'gpt-5.4-mini',
+     *  or one of the offline-engine variants ('offline-keeper', 'offline-keeper-fallback',
+     *  'offline-keeper-recovery'). Undefined for user messages and legacy stored messages. */
+    modelUsed?: string;
 }
+
+/**
+ * Turns a raw modelUsed string from the API (or the client-side offline catch path)
+ * into a short display label plus whether it represents a degraded/offline answer.
+ * This exists so the UI never has to hardcode a provider name again — previously the
+ * header always said "Gemini AI" regardless of which model (or the offline engine)
+ * actually generated the reply, because data.modelUsed from the API was being discarded.
+ */
+export const getModelBadgeInfo = (modelUsed?: string): { label: string; isOffline: boolean } => {
+    if (!modelUsed) {
+        return { label: 'Editorial AI', isOffline: false };
+    }
+    if (modelUsed.startsWith('offline-keeper')) {
+        return { label: 'Offline Engine', isOffline: true };
+    }
+    if (modelUsed.startsWith('gemini')) {
+        return { label: 'Gemini AI', isOffline: false };
+    }
+    if (modelUsed.startsWith('gpt')) {
+        return { label: 'OpenAI', isOffline: false };
+    }
+    return { label: modelUsed, isOffline: false };
+};
+
+/**
+ * Formats a message timestamp for display under a chat bubble — just the local
+ * time (e.g. "2:41 PM"), since the date is already implied by the daily-reset behavior.
+ */
+export const formatMessageTime = (timestamp: number): string => {
+    try {
+        return new Date(timestamp).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    } catch (e) {
+        return '';
+    }
+};
 
 interface AIAssistantBubbleProps {
     currentTool?: ToolId;
@@ -634,7 +673,8 @@ ${userAuthContext}`;
                 id: assistantMessageId,
                 role: 'assistant',
                 content: '',
-                timestamp: Date.now()
+                timestamp: Date.now(),
+                modelUsed: data.modelUsed
             };
 
             // Switch from "sniffing out" spinner to active typing simulation
@@ -679,7 +719,8 @@ ${userAuthContext}`;
                 id: assistantMessageId,
                 role: 'assistant',
                 content: '',
-                timestamp: Date.now()
+                timestamp: Date.now(),
+                modelUsed: 'offline-keeper'
             };
 
             setIsLoading(false);
@@ -727,6 +768,11 @@ ${userAuthContext}`;
 
     const isPositionMoved = position.x !== 0 || position.y !== 0;
     const currentDogGreeting = getTimeOfDayDogGreeting();
+
+    // Most recent assistant reply's model info — replaces the old hardcoded "Gemini AI"
+    // label, which never reflected what actually answered (Gemini, OpenAI, or offline).
+    const lastAssistantMessage = [...messages].reverse().find(m => m.role === 'assistant');
+    const lastModelBadge = getModelBadgeInfo(lastAssistantMessage?.modelUsed);
 
     return (
         <>
@@ -985,7 +1031,10 @@ ${userAuthContext}`;
                                             <span>Active Module Context:</span>
                                             <strong className="text-slate-800 font-bold">{currentToolInfo?.name || currentTool}</strong>
                                         </span>
-                                        <span className="text-[9px] text-slate-400">Gemini AI</span>
+                                        <span className={`text-[9px] font-semibold flex items-center gap-1 ${lastModelBadge.isOffline ? 'text-amber-600' : 'text-slate-400'}`} title={lastModelBadge.isOffline ? 'This mode uses Keeper\'s built-in offline rules engine instead of a live AI model' : undefined}>
+                                            {lastModelBadge.isOffline && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />}
+                                            <span>{lastModelBadge.label}</span>
+                                        </span>
                                     </div>
                                 )
                             )}
@@ -1319,6 +1368,29 @@ ${userAuthContext}`;
                                                         </div>
                                                     )}
                                                 </div>
+
+                                                {/* Timestamp & Model Source Footer — hidden while actively typing to avoid clutter.
+                                                    Shows which model actually answered (Gemini / OpenAI / Offline Engine) per message,
+                                                    since the old static "Gemini AI" header label never reflected this. */}
+                                                {!(message.role === 'assistant' && currentlyTypingId === message.id) && (
+                                                    <div className={`mt-1 px-1 flex items-center gap-1.5 text-[9px] text-slate-400 select-none ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
+                                                        <span>{formatMessageTime(message.timestamp)}</span>
+                                                        {!isUser && message.modelUsed && (() => {
+                                                            const badge = getModelBadgeInfo(message.modelUsed);
+                                                            return badge.isOffline ? (
+                                                                <span
+                                                                    className="flex items-center gap-1 text-amber-600 font-semibold"
+                                                                    title="Answered by Keeper's offline rules engine, not a live AI model"
+                                                                >
+                                                                    <span className="w-1 h-1 rounded-full bg-amber-500" />
+                                                                    <span>{badge.label}</span>
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-slate-400">· {badge.label}</span>
+                                                            );
+                                                        })()}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     );
