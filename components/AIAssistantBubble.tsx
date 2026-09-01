@@ -330,6 +330,7 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
     });
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const messagesContainerRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const typingControllerRef = useRef<TypingSimulatorController | null>(null);
 
@@ -406,24 +407,40 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
         };
     }, []);
 
-    // Auto-scroll to bottom of chat
+    // Auto-scroll helpers
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
 
+    const scrollToTop = () => {
+        if (messagesContainerRef.current) {
+            messagesContainerRef.current.scrollTop = 0;
+        }
+    };
+
     useEffect(() => {
         if (isOpen) {
-            scrollToBottom();
             setHasUnread(prev => (prev ? false : prev));
-            const timer = setTimeout(() => {
-                textareaRef.current?.focus();
-            }, 150);
-            return () => clearTimeout(timer);
+            if (messages.length === 0) {
+                // When opening an empty or fresh conversation, ensure scroll starts at the top to see Keeper's face
+                scrollToTop();
+                const timer = setTimeout(() => {
+                    scrollToTop();
+                    textareaRef.current?.focus({ preventScroll: true });
+                }, 80);
+                return () => clearTimeout(timer);
+            } else {
+                scrollToBottom();
+                const timer = setTimeout(() => {
+                    textareaRef.current?.focus({ preventScroll: true });
+                }, 100);
+                return () => clearTimeout(timer);
+            }
         }
     }, [isOpen]);
 
     useEffect(() => {
-        if (isOpen) {
+        if (isOpen && messages.length > 0) {
             scrollToBottom();
         }
     }, [isOpen, messages.length]);
@@ -555,7 +572,8 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
         setResetNotice('Chat refreshed! Keeper is ready for your next manuscript task. 🐾');
         setTimeout(() => setResetNotice(null), 3000);
         setTimeout(() => {
-            textareaRef.current?.focus();
+            scrollToTop();
+            textareaRef.current?.focus({ preventScroll: true });
         }, 100);
     };
 
@@ -1043,17 +1061,17 @@ ${userAuthContext}`;
                             )}
 
                             {/* Messages Chat Stream / Conversation Area */}
-                            <div className="flex-grow overflow-y-auto p-4 custom-scrollbar space-y-4 bg-white">
+                            <div ref={messagesContainerRef} className="flex-grow overflow-y-auto p-4 custom-scrollbar space-y-4 bg-white">
                                 {messages.length === 0 ? (
-                                    <div className="flex flex-col items-center text-center px-4 pt-6 pb-6 my-auto">
+                                    <div className="flex flex-col items-center text-center px-4 pt-4 pb-6">
                                         {/* Contact Circular Profile Picture */}
-                                        <div className="relative mb-4 shrink-0">
+                                        <div className="relative mb-3.5 shrink-0">
                                             <div className="w-20 h-20 rounded-full overflow-hidden shadow-xl border-3 border-indigo-400/80 bg-slate-950 mx-auto ring-4 ring-indigo-100/80">
                                                 <img 
-                                                    src={keeperAvatar} 
-                                                    alt="Keeper" 
-                                                    referrerPolicy="no-referrer" 
-                                                    className="w-full h-full object-cover object-[center_30%]" 
+                                                     src={keeperAvatar} 
+                                                     alt="Keeper" 
+                                                     referrerPolicy="no-referrer" 
+                                                     className="w-full h-full object-cover object-[center_20%]" 
                                                 />
                                             </div>
                                             <span className="absolute bottom-0.5 right-0.5 bg-emerald-500 text-white w-5 h-5 rounded-full text-[10px] flex items-center justify-center shadow-md ring-2 ring-white font-bold z-10" title="Keeper is online and ready">
