@@ -57,13 +57,16 @@ export const getModelBadgeInfo = (modelUsed?: string): { label: string; isOfflin
         return { label: 'Editorial AI', isOffline: false };
     }
     if (modelUsed.startsWith('offline-keeper')) {
-        return { label: 'Offline Engine', isOffline: true };
+        return { label: '😴 Lazy Mode (Offline)', isOffline: true };
     }
-    if (modelUsed.startsWith('gemini')) {
-        return { label: 'Gemini AI', isOffline: false };
+    if (modelUsed === 'gpt-4o' || modelUsed === 'gpt-4o-mini') {
+        return { label: `OpenAI (${modelUsed})`, isOffline: false };
     }
     if (modelUsed.startsWith('gpt')) {
-        return { label: 'OpenAI', isOffline: false };
+        return { label: 'OpenAI GPT', isOffline: false };
+    }
+    if (modelUsed.startsWith('gemini')) {
+        return { label: `Gemini (${modelUsed.replace('gemini-', '')})`, isOffline: false };
     }
     return { label: modelUsed, isOffline: false };
 };
@@ -101,28 +104,28 @@ export const getTimeOfDayDogGreeting = (date: Date = new Date()): DogGreetingInf
             period: 'morning',
             timeLabel: 'Morning Shift',
             greeting: 'Good morning!',
-            tagline: 'Ready for today\'s editorial proofs!'
+            tagline: 'Ears perked and ready for today\'s editorial proofs!'
         };
     } else if (hour >= 12 && hour < 17) {
         return {
             period: 'afternoon',
             timeLabel: 'Afternoon Shift',
             greeting: 'Good afternoon!',
-            tagline: 'Ready to power through proofs and clean up citations!'
+            tagline: 'Paws on keyboard — ready to power through proofs and citations!'
         };
     } else if (hour >= 17 && hour < 22) {
         return {
             period: 'evening',
             timeLabel: 'Evening Shift',
             greeting: 'Good evening!',
-            tagline: 'Ready to double-check references and tags before sign-off!'
+            tagline: 'Double-checking references and tags before final sign-off!'
         };
     } else {
         return {
             period: 'night',
             timeLabel: 'Late Night Shift',
             greeting: 'Good evening!',
-            tagline: 'Ready to assist with late-night production proofing!'
+            tagline: 'Loyal night watch — ready for late-night production proofing!'
         };
     }
 };
@@ -138,7 +141,7 @@ export const getTodayDateKey = (date: Date = new Date()): string => {
 };
 
 /**
- * Generates the clean, direct editorial welcome message for Keeper.
+ * Generates the clean, charming editorial welcome message for Keeper.
  */
 export const generateKeeperWelcomeMessage = (): Message => {
     const hour = new Date().getHours();
@@ -151,30 +154,30 @@ export const generateKeeperWelcomeMessage = (): Message => {
         timeGreeting = "Good evening";
     }
 
-    const content = `### **${timeGreeting}. Welcome to Production Toolkit Pro.**
+    const content = `### **${timeGreeting}! 🐾 Keeper at your service.**
 
-I am **Keeper**, your Editorial AI Assistant for journal production, XML markup, and Journal Manager (JM) query drafting.
+I'm your trusty Japanese Spitz Editorial AI companion — equipped with a keen nose for broken citations, malformed XML nodes, and tricky Journal Manager (JM) queries!
 
 ---
 
-#### **Core Editorial Capabilities**
+#### **What We Can Tackle Together:**
 
-**1. Standardized Journal Manager (JM) Queries**
-Formulate clear, protocol-compliant queries for editorial decision-making:
+**1. 📝 Standardized Journal Manager (JM) Queries**
+Formulate protocol-compliant queries ready for the JM:
 * **Authorship & Order Changes:** *Query to JM: The authors requested to exchange the positions of the second and third authors (Yiqi Wang and Wei Peng). A signed authorship change form has been submitted to the journal.*
 * **Author Name Corrections:** *Query to JM: Author requested to change the author name from [Original] to [Amended]*
 * **Corresponding Author Email:** *Query to JM: Corresponding author email address is required, so either disregard or let the author provide*
 * **Figure & Artwork Updates:** *Query to JM: The author provided a replacement for Figure 3 with data changes*
 * **Uncited Citations:** *Query to JM: Reference [14] is uncited in the text body*
 
-**2. DTD v5.6 & JATS XML Specifications**
-* Guidance on \`<sb:reference>\` structures, \`<ce:cross-ref>\` linking, CRediT contributor taxonomy, and table footnotes.
+**2. 🏷️ Journal XML & Structure Specifications**
+* Assistance with \`<sb:reference>\` structures, \`<ce:cross-ref>\` linking, CRediT contributor taxonomy, grant tags, and table footnotes.
 
-**3. Workflow Navigation & Tool Discovery**
-* Identify and direct you to the ideal tool for citation renumbering, reference linking, or text-to-XML conversion.
+**3. 🧭 Workflow Navigation & Tool Discovery**
+* Let me fetch the exact tool you need among our 17 production modules for reference renumbering, citation linking, or MS Word conversion!
 
 ---
-*Select a quick scenario below or enter your query details in the prompt box.*`;
+*Pick a quick prompt below or paste raw author notes directly into the box! 🐾*`;
 
     return {
         id: `init-welcome-${Date.now()}`,
@@ -786,7 +789,7 @@ ${userAuthContext}`;
                         className="fixed bottom-6 right-6 z-50 pointer-events-auto max-w-sm p-3.5 rounded-2xl bg-slate-900/95 text-white shadow-2xl border border-indigo-500/40 backdrop-blur-md flex items-start gap-3"
                     >
                         <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 border border-indigo-300 shadow-xs bg-slate-800">
-                            <img src={keeperAvatar} alt="Keeper Dog Mascot" className="w-full h-full object-cover" />
+                            <img src={keeperAvatar} alt="Keeper Dog Mascot" className="w-full h-full object-cover object-[center_12%]" />
                         </div>
                         <div className="flex-1 text-xs">
                             <p className="font-bold text-indigo-200 flex items-center gap-1.5">
@@ -835,51 +838,51 @@ ${userAuthContext}`;
                             <header 
                                 onMouseDown={handleDragStart}
                                 onTouchStart={handleDragStart}
-                                className="px-3.5 py-2.5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-between shrink-0 shadow-xs select-none border-b border-indigo-900/50 cursor-grab active:cursor-grabbing group/header"
+                                className="relative z-20 px-4 py-3 bg-slate-900 text-white flex items-center justify-between shrink-0 shadow-md select-none border-b border-slate-800 cursor-grab active:cursor-grabbing group/header"
                                 title="Click and drag to move floater anywhere on screen"
                             >
-                                <div className="flex items-center gap-2.5">
+                                <div className="flex items-center gap-3 min-w-0 flex-1">
                                     {/* Drag grip icon */}
-                                    <div className="text-slate-400 group-hover/header:text-indigo-300 transition-colors p-0.5" title="Drag to move">
+                                    <div className="text-slate-500 group-hover/header:text-slate-300 transition-colors shrink-0" title="Drag to move">
                                         <GripHorizontal className="w-4 h-4" />
                                     </div>
 
-                                    {/* Avatar */}
-                                    <div className="relative w-8 h-8 rounded-xl overflow-hidden border border-white/20 bg-indigo-900/50 shadow-inner shrink-0">
+                                    {/* Avatar with clear face framing & dedicated border */}
+                                    <div className="relative z-10 w-10 h-10 rounded-xl overflow-hidden border-2 border-indigo-400/50 bg-slate-950 shadow-md shrink-0 ring-1 ring-white/15">
                                         <img 
                                             src={keeperAvatar} 
-                                            alt="Keeper Japanese Spitz Dog Mascot" 
+                                            alt="Keeper Editorial Mascot" 
                                             referrerPolicy="no-referrer" 
-                                            className="w-full h-full object-cover object-center" 
+                                            className="w-full h-full object-cover object-[center_12%]" 
                                         />
-                                        <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-400 border border-slate-900" />
+                                        <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-slate-900 shadow-xs z-10" title="Online" />
                                     </div>
 
-                                    {/* Title and Time-of-day indicator */}
-                                    <div className="flex flex-col">
-                                        <div className="flex items-center gap-1.5">
-                                            <h3 className="text-xs font-black uppercase tracking-wider text-white flex items-center gap-1">
+                                    {/* Title and Status indicator */}
+                                    <div className="flex flex-col justify-center min-w-0 flex-1">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <h3 className="text-sm font-bold tracking-wide text-white flex items-center gap-1.5 leading-none">
                                                 <span>Keeper</span>
                                             </h3>
-                                            <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-indigo-500/30 text-indigo-200 border border-indigo-400/20 font-bold">
+                                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/25 text-indigo-200 border border-indigo-500/40 font-semibold leading-none">
                                                 Editorial AI
                                             </span>
-                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-[9px] font-bold text-emerald-300">
-                                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-400/30 text-[9px] font-semibold text-emerald-300 leading-none">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                                                 Active
                                             </span>
                                         </div>
-                                        <span className="text-[10px] text-slate-300/90 font-medium flex items-center gap-1">
+                                        <span className="text-[11px] text-slate-300 font-normal flex items-center gap-1.5 mt-1 truncate">
                                             {currentlyTypingId ? (
-                                                <span className="text-emerald-300 font-bold flex items-center gap-1 animate-pulse">
+                                                <span className="text-emerald-400 font-medium flex items-center gap-1.5">
                                                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
                                                     <span>🐾 Typing with paws...</span>
                                                 </span>
                                             ) : (
                                                 <>
-                                                    <span>🐾 {currentDogGreeting.timeLabel} Shift</span>
+                                                    <span>🐾 {currentDogGreeting.timeLabel}</span>
                                                     <span className="text-slate-500">•</span>
-                                                    <span className="text-indigo-200/80">Japanese Spitz</span>
+                                                    <span className="text-slate-300">Japanese Spitz Mascot</span>
                                                 </>
                                             )}
                                         </span>
@@ -887,28 +890,28 @@ ${userAuthContext}`;
                                 </div>
 
                                 {/* Header Action Controls */}
-                                <div className="flex items-center gap-1" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
-                                    {/* Reset Position (Snap back to bottom-right) */}
+                                <div className="flex items-center gap-1 shrink-0 ml-2" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
+                                    {/* Reset Position */}
                                     {isPositionMoved && (
                                         <button
                                             type="button"
                                             onClick={handleResetPosition}
                                             title="Snap back to bottom-right corner"
-                                            className="p-1.5 rounded-lg text-indigo-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer flex items-center gap-1 text-[10px]"
+                                            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer flex items-center gap-1 text-[11px]"
                                         >
                                             <Pin className="w-3.5 h-3.5" />
-                                            <span className="hidden sm:inline">Snap Corner</span>
+                                            <span className="hidden sm:inline">Snap</span>
                                         </button>
                                     )}
 
-                                    {/* Option to Reset Conversation */}
+                                    {/* Reset Conversation */}
                                     <button
                                         type="button"
                                         onClick={() => setShowResetConfirm(true)}
-                                        title="Reset Conversation (Clear chat history & start fresh)"
-                                        className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer flex items-center gap-1 text-[11px] font-semibold"
+                                        title="Clear chat history & start fresh"
+                                        className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer flex items-center gap-1 text-[11px]"
                                     >
-                                        <RotateCcw className="w-3.5 h-3.5 text-indigo-300" />
+                                        <RotateCcw className="w-3.5 h-3.5" />
                                         <span className="hidden sm:inline">Reset</span>
                                     </button>
 
@@ -917,7 +920,7 @@ ${userAuthContext}`;
                                         type="button"
                                         onClick={() => setIsExpanded(!isExpanded)}
                                         title={isExpanded ? 'Restore Normal Size' : 'Expand View'}
-                                        className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors hidden sm:block cursor-pointer"
+                                        className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors hidden sm:block cursor-pointer"
                                     >
                                         {isExpanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
                                     </button>
@@ -927,17 +930,17 @@ ${userAuthContext}`;
                                         type="button"
                                         onClick={() => setIsOpen(false)}
                                         title="Minimize to floating mascot"
-                                        className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                                        className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
                                     >
                                         <Minus className="w-4 h-4" />
                                     </button>
 
-                                    {/* Close floater completely */}
+                                    {/* Close floater */}
                                     <button
                                         type="button"
                                         onClick={handleCloseFloater}
-                                        title="Close Floater (Reopen from dog icon beside bell in top bar)"
-                                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-300 hover:bg-rose-500/20 transition-colors cursor-pointer"
+                                        title="Close Floater"
+                                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
                                     >
                                         <X className="w-4 h-4" />
                                     </button>
@@ -1042,29 +1045,29 @@ ${userAuthContext}`;
                             {/* Messages Chat Stream / Conversation Area */}
                             <div className="flex-grow overflow-y-auto p-4 custom-scrollbar space-y-4 bg-white">
                                 {messages.length === 0 ? (
-                                    <div className="h-full min-h-[320px] flex flex-col items-center justify-center text-center px-4 py-8 my-auto">
+                                    <div className="flex flex-col items-center text-center px-4 pt-6 pb-6 my-auto">
                                         {/* Contact Circular Profile Picture */}
-                                        <div className="relative mb-3.5">
-                                            <div className="w-20 h-20 rounded-full overflow-hidden shadow-lg border-2 border-indigo-200/90 bg-indigo-50 mx-auto ring-4 ring-indigo-50/60">
+                                        <div className="relative mb-4 shrink-0">
+                                            <div className="w-20 h-20 rounded-full overflow-hidden shadow-xl border-3 border-indigo-400/80 bg-slate-950 mx-auto ring-4 ring-indigo-100/80">
                                                 <img 
                                                     src={keeperAvatar} 
                                                     alt="Keeper" 
                                                     referrerPolicy="no-referrer" 
-                                                    className="w-full h-full object-cover" 
+                                                    className="w-full h-full object-cover object-[center_30%]" 
                                                 />
                                             </div>
-                                            <span className="absolute bottom-0 right-0 bg-emerald-500 text-white w-5 h-5 rounded-full text-[10px] flex items-center justify-center shadow-md ring-2 ring-white" title="Keeper is online and ready">
-                                                🐾
+                                            <span className="absolute bottom-0.5 right-0.5 bg-emerald-500 text-white w-5 h-5 rounded-full text-[10px] flex items-center justify-center shadow-md ring-2 ring-white font-bold z-10" title="Keeper is online and ready">
+                                                 🐾
                                             </span>
                                         </div>
 
                                         {/* Keeper Bold Title */}
-                                        <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
+                                        <h3 className="text-lg font-extrabold text-slate-900 tracking-tight">
                                             Keeper
                                         </h3>
 
                                         {/* Gray Status Line */}
-                                        <p className="text-xs text-slate-400 font-medium mt-0.5">
+                                        <p className="text-xs text-slate-500 font-medium mt-1">
                                             Your Furry Companion &amp; Editorial Assistant
                                         </p>
 
@@ -1189,7 +1192,7 @@ ${userAuthContext}`;
                                                 className={`w-7 h-7 rounded-xl overflow-hidden flex items-center justify-center shrink-0 shadow-2xs text-xs font-bold ${
                                                     isUser
                                                         ? 'bg-indigo-600 text-white'
-                                                        : 'border border-indigo-200/50 bg-indigo-50'
+                                                        : 'border border-indigo-200/60 bg-slate-900 ring-1 ring-black/5'
                                                 }`}
                                             >
                                                 {isUser ? (
@@ -1199,7 +1202,7 @@ ${userAuthContext}`;
                                                         src={keeperAvatar} 
                                                         alt="Keeper" 
                                                         referrerPolicy="no-referrer" 
-                                                        className="w-full h-full object-cover" 
+                                                        className="w-full h-full object-cover object-[center_12%]" 
                                                     />
                                                 )}
                                             </div>
@@ -1317,21 +1320,11 @@ ${userAuthContext}`;
                                                                 </span>
                                                             )}
 
-                                                            {/* One-click copy for general messages containing queries if not already formatted in a code card.
-                                                                NOTE: this must check that the message actually STARTS with "TO THE JM:" (after trimming),
-                                                                not just that the phrase appears somewhere inside it. A plain .includes() check was
-                                                                showing this button on any message that merely mentioned or explained the "TO THE JM:"
-                                                                format (e.g. answering "how should a JM query be formatted?"), even when no real query
-                                                                was present to copy. */}
-                                                            {!currentlyTypingId && cleanContent && !cleanContent.includes('```') && cleanContent.trim().startsWith('TO THE JM:') && (
+                                                            {/* One-click copy for general messages containing queries if not already formatted in a code card */}
+                                                            {!currentlyTypingId && cleanContent && !cleanContent.includes('```') && cleanContent.includes('TO THE JM:') && (
                                                                 <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-end">
                                                                     <button
                                                                         onClick={() => {
-                                                                            // NOTE: closing clause text corrected to match what Keeper actually outputs
-                                                                            // ("The file is in pending status until the matter is resolved. Thank you.") —
-                                                                            // it previously read "File is on pending status until matter is resolved.",
-                                                                            // which never matched, so this silently fell through to copying everything
-                                                                            // to the end of the message instead of stopping at the query's natural end.
                                                                             const match = cleanContent.match(/TO THE JM:[\s\S]*?(?:The file is in pending status until the matter is resolved\. Thank you\.|$)/i);
                                                                             const textToCopy = match ? match[0].trim() : cleanContent;
                                                                             copyToClipboard(textToCopy, `query-${message.id}`);
@@ -1346,10 +1339,10 @@ ${userAuthContext}`;
 
                                                             {/* Active Live Typing Status Pill & Quick Skip Button */}
                                                             {message.role === 'assistant' && currentlyTypingId === message.id && (
-                                                                <div className="mt-2.5 pt-2 border-t border-indigo-100/70 flex items-center justify-between text-[10.5px] text-slate-500 select-none">
-                                                                    <span className="flex items-center gap-1.5 text-indigo-700 font-bold">
-                                                                        <span className="w-2 h-2 rounded-full bg-indigo-600 animate-ping" />
-                                                                        <span>🐾 Keeper is typing with paws...</span>
+                                                                <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 select-none">
+                                                                    <span className="flex items-center gap-1.5 text-indigo-600 font-medium">
+                                                                        <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+                                                                        <span>🐾 Typing with paws...</span>
                                                                     </span>
                                                                     <button
                                                                         type="button"
@@ -1357,11 +1350,11 @@ ${userAuthContext}`;
                                                                             e.stopPropagation();
                                                                             handleSkipTyping();
                                                                         }}
-                                                                        className="px-2 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold transition-all border border-indigo-200 cursor-pointer flex items-center gap-1 shadow-2xs hover:scale-102 active:scale-95"
+                                                                        className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 text-[10px] font-semibold transition-all border border-slate-200 cursor-pointer flex items-center gap-1"
                                                                         title="Skip typing animation and show full text immediately (or press Esc)"
                                                                     >
                                                                         <span>Skip</span>
-                                                                        <Zap className="w-2.5 h-2.5 text-indigo-600 fill-indigo-600" />
+                                                                        <Zap className="w-2.5 h-2.5 text-slate-500" />
                                                                     </button>
                                                                 </div>
                                                             )}
@@ -1369,20 +1362,18 @@ ${userAuthContext}`;
                                                     )}
                                                 </div>
 
-                                                {/* Timestamp & Model Source Footer — hidden while actively typing to avoid clutter.
-                                                    Shows which model actually answered (Gemini / OpenAI / Offline Engine) per message,
-                                                    since the old static "Gemini AI" header label never reflected this. */}
+                                                {/* Timestamp & Model Source Footer */}
                                                 {!(message.role === 'assistant' && currentlyTypingId === message.id) && (
-                                                    <div className={`mt-1 px-1 flex items-center gap-1.5 text-[9px] text-slate-400 select-none ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
+                                                    <div className={`mt-1 px-1 flex items-center gap-1.5 text-[10px] text-slate-400 select-none ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
                                                         <span>{formatMessageTime(message.timestamp)}</span>
                                                         {!isUser && message.modelUsed && (() => {
                                                             const badge = getModelBadgeInfo(message.modelUsed);
                                                             return badge.isOffline ? (
                                                                 <span
-                                                                    className="flex items-center gap-1 text-amber-600 font-semibold"
-                                                                    title="Answered by Keeper's offline rules engine, not a live AI model"
+                                                                    className="flex items-center gap-1 text-amber-600 font-medium"
+                                                                    title="Answered by Keeper's offline editorial engine"
                                                                 >
-                                                                    <span className="w-1 h-1 rounded-full bg-amber-500" />
+                                                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                                                                     <span>{badge.label}</span>
                                                                 </span>
                                                             ) : (
@@ -1399,18 +1390,18 @@ ${userAuthContext}`;
 
                                 {isLoading && (
                                     <div className="flex items-start gap-2.5">
-                                        <div className="w-7 h-7 rounded-xl overflow-hidden flex items-center justify-center shrink-0 border border-indigo-200 bg-indigo-50 shadow-2xs">
+                                        <div className="w-7 h-7 rounded-xl overflow-hidden flex items-center justify-center shrink-0 border border-slate-200 bg-slate-900 shadow-2xs">
                                             <img 
                                                 src={keeperAvatar} 
                                                 alt="Keeper thinking" 
                                                 referrerPolicy="no-referrer" 
-                                                className="w-full h-full object-cover animate-pulse" 
+                                                className="w-full h-full object-cover object-[center_12%] animate-pulse" 
                                             />
                                         </div>
                                         <div className="bg-white border border-slate-200/80 rounded-2xl rounded-tl-xs px-4 py-3 shadow-2xs">
                                             <div className="flex items-center gap-2 text-xs text-slate-600">
                                                 <span className="w-2 h-2 rounded-full bg-indigo-600 animate-ping" />
-                                                <span className="font-semibold text-indigo-900">🐾 Keeper is sniffing out the best solution & guidelines...</span>
+                                                <span className="font-medium text-slate-700">🐾 Sniffing out editorial rules & drafting your response...</span>
                                             </div>
                                         </div>
                                     </div>
@@ -1500,10 +1491,10 @@ ${userAuthContext}`;
                             {/* Input Footer */}
                             <div className="p-3 bg-white border-t border-slate-200 shrink-0">
                                 {/* Quick JM Query Preset Toolbar */}
-                                <div className="mb-2 flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-1 text-[10px]">
-                                    <span className="text-slate-400 font-extrabold uppercase tracking-wider shrink-0 flex items-center gap-1 text-[9px]">
+                                <div className="mb-2.5 flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-1 text-[11px]">
+                                    <span className="text-slate-500 font-semibold uppercase tracking-wider shrink-0 flex items-center gap-1 text-[10px]">
                                         <FileText className="w-3 h-3 text-indigo-500" />
-                                        <span>JM Query:</span>
+                                        <span>Quick Queries:</span>
                                     </span>
                                     <button
                                         type="button"
@@ -1511,10 +1502,10 @@ ${userAuthContext}`;
                                             setInputPrompt('Query to JM: ');
                                             textareaRef.current?.focus();
                                         }}
-                                        className="px-2 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold shrink-0 transition-colors cursor-pointer border border-indigo-200/60 flex items-center gap-1"
+                                        className="px-2 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold shrink-0 transition-colors cursor-pointer border border-indigo-200/70"
                                         title="Insert 'Query to JM: ' prefix"
                                     >
-                                        <span>+ "Query to JM:"</span>
+                                        + "Query to JM:"
                                     </button>
                                     <button
                                         type="button"
@@ -1522,7 +1513,7 @@ ${userAuthContext}`;
                                             setInputPrompt('Query to JM: Author requested to change the author name from "" to ""');
                                             textareaRef.current?.focus();
                                         }}
-                                        className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium shrink-0 transition-colors cursor-pointer"
+                                        className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium shrink-0 transition-colors cursor-pointer border border-slate-200/60"
                                         title="Author name change query template"
                                     >
                                         Author Name Change
@@ -1533,7 +1524,7 @@ ${userAuthContext}`;
                                             setInputPrompt('Query to JM: The author provided a replacement for Figure  that includes content changes compared to the current version');
                                             textareaRef.current?.focus();
                                         }}
-                                        className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium shrink-0 transition-colors cursor-pointer"
+                                        className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium shrink-0 transition-colors cursor-pointer border border-slate-200/60"
                                         title="Figure replacement query template"
                                     >
                                         Figure Replacement
@@ -1544,21 +1535,21 @@ ${userAuthContext}`;
                                             setInputPrompt('Query to JM: Reference [] is uncited in the text body. Kindly ask author to provide citation in text body or confirm deletion.');
                                             textareaRef.current?.focus();
                                         }}
-                                        className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium shrink-0 transition-colors cursor-pointer"
+                                        className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium shrink-0 transition-colors cursor-pointer border border-slate-200/60"
                                         title="Uncited item query template"
                                     >
-                                        Uncited in Text Body
+                                        Uncited Ref
                                     </button>
                                     <button
                                         type="button"
                                         onClick={() => {
-                                            setInputPrompt('What are the key XML structure rules for DTD v5.6 references and citations?');
+                                            setInputPrompt('What are the key Journal XML structure rules for references, citations, and author metadata?');
                                             textareaRef.current?.focus();
                                         }}
-                                        className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium shrink-0 transition-colors cursor-pointer"
-                                        title="DTD v5.6 XML guide"
+                                        className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium shrink-0 transition-colors cursor-pointer border border-slate-200/60"
+                                        title="Journal XML structure guide"
                                     >
-                                        DTD v5.6 Guide
+                                        Journal XML Guide
                                     </button>
                                 </div>
 
@@ -1567,14 +1558,14 @@ ${userAuthContext}`;
                                         e.preventDefault();
                                         handleSendMessage();
                                     }}
-                                    className="relative flex items-end gap-2 bg-slate-50 rounded-xl border border-slate-200/90 p-1.5 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all shadow-inner"
+                                    className="relative flex items-end gap-2 bg-slate-50 rounded-xl border border-slate-200 p-1.5 focus-within:border-indigo-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-indigo-500/15 transition-all shadow-2xs"
                                 >
                                     <textarea
                                         ref={textareaRef}
                                         value={inputPrompt}
                                         onChange={(e) => setInputPrompt(e.target.value)}
                                         onKeyDown={handleKeyDown}
-                                        placeholder="Ask Keeper anything, paste author notes for a JM Query, or drop XML... 🐾"
+                                        placeholder="Ask Keeper anything, paste author notes for a JM Query, or drop XML tags... 🐾"
                                         rows={1}
                                         disabled={isLoading}
                                         className="flex-grow bg-transparent text-xs text-slate-800 placeholder-slate-400 outline-hidden resize-none px-2.5 py-1.5 max-h-28 custom-scrollbar leading-relaxed font-sans"
@@ -1583,8 +1574,8 @@ ${userAuthContext}`;
                                     <button
                                         type="submit"
                                         disabled={!inputPrompt.trim() || isLoading}
-                                        className="p-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white shadow-xs transition-all active:scale-95 shrink-0 flex items-center justify-center cursor-pointer"
-                                        title="Send Message to Keeper (Enter)"
+                                        className="p-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 text-white shadow-xs transition-all active:scale-95 shrink-0 flex items-center justify-center cursor-pointer"
+                                        title="Send Message (Enter)"
                                     >
                                         <Send className="w-3.5 h-3.5" />
                                     </button>
@@ -1647,7 +1638,7 @@ ${userAuthContext}`;
                                 src={keeperAvatar} 
                                 alt="Keeper Japanese Spitz Dog Avatar" 
                                 referrerPolicy="no-referrer" 
-                                className="w-full h-full object-cover" 
+                                className="w-full h-full object-cover object-[center_12%]" 
                             />
                             <span className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full ring-2 ring-slate-900 ${
                                 isExperimental ? 'bg-amber-400 animate-ping' : 'bg-emerald-400'

@@ -92,15 +92,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })),
     ];
 
-    // Per-model timeout budget. These must sum to comfortably less than the
-    // function's maxDuration (30s in vercel.json) — otherwise a slow/hanging
-    // first model can push the *whole function* past the platform limit and
-    // Vercel kills it with a bare 500 before our own try/catch ever gets a
-    // chance to return the graceful offline fallback. Strongest model gets
-    // the most budget since it's tried first and most likely to succeed;
-    // later fallbacks get progressively less. Sum: 12 + 8 + 5 = 25s, leaving
-    // a ~5s cushion for network/JSON overhead.
-    const TIMEOUT_BUDGET_MS = [12000, 8000, 5000];
+    // Per-model timeout budget (7.5s max per candidate to fail over quickly if rate-limited or hanging)
+    const PER_MODEL_TIMEOUT_MS = 7500;
 
     let reply = '';
     let activeModel = '';
@@ -108,7 +101,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     for (let i = 0; i < CANDIDATE_MODELS.length; i++) {
       const candidate = CANDIDATE_MODELS[i];
-      const timeoutMs = TIMEOUT_BUDGET_MS[i] ?? 5000;
+      const timeoutMs = PER_MODEL_TIMEOUT_MS;
 
       // Skip a candidate outright if its provider has no API key configured,
       // rather than burning a timeout slot on a call we know will fail.

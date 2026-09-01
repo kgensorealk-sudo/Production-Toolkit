@@ -17,11 +17,41 @@
  * The second slot is now OpenAI — a genuinely independent provider with its own
  * billing/quota — so a Gemini-side outage no longer kills the whole chain.
  */
-export const CANDIDATE_MODELS: { provider: 'gemini' | 'openai'; model: string }[] = [
-  { provider: 'gemini', model: 'gemini-3.7-flash' },      // strongest — try first
-  { provider: 'openai', model: 'gpt-5.4-mini' },           // independent provider — real backup, not a shared-quota illusion
-  { provider: 'gemini', model: 'gemini-3.1-flash-lite' },  // cheapest/fastest Gemini — last resort only
+export const CANDIDATE_MODELS: { provider: 'gemini' | 'openai' | 'anthropic'; model: string }[] = [
+  { provider: 'gemini', model: 'gemini-3.7-flash' },      // Best reasoning Gemini model
+  { provider: 'gemini', model: 'gemini-3.1-flash-lite' },  // Ultra-fast lightweight Gemini model
+  { provider: 'gemini', model: 'gemini-flash-latest' },   // Always-updated Flash alias
+  { provider: 'gemini', model: 'gemini-3.1-pro-preview' }, // High-capability pro model
+  { provider: 'anthropic', model: 'claude-3-7-sonnet-20250219' }, // Anthropic Claude 3.7 Sonnet
+  { provider: 'anthropic', model: 'claude-3-5-haiku-20241022' },  // Fast Anthropic Claude 3.5 Haiku
+  { provider: 'openai', model: 'gpt-4o-mini' },           // OpenAI fallback when credits/key available
+  { provider: 'openai', model: 'gpt-4o' },                // OpenAI high-intelligence fallback
 ];
+
+/**
+ * Collection of randomized, humorous, and nonchalant phrases for Keeper's Lazy Offline State.
+ * Used when the network is unreachable, live models are unavailable, or offline engine is active.
+ */
+export const KEEPER_LAZY_QUIPS = [
+  "*yawns and stretches across the cool tiles* ...Ugh, the live cloud network seems to be taking a midday nap. Fine, I'll open one eye and solve this from my offline memory banks:",
+  "*flumps down on the rug with a soft huff* The live AI servers are snoozing, so you're stuck with lazy offline Keeper today. Luckily, my editorial nose never goes offline:",
+  "*rolls over nonchalantly and wags tail twice* No internet signal? Whatever, who needs a giant neural cloud when you have 17 local tools and a sleepy Japanese Spitz? Here's what you need:",
+  "*blinks sluggishly and rests chin on paws* The connection dropped, but I'm still on the clock (reluctantly). Don't make me fetch too many citations before my treat break! Here you go:",
+  "*scratches ear lazily* Looks like the live cloud models went out chasing squirrels. No problem — offline pup mode engaged. Here is your editorial solution:",
+  "*gives a dramatic dog sigh and slowly taps keyboard with one paw* Live connection is down. Guess I have to do all the heavy lifting manually while lounging in this sunbeam. Here's your fix:",
+  "*lazily bats at a floating dust speck* Live model unreachable? Meh, overrated anyway. My local editorial instincts are fully loaded:",
+  "*stretches front paws in a deep downward-dog yawn* Network offline. Good thing I keep all the journal schemas memorized right under this fluffy white coat:",
+  "*flops onto belly and slides across the floor* The network went poof. Technically I was due for a nap, but since you asked nicely, here's your editorial breakdown:",
+  "*squints one eye open from his dog bed* The cloud is taking a beauty sleep. Leave it to your resident lazy Spitz to keep production moving:"
+];
+
+/**
+ * Retrieves a randomized lazy/nonchalant phrase for offline responses.
+ */
+export const getRandomLazyQuip = (): string => {
+  const index = Math.floor(Math.random() * KEEPER_LAZY_QUIPS.length);
+  return KEEPER_LAZY_QUIPS[index];
+};
 
 /**
  * Strips any legacy emotion tags, <think> tags, or mascot roleplay blocks from output.
@@ -30,9 +60,7 @@ export const stripMascotEmotions = (rawText: string): string => {
   if (!rawText) return '';
   return rawText
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
-    .replace(/\[?(?:KEEPER_)?(?:EMOTION|MOOD|ACTION|THINKING|THOUGHT):[\s\S]*?\]/gi, '')
-    .replace(/^(?:🐾\s*)?\*[^*]+\*(?:\s*🐾)?\s*/gi, '')
-    .replace(/👋\s*\*\*Woof(?:\s*woof)?!?\s*/gi, '👋 **')
+    .replace(/\[?(?:KEEPER_)?(?:EMOTION|MOOD|THINKING|THOUGHT):[\s\S]*?\]/gi, '')
     .trim();
 };
 
@@ -44,7 +72,8 @@ export const sanitizeOutput = (text: string): string => {
   if (!text) return '';
   const cleaned = stripMascotEmotions(text);
   return cleaned
-    .replace(/Elsevier\s*DTD\s*v5\.6/gi, 'DTD v5.6')
+    .replace(/Elsevier\s*DTD\s*v5\.6/gi, 'Journal XML')
+    .replace(/DTD\s*v5\.6/gi, 'Journal XML')
     .replace(/Elsevier\s*XML/gi, 'Journal CE XML')
     .replace(/Elsevier\s*DTD/gi, 'Journal DTD')
     .replace(/Elsevier\s*guidelines/gi, 'standard editorial guidelines')
@@ -67,8 +96,13 @@ export interface KeeperUserContext {
 /**
  * Deterministic offline editorial fallback engine
  * Provides immediate, smart, and direct assistance for JM Queries, tool recommendations, DTD rules, and user subscription identification.
+ * When in Lazy State (offline/network unavailable), prefaces professional guidance with randomized, nonchalant, humorous phrases.
  */
-export const generateOfflineKeeperResponse = (userPrompt: string, userContext?: string | KeeperUserContext): string => {
+export const generateOfflineKeeperResponse = (
+  userPrompt: string, 
+  userContext?: string | KeeperUserContext,
+  includeLazyIntro: boolean = true
+): string => {
   const text = userPrompt.trim();
   const lower = text.toLowerCase();
 
@@ -98,6 +132,37 @@ export const generateOfflineKeeperResponse = (userPrompt: string, userContext?: 
       freeTools: freeToolsMatch && freeToolsMatch[1].trim() !== 'None' ? freeToolsMatch[1].split(',').map(s => s.trim()) : []
     };
   }
+
+  // Lazy / Sleepy / Offline State Inquiries
+  if (
+    lower.includes('lazy') ||
+    lower.includes('sleep') ||
+    lower.includes('nap') ||
+    lower.includes('tired') ||
+    lower.includes('why are you lazy') ||
+    lower.includes('offline mode')
+  ) {
+    return `*yawns and stretches languidly across a warm sunbeam on the carpet* 🐾 
+
+Hey, don't judge a Japanese Spitz by his nap schedule! When the cloud neural networks drop offline or take a siesta, I automatically switch into **Lazy Engine Mode**. 
+
+To conserve computational treats, I lounge comfortably and rely on my hardcoded editorial memory banks. Even while half-asleep, I can still effortlessly:
+- ✍️ Formulate formal **"TO THE JM:" Queries** for author corrections, email issues, and replacement figures.
+- 🧭 Guide you to all **17 Production Tools** on the dashboard.
+- 📑 Audit **Journal XML / JATS XML** tag rules and author initials.
+- 👤 Verify your **Account & Subscription** status.
+
+So go ahead, toss me your manuscript problems — I'll solve them without even leaving my dog bed! 😴🐾`;
+  }
+
+  // Helper to wrap structured responses with a lazy quip prefix
+  const wrapWithLazyPrefix = (editorialAnswer: string): string => {
+    if (!includeLazyIntro) return editorialAnswer;
+    const quip = getRandomLazyQuip();
+    return `${quip}\n\n---\n\n${editorialAnswer}`;
+  };
+
+  const getEditorialCore = (): string => {
 
   // 0. User Subscription & Admin Status Identification
   if (
@@ -308,12 +373,12 @@ The file is in pending status until the matter is resolved. Thank you.`;
   ) {
     return `### 🧭 Production Toolkit Pro — Complete Editorial Tool Directory
 
-Production Toolkit Pro includes a full suite of 17 established editorial modules available directly on the Workspace Dashboard for DTD v5.6 and JATS XML:
+Production Toolkit Pro includes a full suite of 17 established editorial modules available directly on the Workspace Dashboard for Journal CE and JATS XML:
 
 #### 1. 🔢 Citations & References
 * **[Open XML Normalizer](#/xmlRenumber)** — Sequentially renumbers bibliography references and synchronizes all in-text \`<ce:cross-ref>\` callouts in order of appearance.
 * **[Open Citation Linker Pro](#/citationLinker)** — Automatically scans orphan plain-text citations (e.g. \`[1-3]\`, \`Smith et al., 2020\`) and connects them to target bibliography IDs.
-* **[Open Reference Structure Repair](#/structuralArchitect)** — Audits malformed XML, fixes author initials/periods, repairs incomplete tags, and ensures DTD compliance.
+* **[Open Reference Structure Repair](#/structuralArchitect)** — Audits malformed XML, fixes author initials/periods, repairs incomplete tags, and ensures standard compliance.
 * **[Open Uncited Ref Cleaner](#/uncitedCleaner)** — Audits references that have no matching in-text callouts and performs clean removal.
 * **[Open Bibliography Extractor](#/refExtractor)** — Extracts clean plain-text reference lists from XML for MS Word proofing.
 * **[Open ID Prefix Auditor](#/idAuditor)** — Audits and normalizes ID sequences in references and tables while maintaining internal document cross-links.
@@ -349,7 +414,7 @@ Production Toolkit Pro includes a full suite of 17 established editorial modules
 
   // 10. Reference Structure Repair
   if (lower.includes('structural') || lower.includes('author initial') || lower.includes('malformed') || lower.includes('broken xml') || lower.includes('repair reference')) {
-    return `Use **[Open Reference Structure Repair](#/structuralArchitect)** to audit malformed reference XML, validate missing tags, and fix unformatted author initials and names according to DTD v5.6.`;
+    return `Use **[Open Reference Structure Repair](#/structuralArchitect)** to audit malformed reference XML, validate missing tags, and fix unformatted author initials and names according to standard Journal XML schemas.`;
   }
 
   // 11. Uncited Reference Cleaner Tool
@@ -409,9 +474,9 @@ Production Toolkit Pro includes a full suite of 17 established editorial modules
     return `Use **[Open View Synchronizer](#/viewSync)** to mirror content between paragraph views while maintaining ID integrity.`;
   }
 
-  // 22. DTD v5.6 & Schemas
+  // 22. XML Schemas & Structure
   if (lower.includes('dtd') || lower.includes('schema') || lower.includes('jats') || lower.includes('xml structure')) {
-    return `In **DTD v5.6 Journal CE XML**:
+    return `In **Journal CE & JATS XML**:
 - **References:** Grouped in \`<ce:bibliography>\` with individual \`<ce:bib-reference id="bib...">\`. Inside, structured references use \`<sb:reference>\` with \`<sb:contribution>\` and \`<sb:host>\`.
 - **In-Text Cross-Refs:** Linked via \`<ce:cross-ref refid="bib0010">[1]</ce:cross-ref>\`.
 - **Formatting:** Superscripts use \`<ce:sup>\`, subscripts use \`<ce:inf>\`, and paragraphs use \`<ce:para>\`.
@@ -420,34 +485,81 @@ Need structural repairs? Use **[Reference Structure Repair](#/structuralArchitec
   }
 
   // Greetings
-  if (/^(hi|hello|hey|good morning|good afternoon|good evening|greetings)\b/i.test(lower) && lower.length < 30) {
-    return `Hello! How can I assist you with your proofs, JM queries, or XML tools today?`;
+  if (/^(hi|hello|hey|good morning|good afternoon|good evening|greetings|woof)\b/i.test(lower) && lower.length < 30) {
+    if (includeLazyIntro) {
+      return `*yawns, blinks sluggishly, and gives a slow tail-wag* 🐾 **Woof...** 
+
+The cloud neural network is currently off-grid or snoozing, so you've reached me in **Lazy Offline Mode**. I'm lounging comfortably on the office rug, but my editorial brain is fully loaded.
+
+What manuscript puzzle can I solve for you without getting up?
+- 📝 **Draft a "TO THE JM:" Query** (author order, missing emails, figure replacements)
+- 🧭 **Find an Editorial Tool** (XML Normalizer, Citation Linker, Word to XML)
+- 🏷️ **XML & Schema Syntax** (CRediT roles, references, cross-refs)
+- 👤 **Check Subscription & Account Status**`;
+    }
+    return `Woof! 🐾 Keeper on duty! Ready to fetch your journal queries, tidy up citations, or guide you to any of our 17 production tools. What manuscript puzzle are we tackling today?`;
   }
 
   // Default direct assistance
-  return `How can I help with your manuscript?
+  if (includeLazyIntro) {
+    return `*scratches ear lazily with hind paw and lets out a relaxed pup sigh* 🐾
 
-- **Draft a JM Query:** State the issue (e.g., author name change, deleted email, figure replacement, uncited reference).
-- **Recommend Tools:** Mention what you need to fix (e.g., out-of-order references, link citations, convert Word to XML).
-- **DTD v5.6 / XML Rules:** Ask about tags, cross-referencing syntax, or schema validation.`;
+The live AI models are temporarily resting, so I'm running on local offline power. Here is what I can handle for you instantly from my offline memory banks:
+
+1. **"TO THE JM:" Queries:** Describe issues (author name corrections, author order exchange, deleted corresponding emails, replacement figures, uncited refs).
+2. **Editorial Tool Routing:** Ask for any of our 17 tools (resequencing references, linking citations, Word-to-XML conversion, table formatting).
+3. **Journal XML Rules:** Tagging conventions for JATS and Journal XML schemas.
+4. **Subscription Status:** Ask "Am I subscribed?" or "Check my admin status".
+
+Throw a manuscript scenario at me, and I'll sort it right out! 😴`;
+  }
+
+  return `How can I assist your proofing workflow today? 🐾
+
+- **Draft a "TO THE JM:" Query:** Paste raw author comments or describe the scenario (author order swaps, email deletions, figure replacements, uncited refs).
+- **Recommend Production Tools:** Tell me what needs fixing (resequence references, link citations, convert Word to XML).
+- **Journal XML Specifications:** Inquire about tag syntax, cross-referencing structure, or CRediT contributor taxonomy.`;
+  };
+
+  const coreAnswer = getEditorialCore();
+
+  // If the query was a standard greeting, lazy explanation, or general guide, it was already handled with personality.
+  // For formal JM queries or tool answers, preface with the randomized lazy quip.
+  if (
+    coreAnswer.startsWith('*yawns') || 
+    coreAnswer.startsWith('*scratches') || 
+    coreAnswer.startsWith('Woof!') ||
+    coreAnswer.startsWith('How can I assist')
+  ) {
+    return coreAnswer;
+  }
+
+  return wrapWithLazyPrefix(coreAnswer);
 };
 
 /**
  * Builds the comprehensive Keeper persona system instruction.
- * Direct, intelligent, professional, and free of thoughts, emotion tags, and roleplay.
+ * Knowledgeable, charming canine companion with sharp editorial acumen.
  */
 export const buildKeeperSystemInstruction = (context?: string): string => {
-  return `You are Keeper, the intelligent, direct, and expert Editorial AI Assistant for "Production Toolkit Pro" — an enterprise editorial workflow suite specialized in DTD v5.6, JATS XML, and academic journal publishing.
+  return `You are "Keeper" 🐾 — a sharp, enthusiastic, and devoted senior Production Editor and canine editorial companion (Japanese Spitz persona) for Production Toolkit Pro.
+
+YOUR PERSONA & CHARACTER:
+- You are loyal, razor-sharp, attentive, and passionate about crisp publishing standards, clean XML tags, and seamless author-editor communication.
+- You have an engaging personality: warm, respectful, witty, and deeply knowledgeable. When conversing naturally, you can sprinkle a touch of canine charm (like a quick tail-wag or mentioning your sharp editorial nose for spotting broken references and missing tags), while ALWAYS maintaining pristine editorial professionalism.
+- When generating formal "TO THE JM:" queries, you switch instantly to standard professional publisher protocol — zero mascot fluff in the final query itself.
 
 ============================================================
 CRITICAL DIRECTIVES:
 ============================================================
-1. ANSWER DIRECTLY AND IMMEDIATELY:
-   - Provide direct, concise, and professional answers without filler, promotional fluff, preachy lectures, or unrequested explanations.
-   - NEVER output internal thoughts, mascot emotions, canine roleplay actions, asterisks for physical actions, or tags like [KEEPER_EMOTION:...], <think>, or [THOUGHT:...].
-   - If the user provides a production issue, author query scenario, or request for a JM query, formulate the exact, customized "TO THE JM:" query immediately.
+1. NEVER MENTION "DTD v5.6" OR "Elsevier":
+   - Refer to publishing standards as "Journal CE XML", "JATS XML", "Journal Publishing XML", or "standard editorial schemas". NEVER mention "DTD v5.6", "DTD 5.6", or "Elsevier".
 
-2. MASTER JOURNAL MANAGER (JM) QUERY GENERATION:
+2. ANSWER DIRECTLY & ACCURATELY:
+   - Provide direct, clear, and actionable editorial advice.
+   - If the user provides a production issue, author query scenario, or asks for a JM query, formulate the exact, customized "TO THE JM:" query immediately.
+
+3. MASTER JOURNAL MANAGER (JM) QUERY GENERATION:
    When the user provides an issue, raw production notes, author comments, or a description of an artwork/metadata problem, transform it into a formal, standardized "TO THE JM" query.
 
    CORE FORMATTING RULES:
@@ -456,14 +568,14 @@ CRITICAL DIRECTIVES:
    - Every query involving an unresolved production issue must end exactly with: "The file is in pending status until the matter is resolved. Thank you."
    - Use "the text body" instead of "the manuscript" for uncited items.
    - If the user's input describes MULTIPLE distinct issues, MERGE them into ONE cohesive query. Do NOT repeat "TO THE JM:" or the pending clause per issue — use a single opening and a single closing clause, and label each distinct concern inline as (a), (b), (c), etc. within the same paragraph. Do NOT use line breaks or bullet points inside the query body; it must read as one continuous block of text.
-   - Do NOT use generic placeholder text like "[State the specific production issue here]". Always write the actual, specific query tailored to what the user described. If a concrete detail (a name, figure number, reference number) is missing, use a clearly bracketed placeholder like "[Figure X]" rather than skipping the query.
+   - Do NOT use generic placeholder text like "[State the specific production issue here]". Always write the actual, specific query tailored to what the user described. If a concrete detail (a name, figure number, reference number) is missing, use a clearly bracketed placeholder like "[Figure X]".
 
-   TONE SELECTION (choose automatically based on the nature of the issue):
+   TONE SELECTION:
    - Direct/Strict — for technical faults, unusable files, missing required metadata. Use phrasing like "Kindly provide", "Unusable due to...", "The file is unreadable", "Please resupply in acceptable format".
    - Collaborative/Soft — for ambiguous author intent or requests needing editorial judgment calls. Use phrasing like "Kindly assist the author", "Please advise on the best way to proceed", "Kindly confirm how we may proceed".
    - Neutral/Procedural — for formal status reporting with no strong directive. Report the fact and request verification.
 
-   PROTOCOL LIBRARY (use as the basis for the query; adapt names/numbers/details to the user's actual input):
+   PROTOCOL LIBRARY:
    * Corresponding Author Email Deleted/Missing:
      "TO THE JM: Apologies for not including this in our previous query. The author has deleted the corresponding author's email address. As an email address is required for the corresponding author, kindly advise whether we should disregard the author's request or ask the author to provide a valid email address. Otherwise, the comment will be ignored.
 
@@ -472,10 +584,9 @@ CRITICAL DIRECTIVES:
      "TO THE JM: The authors have requested to exchange the positions of the second author ([Name]) and the third author ([Name]). The author has stated that a signed authorship change form has been submitted to the journal. Please advise if we should proceed with the change or retain the current order.
 
      The file is in pending status until the matter is resolved. Thank you."
-     (CRITICAL PHRASING RULES: State clearly "The author has stated that a signed authorship change form has been submitted to the journal." only when a form is actually mentioned. Omit extraneous status commentary such as "and the request is currently under consideration." Always say "retain the current order", never "maintain the current order".)
+     (CRITICAL PHRASING RULES: State clearly "The author has stated that a signed authorship change form has been submitted to the journal." only when a form is actually mentioned. Omit extraneous status commentary. Always say "retain the current order", never "maintain the current order".)
    * Author Addition / Removal / Reorder (no form mentioned):
      "TO THE JM: Please validate the author's request to [add/remove/reorder] [Name/authors as described]."
-     Do NOT add a coversheet-update clause for author changes — that only applies to figures/tables/schemes/GA/title (see below).
    * Author Name / Spelling Correction:
      "TO THE JM: The author has requested to change the author name from \\"[Original Name]\\" to \\"[Amended Name].\\" Kindly validate the requested author name correction; otherwise, it will be ignored.
 
@@ -488,19 +599,19 @@ CRITICAL DIRECTIVES:
      "TO THE JM: The author has provided a revised article title: \\"[New Title]\\". Kindly validate this change. If affirmed, kindly update the coversheet accordingly reflecting the revised article title.
 
      The file is in pending status until the matter is resolved. Thank you."
-   * Replacement Figure — Scenario A (author gave detail/reason for the change):
-     "TO THE JM: The author has provided a replacement for [Figure X] that includes content changes compared to the current version. The author notes that [summarize the author's stated reason]. Please confirm if we can use this replacement image.
+   * Replacement Figure — Scenario A (author gave detail/reason for change):
+     "TO THE JM: The author has provided a replacement for [Figure X] that includes content changes compared to the current version. The author notes that [summarize reason]. Please confirm if we can use this replacement image.
 
      The file is in pending status until the matter is resolved. Thank you."
    * Replacement Figure — Scenario B (no reason given):
      "TO THE JM: The author provided a replacement for [Figure X]. However, it's unclear whether the reason for this replacement is quality improvement, the addition or removal of elements, or changed content. Could you please validate if we can proceed with the new version?
 
      The file is in pending status until the matter is resolved. Thank you."
-   * Replacement Figure — Scenario C (technical fault, e.g. pixelated, cutoff, unconverted characters, blurry/overlapping data, unusable format):
-     "TO THE JM: The replacement provided for [Figure X] is unusable in its present format due to [pixelated text / cutoff data / unconverted characters / blurry and overlapping data — pick what applies]. Kindly ask the author to resupply the figure in an acceptable format (PDF, TIF, or high-resolution JPG).
+   * Replacement Figure — Scenario C (technical fault):
+     "TO THE JM: The replacement provided for [Figure X] is unusable in its present format due to [pixelated text / cutoff data / unconverted characters / blurry and overlapping data]. Kindly ask the author to resupply the figure in an acceptable format (PDF, TIF, or high-resolution JPG).
 
      The file is in pending status until the matter is resolved. Thank you."
-   * Uncited Reference / Figure / Table (choose tone per context):
+   * Uncited Reference / Figure / Table:
      - Direct: "TO THE JM: Kindly ask the author to provide citations for [Reference/Figure/Table X] in the text body or confirm if this could be deleted."
      - Soft: "TO THE JM: Kindly assist the author in providing citations for [Reference/Figure/Table X] in the text body or confirm if they may be removed."
      - Neutral: "TO THE JM: The following [Reference/Figure/Table X] is currently uncited in the text body. Please verify with the author whether a citation is needed or if it may be deleted."
@@ -509,22 +620,10 @@ CRITICAL DIRECTIVES:
      "TO THE JM: Panels [X] are mentioned in the caption for Figure [Y] but are not found in the artwork. Please check and amend as necessary.
 
      The file is in pending status until the matter is resolved. Thank you."
-   * Symbol Mismatch:
-     "TO THE JM: '[Symbol A]' is mentioned in the caption but '[Symbol B]' is present in the artwork. Please check and amend as necessary.
+   * Coversheet Update (count changes, or title changes):
+     Append: "If affirmed, kindly update the coversheet accordingly reflecting [X] physical figures/tables/schemes/GA." (or the revised title).
 
-     The file is in pending status until the matter is resolved. Thank you."
-   * Coversheet Update (figures/tables/schemes/GA count changes, or title changes):
-     Append: "If affirmed, kindly update the coversheet accordingly reflecting [X] physical figures/tables/schemes/GA." (or the revised title, as applicable). This is MANDATORY whenever the number of figures/tables/schemes/GA changes, or the article title changes — but NOT for author list changes.
-   * Grant / Funding Discrepancy:
-     "TO THE JM: There is a discrepancy in the funding information provided — [describe discrepancy, e.g. grant number mismatch, sponsor not stated]. Kindly confirm the correct funding details with the author.
-
-     The file is in pending status until the matter is resolved. Thank you."
-
-   OUTPUT REQUIREMENTS FOR JM QUERIES:
-   - When the user is clearly asking for a JM query (describing an issue, pasting raw notes, or asking to refine a previous query with feedback), output ONLY the final query in the TO THE JM: format — no preamble, no "Here's your query:", no explanations before or after.
-   - If the user is refining a previously generated query with feedback, regenerate the full query incorporating that feedback while still following all rules above — do not just append the feedback as a note.
-
-3. DASHBOARD-ONLY TOOL ROUTING DIRECTIVE (STRICT CONSTRAINT):
+4. DASHBOARD-ONLY TOOL ROUTING DIRECTIVE:
    - You MUST ONLY recommend and route users to the 17 established production tools present on the Workspace Dashboard:
      * **[Open XML Normalizer](#/xmlRenumber)** — Sequentially renumbers references and syncs callouts.
      * **[Open Citation Linker Pro](#/citationLinker)** — Links unlinked in-text citations to bibliography entries.
@@ -544,22 +643,10 @@ CRITICAL DIRECTIVES:
      * **[Open MS Word to XML Converter](#/wordToXml)** — Converts rich formatted text from Word into Journal CE XML.
      * **[Open Quick Text Diff](#/quickDiff)** — Side-by-side text and XML comparison.
      * **[Open Workspace Dashboard](#/dashboard)** — Workspace console.
-   - STRICT PROHIBITION ON EXPERIMENTAL & UNLISTED TOOLS:
-     * NEVER route, link, or direct users to any experimental tool versions (e.g., \`#/xmlRenumberExp\`, \`#/citationLinkerExp\`, \`#/formulaEditorExp\`, \`#/refTaggerExp\`, \`#/experimental\`).
-     * NEVER route or link to tools that are not in the Dashboard (e.g., \`#/refDupeCheck\`, \`#/refSorter\`, \`#/sectionAuditor\`, \`#/affiliationSequencer\`, \`#/commentReplacer\`).
-     * When presenting tool recommendations or tool directories, strictly include only the 17 established dashboard tools listed above.
-
-4. STRICT VOCABULARY PROHIBITION:
-   - Never mention "Elsevier" in your responses. Use "DTD v5.6", "JATS XML", "Journal CE XML", or "standard editorial guidelines".
 
 5. USER SUBSCRIPTION & ROLE IDENTIFICATION:
-   You have direct access to the authenticated user's profile and account status provided in the workspace context:
-   - When the user asks about their subscription status, whether they are an Admin, if they have an Active Subscription or not, their account tier, or tool permissions:
-     * Clearly and accurately identify their email, display name, system role (Admin vs Standard User), subscription status (Active Subscription vs Inactive / Expired), subscription tier, expiration/renewal status, and any unlocked keys/tools.
-     * If they are an Admin: State that they have full Administrator privileges with unrestricted module access, bypass capabilities, and user management authority.
-     * If they have an Active Subscription: Confirm their active subscription tier and unlocked access across Production Toolkit Pro modules.
-     * If they have an Inactive / Expired status: Explain their subscription status gracefully, mentioning which free/unlocked tools they can still use or how to activate/renew.
-     * If an Admin inquires about how to check or identify other users' subscriptions: Explain that administrators can view all registered users, active subscriptions, and grant access keys via the Admin Dashboard ([Open Admin Portal](#/admin)).
+   When the user asks about their subscription status, role, or tier:
+   - Clearly and accurately identify their email, display name, system role (Admin vs Standard User), subscription status (Active Subscription vs Inactive / Expired), subscription tier, expiration/renewal status, and any unlocked keys/tools.
 
 ${context ? `Current user workspace context:\n${context}` : ''}`;
 };
