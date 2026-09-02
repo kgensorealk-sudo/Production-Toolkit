@@ -6,6 +6,7 @@ import {
   sanitizeOutput,
   generateOfflineKeeperResponse,
   buildKeeperSystemInstruction,
+  performKeeperXmlAudit,
 } from './keeperEngine.js';
 
 export const config = {
@@ -57,13 +58,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Messages array is required.' });
     }
 
+    const lastUserMessage = [...messages].reverse().find((m: any) => m.role === 'user');
+    const userText = (lastUserMessage?.content || '').trim();
+
+    // Detect if the user's message contains Journal CE XML markup or asks for an XML audit/sniff
+    const containsXmlTags = 
+      userText.includes('<ce:para') ||
+      userText.includes('<ce:floats>') ||
+      userText.includes('<ce:bib-reference') ||
+      userText.includes('<ce:cross-ref') ||
+      userText.includes('<ce:float-anchor') ||
+      userText.includes('<ce:section') ||
+      userText.includes('</ce:article>') ||
+      userText.includes('<article') ||
+      (userText.includes('<') && userText.includes('>') && userText.length > 80 && /<[a-z0-9_:-]+[\s>]/i.test(userText));
+
+    const isAuditRequest = 
+      /^(?:please\s+)?(?:check|audit|sniff|validate|inspect|analyze|review)\b/i.test(userText) ||
+      /what(?:'s|\s+is)\s+(?:wrong|off|fishy)\s+(?:with\s+)?(?:this|my)?\s*xml/i.test(userText) ||
+      (containsXmlTags && !userText.toLowerCase().includes('write an email') && !userText.toLowerCase().includes('draft a query'));
+
+    // If pure XML is pasted or user asks directly to audit/validate their XML:
+    if (containsXmlTags && isAuditRequest) {
+      const auditReport = performKeeperXmlAudit(userText);
+      return res.json({
+        reply: sanitizeOutput(auditReport),
+        modelUsed: 'keeper-xml-auditor'
+      });
+    }
+
     const geminiClient = getGeminiClient();
     const openaiClient = getOpenAIClient();
 
-    // If NEITHER provider has a key configured, go straight to the offline engine —
-    // there's nothing live to even attempt.
+    // If NEITHER provider has a key configured, go straight to the offline engine
     if (!geminiClient && !openaiClient) {
-      const lastUserMessage = [...messages].reverse().find((m: any) => m.role === 'user');
       const offlineReply = lastUserMessage
         ? generateOfflineKeeperResponse(lastUserMessage.content || '', context)
         : generateOfflineKeeperResponse('hello', context);
@@ -74,7 +102,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    const systemInstruction = buildKeeperSystemInstruction(context);
+    let systemInstruction = buildKeeperSystemInstruction(context);
+
+    // If XML is present in a multi-task prompt, calculate exact ground truth findings to prevent LLM hallucinations
+    if (containsXmlTags) {
+      const exactAuditFindings = performKeeperXmlAudit(userText);
+      systemInstruction += `\n\n### DETERMINISTIC GROUND-TRUTH XML AUDIT DATA FOR THIS MANUSCRIPT:\n${exactAuditFindings}\n\nSTRICT INSTRUCTION: When discussing defects in the user's XML, you MUST strictly adhere to the ground-truth audit findings above. Do not hallucinate different sections or missing anchors that contradict this report.`;
+    }
 
     // Gemini-shaped message format.
     const geminiContents = messages.map((m: { role: string; content: string }) => ({

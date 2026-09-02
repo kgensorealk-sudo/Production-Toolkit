@@ -31,6 +31,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { isExperimentalTool, getToolInfo } from '../utils/toolRegistry';
 import { startTypingSimulation, TypingSimulatorController } from '../utils/typingSimulator';
 import { generateOfflineKeeperResponse, sanitizeOutput, KeeperUserContext } from '../utils/keeperEngine';
+import { KeeperAvatar, KeeperState } from './KeeperAvatar';
 
 const keeperAvatar = '/keeper_avatar.jpg';
 
@@ -187,6 +188,28 @@ Formulate protocol-compliant queries ready for the JM:
     };
 };
 
+const ROUTE_TOOL_NAMES: Record<string, string> = {
+    '/viewSync': 'Open View Synchronizer',
+    '/quickDiff': 'Open Quick Text Diff',
+    '/uncitedCleaner': 'Open Uncited Ref Cleaner',
+    '/xmlRenumber': 'Open XML Normalizer',
+    '/citationLinker': 'Open Citation Linker Pro',
+    '/structuralArchitect': 'Open Reference Structure Repair',
+    '/creditGenerator': 'Open CRediT Tagging',
+    '/wordToXml': 'Open MS Word to XML Converter',
+    '/tableBeautifier': 'Open Table XML Beautifier',
+    '/tableFixer': 'Open XML Table Fixer',
+    '/grantTagger': 'Open Grant Tagger',
+    '/idAuditor': 'Open ID Prefix Auditor',
+    '/refExtractor': 'Open Bibliography Extractor',
+    '/tagCleaner': 'Open XML Tag Cleaner',
+    '/highlightsGen': 'Open Article Highlights Gen',
+    '/referenceGen': 'Open Reference Updater',
+    '/otherRefScanner': 'Open Other-Ref Scanner',
+    '/dashboard': 'Workspace Dashboard',
+    '/admin': 'Admin Portal',
+};
+
 const SCENARIO_CATEGORIES = [
     {
         category: '📝 Master JM Queries',
@@ -212,6 +235,9 @@ const SCENARIO_CATEGORIES = [
     {
         category: '🛠️ XML Markup & Document Utilities',
         items: [
+            { label: 'Audit & Validate Pasted XML', prompt: 'Please audit and validate this manuscript XML for structural defects, leftover uncited sections, dual-view synchronization, or broken citation links.' },
+            { label: 'Upstream Feedback: Leftover Uncited Section', prompt: 'I received an upstream feedback because i forgot to remove the Uncited Reference section. What should I do to fix and validate this?' },
+            { label: 'Synchronize paragraph views (compact vs extended)', prompt: 'How do I synchronize and mirror text edits and citation callouts between compact and extended paragraph views using View Synchronizer?' },
             { label: 'Convert Word text to Journal XML', prompt: 'Which tool converts formatted text from MS Word with bold, italics, chemical subscripts (<ce:inf>), and superscripts (<ce:sup>) into standard Journal CE XML?' },
             { label: 'Tag author CRediT roles', prompt: 'How do I use the CRediT Tagging tool to convert informal author contribution statements into NISO CRediT XML (<ce:contributor-role>)?' },
             { label: 'Table footnotes & legend notes', prompt: 'Which tool manages and relocates table footnotes (<ce:table-footnote>) and table legend notes?' },
@@ -258,6 +284,30 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
     const [currentlyTypingId, setCurrentlyTypingId] = useState<string | null>(null);
     const [copiedId, setCopiedId] = useState<string | null>(null);
     const [hasUnread, setHasUnread] = useState(false);
+    const [successCelebration, setSuccessCelebration] = useState(false);
+    const [isLazyMode, setIsLazyMode] = useState(false);
+
+    // Inactivity timer to trigger lazy mode (power nap)
+    useEffect(() => {
+        let timer: any;
+        if (!isLoading && !currentlyTypingId && inputPrompt.trim() === '') {
+            timer = setTimeout(() => {
+                setIsLazyMode(true);
+            }, 60000); // 1 minute of idle without typing triggers cozy dog nap
+        } else {
+            setIsLazyMode(false);
+        }
+        return () => clearTimeout(timer);
+    }, [isLoading, currentlyTypingId, inputPrompt]);
+
+    // Calculate dynamic keeper state
+    const currentKeeperState: KeeperState = (() => {
+        if (isLoading || currentlyTypingId) return 'thinking';
+        if (successCelebration) return 'success';
+        if (inputPrompt.trim().length > 0) return 'listening';
+        if (isLazyMode) return 'lazy';
+        return 'idle';
+    })();
 
     // Draggable position state
     const [position, setPosition] = useState<{ x: number; y: number }>(() => {
@@ -580,6 +630,8 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
     const handleSkipTyping = () => {
         if (typingControllerRef.current) {
             typingControllerRef.current.skip();
+            setSuccessCelebration(true);
+            setTimeout(() => setSuccessCelebration(false), 2600);
         }
     };
 
@@ -716,6 +768,8 @@ ${userAuthContext}`;
                 onComplete: () => {
                     setCurrentlyTypingId(null);
                     typingControllerRef.current = null;
+                    setSuccessCelebration(true);
+                    setTimeout(() => setSuccessCelebration(false), 2600);
                     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
                 }
             });
@@ -760,6 +814,8 @@ ${userAuthContext}`;
                 onComplete: () => {
                     setCurrentlyTypingId(null);
                     typingControllerRef.current = null;
+                    setSuccessCelebration(true);
+                    setTimeout(() => setSuccessCelebration(false), 2600);
                     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
                 }
             });
@@ -806,8 +862,8 @@ ${userAuthContext}`;
                         exit={{ opacity: 0, y: 15, scale: 0.95 }}
                         className="fixed bottom-6 right-6 z-50 pointer-events-auto max-w-sm p-3.5 rounded-2xl bg-slate-900/95 text-white shadow-2xl border border-indigo-500/40 backdrop-blur-md flex items-start gap-3"
                     >
-                        <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 border border-indigo-300 shadow-xs bg-slate-800">
-                            <img src={keeperAvatar} alt="Keeper Dog Mascot" className="w-full h-full object-cover object-[center_12%]" />
+                        <div className="shrink-0">
+                            <KeeperAvatar state="idle" size="sm" showBadge={false} interactive={false} />
                         </div>
                         <div className="flex-1 text-xs">
                             <p className="font-bold text-indigo-200 flex items-center gap-1.5">
@@ -855,6 +911,7 @@ ${userAuthContext}`;
                             {/* Draggable Chat Header */}
                             <header 
                                 onMouseDown={handleDragStart}
+                                touch-action="none"
                                 onTouchStart={handleDragStart}
                                 className="relative z-20 px-4 py-3 bg-slate-900 text-white flex items-center justify-between shrink-0 shadow-md select-none border-b border-slate-800 cursor-grab active:cursor-grabbing group/header"
                                 title="Click and drag to move floater anywhere on screen"
@@ -865,15 +922,14 @@ ${userAuthContext}`;
                                         <GripHorizontal className="w-4 h-4" />
                                     </div>
 
-                                    {/* Avatar with clear face framing & dedicated border */}
-                                    <div className="relative z-10 w-10 h-10 rounded-xl overflow-hidden border-2 border-indigo-400/50 bg-slate-950 shadow-md shrink-0 ring-1 ring-white/15">
-                                        <img 
-                                            src={keeperAvatar} 
-                                            alt="Keeper Editorial Mascot" 
-                                            referrerPolicy="no-referrer" 
-                                            className="w-full h-full object-cover object-[center_12%]" 
+                                    {/* Avatar with dynamic state micro-animations & status ring */}
+                                    <div className="shrink-0">
+                                        <KeeperAvatar
+                                            state={currentKeeperState}
+                                            size="lg"
+                                            showBadge={true}
+                                            interactive={true}
                                         />
-                                        <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-slate-900 shadow-xs z-10" title="Online" />
                                     </div>
 
                                     {/* Title and Status indicator */}
@@ -1064,19 +1120,14 @@ ${userAuthContext}`;
                             <div ref={messagesContainerRef} className="flex-grow overflow-y-auto p-4 custom-scrollbar space-y-4 bg-white">
                                 {messages.length === 0 ? (
                                     <div className="flex flex-col items-center text-center px-4 pt-4 pb-6">
-                                        {/* Contact Circular Profile Picture */}
+                                        {/* Contact Circular Profile Picture with micro-animations */}
                                         <div className="relative mb-3.5 shrink-0">
-                                            <div className="w-20 h-20 rounded-full overflow-hidden shadow-xl border-3 border-indigo-400/80 bg-slate-950 mx-auto ring-4 ring-indigo-100/80">
-                                                <img 
-                                                     src={keeperAvatar} 
-                                                     alt="Keeper" 
-                                                     referrerPolicy="no-referrer" 
-                                                     className="w-full h-full object-cover object-[center_20%]" 
-                                                />
-                                            </div>
-                                            <span className="absolute bottom-0.5 right-0.5 bg-emerald-500 text-white w-5 h-5 rounded-full text-[10px] flex items-center justify-center shadow-md ring-2 ring-white font-bold z-10" title="Keeper is online and ready">
-                                                 🐾
-                                            </span>
+                                            <KeeperAvatar 
+                                                state={currentKeeperState} 
+                                                size="hero" 
+                                                showBadge={true} 
+                                                interactive={true} 
+                                            />
                                         </div>
 
                                         {/* Keeper Bold Title */}
@@ -1206,21 +1257,17 @@ ${userAuthContext}`;
                                             key={message.id}
                                             className={`flex items-start gap-2.5 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}
                                         >
-                                            <div
-                                                className={`w-7 h-7 rounded-xl overflow-hidden flex items-center justify-center shrink-0 shadow-2xs text-xs font-bold ${
-                                                    isUser
-                                                        ? 'bg-indigo-600 text-white'
-                                                        : 'border border-indigo-200/60 bg-slate-900 ring-1 ring-black/5'
-                                                }`}
-                                            >
+                                            <div className="shrink-0">
                                                 {isUser ? (
-                                                    <User className="w-3.5 h-3.5" />
+                                                    <div className="w-7 h-7 rounded-xl overflow-hidden flex items-center justify-center bg-indigo-600 text-white text-xs font-bold shadow-2xs">
+                                                        <User className="w-3.5 h-3.5" />
+                                                    </div>
                                                 ) : (
-                                                    <img 
-                                                        src={keeperAvatar} 
-                                                        alt="Keeper" 
-                                                        referrerPolicy="no-referrer" 
-                                                        className="w-full h-full object-cover object-[center_12%]" 
+                                                    <KeeperAvatar
+                                                        state={message.modelUsed?.startsWith('offline') ? 'lazy' : (currentlyTypingId === message.id ? 'thinking' : 'idle')}
+                                                        size="sm"
+                                                        showBadge={false}
+                                                        interactive={true}
                                                     />
                                                 )}
                                             </div>
@@ -1245,6 +1292,10 @@ ${userAuthContext}`;
                                                                         a({ href, children }: any) {
                                                                             if (href && (href.startsWith('#/') || href.startsWith('/'))) {
                                                                                 const route = href.replace(/^#/, '');
+                                                                                const fallbackName = ROUTE_TOOL_NAMES[route] || ROUTE_TOOL_NAMES[`/${route.replace(/^\//, '')}`] || `Open ${route.replace(/^\//, '')}`;
+                                                                                const labelText = typeof children === 'string' ? children.trim() : children;
+                                                                                const displayLabel = labelText && String(labelText).trim().length > 0 ? children : fallbackName;
+
                                                                                 return (
                                                                                     <button
                                                                                         onClick={(e) => {
@@ -1255,7 +1306,7 @@ ${userAuthContext}`;
                                                                                         title={`Open ${route}`}
                                                                                     >
                                                                                         <Compass className="w-3 h-3 text-indigo-200" />
-                                                                                        <span>{children}</span>
+                                                                                        <span>{displayLabel}</span>
                                                                                         <ExternalLink className="w-2.5 h-2.5 opacity-80" />
                                                                                     </button>
                                                                                 );
@@ -1267,7 +1318,7 @@ ${userAuthContext}`;
                                                                                     rel="noreferrer" 
                                                                                     className="text-indigo-600 font-semibold underline hover:text-indigo-800" 
                                                                                 >
-                                                                                    {children}
+                                                                                    {children || href}
                                                                                 </a>
                                                                             );
                                                                         },
@@ -1408,12 +1459,12 @@ ${userAuthContext}`;
 
                                 {isLoading && (
                                     <div className="flex items-start gap-2.5">
-                                        <div className="w-7 h-7 rounded-xl overflow-hidden flex items-center justify-center shrink-0 border border-slate-200 bg-slate-900 shadow-2xs">
-                                            <img 
-                                                src={keeperAvatar} 
-                                                alt="Keeper thinking" 
-                                                referrerPolicy="no-referrer" 
-                                                className="w-full h-full object-cover object-[center_12%] animate-pulse" 
+                                        <div className="shrink-0">
+                                            <KeeperAvatar 
+                                                state="thinking" 
+                                                size="sm" 
+                                                showBadge={false} 
+                                                interactive={false} 
                                             />
                                         </div>
                                         <div className="bg-white border border-slate-200/80 rounded-2xl rounded-tl-xs px-4 py-3 shadow-2xs">
@@ -1648,22 +1699,14 @@ ${userAuthContext}`;
                             <GripHorizontal className="w-3 h-3" />
                         </div>
 
-                        {/* Mascot Avatar Thumbnail */}
-                        <div className={`relative w-8 h-8 rounded-full overflow-hidden border-2 shadow-md shrink-0 bg-indigo-900 ${
-                            isExperimental ? 'border-amber-400' : 'border-indigo-300/60'
-                        }`}>
-                            <img 
-                                src={keeperAvatar} 
-                                alt="Keeper Japanese Spitz Dog Avatar" 
-                                referrerPolicy="no-referrer" 
-                                className="w-full h-full object-cover object-[center_12%]" 
+                        {/* Mascot Avatar Thumbnail with micro-animations */}
+                        <div className="shrink-0">
+                            <KeeperAvatar
+                                state={currentKeeperState}
+                                size="md"
+                                showBadge={!isExperimental}
+                                interactive={false}
                             />
-                            <span className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full ring-2 ring-slate-900 ${
-                                isExperimental ? 'bg-amber-400 animate-ping' : 'bg-emerald-400'
-                            }`} />
-                            <span className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full ring-2 ring-slate-900 ${
-                                isExperimental ? 'bg-amber-400' : 'bg-emerald-400'
-                            }`} />
                         </div>
 
                         <div className="flex flex-col text-left">

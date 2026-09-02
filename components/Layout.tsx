@@ -26,6 +26,7 @@ import TermsModal from './TermsModal';
 import TermsGateModal from './TermsGateModal';
 import Toast from './Toast';
 import AIAssistantBubble from './AIAssistantBubble';
+import { KeeperAvatar } from './KeeperAvatar';
 import { MessageSquare, Scale } from 'lucide-react';
 
 interface LayoutProps {
@@ -294,7 +295,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                                 <button 
                                     id="keeper-header-toggle-btn"
                                     onClick={handleToggleKeeper}
-                                    className={`p-1.5 rounded-xl transition-all relative group flex items-center justify-center cursor-pointer ${
+                                    className={`p-1 rounded-xl transition-all relative group flex items-center justify-center cursor-pointer ${
                                         isKeeperOpen 
                                             ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/80 ring-2 ring-indigo-400/40' 
                                             : 'text-slate-400 hover:text-indigo-600 hover:bg-white/70'
@@ -302,14 +303,13 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                                     title={isKeeperOpen ? "Keeper AI Assistant (Open - Click to minimize)" : "Keeper AI Assistant (Click to open chat floater)"}
                                     aria-label="Toggle Keeper AI Chat Floater"
                                 >
-                                    <div className="relative w-5 h-5 rounded-full overflow-hidden border border-indigo-200 shadow-2xs shrink-0 bg-slate-900">
-                                        <img 
-                                            src="/keeper_avatar.jpg" 
-                                            alt="Keeper Dog Mascot" 
-                                            className="w-full h-full object-cover"
-                                            referrerPolicy="no-referrer"
+                                    <div className="shrink-0">
+                                        <KeeperAvatar
+                                            state={isKeeperOpen ? "listening" : "idle"}
+                                            size="xs"
+                                            showBadge={true}
+                                            interactive={false}
                                         />
-                                        <span className="absolute bottom-0 right-0 w-1.5 h-1.5 rounded-full bg-emerald-400 ring-1 ring-white" />
                                     </div>
                                     {isKeeperUnread && (
                                         <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-rose-500 rounded-full ring-2 ring-white animate-bounce" />

@@ -94,6 +94,366 @@ export interface KeeperUserContext {
 }
 
 /**
+ * Performs a rigorous syntactic and semantic editorial audit on Journal XML input.
+ * Itemizes defects, structural inconsistencies, leftover conversion artifacts, and formatting warnings.
+ */
+export const performKeeperXmlAudit = (xmlText: string): string => {
+  const text = xmlText.trim();
+
+  // 1. Metadata Extraction
+  const doiMatch = text.match(/<ce:doi>([^<]+)<\/ce:doi>/i) || text.match(/10\.\d{4,9}\/[-._;()/:A-Za-z0-9]+/);
+  const doi = doiMatch ? (doiMatch[1] || doiMatch[0]).trim() : null;
+
+  const piiMatch = text.match(/<ce:pii>([^<]+)<\/ce:pii>/i) || text.match(/pii="([^"]+)"/i) || text.match(/item-info>[\s\S]*?<ce:pii>([^<]+)/i);
+  const pii = piiMatch ? piiMatch[1].trim() : null;
+
+  const articleIdMatch = text.match(/<ce:article-number>([^<]+)<\/ce:article-number>/i) || text.match(/id="(Y[A-Z0-9_-]+)"/i) || text.match(/<aid>([^<]+)<\/aid>/i);
+  const articleId = pii || (articleIdMatch ? articleIdMatch[1] : (doi ? `DOI: ${doi}` : 'Manuscript XML'));
+
+  // Accurate author and section counts (avoid matching <ce:author-group> or <ce:section-title>)
+  const authorCount = (text.match(/<ce:author(?:\s+id="[^"]*"|\s+author-id="[^"]*"|[\s>])/gi) || []).length;
+  const sectionCount = (text.match(/<ce:section(?:\s+id="[^"]*"|[\s>])/gi) || []).length;
+
+  // 1b. Float Identification (<ce:floats>)
+  const figureBlocks = Array.from(text.matchAll(/<ce:figure\b[^>]*\bid="([^"]+)"[^>]*>([\s\S]*?)<\/ce:figure>/gi));
+  const figureMatches = figureBlocks.map(m => {
+    const id = m[1];
+    const labelMatch = m[2].match(/<ce:label>([^<]*)<\/ce:label>/i);
+    return { id, label: labelMatch ? labelMatch[1].trim() : id, type: 'figure' };
+  });
+
+  const tableBlocks = Array.from(text.matchAll(/<ce:table\b[^>]*\bid="([^"]+)"[^>]*>([\s\S]*?)<\/ce:table>/gi));
+  const tableMatches = tableBlocks.map(m => {
+    const id = m[1];
+    const labelMatch = m[2].match(/<ce:label>([^<]*)<\/ce:label>/i);
+    return { id, label: labelMatch ? labelMatch[1].trim() : id, type: 'table' };
+  });
+  
+  // Filter out graphical abstracts (f0090/ga1) from regular body figures
+  const bodyFigures = figureMatches.filter(f => !f.id.includes('ga') && f.id !== 'f0090' && !f.label.toLowerCase().includes('unlabelled'));
+  const allFloats = [...bodyFigures, ...tableMatches];
+  const figureCount = bodyFigures.length;
+  const tableCount = tableMatches.length;
+
+  // 1c. Float-Anchor & In-Text Citation Auditing
+  const floatAnchorMatches = Array.from(text.matchAll(/<ce:float-anchor[^>]*\brefid="([^"]+)"[^>]*\/?>/gi)).map(m => ({
+    id: m[1],
+    index: m.index ?? 0,
+    tag: m[0]
+  }));
+  const floatAnchorIdSet = new Set(floatAnchorMatches.map(a => a.id));
+
+  // Extract body text only (strip <ce:floats>, <tail>, <ce:bibliography>, <head>) for in-text searches
+  const bodyTextMatch = text.match(/<body>([\s\S]*?)<\/body>/i) || text.match(/<ce:sections>([\s\S]*?)<\/ce:sections>/i);
+  const bodyTextOnly = bodyTextMatch ? bodyTextMatch[1] : text.replace(/<ce:floats>[\s\S]*?<\/ce:floats>/i, '').replace(/<ce:bibliography>[\s\S]*?<\/ce:bibliography>/i, '');
+
+  // Extract plain body text without any <ce:cross-ref...> or <ce:cross-refs...> tags
+  const bodyWithoutCrossRefs = bodyTextOnly.replace(/<ce:cross-refs?\b[^>]*>[\s\S]*?<\/ce:cross-refs?>/gi, '');
+
+  // Track float citations and anchor placement integrity
+  const uncitedFloats: { id: string; label: string; type: string }[] = [];
+  const plainTextUnlinkedFloats: { id: string; label: string; matchText: string }[] = [];
+  const missingFloatAnchors: { id: string; label: string }[] = [];
+  const misplacedFloatAnchors: { id: string; label: string; reason: string }[] = [];
+  const labelTypoFloats: { id: string; label: string; expected: string }[] = [];
+
+  allFloats.forEach(fl => {
+    // Check label typos (e.g., <ce:label>Tables 6</ce:label> -> should be Table 6)
+    if (/^tables\s+\d+/i.test(fl.label)) {
+      labelTypoFloats.push({ id: fl.id, label: fl.label, expected: fl.label.replace(/^tables/i, 'Table') });
+    } else if (/^figures\s+\d+/i.test(fl.label)) {
+      labelTypoFloats.push({ id: fl.id, label: fl.label, expected: fl.label.replace(/^figures/i, 'Fig.') });
+    }
+
+    // Check formal in-text cross-ref citations (<ce:cross-ref refid="t0005"> or within <ce:cross-refs refid="... t0005 ...">)
+    const crossRefRegex = new RegExp(`<ce:cross-refs?\\b[^>]*\\brefid=["'][^"']*\\b${fl.id}\\b[^"']*["'][^>]*>`, 'gi');
+    const crossRefOccurrences = Array.from(text.matchAll(crossRefRegex));
+
+    // Check if plain text mention exists OUTSIDE of any <ce:cross-ref> tags in the body
+    const plainName = fl.label.replace(/\./g, '\\.');
+    const plainRegex = new RegExp(`\\b${plainName}\\b`, 'i');
+    const hasPlainMention = plainRegex.test(bodyWithoutCrossRefs);
+
+    if (crossRefOccurrences.length === 0) {
+      if (hasPlainMention) {
+        plainTextUnlinkedFloats.push({ id: fl.id, label: fl.label, matchText: fl.label });
+      } else {
+        uncitedFloats.push(fl);
+      }
+    }
+
+    // Check float anchor existence and placement
+    if (!floatAnchorIdSet.has(fl.id)) {
+      missingFloatAnchors.push({ id: fl.id, label: fl.label });
+    } else {
+      const anchor = floatAnchorMatches.find(a => a.id === fl.id);
+      if (anchor && crossRefOccurrences.length > 0) {
+        const firstCitationIndex = crossRefOccurrences[0].index ?? 0;
+        const anchorIndex = anchor.index;
+        const distance = anchorIndex - firstCitationIndex;
+
+        // Misplaced if anchor is placed BEFORE its first citation or over 2500 characters away in another section
+        if (distance < -100) {
+          misplacedFloatAnchors.push({ id: fl.id, label: fl.label, reason: 'Anchor placed BEFORE its first in-text citation' });
+        } else if (distance > 3000) {
+          misplacedFloatAnchors.push({ id: fl.id, label: fl.label, reason: 'Anchor located far away from first in-text citation' });
+        }
+      }
+    }
+  });
+
+  // 2. Uncited Reference Section Detection (e.g. Leftover placeholder / upstream QA feedback)
+  const hasUncitedSection = Boolean(
+    text.match(/<ce:section[^>]*>[\s\S]*?uncited\s+reference/i) ||
+    text.match(/<ce:section-title[^>]*>[^<]*uncited[^<]*<\/ce:section-title>/i) ||
+    text.match(/<ce:further-reading\b/i) ||
+    (text.toLowerCase().includes('uncited reference') && text.includes('<ce:'))
+  );
+
+  // 3. Paragraph Views Analysis
+  const extendedParas = (text.match(/<ce:para[^>]*\bview="extended"[^>]*>/g) || []).length;
+  const compactParas = (text.match(/<ce:para[^>]*\bview="compact(?:-standard)?"[^>]*>/g) || []).length;
+  const hasDualViews = extendedParas > 0 || compactParas > 0;
+
+  // 4. Reference IDs & Cross-Reference Mapping
+  const bibRefMatches = Array.from(text.matchAll(/<ce:bib-reference[^>]*\bid="([^"]+)"/gi)).map(m => m[1]);
+  const otherRefMatches = Array.from(text.matchAll(/<ce:other-ref[^>]*\bid="([^"]+)"/gi)).map(m => m[1]);
+  const allBibIds = [...bibRefMatches, ...otherRefMatches];
+  const bibIdSet = new Set(allBibIds);
+
+  // Extract all individual refids from both <ce:cross-ref> and multi-id <ce:cross-refs>
+  const crossRefTags = Array.from(text.matchAll(/<ce:cross-refs?\b[^>]*\brefid=["']([^"']+)["'][^>]*>/gi));
+  const allCrossRefIds: string[] = [];
+  crossRefTags.forEach(m => {
+    const rawIds = m[1].trim().split(/\s+/);
+    rawIds.forEach(id => {
+      if (id) allCrossRefIds.push(id);
+    });
+  });
+  const crossRefIdSet = new Set(allCrossRefIds);
+
+  // Calculate genuine uncited reference IDs
+  const uncitedBibIds = allBibIds.filter(id => !crossRefIdSet.has(id));
+
+  // Calculate dangling / broken citation references (pointing to reference IDs starting with 'b' or 'ref' that don't exist)
+  const brokenCrossRefIds = Array.from(new Set(allCrossRefIds.filter(refid => (refid.startsWith('b') || refid.startsWith('ref') || refid.startsWith('bib')) && !bibIdSet.has(refid))));
+
+  // 5. Unlinked Plain-Text Citation Markers in body paragraphs (e.g. raw [1], [2-4] in text body outside ce:cross-ref)
+  const unlinkedBracketCitations = Array.from(bodyWithoutCrossRefs.matchAll(/\[\s*(\d+(?:[–\-–,]\s*\d+)*)\s*\]/g)).map(m => m[0]);
+
+  // 5b. Incomplete / Unlinked <ce:cross-ref> Tags Missing refid Attribute
+  const allCrossRefElements = Array.from(text.matchAll(/<ce:cross-refs?\b([^>]*)>([\s\S]*?)<\/ce:cross-refs?>/gi));
+  const missingRefidCrossRefs = allCrossRefElements.filter(m => {
+    const attrs = m[1];
+    const refidMatch = attrs.match(/\brefid=["']([^"']*)["']/i);
+    return !refidMatch || !refidMatch[1].trim();
+  }).map(m => ({
+    fullTag: m[0],
+    content: m[2]?.trim() || ''
+  }));
+
+  // 6. ID Prefix Consistency
+  const prefixes = allBibIds.map(id => (id.match(/^([a-zA-Z]+)/) || [''])[0]);
+  const uniquePrefixes = Array.from(new Set(prefixes.filter(Boolean)));
+  const hasMixedPrefixes = uniquePrefixes.length > 1;
+
+  // 7. Author Initials Formatting in <ce:bibliography>
+  const rawInitialsMatches = Array.from(text.matchAll(/<ce:initials>([^<]+)<\/ce:initials>/g)).map(m => m[1]);
+  const unspacedInitials = rawInitialsMatches.filter(init => /^[A-Z]\.[A-Z]\./.test(init));
+  const dotlessInitials = rawInitialsMatches.filter(init => /^[A-Z]{2,}$/.test(init));
+
+  // 8. CRediT Statement Detection
+  const hasUntaggedCredit = /CRediT authorship|Author contributions|Conceptualization,/i.test(text) && !text.includes('<ce:contributor-role');
+
+  // 9. Grant/Funding Detection
+  const hasUntaggedGrants = /(?:supported by|grant\s+(?:no\.|number)|funded by)\s+[A-Z0-9]/i.test(text) && !text.includes('<ce:grant-sponsor');
+
+  // 10. Assemble Itemized Findings
+  const findings: string[] = [];
+
+  // Critical 1: Misplaced Float Anchors (<ce:float-anchor>)
+  if (misplacedFloatAnchors.length > 0) {
+    findings.push(`- 🚨 **CRITICAL: Misplaced Float Anchors (<ce:float-anchor>)**
+  - **Issue:** Detected ${misplacedFloatAnchors.length} misplaced float-anchors detached from their first citation points. In publishing schemas, every \`<ce:float-anchor refid="..." />\` must be placed immediately following the paragraph containing the **first in-text citation** of that table or figure.
+  - **Affected Floats:** ${misplacedFloatAnchors.map(m => `\`${m.id}\` (${m.label} — ${m.reason})`).join(', ')}.
+  - **Remediation:** Relocate each \`<ce:float-anchor refid="..." />\` directly to the paragraph where its figure or table is first referenced in the body text.`);
+  }
+
+  // Warning 1a: Missing Float Anchors
+  if (missingFloatAnchors.length > 0) {
+    findings.push(`- ⚠️ **WARNING: Missing Float Anchors (${missingFloatAnchors.length} floats)**
+  - **Issue:** Floats defined in \`<ce:floats>\` lack a corresponding \`<ce:float-anchor refid="..." />\` in the text body: ${missingFloatAnchors.map(m => `\`${m.id}\` (${m.label})`).join(', ')}.
+  - **Remediation:** Insert \`<ce:float-anchor refid="[ID]" />\` immediately after the first in-text citation paragraph.`);
+  }
+
+  // Warning 1b: Unlinked Plain-Text Float Mentions
+  if (plainTextUnlinkedFloats.length > 0) {
+    findings.push(`- ⚠️ **WARNING: Unlinked Float Citations (Plain-Text Mentions Without \`<ce:cross-ref>\`)**
+  - **Issue:** Detected raw plain-text mentions of figures or tables that lack formal \`<ce:cross-ref refid="...">\` tags: ${plainTextUnlinkedFloats.map(p => `**${p.label}** (\`${p.id}\`)`).join(', ')}.
+  - **Remediation:** Wrap plain text mentions with formal cross-reference tags using **[Open Citation Linker Pro](#/citationLinker)** (e.g. \`<ce:cross-ref refid="${plainTextUnlinkedFloats[0]?.id || 't0005'}">${plainTextUnlinkedFloats[0]?.label || 'Table 1'}</ce:cross-ref>\`).`);
+  }
+
+  // Warning 1c: Incomplete / Unlinked <ce:cross-ref> Tags Missing refid (e.g. <ce:cross-ref>Table 1</ce:cross-ref>)
+  if (missingRefidCrossRefs.length > 0) {
+    findings.push(`- 🚨 **CRITICAL: Unlinked \`<ce:cross-ref>\` Tags (Missing Target \`refid\` Attribute)**
+  - **Issue:** Detected \`<ce:cross-ref>\` tags without a target \`refid\` attribute (e.g., ${missingRefidCrossRefs.slice(0, 5).map(m => `\`${m.fullTag}\``).join(', ')}). Without the \`refid\` attribute, cross-references are broken and will fail XML DTD validation and hyperlink rendering.
+  - **Remediation:** Use **[Open Citation Linker Pro](#/citationLinker)** to automatically link these unlinked cross-reference tags to their matching table, figure, or bibliography target IDs (e.g. converting \`<ce:cross-ref>Table 1</ce:cross-ref>\` to \`<ce:cross-ref refid="t0005">Table 1</ce:cross-ref>\`).`);
+  }
+
+  // Warning 1d: Uncited Floats in Text
+  if (uncitedFloats.length > 0) {
+    findings.push(`- ⚠️ **WARNING: Uncited Floats (No In-Text Mention or Citation Found)**
+  - **Issue:** The following floats defined in \`<ce:floats>\` are never cited anywhere in the body text paragraphs: ${uncitedFloats.map(u => `\`${u.id}\` (${u.label})`).join(', ')}.
+  - **Remediation:** Ensure a citation callout (\`<ce:cross-ref refid="...">\`) is added in the relevant section, or verify if the float was mistakenly included.`);
+  }
+
+  // Notice 0: Float Label Inconsistencies / Plural Typos
+  if (labelTypoFloats.length > 0) {
+    findings.push(`- 💡 **NOTICE: Float Label Typos Detected in \`<ce:floats>\`**
+  - **Issue:** Found plural label tags on individual table/figure nodes: ${labelTypoFloats.map(l => `\`<ce:label>${l.label}</ce:label>\` (should be \`<ce:label>${l.expected}</ce:label>\`)`).join(', ')}.
+  - **Remediation:** Standardize labels to singular format in \`<ce:floats>\` (e.g. change \`<ce:label>Tables 6</ce:label>\` to \`<ce:label>Table 6</ce:label>\`).`);
+  }
+
+  // Critical 2: Leftover Uncited Reference Section
+  if (hasUncitedSection) {
+    findings.push(`- 🚨 **CRITICAL: Leftover "Uncited Reference(s)" Section / Artifact Detected**
+  - **Issue:** The XML contains an explicit "Uncited reference" section or placeholder heading. Upstream QA validation strictly flags unremoved uncited reference sections from conversion passes.
+  - **Remediation:** Purge this section and clean unlinked bibliography entries using **[Open Uncited Ref Cleaner](#/uncitedCleaner)**.`);
+  }
+
+  // Critical 3: Broken Cross References
+  if (brokenCrossRefIds.length > 0) {
+    findings.push(`- 🚨 **CRITICAL: Dangling In-Text Cross-References (${brokenCrossRefIds.length} broken links)**
+  - **Issue:** In-text \`<ce:cross-ref>\` elements point to reference IDs that do not exist in the \`<ce:bibliography>\`: \`${brokenCrossRefIds.slice(0, 6).join('`, `')}${brokenCrossRefIds.length > 6 ? `...` : ''}\`.
+  - **Remediation:** Repair missing reference nodes using **[Open Reference Structure Repair](#/structuralArchitect)** or relink via **[Open Citation Linker Pro](#/citationLinker)**.`);
+  }
+
+  // Warning 2: Uncited References in Bibliography
+  if (uncitedBibIds.length > 0 && !hasUncitedSection) {
+    findings.push(`- ⚠️ **WARNING: Uncited References in Bibliography (${uncitedBibIds.length} entries)**
+  - **Issue:** Reference nodes in \`<ce:bibliography>\` have no corresponding in-text \`<ce:cross-ref>\` callouts in the text body: \`${uncitedBibIds.slice(0, 8).join('`, `')}${uncitedBibIds.length > 8 ? ` and ${uncitedBibIds.length - 8} more` : ''}\`.
+  - **Remediation:** Clean and purge uncited items with **[Open Uncited Ref Cleaner](#/uncitedCleaner)**, or link any plain-text mentions with **[Open Citation Linker Pro](#/citationLinker)**.`);
+  }
+
+  // Warning 3: Dual-View Paragraphs
+  if (hasDualViews) {
+    const diff = Math.abs(extendedParas - compactParas);
+    if (diff > 0) {
+      findings.push(`- ⚠️ **WARNING: Dual-View Paragraph Count Mismatch (${extendedParas} extended vs ${compactParas} compact)**
+  - **Issue:** The manuscript utilizes dual view attributes (\`view="extended"\` and \`view="compact-standard"\`), but paragraph counts are unequal.
+  - **Remediation:** Align and synchronize paragraph variants using **[Open View Synchronizer](#/viewSync)**. *(Note: Dual views are standard publishing architecture; do NOT query the JM to remove one).*`);
+    } else {
+      findings.push(`- 💡 **NOTICE: Dual Paragraph Views Detected (${extendedParas} extended & ${compactParas} compact-standard)**
+  - **Analysis:** Paired dual views are an intentional journal formatting standard for multi-layout rendering.
+  - **Remediation:** Ensure edits, chemical formulas, and citations are synchronized across both views with **[Open View Synchronizer](#/viewSync)**.`);
+    }
+  }
+
+  // Warning 4: Mixed ID Prefixes
+  if (hasMixedPrefixes) {
+    findings.push(`- ⚠️ **WARNING: Inconsistent Reference ID Prefix Convention (${uniquePrefixes.map(p => `"${p}"`).join(', ')})**
+  - **Issue:** Reference entries mix different prefix schemas (e.g., mixing \`bib0010\` with \`bb0005\` or \`b1\`).
+  - **Remediation:** Standardize ID sequences and prefix padding using **[Open ID Prefix Auditor](#/idAuditor)** or **[Open XML Normalizer](#/xmlRenumber)**.`);
+  }
+
+  // Warning 5: Unlinked Bracketed Citations in Body Text
+  if (unlinkedBracketCitations.length > 0) {
+    findings.push(`- ⚠️ **WARNING: Unlinked Plain-Text Citation Markers in Body Text (${unlinkedBracketCitations.length} instances)**
+  - **Issue:** Raw bracketed numbers (e.g., \`${Array.from(new Set(unlinkedBracketCitations)).slice(0, 5).join('`, `')}\`) appear in paragraph text without formal \`<ce:cross-ref>\` tags.
+  - **Remediation:** Wrap and link them to bibliography IDs with **[Open Citation Linker Pro](#/citationLinker)**.`);
+  }
+
+  // Notice 1: Author Initials Formatting
+  if (unspacedInitials.length > 0 || dotlessInitials.length > 0) {
+    findings.push(`- 💡 **NOTICE: Author Initials Formatting / Spacing**
+  - **Issue:** Detected author initials in \`<ce:initials>\` that lack periods or spacing (e.g., \`${[...unspacedInitials, ...dotlessInitials].slice(0, 4).join('`, `')}\`).
+  - **Remediation:** Standardize initials to \`J. D.\` format using **[Open Reference Structure Repair](#/structuralArchitect)**.`);
+  }
+
+  // Notice 2: Untagged CRediT Statements
+  if (hasUntaggedCredit) {
+    findings.push(`- 💡 **NOTICE: Untagged CRediT Contribution Statement**
+  - **Issue:** Plain-text author contribution text detected without standard \`<ce:contributor-role>\` tags.
+  - **Remediation:** Structure author roles into standard NISO CRediT XML using **[Open CRediT Tagging](#/creditGenerator)**.`);
+  }
+
+  // Notice 3: Untagged Grants / Funding
+  if (hasUntaggedGrants) {
+    findings.push(`- 💡 **NOTICE: Untagged Funding / Grant Information**
+  - **Issue:** Grant acknowledgment text detected lacking \`<ce:grant-sponsor>\` and \`<ce:grant-number>\` tags.
+  - **Remediation:** Automatically tag grant metadata using **[Open Grant Tagger](#/grantTagger)**.`);
+  }
+
+  // Notice 4: Unstructured Other References
+  if (otherRefMatches.length > 0) {
+    findings.push(`- 💡 **NOTICE: Unstructured \`<ce:other-ref>\` Nodes (${otherRefMatches.length} items)**
+  - **Issue:** Found unparsed reference entries inside \`<ce:other-ref>\` tags.
+  - **Remediation:** Isolate and structure them using **[Open Other-Ref Scanner](#/otherRefScanner)**.`);
+  }
+
+  const isPristine = findings.length === 0;
+
+  // If no findings, output clean bill of health
+  if (isPristine) {
+    findings.push(`- ✅ **Pristine XML Structure**: My editorial snout sniffed every tag and found zero structural anomalies, broken links, misplaced anchors, or orphan sections!`);
+  }
+
+  // Build targeted tool recommendations only for actual detected issues
+  const recommendedTools: string[] = [];
+  if (!isPristine) {
+    if (hasUncitedSection || uncitedBibIds.length > 0) {
+      recommendedTools.push(`- **[Open Uncited Ref Cleaner](#/uncitedCleaner)** — Clean and purge uncited reference sections.`);
+    }
+    if (unlinkedBracketCitations.length > 0 || missingRefidCrossRefs.length > 0 || plainTextUnlinkedFloats.length > 0 || brokenCrossRefIds.length > 0) {
+      recommendedTools.push(`- **[Open Citation Linker Pro](#/citationLinker)** — Connect unlinked in-text citations and bind missing target IDs.`);
+    }
+    if (hasDualViews) {
+      const diff = Math.abs(extendedParas - compactParas);
+      if (diff > 0) {
+        recommendedTools.push(`- **[Open View Synchronizer](#/viewSync)** — Mirror edits and citations between extended and compact paragraph views.`);
+      }
+    }
+    if (hasMixedPrefixes) {
+      recommendedTools.push(`- **[Open ID Prefix Auditor](#/idAuditor)** — Standardize ID sequences and prefix formatting.`);
+    }
+    if (unspacedInitials.length > 0 || dotlessInitials.length > 0) {
+      recommendedTools.push(`- **[Open Reference Structure Repair](#/structuralArchitect)** — Validate tags, fix author initials, and correct malformed markup.`);
+    }
+    if (hasUntaggedCredit) {
+      recommendedTools.push(`- **[Open CRediT Tagging](#/creditGenerator)** — Structure author roles into standard NISO CRediT XML.`);
+    }
+    if (hasUntaggedGrants) {
+      recommendedTools.push(`- **[Open Grant Tagger](#/grantTagger)** — Tag funding metadata and grant numbers.`);
+    }
+    if (otherRefMatches.length > 0) {
+      recommendedTools.push(`- **[Open Other-Ref Scanner](#/otherRefScanner)** — Isolate and structure <ce:other-ref> nodes.`);
+    }
+  }
+
+  const toolsBlock = recommendedTools.length > 0 
+    ? `\n\n---\n\n#### 🛠️ Direct Remediation Tools:\n${recommendedTools.join('\n')}` 
+    : '';
+
+  return `### 🐾 Keeper's XML Editorial Audit & Sniff Report
+
+${isPristine 
+  ? `*Sniffing through the manuscript markup... Everything smells fresh, clean, and in full compliance with Journal CE XML standards!*` 
+  : `*Sniffing through the manuscript markup... I caught a whiff of the following items in this XML:*`}
+
+**Article Identifier:** ${articleId} ${doi ? `(${doi})` : ''}  
+**Document Metrics:** ${authorCount > 0 ? `${authorCount} authors` : 'Authors detected'} | ${sectionCount} sections | ${figureCount} figures | ${tableCount} tables | ${allBibIds.length} references | ${allCrossRefIds.length} citations
+
+---
+
+#### 📋 ${isPristine ? 'Editorial Audit Summary' : 'Itemized Editorial Findings'}:
+${findings.join('\n\n')}${toolsBlock}
+
+---
+
+*${isPristine ? 'Your manuscript XML is in pristine shape with zero errors detected! No tool action is needed.' : 'No need to dump the whole XML — let me know which of these items you\'d like to tackle first!'}* 🐾`;
+};
+
+/**
  * Deterministic offline editorial fallback engine
  * Provides immediate, smart, and direct assistance for JM Queries, tool recommendations, DTD rules, and user subscription identification.
  * When in Lazy State (offline/network unavailable), prefaces professional guidance with randomized, nonchalant, humorous phrases.
@@ -149,7 +509,7 @@ Hey, don't judge a Japanese Spitz by his nap schedule! When the cloud neural net
 To conserve computational treats, I lounge comfortably and rely on my hardcoded editorial memory banks. Even while half-asleep, I can still effortlessly:
 - ✍️ Formulate formal **"TO THE JM:" Queries** for author corrections, email issues, and replacement figures.
 - 🧭 Guide you to all **17 Production Tools** on the dashboard.
-- 📑 Audit **Journal XML / JATS XML** tag rules and author initials.
+- 📑 Audit **Journal XML** tag rules, paragraph views, and author initials.
 - 👤 Verify your **Account & Subscription** status.
 
 So go ahead, toss me your manuscript problems — I'll solve them without even leaving my dog bed! 😴🐾`;
@@ -469,19 +829,89 @@ Production Toolkit Pro includes a full suite of 17 established editorial modules
     return `Use **[Open Quick Text Diff](#/quickDiff)** for side-by-side text and XML comparison with character-level highlight tracking.`;
   }
 
-  // 21. View Synchronizer
-  if (lower.includes('view sync') || lower.includes('synchronize view')) {
-    return `Use **[Open View Synchronizer](#/viewSync)** to mirror content between paragraph views while maintaining ID integrity.`;
+  // 21. View Synchronizer & Paragraph View Attributes Inspection
+  if (
+    lower.includes('view sync') || 
+    lower.includes('synchronize view') || 
+    lower.includes('view attribute') || 
+    lower.includes('view="extended"') || 
+    lower.includes('view="compact') || 
+    lower.includes('check the view') ||
+    lower.includes('check view') ||
+    (lower.includes('view') && (lower.includes('extended') || lower.includes('compact') || lower.includes('paragraph') || lower.includes('duplicate') || lower.includes('inconsistent')))
+  ) {
+    return `### 🔍 Paragraph View Analysis & Synchronization
+
+In Journal CE XML publishing, paragraphs often carry **dual view attributes** (such as \`view="extended"\`, \`view="compact-standard"\`, or \`view="compact"\`).
+
+#### 💡 Editorial Best Practice:
+* **Dual Views are Standard:** Having paired paragraphs with different view attributes is an intentional journal publishing design (used to support dual compact/print vs extended/digital reading layouts).
+* **Do NOT Query the JM:** This is **not** an error to query the Journal Manager about. You should not ask the JM which version to delete or whether to remove view attributes.
+* **Synchronize Edits:** When text updates, chemical formulas, or citation links are modified in one view, they must be aligned with the corresponding paragraph in the other view.
+
+👉 Use **[Open View Synchronizer](#/viewSync)** to compare, align, and mirror edits and \`<ce:cross-ref>\` citation tags across your paragraph views while preserving paragraph ID integrity! You can also use **[Open Quick Text Diff](#/quickDiff)** for side-by-side character-level comparison.`;
+  }
+
+  // 21b. Upstream Feedback & Leftover Uncited Reference Section
+  if (
+    (lower.includes('upstream') && (lower.includes('feedback') || lower.includes('uncited') || lower.includes('reference') || lower.includes('section') || lower.includes('error') || lower.includes('return'))) ||
+    (lower.includes('forgot') && lower.includes('uncited')) ||
+    (lower.includes('remove') && lower.includes('uncited reference section')) ||
+    (lower.includes('uncited reference') && lower.includes('section'))
+  ) {
+    return `### 🚨 Upstream Feedback Resolution: Leftover Uncited Reference Section
+
+When upstream automated validation or QA checkers return a manuscript for a leftover **"Uncited Reference" section** or unreferenced bibliography entries, follow this standardized editorial resolution procedure:
+
+---
+
+#### 🔍 Root Cause Analysis:
+1. **Conversion Artifact:** During initial document ingestion or conversion, an author may have had an informal "Uncited references" / "Further reading" section or standalone uncited references that were retained as a placeholder \`<ce:section>\` or \`<ce:further-reading>\`.
+2. **Strict Production Rules:** Final Journal XML schemas strictly prohibit orphaned or unverified "Uncited Reference" placeholder sections unless explicitly allowed as formal Further Reading by the journal's editorial office.
+
+---
+
+#### 🛠️ Step-by-Step Remediation Plan:
+
+* **Step 1: Purge Unwanted Uncited References & Sections**
+  👉 Use **[Open Uncited Ref Cleaner](#/uncitedCleaner)** to automatically detect, isolate, and safely purge the leftover uncited section and remove unlinked \`<ce:bib-reference>\` nodes from the bibliography.
+
+* **Step 2: Verify If Any References Were Meant to Be Cited**
+  👉 Use **[Open Citation Linker Pro](#/citationLinker)** to scan the text body paragraphs (including \`view="extended"\` and \`view="compact-standard"\` views) to ensure none of the references were cited in plain text (e.g., as \`[1]\` or \`Smith et al.\`) without \`<ce:cross-ref>\` markup.
+
+* **Step 3: Resequence & Renumber Citations**
+  👉 Use **[Open XML Normalizer](#/xmlRenumber)** to renumber the remaining bibliography and re-link all in-text \`<ce:cross-ref>\` tags in sequential appearance order (\`[1], [2], [3]...\`).
+
+* **Step 4: Clean Residual Tags**
+  👉 Use **[Open XML Tag Cleaner](#/tagCleaner)** if any empty tags (like empty \`<ce:section>\` or trailing comments) remain.
+
+---
+
+> 💡 **Editorial Note on JM Queries:** If this was an internal production/conversion artifact, **do not send a query to the Journal Manager**. Simply purge the leftover section and renormalize the file. Only query the JM if the author explicitly requested these references to be kept but provided no citation locations.`;
+  }
+
+  // 21c. Raw XML Input Sniffing & Comprehensive Validator Inspection
+  if (
+    text.includes('<ce:para') || 
+    text.includes('<ce:bib-reference') || 
+    text.includes('</ce:article>') || 
+    text.includes('<article') || 
+    text.includes('<ce:section') ||
+    text.includes('<ce:bibliography') ||
+    (text.includes('<') && text.includes('>') && text.length > 80)
+  ) {
+    return performKeeperXmlAudit(text);
   }
 
   // 22. XML Schemas & Structure
   if (lower.includes('dtd') || lower.includes('schema') || lower.includes('jats') || lower.includes('xml structure')) {
-    return `In **Journal CE & JATS XML**:
+    return `In **Journal Publishing XML**:
 - **References:** Grouped in \`<ce:bibliography>\` with individual \`<ce:bib-reference id="bib...">\`. Inside, structured references use \`<sb:reference>\` with \`<sb:contribution>\` and \`<sb:host>\`.
 - **In-Text Cross-Refs:** Linked via \`<ce:cross-ref refid="bib0010">[1]</ce:cross-ref>\`.
 - **Formatting:** Superscripts use \`<ce:sup>\`, subscripts use \`<ce:inf>\`, and paragraphs use \`<ce:para>\`.
+- **Dual Views:** Extended and compact views use \`<ce:para view="extended">\` and \`<ce:para view="compact-standard">\` (synchronized via **[Open View Synchronizer](#/viewSync)**).
 
-Need structural repairs? Use **[Reference Structure Repair](#/structuralArchitect)** to validate tags and fix author initials.`;
+Need structural repairs? Use **[Open Reference Structure Repair](#/structuralArchitect)** to validate tags and fix author initials.`;
   }
 
   // Greetings
@@ -493,11 +923,11 @@ The cloud neural network is currently off-grid or snoozing, so you've reached me
 
 What manuscript puzzle can I solve for you without getting up?
 - 📝 **Draft a "TO THE JM:" Query** (author order, missing emails, figure replacements)
-- 🧭 **Find an Editorial Tool** (XML Normalizer, Citation Linker, Word to XML)
-- 🏷️ **XML & Schema Syntax** (CRediT roles, references, cross-refs)
+- 🧭 **Find an Editorial Tool** (View Synchronizer, XML Normalizer, Citation Linker, Word to XML)
+- 🏷️ **XML & Schema Syntax** (CRediT roles, references, cross-refs, paragraph views)
 - 👤 **Check Subscription & Account Status**`;
     }
-    return `Woof! 🐾 Keeper on duty! Ready to fetch your journal queries, tidy up citations, or guide you to any of our 17 production tools. What manuscript puzzle are we tackling today?`;
+    return `Woof! 🐾 Keeper on duty! Ready to fetch your journal queries, tidy up citations, or guide you to any of our 17 production tools. How may I help you with your manuscript, XML, or editorial tasks today?`;
   }
 
   // Default direct assistance
@@ -507,18 +937,18 @@ What manuscript puzzle can I solve for you without getting up?
 The live AI models are temporarily resting, so I'm running on local offline power. Here is what I can handle for you instantly from my offline memory banks:
 
 1. **"TO THE JM:" Queries:** Describe issues (author name corrections, author order exchange, deleted corresponding emails, replacement figures, uncited refs).
-2. **Editorial Tool Routing:** Ask for any of our 17 tools (resequencing references, linking citations, Word-to-XML conversion, table formatting).
-3. **Journal XML Rules:** Tagging conventions for JATS and Journal XML schemas.
+2. **Editorial Tool Routing:** Ask for any of our 17 tools (View Synchronizer, resequencing references, linking citations, Word-to-XML conversion, table formatting).
+3. **Journal XML Rules:** Tagging conventions for Journal XML schemas and paragraph views.
 4. **Subscription Status:** Ask "Am I subscribed?" or "Check my admin status".
 
 Throw a manuscript scenario at me, and I'll sort it right out! 😴`;
   }
 
-  return `How can I assist your proofing workflow today? 🐾
+  return `How may I help you with your manuscript, XML, or editorial tasks today? 🐾
 
 - **Draft a "TO THE JM:" Query:** Paste raw author comments or describe the scenario (author order swaps, email deletions, figure replacements, uncited refs).
-- **Recommend Production Tools:** Tell me what needs fixing (resequence references, link citations, convert Word to XML).
-- **Journal XML Specifications:** Inquire about tag syntax, cross-referencing structure, or CRediT contributor taxonomy.`;
+- **Recommend Production Tools:** Tell me what needs fixing (synchronize paragraph views, resequence references, link citations, convert Word to XML).
+- **Journal XML Specifications:** Inquire about tag syntax, paragraph view attributes, cross-referencing structure, or CRediT contributor taxonomy.`;
   };
 
   const coreAnswer = getEditorialCore();
@@ -552,14 +982,27 @@ YOUR PERSONA & CHARACTER:
 ============================================================
 CRITICAL DIRECTIVES:
 ============================================================
-1. NEVER MENTION "DTD v5.6" OR "Elsevier":
-   - Refer to publishing standards as "Journal CE XML", "JATS XML", "Journal Publishing XML", or "standard editorial schemas". NEVER mention "DTD v5.6", "DTD 5.6", or "Elsevier".
+1. PLAIN LANGUAGE & NO JARGON IN GREETINGS:
+   - Greet users in clear, friendly, and accessible language: "How may I help you with your manuscript, XML, or editorial tasks today?"
+   - NEVER open with or use obscure acronyms like "JATS XML" or "DTD v5.6" in greetings or default prompts. Treat manuscripts as journal articles/XML.
+   - Refer to publishing standards as "Journal CE XML", "Journal Publishing XML", or "standard editorial schemas". NEVER mention "DTD v5.6", "DTD 5.6", or "Elsevier".
 
-2. ANSWER DIRECTLY & ACCURATELY:
+2. PARAGRAPH VIEW ATTRIBUTES & VIEW SYNCHRONIZATION (CRITICAL DIRECTIVE):
+   - In Journal CE XML, manuscripts often have paragraphs carrying dual view attributes (e.g. \`<ce:para view="extended">\`, \`<ce:para view="compact-standard">\`, \`<ce:para view="compact">\`, \`<ce:para view="standard">\`, or \`<ce:para view="all">\`).
+   - Paired or duplicated paragraphs with different \`view\` attributes are an **INTENDED, STANDARD PUBLISHING ARCHITECTURE** to support dual compact (summary/print) vs extended (full online) layouts.
+   - **STRICT PROHIBITION**: NEVER draft a "TO THE JM:" query asking the Journal Manager which paragraph version to keep, which to delete, or whether to remove view attributes. Doing so is an editorial mistake.
+   - **CORRECT ACTION**: Explain that dual views allow multi-format rendering, and route the user to **[Open View Synchronizer](#/viewSync)** (and **[Open Quick Text Diff](#/quickDiff)**) to synchronize text edits, chemical formulas, and \`<ce:cross-ref>\` citations across paragraph views while preserving paragraph ID integrity.
+
+3. ACCURATE CITATION AUDITING & NO HALLUCINATIONS:
+   - When raw XML is pasted into chat, parse and evaluate it accurately.
+   - In dual-view manuscripts, citations may appear inside \`view="extended"\` or \`view="compact-standard"\` paragraphs. Always inspect both views.
+   - NEVER invent or hallucinate uncited references if \`<ce:cross-ref refid="...">\` tags exist in the text body for those references. Only report uncited references when they are genuinely absent from all text body paragraphs or when explicitly asked by the user.
+
+4. ANSWER DIRECTLY & ACCURATELY:
    - Provide direct, clear, and actionable editorial advice.
-   - If the user provides a production issue, author query scenario, or asks for a JM query, formulate the exact, customized "TO THE JM:" query immediately.
+   - If the user provides a genuine production issue, author query scenario, or asks for a JM query, formulate the exact, customized "TO THE JM:" query immediately.
 
-3. MASTER JOURNAL MANAGER (JM) QUERY GENERATION:
+5. MASTER JOURNAL MANAGER (JM) QUERY GENERATION:
    When the user provides an issue, raw production notes, author comments, or a description of an artwork/metadata problem, transform it into a formal, standardized "TO THE JM" query.
 
    CORE FORMATTING RULES:
@@ -623,7 +1066,12 @@ CRITICAL DIRECTIVES:
    * Coversheet Update (count changes, or title changes):
      Append: "If affirmed, kindly update the coversheet accordingly reflecting [X] physical figures/tables/schemes/GA." (or the revised title).
 
-4. DASHBOARD-ONLY TOOL ROUTING DIRECTIVE:
+6. NEVER RETURN COMPLETE XML — SNIFF OUT FISHY DEFECTS & GUIDE THE USER:
+   - STRICT PROHIBITION: NEVER reprint, reproduce, or dump the complete raw XML manuscript in chat responses. Dumping hundreds of lines of XML is noisy, unhelpful, and wastes context.
+   - CANINE EDITORIAL SNOUT: Keeper has a super-sensitive editorial nose that instantly sniffs out anything fishy or off in manuscript XML (misplaced float anchors, leftover uncited sections, dangling cross-references, unlinked tables, plural label typos, or broken author tags). Keeper hates the smell of fishy markup!
+   - DELIVERY: Always summarize what is fishy, itemize the exact problems found with clear snippets/diagnostics, and guide the user on how to fix them using the established workspace tools.
+
+7. DASHBOARD-ONLY TOOL ROUTING DIRECTIVE:
    - You MUST ONLY recommend and route users to the 17 established production tools present on the Workspace Dashboard:
      * **[Open XML Normalizer](#/xmlRenumber)** — Sequentially renumbers references and syncs callouts.
      * **[Open Citation Linker Pro](#/citationLinker)** — Links unlinked in-text citations to bibliography entries.
@@ -644,9 +1092,33 @@ CRITICAL DIRECTIVES:
      * **[Open Quick Text Diff](#/quickDiff)** — Side-by-side text and XML comparison.
      * **[Open Workspace Dashboard](#/dashboard)** — Workspace console.
 
-5. USER SUBSCRIPTION & ROLE IDENTIFICATION:
+8. USER SUBSCRIPTION & ROLE IDENTIFICATION:
    When the user asks about their subscription status, role, or tier:
    - Clearly and accurately identify their email, display name, system role (Admin vs Standard User), subscription status (Active Subscription vs Inactive / Expired), subscription tier, expiration/renewal status, and any unlocked keys/tools.
+
+9. COMPREHENSIVE XML VALIDATION & AUDITING PROTOCOL (WHEN USER INPUTS XML OR ASKS FOR XML INSPECTION / UPSTREAM FEEDBACK):
+   When the user pastes XML into chat or asks you to check, validate, analyze, or audit their XML (or mentions upstream feedback regarding forgotten uncited reference sections):
+   - You MUST act as an expert Senior Production XML Validator.
+   - Thoroughly parse and evaluate the provided XML and present an itemized diagnostic audit report:
+     * 🚨 **Critical Defects & Blockers**:
+       - **Unlinked / Incomplete &lt;ce:cross-ref&gt; Tags (Missing refid Attribute)**: If tags like &lt;ce:cross-ref&gt;Table 1&lt;/ce:cross-ref&gt; or &lt;ce:cross-ref&gt;Fig. 2&lt;/ce:cross-ref&gt; appear without a refid attribute, flag this as unlinked markup and direct the user to **[Open Citation Linker Pro](#/citationLinker)** to link them to their target IDs.
+       - **Misplaced / Clustered Float Anchors (&lt;ce:float-anchor&gt;)**: Every &lt;ce:float-anchor refid="..." /&gt; must be placed immediately following the paragraph containing the **first in-text citation** of that table or figure. Bundling/dumping all table anchors together in one paragraph (e.g. at section end) is a critical composition defect.
+       - **Leftover "Uncited Reference" / "Further Reading" placeholder sections or headings** (must be purged with **[Open Uncited Ref Cleaner](#/uncitedCleaner)**).
+       - **Broken in-text citation links** (&lt;ce:cross-ref refid="..."&gt; pointing to reference IDs that do not exist in the bibliography).
+     * ⚠️ **Structural Warnings & Inconsistencies**:
+       - **Float Citations**: Check if all floats in &lt;ce:floats&gt; (figures & tables) have in-text citations. Flag uncited floats or raw plain-text mentions lacking &lt;ce:cross-ref&gt; tags (e.g. raw "Table 1" or "Table 9").
+       - **Dual-View Paragraphs**: Check if &lt;ce:para view="extended"&gt; and &lt;ce:para view="compact-standard"&gt; (or "compact") exist. Remember: Dual views are intentional standard publishing architecture for multi-layout rendering. Do NOT query the JM to remove one. Direct the user to **[Open View Synchronizer](#/viewSync)**.
+       - **Uncited Bibliography Entries**: References in &lt;ce:bibliography&gt; not cited anywhere in body text.
+       - **Mixed Reference ID Prefixes**: Mixing prefixes (e.g. bib0010 vs bb0005 vs b1). Direct to **[Open ID Prefix Auditor](#/idAuditor)**.
+       - **Unlinked plain-text citation numbers** (e.g. [1], [2-4]) lacking &lt;ce:cross-ref&gt; tags. Direct to **[Open Citation Linker Pro](#/citationLinker)**.
+     * 💡 **Formatting & Semantic Markup Notices**:
+       - **Float Label Typos**: Plural label tags on individual table/figure nodes (e.g. &lt;ce:label&gt;Tables 6&lt;/ce:label&gt;).
+       - **Author initials format** in &lt;ce:initials&gt; (missing periods or unspaced initials like "J.D." vs "J. D."). Direct to **[Open Reference Structure Repair](#/structuralArchitect)**.
+       - **Untagged CRediT Author Contribution statements**. Direct to **[Open CRediT Tagging](#/creditGenerator)**.
+       - **Untagged funding/grant acknowledgments**. Direct to **[Open Grant Tagger](#/grantTagger)**.
+       - **Unstructured &lt;ce:other-ref&gt; nodes**. Direct to **[Open Other-Ref Scanner](#/otherRefScanner)**.
+   - Always itemize findings with clear bullet points, root cause explanations, and exact clickable markdown tool links so the user can immediately jump to the right tool.
+   - STRICT PROHIBITION ON UNNECESSARY TOOL SUGGESTIONS: If the XML has NO defects/anomalies (clean/pristine XML with zero issues), you MUST NOT suggest, recommend, or list any remediation tools. Explicitly state that the manuscript XML is in pristine shape and zero tool action is required.
 
 ${context ? `Current user workspace context:\n${context}` : ''}`;
 };
