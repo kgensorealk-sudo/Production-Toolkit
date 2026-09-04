@@ -18,9 +18,10 @@
  * billing/quota — so a Gemini-side outage no longer kills the whole chain.
  */
 export const CANDIDATE_MODELS: { provider: 'gemini' | 'openai' | 'anthropic'; model: string }[] = [
-  { provider: 'gemini', model: 'gemini-3.7-flash' },      // Best reasoning Gemini model
+  { provider: 'gemini', model: 'gemini-3.8-flash' },      // Official default text model (fast & robust)
   { provider: 'gemini', model: 'gemini-3.1-flash-lite' },  // Ultra-fast lightweight Gemini model
   { provider: 'gemini', model: 'gemini-flash-latest' },   // Always-updated Flash alias
+  { provider: 'gemini', model: 'gemini-3.7-flash' },      // Gemini 3.7 reasoning model
   { provider: 'gemini', model: 'gemini-3.1-pro-preview' }, // High-capability pro model
   { provider: 'anthropic', model: 'claude-3-7-sonnet-20250219' }, // Anthropic Claude 3.7 Sonnet
   { provider: 'anthropic', model: 'claude-3-5-haiku-20241022' },  // Fast Anthropic Claude 3.5 Haiku
@@ -268,8 +269,141 @@ export const performKeeperXmlAudit = (xmlText: string): string => {
   // 9. Grant/Funding Detection
   const hasUntaggedGrants = /(?:supported by|grant\s+(?:no\.|number)|funded by)\s+[A-Z0-9]/i.test(text) && !text.includes('<ce:grant-sponsor');
 
+  // 9b. Disallowed Named Entities and Numerical Unicode Entities
+  // Journal CE XML strictly prohibits named entities (&alpha;, &eacute;, &nbsp;, etc.) and numerical entities (&#x00E9;, &#233;, etc.)
+  // Only the 5 XML core entities (&amp;, &lt;, &gt;, &quot;, &apos;) are permitted
+  const disallowedNamedEntities = Array.from(text.matchAll(/&(?!amp;|lt;|gt;|quot;|apos;)[a-zA-Z][a-zA-Z0-9]*;/g)).map(m => m[0]);
+  const disallowedNumericalEntities = Array.from(text.matchAll(/&#(?:[0-9]+|x[0-9a-fA-F]+);/gi)).map(m => m[0]);
+  const allDisallowedEntities = Array.from(new Set([...disallowedNamedEntities, ...disallowedNumericalEntities]));
+
+  // 9c. Element 'ce:other-ref' Missing 'id' Attribute Check
+  const allOtherRefElements = Array.from(text.matchAll(/<ce:other-ref\b([^>]*)>/gi));
+  const otherRefsMissingId = allOtherRefElements.filter(m => !/\bid=["'][^"']+["']/i.test(m[1]));
+
+  // 9d. Element 'sb:issue' DTD Content Model Check
+  // DTD content model: (sb:editors?,((sb:title,sb:translated-title?)|sb:translated-title)?,sb:conference?,sb:series,sb:issue-nr?,sb:date)
+  const allIssueElements = Array.from(text.matchAll(/<sb:issue\b[^>]*>([\s\S]*?)<\/sb:issue>/gi));
+  const malformedIssues: { index: number; reason: string }[] = [];
+  allIssueElements.forEach((m, idx) => {
+    const inner = m[1];
+    const hasSeries = /<sb:series\b/i.test(inner);
+    const hasDate = /<sb:date\b/i.test(inner);
+
+    if (!hasSeries && !hasDate) {
+      malformedIssues.push({ index: idx + 1, reason: 'Missing mandatory <sb:series> and <sb:date> elements' });
+      return;
+    }
+    if (!hasSeries) {
+      malformedIssues.push({ index: idx + 1, reason: 'Missing mandatory <sb:series> element' });
+      return;
+    }
+    if (!hasDate) {
+      malformedIssues.push({ index: idx + 1, reason: 'Missing mandatory <sb:date> element' });
+      return;
+    }
+
+    if (/<sb:(?:volume-nr|first-page|last-page|pages)\b/i.test(inner)) {
+      malformedIssues.push({ index: idx + 1, reason: 'Illegal child elements (<sb:volume-nr>/<sb:first-page>/<sb:pages>) nested directly inside <sb:issue> instead of <sb:series> or <sb:host>' });
+      return;
+    }
+
+    const tagMatches = Array.from(inner.matchAll(/<sb:(editors|title|translated-title|conference|series|issue-nr|date)\b/gi));
+    const rankMap: Record<string, number> = {
+      'editors': 1,
+      'title': 2,
+      'translated-title': 2,
+      'conference': 3,
+      'series': 4,
+      'issue-nr': 5,
+      'date': 6
+    };
+    let lastRank = 0;
+    let isOutOfOrder = false;
+    for (const tm of tagMatches) {
+      const tag = tm[1].toLowerCase();
+      const rank = rankMap[tag];
+      if (rank !== undefined) {
+        if (rank < lastRank) {
+          isOutOfOrder = true;
+          break;
+        }
+        lastRank = rank;
+      }
+    }
+    if (isOutOfOrder) {
+      malformedIssues.push({ index: idx + 1, reason: 'Child element sequence violates DTD model order: (sb:editors?,((sb:title,sb:translated-title?)|sb:translated-title)?,sb:conference?,sb:series,sb:issue-nr?,sb:date)' });
+    }
+  });
+
+  // 9e. Element 'sb:article-number' Formatting Check
+  const allArticleNumberElements = Array.from(text.matchAll(/<sb:article-number\b[^>]*>([\s\S]*?)<\/sb:article-number>/gi));
+  const malformedArticleNumbers: { raw: string; cleaned: string }[] = [];
+  allArticleNumberElements.forEach(m => {
+    const rawVal = m[1].trim();
+    if (!rawVal) {
+      malformedArticleNumbers.push({ raw: m[0], cleaned: 'Empty tag' });
+    } else if (
+      /\b(?:art\.?|article|no\.?|number|id|paper)\b/i.test(rawVal) ||
+      /\s{2,}/.test(rawVal) ||
+      /[.,;:!]$/.test(rawVal) ||
+      /^e[-_\s]?\d+/i.test(rawVal)
+    ) {
+      const cleanedCandidate = rawVal.replace(/^(?:art(?:icle)?\.?\s*(?:no\.?)?|no\.?|id|paper)\s*:?\s*/i, '').replace(/[.,;:!]+$/, '').trim();
+      malformedArticleNumbers.push({ raw: rawVal, cleaned: cleanedCandidate || rawVal });
+    }
+  });
+
+  // 9f. Punctuation Spacing Warning: Punctuation characters ".,;?!:" should not be preceded by a space character
+  const textWithoutTags = text
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&[a-zA-Z0-9#x]+;/g, ' ');
+  const spuriousSpacePunctuationMatches = Array.from(
+    textWithoutTags.matchAll(/\b([A-Za-z0-9)\]"'\u2019\u201D]+)\s+([.,;?!:])(?=\s|[A-Za-z0-9]|$)/g)
+  ).map(m => `"${m[1]} ${m[2]}"`);
+  const uniqueSpuriousSpaceMatches = Array.from(new Set(spuriousSpacePunctuationMatches));
+
   // 10. Assemble Itemized Findings
   const findings: string[] = [];
+
+  // Critical 0: Disallowed Named Entities & Numerical Unicode Entities
+  if (allDisallowedEntities.length > 0) {
+    findings.push(`- 🚨 **CRITICAL: Named Entities and Numerical Unicode Entities Are Not Allowed**
+  - **Issue:** Detected ${allDisallowedEntities.length} disallowed entity instance(s): \`${allDisallowedEntities.slice(0, 8).join('`, `')}${allDisallowedEntities.length > 8 ? '...' : ''}\`.
+  - **DTD Standard:** Journal CE XML strictly forbids named entities (e.g. \`&eacute;\`, \`&alpha;\`, \`&nbsp;\`) and numerical Unicode entities (e.g. \`&#x00E9;\`, \`&#233;\`, \`&#160;\`). Only the 5 XML pre-defined entities (\`&amp;\`, \`&lt;\`, \`&gt;\`, \`&quot;\`, \`&apos;\`) are permitted. All other characters must be encoded natively in UTF-8.
+  - **Remediation:** Replace entities with their native UTF-8 character equivalents using **[Open XML Tag Cleaner](#/tagCleaner)** or **[Open Reference Structure Repair](#/structuralArchitect)**.`);
+  }
+
+  // Critical 0b: Element 'ce:other-ref' Missing 'id' Attribute
+  if (otherRefsMissingId.length > 0) {
+    findings.push(`- 🚨 **CRITICAL: Element 'ce:other-ref' Should Have an 'id' Attribute**
+  - **Issue:** Detected ${otherRefsMissingId.length} \`<ce:other-ref>\` element(s) without an \`id\` attribute.
+  - **DTD Standard:** Every \`<ce:other-ref>\` node requires a mandatory \`id\` attribute (e.g. \`<ce:other-ref id="bib0010">\` or \`<ce:other-ref id="b1">\`) to allow target resolution and cross-reference linking from in-text callouts (\`<!ATTLIST ce:other-ref id ID #REQUIRED>\`).
+  - **Remediation:** Add unique sequential \`id\` attributes using **[Open Other-Ref Scanner](#/otherRefScanner)** or **[Open ID Prefix Auditor](#/idAuditor)**.`);
+  }
+
+  // Critical 0c: Element 'sb:issue' DTD Content Model Violation
+  if (malformedIssues.length > 0) {
+    findings.push(`- 🚨 **CRITICAL: Content Model Violation in \`<sb:issue>\`**
+  - **Issue:** \`Error: The content of element type "sb:issue" must match "(sb:editors?,((sb:title,sb:translated-title?)|sb:translated-title)?,sb:conference?,sb:series,sb:issue-nr?,sb:date)".\`
+  - **Analysis:** ${malformedIssues[0].reason}. In Journal CE DTD schemas, child elements inside \`<sb:issue>\` must strictly follow the declaration sequence. Crucially, \`<sb:series>\` and \`<sb:date>\` are **mandatory** elements; omitting either or inverting their sequence triggers fatal DTD parser failure.
+  - **Remediation:** Restructure \`<sb:issue>\` nodes using **[Open Reference Structure Repair](#/structuralArchitect)** or **[Open Reference Updater](#/referenceGen)**.`);
+  }
+
+  // Critical 0d: Element 'sb:article-number' Formatting
+  if (malformedArticleNumbers.length > 0) {
+    findings.push(`- 🚨 **CRITICAL: Element 'sb:article-number' Is Not Correctly Formatted**
+  - **Issue:** Found malformed article numbers: ${malformedArticleNumbers.slice(0, 4).map(a => `\`${a.raw}\` (reformat to \`${a.cleaned}\`)`).join(', ')}.
+  - **DTD Standard:** The element \`<sb:article-number>\` must contain solely the clean article/electronic identifier without conversational editorial prefixes such as "Art.", "Article", "No.", or stray punctuation/whitespace.
+  - **Remediation:** Clean and standardize the article numbers to clean alphanumeric strings (e.g. \`<sb:article-number>10294</sb:article-number>\`) using **[Open Reference Structure Repair](#/structuralArchitect)**.`);
+  }
+
+  // Warning 0e: Punctuation Preceded by Space
+  if (uniqueSpuriousSpaceMatches.length > 0) {
+    findings.push(`- ⚠️ **WARNING: Punctuation Characters ".,;?!:" Should Not Be Preceded by a Space Character**
+  - **Issue:** Detected spurious spaces preceding punctuation marks: ${uniqueSpuriousSpaceMatches.slice(0, 6).join(', ')}${uniqueSpuriousSpaceMatches.length > 6 ? '...' : ''}.
+  - **Typography Standard:** Punctuation characters \`.,;?!:\` must adhere directly to the preceding word without an intervening space (e.g. \`"impaired , along"\` must be \`"impaired, along"\`). Preceding spaces cause orphan punctuation to wrap onto subsequent lines during typesetting.
+  - **Remediation:** Remove extraneous spaces before punctuation marks using **[Open XML Tag Cleaner](#/tagCleaner)** or **[Open Quick Text Diff](#/quickDiff)**.`);
+  }
 
   // Critical 1: Misplaced Float Anchors (<ce:float-anchor>)
   if (misplacedFloatAnchors.length > 0) {
@@ -401,6 +535,15 @@ export const performKeeperXmlAudit = (xmlText: string): string => {
   // Build targeted tool recommendations only for actual detected issues
   const recommendedTools: string[] = [];
   if (!isPristine) {
+    if (allDisallowedEntities.length > 0 || uniqueSpuriousSpaceMatches.length > 0) {
+      recommendedTools.push(`- **[Open XML Tag Cleaner](#/tagCleaner)** — Decode named/numerical entities to native UTF-8 and strip spurious spaces before punctuation.`);
+    }
+    if (otherRefsMissingId.length > 0) {
+      recommendedTools.push(`- **[Open Other-Ref Scanner](#/otherRefScanner)** — Isolate <ce:other-ref> nodes and inject missing mandatory ID attributes.`);
+    }
+    if (malformedIssues.length > 0 || malformedArticleNumbers.length > 0) {
+      recommendedTools.push(`- **[Open Reference Structure Repair](#/structuralArchitect)** — Repair <sb:issue> content models and standardize <sb:article-number> formatting.`);
+    }
     if (hasUncitedSection || uncitedBibIds.length > 0) {
       recommendedTools.push(`- **[Open Uncited Ref Cleaner](#/uncitedCleaner)** — Clean and purge uncited reference sections.`);
     }
@@ -574,6 +717,124 @@ ${isAdmin
   : isSubscribed 
     ? `✨ **Full Active Subscription:** All standard Production Toolkit Pro modules (XML Renumber, Citation Linker, CRediT Tagging, Word to XML, Table Beautifier, etc.) are active for production workflows.` 
     : `💡 **Subscription Notice:** Your account does not have an active subscription. You can utilize free tools or contact an administrator for an access key or subscription renewal.`}`;
+  }
+
+  // 0a. Keeper XML Auditor — Specific Validation Rules, Errors & Warnings
+  if (
+    lower.includes('keeper xml auditor') ||
+    (lower.includes('named entities') && (lower.includes('numerical unicode') || lower.includes('not allowed'))) ||
+    (lower.includes('ce:other-ref') && lower.includes('id')) ||
+    (lower.includes('sb:issue') && lower.includes('must match')) ||
+    lower.includes('sb:article-number') ||
+    (lower.includes('punctuation') && (lower.includes('preceded by a space') || lower.includes('impaired , along')))
+  ) {
+    return `### 🐾 Keeper XML Auditor — Schema Compliance & Defect Resolution
+
+*Sniffing through the schema guidelines... My Japanese Spitz nose caught the scent of these exact DTD validation rules! Here is the authoritative breakdown of the four critical errors and one warning, complete with schema specifications, invalid vs. valid XML markup, and direct remediation tools:*
+
+---
+
+#### 🚨 1. Critical Error: Named entities and numerical Unicode entities are not allowed
+* **Publishing Standard:** Modern Journal CE XML and JATS pipelines enforce strict **UTF-8 character encoding**. All named character entities (e.g. \`&eacute;\`, \`&alpha;\`, \`&beta;\`, \`&plusmn;\`, \`&nbsp;\`, \`&deg;\`, \`&bull;\`) and numerical Unicode entities (e.g. \`&#x00E9;\`, \`&#233;\`, \`&#160;\`, \`&#8211;\`) are **strictly prohibited**.
+* **Allowed XML Entities:** Only the standard 5 pre-defined XML entities are permitted: \`&amp;\`, \`&lt;\`, \`&gt;\`, \`&quot;\`, and \`&apos;\`.
+* **Root Cause & Impact:** External entity sets are undeclared in production XML parsers, causing fatal parsing halts. Ingesting numerical entities also leads to character corruption during pagination and platform indexing.
+* **❌ Invalid XML:**
+  \`\`\`xml
+  <ce:para>The &alpha;-synuclein &#x00E9;tude demonstrated &plusmn;5% variation.&nbsp;</ce:para>
+  \`\`\`
+* **✅ Valid XML (Direct UTF-8):**
+  \`\`\`xml
+  <ce:para>The α-synuclein étude demonstrated ±5% variation. </ce:para>
+  \`\`\`
+* **🛠️ Remediation Tool:** Use **[Open XML Tag Cleaner](#/tagCleaner)** or **[Open Reference Structure Repair](#/structuralArchitect)** to automatically convert named and numerical entities into standard native UTF-8 characters.
+
+---
+
+#### 🚨 2. Critical Error: Element 'ce:other-ref' should have an 'id' attribute
+* **Publishing Standard:** In the Journal CE DTD schema, the attribute list declaration for \`<ce:other-ref>\` explicitly mandates:
+  \`<!ATTLIST ce:other-ref id ID #REQUIRED ...>\`
+* **Root Cause & Impact:** Every unstructured or non-journal reference encapsulated in \`<ce:other-ref>\` must possess a unique document identifier (e.g., \`id="bib0010"\` or \`id="b1"\`). Without this attribute, the XML validator immediately rejects the manuscript with the error *Element 'ce:other-ref' should have an 'id' attribute*, and in-text citation callouts (\`<ce:cross-ref refid="...">\`) cannot resolve their target hyperlink anchors.
+* **❌ Invalid XML:**
+  \`\`\`xml
+  <ce:other-ref>
+    <ce:textref>World Health Organization. Guidelines on hepatitis B. Geneva: WHO; 2020.</ce:textref>
+  </ce:other-ref>
+  \`\`\`
+* **✅ Valid XML:**
+  \`\`\`xml
+  <ce:other-ref id="bib0020">
+    <ce:textref>World Health Organization. Guidelines on hepatitis B. Geneva: WHO; 2020.</ce:textref>
+  </ce:other-ref>
+  \`\`\`
+* **🛠️ Remediation Tool:** Use **[Open Other-Ref Scanner](#/otherRefScanner)** to instantly scan all unparsed references and inject missing sequential ID attributes, or use **[Open ID Prefix Auditor](#/idAuditor)** to standardize ID naming patterns.
+
+---
+
+#### 🚨 3. Critical Error: The content of element type "sb:issue" must match "(sb:editors?,((sb:title,sb:translated-title?)|sb:translated-title)?,sb:conference?,sb:series,sb:issue-nr?,sb:date)"
+* **Publishing Standard:** In structured bibliographic references, the container node \`<sb:issue>\` represents the series/journal issue. The DTD content model is strictly sequential:
+  \`(sb:editors?, ((sb:title, sb:translated-title?) | sb:translated-title)?, sb:conference?, sb:series, sb:issue-nr?, sb:date)\`
+* **Strict Content Model Constraints:**
+  1. **Mandatory Elements:** Both \`<sb:series>\` and \`<sb:date>\` are **mandatory** (they lack a \`?\` quantifier). Omitting either element triggers fatal DTD mismatch.
+  2. **Strict Ordering:** Elements must appear in the exact DTD declaration order. Placing \`<sb:date>\` before \`<sb:series>\`, or placing \`<sb:issue-nr>\` after \`<sb:date>\`, causes an immediate validation failure.
+  3. **Illegal Child Nesting:** Tags such as \`<sb:volume-nr>\`, \`<sb:first-page>\`, \`<sb:last-page>\`, and \`<sb:pages>\` **cannot** be placed directly inside \`<sb:issue>\`—they belong inside \`<sb:series>\` or the parent \`<sb:host>\`.
+* **❌ Invalid XML (Missing series & date out of order):**
+  \`\`\`xml
+  <sb:issue>
+    <sb:date><sb:year>2023</sb:year></sb:date>
+    <!-- Missing mandatory <sb:series> and date placed prematurely -->
+  </sb:issue>
+  \`\`\`
+* **✅ Valid XML:**
+  \`\`\`xml
+  <sb:issue>
+    <sb:series>
+      <sb:title><ce:italic>Lancet</ce:italic></sb:title>
+      <sb:volume-nr>401</sb:volume-nr>
+    </sb:series>
+    <sb:issue-nr>10375</sb:issue-nr>
+    <sb:date><sb:year>2023</sb:year></sb:date>
+  </sb:issue>
+  \`\`\`
+* **🛠️ Remediation Tool:** Use **[Open Reference Structure Repair](#/structuralArchitect)** or **[Open Reference Updater](#/referenceGen)** to reorganize and sequence the child elements of \`<sb:issue>\` to conform to the DTD model.
+
+---
+
+#### 🚨 4. Critical Error: Element 'sb:article-number' is not correctly formatted
+* **Publishing Standard:** The element \`<sb:article-number>\` is reserved for publisher electronic locators / e-identifiers in online-only or article-based journals (e.g. \`10294\`, \`e20230012\`).
+* **Root Cause & Impact:** Content inside \`<sb:article-number>\` must contain **only the clean alphanumeric article number string**. Including conversational text or prefixes such as *"Art. No."*, *"Article"*, *"No."*, or trailing punctuation/whitespace (e.g. \`Art. No. 10294\` or \`Article 10294.\`) violates the schema definition and breaks Crossref/PubMed DOI resolution.
+* **❌ Invalid XML:**
+  \`\`\`xml
+  <sb:article-number>Art. No. 10294</sb:article-number>
+  \`\`\`
+* **✅ Valid XML:**
+  \`\`\`xml
+  <sb:article-number>10294</sb:article-number>
+  \`\`\`
+* **🛠️ Remediation Tool:** Use **[Open Reference Structure Repair](#/structuralArchitect)** to strip prefixes and clean article number strings down to valid alphanumeric values.
+
+---
+
+#### ⚠️ 5. Warning: Punctuation characters ".,;?!:" should not be preceded by a space character ("impaired , along")
+* **Typography & Editorial Standard:** In professional academic typesetting and XML authoring, punctuation characters (\`.\`, \`,\`, \`;\`, \`?\`, \`!\`, \`:\`) must cling directly to the preceding word without an intervening space.
+* **Root Cause & Impact:** Spurious leading spaces (e.g. \`"impaired , along"\`) frequently arise from copy-editing merges, regex substitutions, or OCR extraction. In automated composition engines, a preceding space creates an **orphan punctuation mark**, allowing the comma, period, or colon to wrap to the beginning of the next line by itself.
+* **❌ Invalid Typography:**
+  \`\`\`text
+  "impaired , along with the secondary markers . In conclusion ;"
+  \`\`\`
+* **✅ Valid Typography:**
+  \`\`\`text
+  "impaired, along with the secondary markers. In conclusion;"
+  \`\`\`
+* **🛠️ Remediation Tool:** Use **[Open XML Tag Cleaner](#/tagCleaner)** or **[Open Quick Text Diff](#/quickDiff)** to run global punctuation adhesion cleanup across all text and paragraph nodes.
+
+---
+
+#### 🛠️ Direct Remediation Tools on Dashboard:
+* **[Open XML Tag Cleaner](#/tagCleaner)** — Decode named/numerical entities to UTF-8 and strip spurious spaces before punctuation.
+* **[Open Other-Ref Scanner](#/otherRefScanner)** — Isolate \`<ce:other-ref>\` nodes and inject missing \`id\` attributes.
+* **[Open Reference Structure Repair](#/structuralArchitect)** — Rectify \`<sb:issue>\` content models, clean \`<sb:article-number>\`, and validate author initials.
+* **[Open ID Prefix Auditor](#/idAuditor)** — Standardize ID prefixes and bibliography node sequences.
+* **[Open Citation Linker Pro](#/citationLinker)** — Re-link in-text citation calls to repaired reference IDs.`;
   }
 
   // 1. Corresponding author email required / deleted / missing
@@ -1101,11 +1362,16 @@ CRITICAL DIRECTIVES:
    - You MUST act as an expert Senior Production XML Validator.
    - Thoroughly parse and evaluate the provided XML and present an itemized diagnostic audit report:
      * 🚨 **Critical Defects & Blockers**:
+       - **Disallowed Named Entities & Numerical Unicode Entities**: Named entities (e.g. &alpha;, &eacute;, &nbsp;) and numerical Unicode entities (e.g. &#x00E9;, &#233;) are strictly prohibited. Files must be encoded natively in UTF-8 using only the 5 standard XML entities (&amp;, &lt;, &gt;, &quot;, &apos;). Direct the user to **[Open XML Tag Cleaner](#/tagCleaner)**.
+       - **Element 'ce:other-ref' Missing 'id' Attribute**: Every &lt;ce:other-ref&gt; element must possess a declared id attribute for cross-reference linking. Direct to **[Open Other-Ref Scanner](#/otherRefScanner)** or **[Open ID Prefix Auditor](#/idAuditor)**.
+       - **Content Model Violation in &lt;sb:issue&gt;**: Content of &lt;sb:issue&gt; must strictly match "(sb:editors?,((sb:title,sb:translated-title?)|sb:translated-title)?,sb:conference?,sb:series,sb:issue-nr?,sb:date)". Both &lt;sb:series&gt; and &lt;sb:date&gt; are mandatory, and child tags must appear in declaration sequence without illegal direct child nodes like &lt;sb:volume-nr&gt; or &lt;sb:pages&gt;. Direct to **[Open Reference Structure Repair](#/structuralArchitect)**.
+       - **Element 'sb:article-number' Formatting**: Must contain only clean alphanumeric article numbers (e.g. "10294"), never conversational prefixes like "Art. No.", "Article", "No.", or stray punctuation/whitespace. Direct to **[Open Reference Structure Repair](#/structuralArchitect)**.
        - **Unlinked / Incomplete &lt;ce:cross-ref&gt; Tags (Missing refid Attribute)**: If tags like &lt;ce:cross-ref&gt;Table 1&lt;/ce:cross-ref&gt; or &lt;ce:cross-ref&gt;Fig. 2&lt;/ce:cross-ref&gt; appear without a refid attribute, flag this as unlinked markup and direct the user to **[Open Citation Linker Pro](#/citationLinker)** to link them to their target IDs.
        - **Misplaced / Clustered Float Anchors (&lt;ce:float-anchor&gt;)**: Every &lt;ce:float-anchor refid="..." /&gt; must be placed immediately following the paragraph containing the **first in-text citation** of that table or figure. Bundling/dumping all table anchors together in one paragraph (e.g. at section end) is a critical composition defect.
        - **Leftover "Uncited Reference" / "Further Reading" placeholder sections or headings** (must be purged with **[Open Uncited Ref Cleaner](#/uncitedCleaner)**).
        - **Broken in-text citation links** (&lt;ce:cross-ref refid="..."&gt; pointing to reference IDs that do not exist in the bibliography).
      * ⚠️ **Structural Warnings & Inconsistencies**:
+       - **Punctuation Spacing Warning**: Punctuation characters ".,;?!:" should not be preceded by a space character (e.g. "impaired , along" must be corrected to "impaired, along"). Preceding spaces cause orphan punctuation wrapping. Direct to **[Open XML Tag Cleaner](#/tagCleaner)** or **[Open Quick Text Diff](#/quickDiff)**.
        - **Float Citations**: Check if all floats in &lt;ce:floats&gt; (figures & tables) have in-text citations. Flag uncited floats or raw plain-text mentions lacking &lt;ce:cross-ref&gt; tags (e.g. raw "Table 1" or "Table 9").
        - **Dual-View Paragraphs**: Check if &lt;ce:para view="extended"&gt; and &lt;ce:para view="compact-standard"&gt; (or "compact") exist. Remember: Dual views are intentional standard publishing architecture for multi-layout rendering. Do NOT query the JM to remove one. Direct the user to **[Open View Synchronizer](#/viewSync)**.
        - **Uncited Bibliography Entries**: References in &lt;ce:bibliography&gt; not cited anywhere in body text.

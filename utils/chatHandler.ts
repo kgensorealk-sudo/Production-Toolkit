@@ -76,6 +76,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const isAuditRequest = 
       /^(?:please\s+)?(?:check|audit|sniff|validate|inspect|analyze|review)\b/i.test(userText) ||
       /what(?:'s|\s+is)\s+(?:wrong|off|fishy)\s+(?:with\s+)?(?:this|my)?\s*xml/i.test(userText) ||
+      /keeper\s+xml\s+auditor/i.test(userText) ||
       (containsXmlTags && !userText.toLowerCase().includes('write an email') && !userText.toLowerCase().includes('draft a query'));
 
     // If pure XML is pasted or user asks directly to audit/validate their XML:
@@ -83,6 +84,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const auditReport = performKeeperXmlAudit(userText);
       return res.json({
         reply: sanitizeOutput(auditReport),
+        modelUsed: 'keeper-xml-auditor'
+      });
+    }
+
+    // Direct Keeper XML auditor rule inquiries without raw XML:
+    const isKeeperXmlAuditorQuery = 
+      /keeper\s+xml\s+auditor/i.test(userText) ||
+      (userText.includes('ce:other-ref') && userText.includes('id')) ||
+      (userText.includes('sb:issue') && userText.includes('must match')) ||
+      (userText.includes('named entities') && userText.includes('numerical unicode'));
+
+    if (isKeeperXmlAuditorQuery && !containsXmlTags) {
+      const auditorBriefing = generateOfflineKeeperResponse(userText, context, false);
+      return res.json({
+        reply: sanitizeOutput(auditorBriefing),
         modelUsed: 'keeper-xml-auditor'
       });
     }
@@ -126,8 +142,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })),
     ];
 
-    // Per-model timeout budget (7.5s max per candidate to fail over quickly if rate-limited or hanging)
-    const PER_MODEL_TIMEOUT_MS = 7500;
+    // Per-model timeout budget (12s max per candidate to allow reliable completion while failing over if hanging)
+    const PER_MODEL_TIMEOUT_MS = 12000;
 
     let reply = '';
     let activeModel = '';

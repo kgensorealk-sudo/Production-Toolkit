@@ -189,14 +189,14 @@ export function generateTypingScript(fullText: string): TypingStep[] {
         steps.push({
           type: 'type',
           text: ch,
-          delay: Math.floor(Math.random() * 12) + 20 // 20-32ms
+          delay: Math.floor(Math.random() * 6) + 6 // 6-12ms
         });
       }
 
-      // 2. Realization pause: Human notices the mistype!
+      // 2. Realization pause: Quick reaction
       steps.push({
         type: 'pause',
-        delay: Math.floor(Math.random() * 60) + 200 // 200-260ms pause
+        delay: Math.floor(Math.random() * 30) + 70 // 70-100ms pause
       });
 
       // 3. Backspace the mistake character by character (rapid deletion keystrokes)
@@ -204,14 +204,14 @@ export function generateTypingScript(fullText: string): TypingStep[] {
         steps.push({
           type: 'delete',
           count: 1,
-          delay: Math.floor(Math.random() * 15) + 45 // 45-60ms per backspace
+          delay: Math.floor(Math.random() * 10) + 16 // 16-26ms per backspace
         });
       }
 
-      // 4. Hesitation pause before typing the correct characters
+      // 4. Brief hesitation pause before typing the correct characters
       steps.push({
         type: 'pause',
-        delay: Math.floor(Math.random() * 30) + 90 // 90-120ms
+        delay: Math.floor(Math.random() * 15) + 30 // 30-45ms
       });
 
       // 5. Type the correct characters and advance currentIndex
@@ -219,7 +219,7 @@ export function generateTypingScript(fullText: string): TypingStep[] {
         steps.push({
           type: 'type',
           text: ch,
-          delay: Math.floor(Math.random() * 10) + 22 // 22-32ms
+          delay: Math.floor(Math.random() * 6) + 6 // 6-12ms
         });
       }
 
@@ -228,33 +228,35 @@ export function generateTypingScript(fullText: string): TypingStep[] {
     }
 
     // Normal typing of next character or small chunk for speed ramp on long texts
-    const char = fullText[currentIndex];
-
-    // Determine typing delay based on character context
-    let delay = Math.floor(Math.random() * 12) + 16; // 16-28ms default
-
-    if (char === ' ') {
-      delay = Math.floor(Math.random() * 15) + 22; // 22-37ms
-    } else if (char === ',' || char === ';' || char === ':') {
-      delay = Math.floor(Math.random() * 40) + 60; // 60-100ms pause
-    } else if (char === '.' || char === '!' || char === '?') {
-      delay = Math.floor(Math.random() * 70) + 160; // 160-230ms sentence pause
-    } else if (char === '\n') {
-      delay = Math.floor(Math.random() * 50) + 90; // 90-140ms line pause
+    // For swift, modern AI streaming cadence, chunk characters after initial intro
+    let chunkSize = 1;
+    if (currentIndex > 70 && len > 200) {
+      chunkSize = len > 800 ? 3 : 2;
     }
 
-    // Adaptive acceleration: If past character 320, slightly speed up so long messages finish smoothly
-    if (currentIndex > 320 && len > 500) {
-      delay = Math.max(8, Math.floor(delay * 0.55));
+    const chunk = fullText.slice(currentIndex, currentIndex + chunkSize);
+    const lastChar = chunk[chunk.length - 1];
+
+    // Ultra-crisp, responsive typing delay (1-3ms default)
+    let delay = Math.floor(Math.random() * 3) + 1;
+
+    if (lastChar === ' ') {
+      delay = Math.floor(Math.random() * 3) + 2; // 2-4ms
+    } else if (lastChar === ',' || lastChar === ';' || lastChar === ':') {
+      delay = Math.floor(Math.random() * 6) + 8; // 8-14ms pause
+    } else if (lastChar === '.' || lastChar === '!' || lastChar === '?') {
+      delay = Math.floor(Math.random() * 10) + 15; // 15-25ms sentence pause
+    } else if (lastChar === '\n') {
+      delay = Math.floor(Math.random() * 8) + 10; // 10-18ms line pause
     }
 
     steps.push({
       type: 'type',
-      text: char,
+      text: chunk,
       delay
     });
 
-    currentIndex++;
+    currentIndex += chunk.length;
   }
 
   return steps;
@@ -318,8 +320,8 @@ export function startTypingSimulation(options: {
     activeTimeout = setTimeout(runNextStep, step.delay);
   };
 
-  // Begin execution
-  activeTimeout = setTimeout(runNextStep, 40);
+  // Begin execution immediately
+  activeTimeout = setTimeout(runNextStep, 10);
 
   return {
     stop: () => {

@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import chatHandler from './utils/chatHandler.js';
+import grantExtractHandler from './utils/grantExtractHandler.js';
 
 async function startServer() {
   const app = express();
@@ -25,6 +26,14 @@ async function startServer() {
   });
   app.post('/api/chat', (req, res) => {
     chatHandler(req as any, res as any);
+  });
+
+  // Grant extraction endpoints (supporting both /api/ai/grant-extract and /api/grant-extract)
+  app.post('/api/ai/grant-extract', (req, res) => {
+    grantExtractHandler(req as any, res as any);
+  });
+  app.post('/api/grant-extract', (req, res) => {
+    grantExtractHandler(req as any, res as any);
   });
 
   // Vite middleware for development vs static build in production

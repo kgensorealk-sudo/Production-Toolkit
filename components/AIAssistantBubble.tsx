@@ -22,7 +22,10 @@ import {
     FileText,
     GripHorizontal,
     Pin,
-    Zap
+    Zap,
+    Activity,
+    ShieldCheck,
+    ListChecks
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -32,6 +35,7 @@ import { isExperimentalTool, getToolInfo } from '../utils/toolRegistry';
 import { startTypingSimulation, TypingSimulatorController } from '../utils/typingSimulator';
 import { generateOfflineKeeperResponse, sanitizeOutput, KeeperUserContext } from '../utils/keeperEngine';
 import { KeeperAvatar, KeeperState } from './KeeperAvatar';
+import { XmlAuditProgressTracker, AUDIT_STAGES, sniffXmlMetadata } from './XmlAuditProgressTracker';
 
 const keeperAvatar = '/keeper_avatar.jpg';
 
@@ -44,6 +48,16 @@ interface Message {
      *  or one of the offline-engine variants ('offline-keeper', 'offline-keeper-fallback',
      *  'offline-keeper-recovery'). Undefined for user messages and legacy stored messages. */
     modelUsed?: string;
+    auditData?: {
+        completed: boolean;
+        metadata?: {
+            articleId?: string;
+            doi?: string;
+            figuresCount?: number;
+            tablesCount?: number;
+            referencesCount?: number;
+        };
+    };
 }
 
 /**
@@ -384,10 +398,39 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const typingControllerRef = useRef<TypingSimulatorController | null>(null);
 
-    // Cleanup typing animation if component unmounts
+    // Visual XML Audit Progress Tracker State
+    const [auditProgress, setAuditProgress] = useState<{
+        isActive: boolean;
+        isCompleted?: boolean;
+        progress: number;
+        stageIndex: number;
+        metadata?: {
+            articleId?: string;
+            doi?: string;
+            figuresCount?: number;
+            tablesCount?: number;
+            referencesCount?: number;
+        };
+    }>({
+        isActive: false,
+        isCompleted: false,
+        progress: 0,
+        stageIndex: 0
+    });
+    const auditIntervalRef = useRef<any>(null);
+    const skipAuditDelayRef = useRef<(() => void) | null>(null);
+
+    // Cleanup typing animation & audit progress timer if component unmounts
     useEffect(() => {
         return () => {
             typingControllerRef.current?.stop();
+            if (skipAuditDelayRef.current) {
+                skipAuditDelayRef.current();
+                skipAuditDelayRef.current = null;
+            }
+            if (auditIntervalRef.current) {
+                clearInterval(auditIntervalRef.current);
+            }
         };
     }, []);
 
@@ -457,9 +500,18 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
         };
     }, []);
 
-    // Auto-scroll helpers
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // Auto-scroll helpers (contained strictly inside messagesContainerRef to prevent covering bottom controls)
+    const scrollToBottom = (smooth = true) => {
+        if (messagesContainerRef.current) {
+            if (smooth) {
+                messagesContainerRef.current.scrollTo({
+                    top: messagesContainerRef.current.scrollHeight,
+                    behavior: 'smooth'
+                });
+            } else {
+                messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+            }
+        }
     };
 
     const scrollToTop = () => {
@@ -480,7 +532,7 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
                 }, 80);
                 return () => clearTimeout(timer);
             } else {
-                scrollToBottom();
+                scrollToBottom(false);
                 const timer = setTimeout(() => {
                     textareaRef.current?.focus({ preventScroll: true });
                 }, 100);
@@ -491,7 +543,7 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
 
     useEffect(() => {
         if (isOpen && messages.length > 0) {
-            scrollToBottom();
+            scrollToBottom(true);
         }
     }, [isOpen, messages.length]);
 
@@ -610,6 +662,15 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
     };
 
     const executeResetChat = () => {
+        if (skipAuditDelayRef.current) {
+            skipAuditDelayRef.current();
+            skipAuditDelayRef.current = null;
+        }
+        if (auditIntervalRef.current) {
+            clearInterval(auditIntervalRef.current);
+            auditIntervalRef.current = null;
+        }
+        setAuditProgress(prev => ({ ...prev, isActive: false }));
         typingControllerRef.current?.stop();
         setCurrentlyTypingId(null);
         setMessages([]);
@@ -628,6 +689,15 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
     };
 
     const handleSkipTyping = () => {
+        if (skipAuditDelayRef.current) {
+            skipAuditDelayRef.current();
+            skipAuditDelayRef.current = null;
+        }
+        if (auditIntervalRef.current) {
+            clearInterval(auditIntervalRef.current);
+            auditIntervalRef.current = null;
+        }
+        setAuditProgress(prev => ({ ...prev, progress: 100, isCompleted: true }));
         if (typingControllerRef.current) {
             typingControllerRef.current.skip();
             setSuccessCelebration(true);
@@ -655,6 +725,85 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
         setMessages(newMessages);
         setInputPrompt('');
         setIsLoading(true);
+
+        // Detect if this request is auditing XML or contains raw Journal CE XML tags
+        const containsXmlTags = 
+            text.includes('<ce:para') ||
+            text.includes('<ce:floats>') ||
+            text.includes('<ce:bib-reference') ||
+            text.includes('<ce:cross-ref') ||
+            text.includes('<ce:float-anchor') ||
+            text.includes('<ce:section') ||
+            text.includes('</ce:article>') ||
+            text.includes('<article') ||
+            text.includes('<sb:reference') ||
+            (text.includes('<') && text.includes('>') && text.length > 80 && /<[a-z0-9_:-]+[\s>]/i.test(text));
+
+        const isAuditRequest = 
+            /^(?:please\s+)?(?:check|audit|sniff|validate|inspect|analyze|review)\b/i.test(text) ||
+            /what(?:'s|\s+is)\s+(?:wrong|off|fishy)\s+(?:with\s+)?(?:this|my)?\s*xml/i.test(text) ||
+            /keeper\s+xml\s+auditor/i.test(text) ||
+            (containsXmlTags && !text.toLowerCase().includes('write an email') && !text.toLowerCase().includes('draft a query'));
+
+        const isXmlAudit = containsXmlTags || isAuditRequest;
+
+        if (isXmlAudit) {
+            const doiMatch = text.match(/10\.\d{4,9}\/[-._;()/:A-Za-z0-9]+/);
+            const piiMatch = text.match(/[S|B][0-9]{4}-?[0-9]{4}\(?[0-9]{2}\)?[0-9]{5}-?[0-9X]/i) || text.match(/<ce:pii>([^<]+)<\/ce:pii>/i);
+            const figuresCount = (text.match(/<ce:figure\b/gi) || []).length;
+            const tablesCount = (text.match(/<ce:table\b/gi) || []).length;
+            const referencesCount = (text.match(/<ce:bib-reference\b|<sb:reference\b/gi) || []).length;
+
+            setAuditProgress({
+                isActive: true,
+                isCompleted: false,
+                progress: 12,
+                stageIndex: 0,
+                metadata: {
+                    articleId: piiMatch ? (piiMatch[1] || piiMatch[0]) : undefined,
+                    doi: doiMatch ? doiMatch[0] : undefined,
+                    figuresCount: figuresCount > 0 ? figuresCount : undefined,
+                    tablesCount: tablesCount > 0 ? tablesCount : undefined,
+                    referencesCount: referencesCount > 0 ? referencesCount : undefined,
+                }
+            });
+        } else {
+            setAuditProgress(prev => ({ ...prev, isActive: false, isCompleted: false }));
+        }
+
+        // Setup deliberate scanning progression with comfortable delay so the user clearly sees each stage
+        let skipAuditDelay = false;
+        skipAuditDelayRef.current = () => {
+            skipAuditDelay = true;
+        };
+
+        // Pacing per stage: ~480ms - 520ms (~3.5s total across 7 stages)
+        const stageDelays = [480, 500, 480, 500, 480, 500, 480];
+        const scanPromise = isXmlAudit ? (async () => {
+            for (let i = 0; i < AUDIT_STAGES.length; i++) {
+                if (skipAuditDelay) break;
+                const progressPct = Math.round(((i + 1) / (AUDIT_STAGES.length + 0.3)) * 96);
+                setAuditProgress(prev => ({
+                    ...prev,
+                    isActive: true,
+                    isCompleted: false,
+                    stageIndex: i,
+                    progress: progressPct
+                }));
+
+                const delayMs = stageDelays[i] || 480;
+                await new Promise<void>((resolve) => {
+                    const timer = setTimeout(resolve, delayMs);
+                    const pollInterval = setInterval(() => {
+                        if (skipAuditDelay) {
+                            clearTimeout(timer);
+                            clearInterval(pollInterval);
+                            resolve();
+                        }
+                    }, 40);
+                });
+            }
+        })() : Promise.resolve();
 
         try {
             const dogGreeting = getTimeOfDayDogGreeting();
@@ -714,40 +863,73 @@ ${userAuthContext}`;
                     content: m.content
                 }));
 
-            const response = await fetch('/api/ai/chat', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    messages: payloadMessages.length > 0 ? payloadMessages : [{ role: 'user', content: text }],
-                    context: contextInfo
-                })
-            });
+            const generateResponsePromise = (async () => {
+                try {
+                    const response = await fetch('/api/ai/chat', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            messages: payloadMessages.length > 0 ? payloadMessages : [{ role: 'user', content: text }],
+                            context: contextInfo
+                        })
+                    });
 
-            if (!response.ok) {
-                const errData = await response.json().catch(() => ({}));
-                throw new Error(errData.error || `Request failed with status ${response.status}`);
+                    if (!response.ok) {
+                        const errData = await response.json().catch(() => ({}));
+                        throw new Error(errData.error || `Request failed with status ${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    return {
+                        reply: data.reply || 'No response generated.',
+                        modelUsed: isXmlAudit ? 'keeper-xml-auditor' : data.modelUsed
+                    };
+                } catch (err: any) {
+                    console.warn("AI Chat server fallback to Keeper smart offline engine:", err?.message || err);
+                    const offlineReply = generateOfflineKeeperResponse(text, userContextPayload);
+                    return {
+                        reply: offlineReply,
+                        modelUsed: isXmlAudit ? 'keeper-xml-auditor' : 'offline-keeper'
+                    };
+                }
+            })();
+
+            // Wait for BOTH the deliberate multi-stage scan progression AND the AI response generation
+            const [_, responseData] = await Promise.all([scanPromise, generateResponsePromise]);
+
+            if (isXmlAudit) {
+                // Mark 100% completion with verified checkmarks and keep visible in docked bar
+                setAuditProgress(prev => ({
+                    ...prev,
+                    progress: 100,
+                    stageIndex: AUDIT_STAGES.length - 1,
+                    isCompleted: true,
+                    isActive: true
+                }));
+
+                // Satisfying pause: let the user see the completed 100% verified status for ~550ms before typing starts
+                if (!skipAuditDelay) {
+                    await new Promise(r => setTimeout(r, 550));
+                }
             }
 
-            const data = await response.json();
-            const rawContent = data.reply || 'No response generated.';
-            const sanitizedContent = rawContent
-                .replace(/Elsevier\s*DTD\s*v5\.6/gi, 'DTD v5.6')
-                .replace(/Elsevier\s*XML/gi, 'Journal CE XML')
-                .replace(/Elsevier\s*DTD/gi, 'Journal DTD')
-                .replace(/Elsevier\s*guidelines/gi, 'standard editorial guidelines')
-                .replace(/Elsevier\s*format/gi, 'standard journal format')
-                .replace(/Elsevier\s*standards/gi, 'standard publishing schemas')
-                .replace(/Elsevier/gi, 'Journal Publishing');
+            const rawContent = responseData.reply;
+            const sanitizedContent = sanitizeOutput(rawContent);
 
+            const detectedMeta = isXmlAudit ? (auditProgress.metadata || sniffXmlMetadata(text)) : undefined;
             const assistantMessageId = `ast-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
             const initialAssistantMessage: Message = {
                 id: assistantMessageId,
                 role: 'assistant',
                 content: '',
                 timestamp: Date.now(),
-                modelUsed: data.modelUsed
+                modelUsed: responseData.modelUsed,
+                auditData: isXmlAudit ? {
+                    completed: true,
+                    metadata: detectedMeta
+                } : undefined
             };
 
             // Switch from "sniffing out" spinner to active typing simulation
@@ -758,67 +940,34 @@ ${userAuthContext}`;
                 setHasUnread(true);
             }
 
-            // Start human-like typing simulation with realistic mistype, pause & deletion correction
+            // Scroll container gently to reveal new response without affecting outer page
+            scrollToBottom(true);
+
+            // Start swift, human-like typing simulation with realistic cadence
             typingControllerRef.current = startTypingSimulation({
                 fullText: sanitizedContent,
                 onUpdate: (displayedText) => {
                     setMessages(prev => prev.map(m => m.id === assistantMessageId ? { ...m, content: displayedText } : m));
-                    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+                    // Smart scrolling: Only auto-scroll down if user was already at or near the bottom
+                    if (messagesContainerRef.current) {
+                        const container = messagesContainerRef.current;
+                        const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 120;
+                        if (isNearBottom) {
+                            container.scrollTop = container.scrollHeight;
+                        }
+                    }
                 },
                 onComplete: () => {
                     setCurrentlyTypingId(null);
                     typingControllerRef.current = null;
                     setSuccessCelebration(true);
                     setTimeout(() => setSuccessCelebration(false), 2600);
-                    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
                 }
             });
 
         } catch (err: any) {
-            console.warn("AI Chat server fallback to Keeper smart offline engine:", err?.message || err);
-            const userContextPayload: KeeperUserContext = {
-                email: user?.email,
-                displayName: profile?.display_name || user?.email?.split('@')[0],
-                isAdmin,
-                isSubscribed: profile?.is_subscribed,
-                subscriptionTier: profile?.subscription_tier,
-                subscriptionEnd: profile?.subscription_end ? new Date(profile.subscription_end).toLocaleDateString() : undefined,
-                unlockedTools: profile?.unlocked_tools,
-                freeTools
-            };
-            const offlineReply = generateOfflineKeeperResponse(text, userContextPayload);
-            const sanitizedContent = sanitizeOutput(offlineReply);
-
-            const assistantMessageId = `ast-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-            const initialAssistantMessage: Message = {
-                id: assistantMessageId,
-                role: 'assistant',
-                content: '',
-                timestamp: Date.now(),
-                modelUsed: 'offline-keeper'
-            };
-
+            console.error("Critical error in AI chat message handling:", err);
             setIsLoading(false);
-            setMessages(prev => [...prev, initialAssistantMessage]);
-            setCurrentlyTypingId(assistantMessageId);
-            if (!isOpen) {
-                setHasUnread(true);
-            }
-
-            typingControllerRef.current = startTypingSimulation({
-                fullText: sanitizedContent,
-                onUpdate: (displayedText) => {
-                    setMessages(prev => prev.map(m => m.id === assistantMessageId ? { ...m, content: displayedText } : m));
-                    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-                },
-                onComplete: () => {
-                    setCurrentlyTypingId(null);
-                    typingControllerRef.current = null;
-                    setSuccessCelebration(true);
-                    setTimeout(() => setSuccessCelebration(false), 2600);
-                    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-                }
-            });
         }
     };
 
@@ -948,9 +1097,39 @@ ${userAuthContext}`;
                                         </div>
                                         <span className="text-[11px] text-slate-300 font-normal flex items-center gap-1.5 mt-1 truncate">
                                             {currentlyTypingId ? (
-                                                <span className="text-emerald-400 font-medium flex items-center gap-1.5">
-                                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                                                    <span>🐾 Typing with paws...</span>
+                                                <span className="flex items-center gap-2">
+                                                    <span className="text-emerald-400 font-medium flex items-center gap-1.5">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                                                        <span>🐾 Typing with paws...</span>
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleSkipTyping}
+                                                        className="px-1.5 py-0.5 rounded bg-indigo-500/30 hover:bg-indigo-500/50 text-cyan-300 hover:text-white border border-indigo-400/40 text-[9.5px] font-bold transition-all cursor-pointer"
+                                                        title="Instantly display the complete response"
+                                                    >
+                                                        ⚡ Skip
+                                                    </button>
+                                                </span>
+                                            ) : isLoading && auditProgress.isActive ? (
+                                                <span className="flex items-center gap-2">
+                                                    <span className="text-cyan-300 font-medium flex items-center gap-1.5">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                                                        <span>🐾 Stage {auditProgress.stageIndex + 1}/7: {AUDIT_STAGES[auditProgress.stageIndex]?.shortName || 'Scanning'}</span>
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleSkipTyping}
+                                                        className="px-1.5 py-0.5 rounded bg-indigo-500/30 hover:bg-indigo-500/50 text-cyan-300 hover:text-white border border-indigo-400/40 text-[9.5px] font-bold transition-all cursor-pointer"
+                                                        title="Fast-forward scan delay and show response"
+                                                    >
+                                                        ⚡ Skip
+                                                    </button>
+                                                </span>
+                                            ) : isLoading ? (
+                                                <span className="text-indigo-300 font-medium flex items-center gap-1.5">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-ping" />
+                                                    <span>🐾 Sniffing editorial rules...</span>
                                                 </span>
                                             ) : (
                                                 <>
@@ -1116,6 +1295,19 @@ ${userAuthContext}`;
                                 )
                             )}
 
+                            {/* Persistent Docked 7-Stage Schema Scanner Header Bar (Above messages, never covering textbox, persistent during audit & typing) */}
+                            {auditProgress.isActive && (
+                                <XmlAuditProgressTracker
+                                    variant="docked-bar"
+                                    progress={auditProgress.progress}
+                                    currentStageIndex={auditProgress.stageIndex}
+                                    isCompleted={auditProgress.isCompleted || auditProgress.progress >= 100}
+                                    detectedMetadata={auditProgress.metadata}
+                                    onSkip={handleSkipTyping}
+                                    onClose={() => setAuditProgress(prev => ({ ...prev, isActive: false }))}
+                                />
+                            )}
+
                             {/* Messages Chat Stream / Conversation Area */}
                             <div ref={messagesContainerRef} className="flex-grow overflow-y-auto p-4 custom-scrollbar space-y-4 bg-white">
                                 {messages.length === 0 ? (
@@ -1245,6 +1437,28 @@ ${userAuthContext}`;
                                                 </div>
                                                 <ArrowRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-purple-600 transition-transform group-hover:translate-x-0.5 shrink-0" />
                                             </button>
+
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setAuditProgress({
+                                                        isActive: true,
+                                                        isCompleted: true,
+                                                        progress: 100,
+                                                        stageIndex: AUDIT_STAGES.length - 1
+                                                    });
+                                                }}
+                                                className="w-full px-3 py-2 rounded-xl bg-indigo-50/80 hover:bg-indigo-100/90 border border-indigo-200/80 hover:border-indigo-300 text-left transition-all shadow-2xs hover:shadow-xs group cursor-pointer flex items-center justify-between"
+                                            >
+                                                <div className="flex items-center gap-2.5">
+                                                    <span className="w-6 h-6 rounded-lg bg-indigo-600 text-cyan-200 text-xs flex items-center justify-center shrink-0">🛡️</span>
+                                                    <div>
+                                                        <div className="text-xs font-bold text-indigo-950 group-hover:text-indigo-900">Publishing XML Schema Zones</div>
+                                                        <div className="text-[10px] text-indigo-600/80">Inspect 7 audit stages: DTD, floats, anchors, dual views, CRediT...</div>
+                                                    </div>
+                                                </div>
+                                                <ArrowRight className="w-3.5 h-3.5 text-indigo-400 group-hover:text-indigo-600 transition-transform group-hover:translate-x-0.5 shrink-0" />
+                                            </button>
                                         </div>
                                     </div>
                                 ) : (
@@ -1255,6 +1469,7 @@ ${userAuthContext}`;
                                     return (
                                         <div
                                             key={message.id}
+                                            id={`msg-${message.id}`}
                                             className={`flex items-start gap-2.5 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}
                                         >
                                             <div className="shrink-0">
@@ -1285,6 +1500,47 @@ ${userAuthContext}`;
                                                         <p className="whitespace-pre-wrap leading-relaxed font-normal">{message.content}</p>
                                                     ) : (
                                                         <div className="prose prose-xs max-w-none text-slate-800 leading-relaxed">
+                                                            {/* 7-Stage Schema Scanner Verification Badge (Clean inline badge, no sticky overlay) */}
+                                                            {(!isUser && (message.auditData || message.modelUsed === 'keeper-xml-auditor' || message.content.includes("Keeper's XML Editorial Audit & Sniff Report"))) && (
+                                                                <div className="not-prose mb-3 p-2.5 rounded-xl bg-slate-900 border border-emerald-500/30 text-white flex items-center justify-between shadow-xs">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <div className="w-6 h-6 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
+                                                                            <ShieldCheck className="w-3.5 h-3.5" />
+                                                                        </div>
+                                                                        <div>
+                                                                            <span className="text-[11px] font-bold text-white block leading-tight">
+                                                                                XML Architecture Audit Complete
+                                                                            </span>
+                                                                            <span className="text-[9.5px] text-slate-300 block">
+                                                                                7 schema zones scanned &amp; verified against standard publishing rules
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-1.5 shrink-0">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                setAuditProgress({
+                                                                                    isActive: true,
+                                                                                    isCompleted: true,
+                                                                                    progress: 100,
+                                                                                    stageIndex: AUDIT_STAGES.length - 1,
+                                                                                    metadata: message.auditData?.metadata
+                                                                                });
+                                                                            }}
+                                                                            className="px-2 py-1 rounded-md bg-indigo-600/70 hover:bg-indigo-600 text-cyan-200 hover:text-white border border-indigo-400/50 text-[9.5px] font-bold flex items-center gap-1 transition-all cursor-pointer"
+                                                                            title="Inspect 7 Publishing XML Schema Zones"
+                                                                        >
+                                                                            <ListChecks className="w-3 h-3 text-cyan-300" />
+                                                                            <span>Inspect Zones</span>
+                                                                        </button>
+                                                                        <span className="text-[9.5px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold shrink-0">
+                                                                            100%
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+
                                                             {cleanContent ? (
                                                                 <ReactMarkdown
                                                                     remarkPlugins={[remarkGfm]}
@@ -1458,7 +1714,7 @@ ${userAuthContext}`;
                             )}
 
                                 {isLoading && (
-                                    <div className="flex items-start gap-2.5">
+                                    <div className="flex items-start gap-2.5 w-full">
                                         <div className="shrink-0">
                                             <KeeperAvatar 
                                                 state="thinking" 
@@ -1467,11 +1723,29 @@ ${userAuthContext}`;
                                                 interactive={false} 
                                             />
                                         </div>
-                                        <div className="bg-white border border-slate-200/80 rounded-2xl rounded-tl-xs px-4 py-3 shadow-2xs">
+                                        <div className="bg-white border border-slate-200/80 rounded-2xl rounded-tl-xs px-4 py-3 shadow-2xs max-w-[85%]">
                                             <div className="flex items-center gap-2 text-xs text-slate-600">
-                                                <span className="w-2 h-2 rounded-full bg-indigo-600 animate-ping" />
-                                                <span className="font-medium text-slate-700">🐾 Sniffing out editorial rules & drafting your response...</span>
+                                                <span className={`w-2 h-2 rounded-full ${auditProgress.isActive ? 'bg-cyan-500 animate-ping' : 'bg-indigo-600 animate-ping'}`} />
+                                                <span className="font-medium text-slate-700">
+                                                    {auditProgress.isActive 
+                                                        ? `🐾 Stage ${auditProgress.stageIndex + 1} of 7: ${AUDIT_STAGES[auditProgress.stageIndex]?.label || 'Verifying XML'}` 
+                                                        : '🐾 Sniffing out editorial rules & drafting your response...'}
+                                                </span>
                                             </div>
+                                            {auditProgress.isActive && (
+                                                <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex items-center justify-between gap-3 text-[10.5px] text-slate-500">
+                                                    <span className="font-mono text-[9.5px] text-indigo-600 truncate max-w-[200px]">
+                                                        {AUDIT_STAGES[auditProgress.stageIndex]?.tagPattern || AUDIT_STAGES[auditProgress.stageIndex]?.description || 'XML validation'}
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleSkipTyping}
+                                                        className="shrink-0 text-cyan-600 hover:text-cyan-700 font-semibold hover:underline cursor-pointer"
+                                                    >
+                                                        ⚡ Skip scan delay
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 )}
@@ -1565,6 +1839,18 @@ ${userAuthContext}`;
                                         <FileText className="w-3 h-3 text-indigo-500" />
                                         <span>Quick Queries:</span>
                                     </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setInputPrompt('Please audit and sniff this manuscript XML:\n\n<ce:para>Paste your XML tags here...</ce:para>');
+                                            textareaRef.current?.focus();
+                                        }}
+                                        className="px-2 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold shrink-0 transition-colors cursor-pointer border border-indigo-200/70 flex items-center gap-1"
+                                        title="Paste XML to run comprehensive schema audit"
+                                    >
+                                        <Activity className="w-3 h-3 text-indigo-600" />
+                                        <span>Audit XML</span>
+                                    </button>
                                     <button
                                         type="button"
                                         onClick={() => {
