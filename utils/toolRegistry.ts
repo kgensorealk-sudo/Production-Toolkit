@@ -253,16 +253,18 @@ export const TOOL_REGISTRY: ToolInfo[] = [
     },
     {
         id: ToolId.AFFILIATION_SEQUENCER,
-        name: 'Affiliation Sequencer',
+        name: 'Affiliation Sequencer (ID Normalizer)',
         route: '/affiliationSequencer',
         category: 'Markup & XML Structure',
-        shortDesc: 'Maps and sequences author affiliations, superscript markers, and address tags.',
+        shortDesc: 'Sequentially normalizes affiliation IDs in increments of 5 (af0005, af0010, af0015...) with automatic author cross-reference link synchronization and strict DTD preservation.',
         scenarios: [
-            'Author affiliation superscripts are out of sequence (e.g. 1, 3, 2).',
-            'Authors lack matching <ce:affiliation id="..."> tags or affiliations have unlinked authors.'
+            'Affiliation IDs are non-sequential or have gaps (e.g. af0005, af0010, af0025, af0030) needing step-of-5 sequential numbering.',
+            'Author cross-reference links (<ce:cross-ref refid>) need to be synchronized with renumbered affiliations.',
+            'Production rule requires preserving affiliation-id attributes, cross-ref own IDs, author names, and XML structure intact.',
+            'Affiliations need validation against Elsevier Journal DTD v5.6 rules.'
         ],
-        howToUse: 'Paste author-group XML, click "Sequence Affiliations", reorder or relink superscripts, and export clean markup.',
-        keywords: ['affiliation', 'author affiliation', 'superscript linking', 'author-group', 'institutions']
+        howToUse: 'Paste your XML (author-group, full manuscript, or affiliation list), click "Analyze XML" to inspect issues, then "Execute Sequence".',
+        keywords: ['affiliation', 'author affiliation', 'affiliation id', 'af0005', 'af0010', 'sequential affiliation', 'increments of 5', 'superscript linking', 'author-group', 'institutions']
     },
     {
         id: ToolId.REFERENCE_GEN,
@@ -441,6 +443,15 @@ export function getToolInfo(id?: ToolId | string | null): ToolInfo | undefined {
         t.route === `/${normalized}` ||
         t.id.toLowerCase() === normalized.toLowerCase()
     );
+}
+
+/**
+ * Returns the human-readable display name for a given ToolId or route string.
+ */
+export function getToolName(id?: ToolId | string | null): string {
+    if (!id) return 'Unknown Protocol';
+    const info = getToolInfo(id);
+    return info?.name || String(id);
 }
 
 /**

@@ -3,6 +3,8 @@
  * Shared between Express server (AI Studio/Docker) and Vercel Serverless Functions (/api).
  */
 
+import { sequenceAffiliationIdsStrict } from './affiliationSequencerLogic';
+
 /**
  * Ordered by capability, NOT tried in list order historically — this was the bug.
  * The API layer used to break on the FIRST model that returned anything, which meant
@@ -98,509 +100,6 @@ export interface KeeperUserContext {
  * Performs a rigorous syntactic and semantic editorial audit on Journal XML input.
  * Itemizes defects, structural inconsistencies, leftover conversion artifacts, and formatting warnings.
  */
-export const performKeeperXmlAudit = (xmlText: string): string => {
-  const text = xmlText.trim();
-
-  // 1. Metadata Extraction
-  const doiMatch = text.match(/<ce:doi>([^<]+)<\/ce:doi>/i) || text.match(/10\.\d{4,9}\/[-._;()/:A-Za-z0-9]+/);
-  const doi = doiMatch ? (doiMatch[1] || doiMatch[0]).trim() : null;
-
-  const piiMatch = text.match(/<ce:pii>([^<]+)<\/ce:pii>/i) || text.match(/pii="([^"]+)"/i) || text.match(/item-info>[\s\S]*?<ce:pii>([^<]+)/i);
-  const pii = piiMatch ? piiMatch[1].trim() : null;
-
-  const articleIdMatch = text.match(/<ce:article-number>([^<]+)<\/ce:article-number>/i) || text.match(/id="(Y[A-Z0-9_-]+)"/i) || text.match(/<aid>([^<]+)<\/aid>/i);
-  const articleId = pii || (articleIdMatch ? articleIdMatch[1] : (doi ? `DOI: ${doi}` : 'Manuscript XML'));
-
-  // Accurate author and section counts (avoid matching <ce:author-group> or <ce:section-title>)
-  const authorCount = (text.match(/<ce:author(?:\s+id="[^"]*"|\s+author-id="[^"]*"|[\s>])/gi) || []).length;
-  const sectionCount = (text.match(/<ce:section(?:\s+id="[^"]*"|[\s>])/gi) || []).length;
-
-  // 1b. Float Identification (<ce:floats>)
-  const figureBlocks = Array.from(text.matchAll(/<ce:figure\b[^>]*\bid="([^"]+)"[^>]*>([\s\S]*?)<\/ce:figure>/gi));
-  const figureMatches = figureBlocks.map(m => {
-    const id = m[1];
-    const labelMatch = m[2].match(/<ce:label>([^<]*)<\/ce:label>/i);
-    return { id, label: labelMatch ? labelMatch[1].trim() : id, type: 'figure' };
-  });
-
-  const tableBlocks = Array.from(text.matchAll(/<ce:table\b[^>]*\bid="([^"]+)"[^>]*>([\s\S]*?)<\/ce:table>/gi));
-  const tableMatches = tableBlocks.map(m => {
-    const id = m[1];
-    const labelMatch = m[2].match(/<ce:label>([^<]*)<\/ce:label>/i);
-    return { id, label: labelMatch ? labelMatch[1].trim() : id, type: 'table' };
-  });
-  
-  // Filter out graphical abstracts (f0090/ga1) from regular body figures
-  const bodyFigures = figureMatches.filter(f => !f.id.includes('ga') && f.id !== 'f0090' && !f.label.toLowerCase().includes('unlabelled'));
-  const allFloats = [...bodyFigures, ...tableMatches];
-  const figureCount = bodyFigures.length;
-  const tableCount = tableMatches.length;
-
-  // 1c. Float-Anchor & In-Text Citation Auditing
-  const floatAnchorMatches = Array.from(text.matchAll(/<ce:float-anchor[^>]*\brefid="([^"]+)"[^>]*\/?>/gi)).map(m => ({
-    id: m[1],
-    index: m.index ?? 0,
-    tag: m[0]
-  }));
-  const floatAnchorIdSet = new Set(floatAnchorMatches.map(a => a.id));
-
-  // Extract body text only (strip <ce:floats>, <tail>, <ce:bibliography>, <head>) for in-text searches
-  const bodyTextMatch = text.match(/<body>([\s\S]*?)<\/body>/i) || text.match(/<ce:sections>([\s\S]*?)<\/ce:sections>/i);
-  const bodyTextOnly = bodyTextMatch ? bodyTextMatch[1] : text.replace(/<ce:floats>[\s\S]*?<\/ce:floats>/i, '').replace(/<ce:bibliography>[\s\S]*?<\/ce:bibliography>/i, '');
-
-  // Extract plain body text without any <ce:cross-ref...> or <ce:cross-refs...> tags
-  const bodyWithoutCrossRefs = bodyTextOnly.replace(/<ce:cross-refs?\b[^>]*>[\s\S]*?<\/ce:cross-refs?>/gi, '');
-
-  // Track float citations and anchor placement integrity
-  const uncitedFloats: { id: string; label: string; type: string }[] = [];
-  const plainTextUnlinkedFloats: { id: string; label: string; matchText: string }[] = [];
-  const missingFloatAnchors: { id: string; label: string }[] = [];
-  const misplacedFloatAnchors: { id: string; label: string; reason: string }[] = [];
-  const labelTypoFloats: { id: string; label: string; expected: string }[] = [];
-
-  allFloats.forEach(fl => {
-    // Check label typos (e.g., <ce:label>Tables 6</ce:label> -> should be Table 6)
-    if (/^tables\s+\d+/i.test(fl.label)) {
-      labelTypoFloats.push({ id: fl.id, label: fl.label, expected: fl.label.replace(/^tables/i, 'Table') });
-    } else if (/^figures\s+\d+/i.test(fl.label)) {
-      labelTypoFloats.push({ id: fl.id, label: fl.label, expected: fl.label.replace(/^figures/i, 'Fig.') });
-    }
-
-    // Check formal in-text cross-ref citations (<ce:cross-ref refid="t0005"> or within <ce:cross-refs refid="... t0005 ...">)
-    const crossRefRegex = new RegExp(`<ce:cross-refs?\\b[^>]*\\brefid=["'][^"']*\\b${fl.id}\\b[^"']*["'][^>]*>`, 'gi');
-    const crossRefOccurrences = Array.from(text.matchAll(crossRefRegex));
-
-    // Check if plain text mention exists OUTSIDE of any <ce:cross-ref> tags in the body
-    const plainName = fl.label.replace(/\./g, '\\.');
-    const plainRegex = new RegExp(`\\b${plainName}\\b`, 'i');
-    const hasPlainMention = plainRegex.test(bodyWithoutCrossRefs);
-
-    if (crossRefOccurrences.length === 0) {
-      if (hasPlainMention) {
-        plainTextUnlinkedFloats.push({ id: fl.id, label: fl.label, matchText: fl.label });
-      } else {
-        uncitedFloats.push(fl);
-      }
-    }
-
-    // Check float anchor existence and placement
-    if (!floatAnchorIdSet.has(fl.id)) {
-      missingFloatAnchors.push({ id: fl.id, label: fl.label });
-    } else {
-      const anchor = floatAnchorMatches.find(a => a.id === fl.id);
-      if (anchor && crossRefOccurrences.length > 0) {
-        const firstCitationIndex = crossRefOccurrences[0].index ?? 0;
-        const anchorIndex = anchor.index;
-        const distance = anchorIndex - firstCitationIndex;
-
-        // Misplaced if anchor is placed BEFORE its first citation or over 2500 characters away in another section
-        if (distance < -100) {
-          misplacedFloatAnchors.push({ id: fl.id, label: fl.label, reason: 'Anchor placed BEFORE its first in-text citation' });
-        } else if (distance > 3000) {
-          misplacedFloatAnchors.push({ id: fl.id, label: fl.label, reason: 'Anchor located far away from first in-text citation' });
-        }
-      }
-    }
-  });
-
-  // 2. Uncited Reference Section Detection (e.g. Leftover placeholder / upstream QA feedback)
-  const hasUncitedSection = Boolean(
-    text.match(/<ce:section[^>]*>[\s\S]*?uncited\s+reference/i) ||
-    text.match(/<ce:section-title[^>]*>[^<]*uncited[^<]*<\/ce:section-title>/i) ||
-    text.match(/<ce:further-reading\b/i) ||
-    (text.toLowerCase().includes('uncited reference') && text.includes('<ce:'))
-  );
-
-  // 3. Paragraph Views Analysis
-  const extendedParas = (text.match(/<ce:para[^>]*\bview="extended"[^>]*>/g) || []).length;
-  const compactParas = (text.match(/<ce:para[^>]*\bview="compact(?:-standard)?"[^>]*>/g) || []).length;
-  const hasDualViews = extendedParas > 0 || compactParas > 0;
-
-  // 4. Reference IDs & Cross-Reference Mapping
-  const bibRefMatches = Array.from(text.matchAll(/<ce:bib-reference[^>]*\bid="([^"]+)"/gi)).map(m => m[1]);
-  const otherRefMatches = Array.from(text.matchAll(/<ce:other-ref[^>]*\bid="([^"]+)"/gi)).map(m => m[1]);
-  const allBibIds = [...bibRefMatches, ...otherRefMatches];
-  const bibIdSet = new Set(allBibIds);
-
-  // Extract all individual refids from both <ce:cross-ref> and multi-id <ce:cross-refs>
-  const crossRefTags = Array.from(text.matchAll(/<ce:cross-refs?\b[^>]*\brefid=["']([^"']+)["'][^>]*>/gi));
-  const allCrossRefIds: string[] = [];
-  crossRefTags.forEach(m => {
-    const rawIds = m[1].trim().split(/\s+/);
-    rawIds.forEach(id => {
-      if (id) allCrossRefIds.push(id);
-    });
-  });
-  const crossRefIdSet = new Set(allCrossRefIds);
-
-  // Calculate genuine uncited reference IDs
-  const uncitedBibIds = allBibIds.filter(id => !crossRefIdSet.has(id));
-
-  // Calculate dangling / broken citation references (pointing to reference IDs starting with 'b' or 'ref' that don't exist)
-  const brokenCrossRefIds = Array.from(new Set(allCrossRefIds.filter(refid => (refid.startsWith('b') || refid.startsWith('ref') || refid.startsWith('bib')) && !bibIdSet.has(refid))));
-
-  // 5. Unlinked Plain-Text Citation Markers in body paragraphs (e.g. raw [1], [2-4] in text body outside ce:cross-ref)
-  const unlinkedBracketCitations = Array.from(bodyWithoutCrossRefs.matchAll(/\[\s*(\d+(?:[–\-–,]\s*\d+)*)\s*\]/g)).map(m => m[0]);
-
-  // 5b. Incomplete / Unlinked <ce:cross-ref> Tags Missing refid Attribute
-  const allCrossRefElements = Array.from(text.matchAll(/<ce:cross-refs?\b([^>]*)>([\s\S]*?)<\/ce:cross-refs?>/gi));
-  const missingRefidCrossRefs = allCrossRefElements.filter(m => {
-    const attrs = m[1];
-    const refidMatch = attrs.match(/\brefid=["']([^"']*)["']/i);
-    return !refidMatch || !refidMatch[1].trim();
-  }).map(m => ({
-    fullTag: m[0],
-    content: m[2]?.trim() || ''
-  }));
-
-  // 6. ID Prefix Consistency
-  const prefixes = allBibIds.map(id => (id.match(/^([a-zA-Z]+)/) || [''])[0]);
-  const uniquePrefixes = Array.from(new Set(prefixes.filter(Boolean)));
-  const hasMixedPrefixes = uniquePrefixes.length > 1;
-
-  // 7. Author Initials Formatting in <ce:bibliography>
-  const rawInitialsMatches = Array.from(text.matchAll(/<ce:initials>([^<]+)<\/ce:initials>/g)).map(m => m[1]);
-  const unspacedInitials = rawInitialsMatches.filter(init => /^[A-Z]\.[A-Z]\./.test(init));
-  const dotlessInitials = rawInitialsMatches.filter(init => /^[A-Z]{2,}$/.test(init));
-
-  // 8. CRediT Statement Detection
-  const hasUntaggedCredit = /CRediT authorship|Author contributions|Conceptualization,/i.test(text) && !text.includes('<ce:contributor-role');
-
-  // 9. Grant/Funding Detection
-  const hasUntaggedGrants = /(?:supported by|grant\s+(?:no\.|number)|funded by)\s+[A-Z0-9]/i.test(text) && !text.includes('<ce:grant-sponsor');
-
-  // 9b. Disallowed Named Entities and Numerical Unicode Entities
-  // Journal CE XML strictly prohibits named entities (&alpha;, &eacute;, &nbsp;, etc.) and numerical entities (&#x00E9;, &#233;, etc.)
-  // Only the 5 XML core entities (&amp;, &lt;, &gt;, &quot;, &apos;) are permitted
-  const disallowedNamedEntities = Array.from(text.matchAll(/&(?!amp;|lt;|gt;|quot;|apos;)[a-zA-Z][a-zA-Z0-9]*;/g)).map(m => m[0]);
-  const disallowedNumericalEntities = Array.from(text.matchAll(/&#(?:[0-9]+|x[0-9a-fA-F]+);/gi)).map(m => m[0]);
-  const allDisallowedEntities = Array.from(new Set([...disallowedNamedEntities, ...disallowedNumericalEntities]));
-
-  // 9c. Element 'ce:other-ref' Missing 'id' Attribute Check
-  const allOtherRefElements = Array.from(text.matchAll(/<ce:other-ref\b([^>]*)>/gi));
-  const otherRefsMissingId = allOtherRefElements.filter(m => !/\bid=["'][^"']+["']/i.test(m[1]));
-
-  // 9d. Element 'sb:issue' DTD Content Model Check
-  // DTD content model: (sb:editors?,((sb:title,sb:translated-title?)|sb:translated-title)?,sb:conference?,sb:series,sb:issue-nr?,sb:date)
-  const allIssueElements = Array.from(text.matchAll(/<sb:issue\b[^>]*>([\s\S]*?)<\/sb:issue>/gi));
-  const malformedIssues: { index: number; reason: string }[] = [];
-  allIssueElements.forEach((m, idx) => {
-    const inner = m[1];
-    const hasSeries = /<sb:series\b/i.test(inner);
-    const hasDate = /<sb:date\b/i.test(inner);
-
-    if (!hasSeries && !hasDate) {
-      malformedIssues.push({ index: idx + 1, reason: 'Missing mandatory <sb:series> and <sb:date> elements' });
-      return;
-    }
-    if (!hasSeries) {
-      malformedIssues.push({ index: idx + 1, reason: 'Missing mandatory <sb:series> element' });
-      return;
-    }
-    if (!hasDate) {
-      malformedIssues.push({ index: idx + 1, reason: 'Missing mandatory <sb:date> element' });
-      return;
-    }
-
-    if (/<sb:(?:volume-nr|first-page|last-page|pages)\b/i.test(inner)) {
-      malformedIssues.push({ index: idx + 1, reason: 'Illegal child elements (<sb:volume-nr>/<sb:first-page>/<sb:pages>) nested directly inside <sb:issue> instead of <sb:series> or <sb:host>' });
-      return;
-    }
-
-    const tagMatches = Array.from(inner.matchAll(/<sb:(editors|title|translated-title|conference|series|issue-nr|date)\b/gi));
-    const rankMap: Record<string, number> = {
-      'editors': 1,
-      'title': 2,
-      'translated-title': 2,
-      'conference': 3,
-      'series': 4,
-      'issue-nr': 5,
-      'date': 6
-    };
-    let lastRank = 0;
-    let isOutOfOrder = false;
-    for (const tm of tagMatches) {
-      const tag = tm[1].toLowerCase();
-      const rank = rankMap[tag];
-      if (rank !== undefined) {
-        if (rank < lastRank) {
-          isOutOfOrder = true;
-          break;
-        }
-        lastRank = rank;
-      }
-    }
-    if (isOutOfOrder) {
-      malformedIssues.push({ index: idx + 1, reason: 'Child element sequence violates DTD model order: (sb:editors?,((sb:title,sb:translated-title?)|sb:translated-title)?,sb:conference?,sb:series,sb:issue-nr?,sb:date)' });
-    }
-  });
-
-  // 9e. Element 'sb:article-number' Formatting Check
-  const allArticleNumberElements = Array.from(text.matchAll(/<sb:article-number\b[^>]*>([\s\S]*?)<\/sb:article-number>/gi));
-  const malformedArticleNumbers: { raw: string; cleaned: string }[] = [];
-  allArticleNumberElements.forEach(m => {
-    const rawVal = m[1].trim();
-    if (!rawVal) {
-      malformedArticleNumbers.push({ raw: m[0], cleaned: 'Empty tag' });
-    } else if (
-      /\b(?:art\.?|article|no\.?|number|id|paper)\b/i.test(rawVal) ||
-      /\s{2,}/.test(rawVal) ||
-      /[.,;:!]$/.test(rawVal) ||
-      /^e[-_\s]?\d+/i.test(rawVal)
-    ) {
-      const cleanedCandidate = rawVal.replace(/^(?:art(?:icle)?\.?\s*(?:no\.?)?|no\.?|id|paper)\s*:?\s*/i, '').replace(/[.,;:!]+$/, '').trim();
-      malformedArticleNumbers.push({ raw: rawVal, cleaned: cleanedCandidate || rawVal });
-    }
-  });
-
-  // 9f. Punctuation Spacing Warning: Punctuation characters ".,;?!:" should not be preceded by a space character
-  const textWithoutTags = text
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&[a-zA-Z0-9#x]+;/g, ' ');
-  const spuriousSpacePunctuationMatches = Array.from(
-    textWithoutTags.matchAll(/\b([A-Za-z0-9)\]"'\u2019\u201D]+)\s+([.,;?!:])(?=\s|[A-Za-z0-9]|$)/g)
-  ).map(m => `"${m[1]} ${m[2]}"`);
-  const uniqueSpuriousSpaceMatches = Array.from(new Set(spuriousSpacePunctuationMatches));
-
-  // 10. Assemble Itemized Findings
-  const findings: string[] = [];
-
-  // Critical 0: Disallowed Named Entities & Numerical Unicode Entities
-  if (allDisallowedEntities.length > 0) {
-    findings.push(`- 🚨 **CRITICAL: Named Entities and Numerical Unicode Entities Are Not Allowed**
-  - **Issue:** Detected ${allDisallowedEntities.length} disallowed entity instance(s): \`${allDisallowedEntities.slice(0, 8).join('`, `')}${allDisallowedEntities.length > 8 ? '...' : ''}\`.
-  - **DTD Standard:** Journal CE XML strictly forbids named entities (e.g. \`&eacute;\`, \`&alpha;\`, \`&nbsp;\`) and numerical Unicode entities (e.g. \`&#x00E9;\`, \`&#233;\`, \`&#160;\`). Only the 5 XML pre-defined entities (\`&amp;\`, \`&lt;\`, \`&gt;\`, \`&quot;\`, \`&apos;\`) are permitted. All other characters must be encoded natively in UTF-8.
-  - **Remediation:** Replace entities with their native UTF-8 character equivalents using **[Open XML Tag Cleaner](#/tagCleaner)** or **[Open Reference Structure Repair](#/structuralArchitect)**.`);
-  }
-
-  // Critical 0b: Element 'ce:other-ref' Missing 'id' Attribute
-  if (otherRefsMissingId.length > 0) {
-    findings.push(`- 🚨 **CRITICAL: Element 'ce:other-ref' Should Have an 'id' Attribute**
-  - **Issue:** Detected ${otherRefsMissingId.length} \`<ce:other-ref>\` element(s) without an \`id\` attribute.
-  - **DTD Standard:** Every \`<ce:other-ref>\` node requires a mandatory \`id\` attribute (e.g. \`<ce:other-ref id="bib0010">\` or \`<ce:other-ref id="b1">\`) to allow target resolution and cross-reference linking from in-text callouts (\`<!ATTLIST ce:other-ref id ID #REQUIRED>\`).
-  - **Remediation:** Add unique sequential \`id\` attributes using **[Open Other-Ref Scanner](#/otherRefScanner)** or **[Open ID Prefix Auditor](#/idAuditor)**.`);
-  }
-
-  // Critical 0c: Element 'sb:issue' DTD Content Model Violation
-  if (malformedIssues.length > 0) {
-    findings.push(`- 🚨 **CRITICAL: Content Model Violation in \`<sb:issue>\`**
-  - **Issue:** \`Error: The content of element type "sb:issue" must match "(sb:editors?,((sb:title,sb:translated-title?)|sb:translated-title)?,sb:conference?,sb:series,sb:issue-nr?,sb:date)".\`
-  - **Analysis:** ${malformedIssues[0].reason}. In Journal CE DTD schemas, child elements inside \`<sb:issue>\` must strictly follow the declaration sequence. Crucially, \`<sb:series>\` and \`<sb:date>\` are **mandatory** elements; omitting either or inverting their sequence triggers fatal DTD parser failure.
-  - **Remediation:** Restructure \`<sb:issue>\` nodes using **[Open Reference Structure Repair](#/structuralArchitect)** or **[Open Reference Updater](#/referenceGen)**.`);
-  }
-
-  // Critical 0d: Element 'sb:article-number' Formatting
-  if (malformedArticleNumbers.length > 0) {
-    findings.push(`- 🚨 **CRITICAL: Element 'sb:article-number' Is Not Correctly Formatted**
-  - **Issue:** Found malformed article numbers: ${malformedArticleNumbers.slice(0, 4).map(a => `\`${a.raw}\` (reformat to \`${a.cleaned}\`)`).join(', ')}.
-  - **DTD Standard:** The element \`<sb:article-number>\` must contain solely the clean article/electronic identifier without conversational editorial prefixes such as "Art.", "Article", "No.", or stray punctuation/whitespace.
-  - **Remediation:** Clean and standardize the article numbers to clean alphanumeric strings (e.g. \`<sb:article-number>10294</sb:article-number>\`) using **[Open Reference Structure Repair](#/structuralArchitect)**.`);
-  }
-
-  // Warning 0e: Punctuation Preceded by Space
-  if (uniqueSpuriousSpaceMatches.length > 0) {
-    findings.push(`- ⚠️ **WARNING: Punctuation Characters ".,;?!:" Should Not Be Preceded by a Space Character**
-  - **Issue:** Detected spurious spaces preceding punctuation marks: ${uniqueSpuriousSpaceMatches.slice(0, 6).join(', ')}${uniqueSpuriousSpaceMatches.length > 6 ? '...' : ''}.
-  - **Typography Standard:** Punctuation characters \`.,;?!:\` must adhere directly to the preceding word without an intervening space (e.g. \`"impaired , along"\` must be \`"impaired, along"\`). Preceding spaces cause orphan punctuation to wrap onto subsequent lines during typesetting.
-  - **Remediation:** Remove extraneous spaces before punctuation marks using **[Open XML Tag Cleaner](#/tagCleaner)** or **[Open Quick Text Diff](#/quickDiff)**.`);
-  }
-
-  // Critical 1: Misplaced Float Anchors (<ce:float-anchor>)
-  if (misplacedFloatAnchors.length > 0) {
-    findings.push(`- 🚨 **CRITICAL: Misplaced Float Anchors (<ce:float-anchor>)**
-  - **Issue:** Detected ${misplacedFloatAnchors.length} misplaced float-anchors detached from their first citation points. In publishing schemas, every \`<ce:float-anchor refid="..." />\` must be placed immediately following the paragraph containing the **first in-text citation** of that table or figure.
-  - **Affected Floats:** ${misplacedFloatAnchors.map(m => `\`${m.id}\` (${m.label} — ${m.reason})`).join(', ')}.
-  - **Remediation:** Relocate each \`<ce:float-anchor refid="..." />\` directly to the paragraph where its figure or table is first referenced in the body text.`);
-  }
-
-  // Warning 1a: Missing Float Anchors
-  if (missingFloatAnchors.length > 0) {
-    findings.push(`- ⚠️ **WARNING: Missing Float Anchors (${missingFloatAnchors.length} floats)**
-  - **Issue:** Floats defined in \`<ce:floats>\` lack a corresponding \`<ce:float-anchor refid="..." />\` in the text body: ${missingFloatAnchors.map(m => `\`${m.id}\` (${m.label})`).join(', ')}.
-  - **Remediation:** Insert \`<ce:float-anchor refid="[ID]" />\` immediately after the first in-text citation paragraph.`);
-  }
-
-  // Warning 1b: Unlinked Plain-Text Float Mentions
-  if (plainTextUnlinkedFloats.length > 0) {
-    findings.push(`- ⚠️ **WARNING: Unlinked Float Citations (Plain-Text Mentions Without \`<ce:cross-ref>\`)**
-  - **Issue:** Detected raw plain-text mentions of figures or tables that lack formal \`<ce:cross-ref refid="...">\` tags: ${plainTextUnlinkedFloats.map(p => `**${p.label}** (\`${p.id}\`)`).join(', ')}.
-  - **Remediation:** Wrap plain text mentions with formal cross-reference tags using **[Open Citation Linker Pro](#/citationLinker)** (e.g. \`<ce:cross-ref refid="${plainTextUnlinkedFloats[0]?.id || 't0005'}">${plainTextUnlinkedFloats[0]?.label || 'Table 1'}</ce:cross-ref>\`).`);
-  }
-
-  // Warning 1c: Incomplete / Unlinked <ce:cross-ref> Tags Missing refid (e.g. <ce:cross-ref>Table 1</ce:cross-ref>)
-  if (missingRefidCrossRefs.length > 0) {
-    findings.push(`- 🚨 **CRITICAL: Unlinked \`<ce:cross-ref>\` Tags (Missing Target \`refid\` Attribute)**
-  - **Issue:** Detected \`<ce:cross-ref>\` tags without a target \`refid\` attribute (e.g., ${missingRefidCrossRefs.slice(0, 5).map(m => `\`${m.fullTag}\``).join(', ')}). Without the \`refid\` attribute, cross-references are broken and will fail XML DTD validation and hyperlink rendering.
-  - **Remediation:** Use **[Open Citation Linker Pro](#/citationLinker)** to automatically link these unlinked cross-reference tags to their matching table, figure, or bibliography target IDs (e.g. converting \`<ce:cross-ref>Table 1</ce:cross-ref>\` to \`<ce:cross-ref refid="t0005">Table 1</ce:cross-ref>\`).`);
-  }
-
-  // Warning 1d: Uncited Floats in Text
-  if (uncitedFloats.length > 0) {
-    findings.push(`- ⚠️ **WARNING: Uncited Floats (No In-Text Mention or Citation Found)**
-  - **Issue:** The following floats defined in \`<ce:floats>\` are never cited anywhere in the body text paragraphs: ${uncitedFloats.map(u => `\`${u.id}\` (${u.label})`).join(', ')}.
-  - **Remediation:** Ensure a citation callout (\`<ce:cross-ref refid="...">\`) is added in the relevant section, or verify if the float was mistakenly included.`);
-  }
-
-  // Notice 0: Float Label Inconsistencies / Plural Typos
-  if (labelTypoFloats.length > 0) {
-    findings.push(`- 💡 **NOTICE: Float Label Typos Detected in \`<ce:floats>\`**
-  - **Issue:** Found plural label tags on individual table/figure nodes: ${labelTypoFloats.map(l => `\`<ce:label>${l.label}</ce:label>\` (should be \`<ce:label>${l.expected}</ce:label>\`)`).join(', ')}.
-  - **Remediation:** Standardize labels to singular format in \`<ce:floats>\` (e.g. change \`<ce:label>Tables 6</ce:label>\` to \`<ce:label>Table 6</ce:label>\`).`);
-  }
-
-  // Critical 2: Leftover Uncited Reference Section
-  if (hasUncitedSection) {
-    findings.push(`- 🚨 **CRITICAL: Leftover "Uncited Reference(s)" Section / Artifact Detected**
-  - **Issue:** The XML contains an explicit "Uncited reference" section or placeholder heading. Upstream QA validation strictly flags unremoved uncited reference sections from conversion passes.
-  - **Remediation:** Purge this section and clean unlinked bibliography entries using **[Open Uncited Ref Cleaner](#/uncitedCleaner)**.`);
-  }
-
-  // Critical 3: Broken Cross References
-  if (brokenCrossRefIds.length > 0) {
-    findings.push(`- 🚨 **CRITICAL: Dangling In-Text Cross-References (${brokenCrossRefIds.length} broken links)**
-  - **Issue:** In-text \`<ce:cross-ref>\` elements point to reference IDs that do not exist in the \`<ce:bibliography>\`: \`${brokenCrossRefIds.slice(0, 6).join('`, `')}${brokenCrossRefIds.length > 6 ? `...` : ''}\`.
-  - **Remediation:** Repair missing reference nodes using **[Open Reference Structure Repair](#/structuralArchitect)** or relink via **[Open Citation Linker Pro](#/citationLinker)**.`);
-  }
-
-  // Warning 2: Uncited References in Bibliography
-  if (uncitedBibIds.length > 0 && !hasUncitedSection) {
-    findings.push(`- ⚠️ **WARNING: Uncited References in Bibliography (${uncitedBibIds.length} entries)**
-  - **Issue:** Reference nodes in \`<ce:bibliography>\` have no corresponding in-text \`<ce:cross-ref>\` callouts in the text body: \`${uncitedBibIds.slice(0, 8).join('`, `')}${uncitedBibIds.length > 8 ? ` and ${uncitedBibIds.length - 8} more` : ''}\`.
-  - **Remediation:** Clean and purge uncited items with **[Open Uncited Ref Cleaner](#/uncitedCleaner)**, or link any plain-text mentions with **[Open Citation Linker Pro](#/citationLinker)**.`);
-  }
-
-  // Warning 3: Dual-View Paragraphs
-  if (hasDualViews) {
-    const diff = Math.abs(extendedParas - compactParas);
-    if (diff > 0) {
-      findings.push(`- ⚠️ **WARNING: Dual-View Paragraph Count Mismatch (${extendedParas} extended vs ${compactParas} compact)**
-  - **Issue:** The manuscript utilizes dual view attributes (\`view="extended"\` and \`view="compact-standard"\`), but paragraph counts are unequal.
-  - **Remediation:** Align and synchronize paragraph variants using **[Open View Synchronizer](#/viewSync)**. *(Note: Dual views are standard publishing architecture; do NOT query the JM to remove one).*`);
-    } else {
-      findings.push(`- 💡 **NOTICE: Dual Paragraph Views Detected (${extendedParas} extended & ${compactParas} compact-standard)**
-  - **Analysis:** Paired dual views are an intentional journal formatting standard for multi-layout rendering.
-  - **Remediation:** Ensure edits, chemical formulas, and citations are synchronized across both views with **[Open View Synchronizer](#/viewSync)**.`);
-    }
-  }
-
-  // Warning 4: Mixed ID Prefixes
-  if (hasMixedPrefixes) {
-    findings.push(`- ⚠️ **WARNING: Inconsistent Reference ID Prefix Convention (${uniquePrefixes.map(p => `"${p}"`).join(', ')})**
-  - **Issue:** Reference entries mix different prefix schemas (e.g., mixing \`bib0010\` with \`bb0005\` or \`b1\`).
-  - **Remediation:** Standardize ID sequences and prefix padding using **[Open ID Prefix Auditor](#/idAuditor)** or **[Open XML Normalizer](#/xmlRenumber)**.`);
-  }
-
-  // Warning 5: Unlinked Bracketed Citations in Body Text
-  if (unlinkedBracketCitations.length > 0) {
-    findings.push(`- ⚠️ **WARNING: Unlinked Plain-Text Citation Markers in Body Text (${unlinkedBracketCitations.length} instances)**
-  - **Issue:** Raw bracketed numbers (e.g., \`${Array.from(new Set(unlinkedBracketCitations)).slice(0, 5).join('`, `')}\`) appear in paragraph text without formal \`<ce:cross-ref>\` tags.
-  - **Remediation:** Wrap and link them to bibliography IDs with **[Open Citation Linker Pro](#/citationLinker)**.`);
-  }
-
-  // Notice 1: Author Initials Formatting
-  if (unspacedInitials.length > 0 || dotlessInitials.length > 0) {
-    findings.push(`- 💡 **NOTICE: Author Initials Formatting / Spacing**
-  - **Issue:** Detected author initials in \`<ce:initials>\` that lack periods or spacing (e.g., \`${[...unspacedInitials, ...dotlessInitials].slice(0, 4).join('`, `')}\`).
-  - **Remediation:** Standardize initials to \`J. D.\` format using **[Open Reference Structure Repair](#/structuralArchitect)**.`);
-  }
-
-  // Notice 2: Untagged CRediT Statements
-  if (hasUntaggedCredit) {
-    findings.push(`- 💡 **NOTICE: Untagged CRediT Contribution Statement**
-  - **Issue:** Plain-text author contribution text detected without standard \`<ce:contributor-role>\` tags.
-  - **Remediation:** Structure author roles into standard NISO CRediT XML using **[Open CRediT Tagging](#/creditGenerator)**.`);
-  }
-
-  // Notice 3: Untagged Grants / Funding
-  if (hasUntaggedGrants) {
-    findings.push(`- 💡 **NOTICE: Untagged Funding / Grant Information**
-  - **Issue:** Grant acknowledgment text detected lacking \`<ce:grant-sponsor>\` and \`<ce:grant-number>\` tags.
-  - **Remediation:** Automatically tag grant metadata using **[Open Grant Tagger](#/grantTagger)**.`);
-  }
-
-  // Notice 4: Unstructured Other References
-  if (otherRefMatches.length > 0) {
-    findings.push(`- 💡 **NOTICE: Unstructured \`<ce:other-ref>\` Nodes (${otherRefMatches.length} items)**
-  - **Issue:** Found unparsed reference entries inside \`<ce:other-ref>\` tags.
-  - **Remediation:** Isolate and structure them using **[Open Other-Ref Scanner](#/otherRefScanner)**.`);
-  }
-
-  const isPristine = findings.length === 0;
-
-  // If no findings, output clean bill of health
-  if (isPristine) {
-    findings.push(`- ✅ **Pristine XML Structure**: My editorial snout sniffed every tag and found zero structural anomalies, broken links, misplaced anchors, or orphan sections!`);
-  }
-
-  // Build targeted tool recommendations only for actual detected issues
-  const recommendedTools: string[] = [];
-  if (!isPristine) {
-    if (allDisallowedEntities.length > 0 || uniqueSpuriousSpaceMatches.length > 0) {
-      recommendedTools.push(`- **[Open XML Tag Cleaner](#/tagCleaner)** — Decode named/numerical entities to native UTF-8 and strip spurious spaces before punctuation.`);
-    }
-    if (otherRefsMissingId.length > 0) {
-      recommendedTools.push(`- **[Open Other-Ref Scanner](#/otherRefScanner)** — Isolate <ce:other-ref> nodes and inject missing mandatory ID attributes.`);
-    }
-    if (malformedIssues.length > 0 || malformedArticleNumbers.length > 0) {
-      recommendedTools.push(`- **[Open Reference Structure Repair](#/structuralArchitect)** — Repair <sb:issue> content models and standardize <sb:article-number> formatting.`);
-    }
-    if (hasUncitedSection || uncitedBibIds.length > 0) {
-      recommendedTools.push(`- **[Open Uncited Ref Cleaner](#/uncitedCleaner)** — Clean and purge uncited reference sections.`);
-    }
-    if (unlinkedBracketCitations.length > 0 || missingRefidCrossRefs.length > 0 || plainTextUnlinkedFloats.length > 0 || brokenCrossRefIds.length > 0) {
-      recommendedTools.push(`- **[Open Citation Linker Pro](#/citationLinker)** — Connect unlinked in-text citations and bind missing target IDs.`);
-    }
-    if (hasDualViews) {
-      const diff = Math.abs(extendedParas - compactParas);
-      if (diff > 0) {
-        recommendedTools.push(`- **[Open View Synchronizer](#/viewSync)** — Mirror edits and citations between extended and compact paragraph views.`);
-      }
-    }
-    if (hasMixedPrefixes) {
-      recommendedTools.push(`- **[Open ID Prefix Auditor](#/idAuditor)** — Standardize ID sequences and prefix formatting.`);
-    }
-    if (unspacedInitials.length > 0 || dotlessInitials.length > 0) {
-      recommendedTools.push(`- **[Open Reference Structure Repair](#/structuralArchitect)** — Validate tags, fix author initials, and correct malformed markup.`);
-    }
-    if (hasUntaggedCredit) {
-      recommendedTools.push(`- **[Open CRediT Tagging](#/creditGenerator)** — Structure author roles into standard NISO CRediT XML.`);
-    }
-    if (hasUntaggedGrants) {
-      recommendedTools.push(`- **[Open Grant Tagger](#/grantTagger)** — Tag funding metadata and grant numbers.`);
-    }
-    if (otherRefMatches.length > 0) {
-      recommendedTools.push(`- **[Open Other-Ref Scanner](#/otherRefScanner)** — Isolate and structure <ce:other-ref> nodes.`);
-    }
-  }
-
-  const toolsBlock = recommendedTools.length > 0 
-    ? `\n\n---\n\n#### 🛠️ Direct Remediation Tools:\n${recommendedTools.join('\n')}` 
-    : '';
-
-  return `### 🐾 Keeper's XML Editorial Audit & Sniff Report
-
-${isPristine 
-  ? `*Sniffing through the manuscript markup... Everything smells fresh, clean, and in full compliance with Journal CE XML standards!*` 
-  : `*Sniffing through the manuscript markup... I caught a whiff of the following items in this XML:*`}
-
-**Article Identifier:** ${articleId} ${doi ? `(${doi})` : ''}  
-**Document Metrics:** ${authorCount > 0 ? `${authorCount} authors` : 'Authors detected'} | ${sectionCount} sections | ${figureCount} figures | ${tableCount} tables | ${allBibIds.length} references | ${allCrossRefIds.length} citations
-
----
-
-#### 📋 ${isPristine ? 'Editorial Audit Summary' : 'Itemized Editorial Findings'}:
-${findings.join('\n\n')}${toolsBlock}
-
----
-
-*${isPristine ? 'Your manuscript XML is in pristine shape with zero errors detected! No tool action is needed.' : 'No need to dump the whole XML — let me know which of these items you\'d like to tackle first!'}* 🐾`;
-};
-
-/**
- * Deterministic offline editorial fallback engine
- * Provides immediate, smart, and direct assistance for JM Queries, tool recommendations, DTD rules, and user subscription identification.
- * When in Lazy State (offline/network unavailable), prefaces professional guidance with randomized, nonchalant, humorous phrases.
- */
 export const generateOfflineKeeperResponse = (
   userPrompt: string, 
   userContext?: string | KeeperUserContext,
@@ -634,6 +133,27 @@ export const generateOfflineKeeperResponse = (
       unlockedTools: unlockedMatch && unlockedMatch[1].trim() !== 'None' ? unlockedMatch[1].split(',').map(s => s.trim()) : [],
       freeTools: freeToolsMatch && freeToolsMatch[1].trim() !== 'None' ? freeToolsMatch[1].split(',').map(s => s.trim()) : []
     };
+  }
+
+  // Subscription Enforcement: Keeper only responds to users with active subscriptions or admin privileges
+  const hasActiveSubscription = Boolean(
+    user.isAdmin || 
+    (user.isSubscribed && (!user.subscriptionEnd || new Date(user.subscriptionEnd) >= new Date()))
+  );
+
+  if (!hasActiveSubscription) {
+    return `### 🐾 **Subscription Required to Chat with Keeper**
+
+Woof! Keeper's interactive editorial AI assistant, automated Journal Manager (JM) query drafting, and XML manuscript diagnostics are reserved exclusively for members with an **Active Subscription**.
+
+---
+
+#### 🔒 **What You Unlock With a Subscription:**
+* **📝 Standardized JM Queries:** One-click drafting for authorship changes, email corrections, figure replacements, and uncited reference queries.
+* **🏷️ Full XML & DTD Diagnostic Support:** Deep-dive assistance with \`<sb:reference>\`, \`<ce:cross-ref>\`, and CRediT taxonomy.
+* **🧭 Workflow Automation & Tool Routing:** Immediate guidance and XML transforms across all 18+ editorial modules.
+
+${user.email ? '👉 **[Go to Account Settings & Subscriptions](#/settings)** to activate or renew your subscription.' : '👉 **[Log In or Create Account](#/login)** to check your subscription status.'}`;
   }
 
   // Lazy / Sleepy / Offline State Inquiries
@@ -719,122 +239,78 @@ ${isAdmin
     : `💡 **Subscription Notice:** Your account does not have an active subscription. You can utilize free tools or contact an administrator for an access key or subscription renewal.`}`;
   }
 
-  // 0a. Keeper XML Auditor — Specific Validation Rules, Errors & Warnings
+  // 0. Affiliation ID Sequencer / Increments of 5 Normalizer & Cross-Ref Synchronizer
   if (
-    lower.includes('keeper xml auditor') ||
-    (lower.includes('named entities') && (lower.includes('numerical unicode') || lower.includes('not allowed'))) ||
-    (lower.includes('ce:other-ref') && lower.includes('id')) ||
-    (lower.includes('sb:issue') && lower.includes('must match')) ||
-    lower.includes('sb:article-number') ||
-    (lower.includes('punctuation') && (lower.includes('preceded by a space') || lower.includes('impaired , along')))
+    lower.includes('affiliation') ||
+    lower.includes('af0005') ||
+    lower.includes('af0010') ||
+    lower.includes('af0020') ||
+    lower.includes('af0025') ||
+    lower.includes('cross-ref') ||
+    lower.includes('cross ref') ||
+    ((lower.includes("can't find") || lower.includes("cannot find") || lower.includes("where is the tool") || lower.includes("find the tool") || lower.includes("where is") || lower.includes("does not know")) && 
+     (lower.includes('keeper') || lower.includes('tool') || lower.includes('affiliation') || lower.includes('sequencer')))
   ) {
-    return `### 🐾 Keeper XML Auditor — Schema Compliance & Defect Resolution
+    // Check if XML is embedded in the prompt
+    const xmlMatch = text.match(/<([a-zA-Z0-9:]+\b[\s\S]*>)/);
+    if (xmlMatch && (text.includes('<ce:affiliation') || text.includes('<ce:cross-ref'))) {
+      const xmlToProcess = xmlMatch[0];
+      const result = sequenceAffiliationIdsStrict(xmlToProcess, 5, true);
 
-*Sniffing through the schema guidelines... My Japanese Spitz nose caught the scent of these exact DTD validation rules! Here is the authoritative breakdown of the four critical errors and one warning, complete with schema specifications, invalid vs. valid XML markup, and direct remediation tools:*
+      // If user strictly requested: "Return the COMPLETE XML, not a partial excerpt. Do not provide explanations"
+      if (lower.includes('do not provide explanations') || lower.includes('modify the xml below according to one requirement only') || lower.includes('complete xml, not a partial excerpt')) {
+        return result.outputXml;
+      }
 
----
+      return `### 🐾 Affiliation ID Sequence & Cross-Ref Synchronization (+5 Increments)
 
-#### 🚨 1. Critical Error: Named entities and numerical Unicode entities are not allowed
-* **Publishing Standard:** Modern Journal CE XML and JATS pipelines enforce strict **UTF-8 character encoding**. All named character entities (e.g. \`&eacute;\`, \`&alpha;\`, \`&beta;\`, \`&plusmn;\`, \`&nbsp;\`, \`&deg;\`, \`&bull;\`) and numerical Unicode entities (e.g. \`&#x00E9;\`, \`&#233;\`, \`&#160;\`, \`&#8211;\`) are **strictly prohibited**.
-* **Allowed XML Entities:** Only the standard 5 pre-defined XML entities are permitted: \`&amp;\`, \`&lt;\`, \`&gt;\`, \`&quot;\`, and \`&apos;\`.
-* **Root Cause & Impact:** External entity sets are undeclared in production XML parsers, causing fatal parsing halts. Ingesting numerical entities also leads to character corruption during pagination and platform indexing.
-* **❌ Invalid XML:**
-  \`\`\`xml
-  <ce:para>The &alpha;-synuclein &#x00E9;tude demonstrated &plusmn;5% variation.&nbsp;</ce:para>
-  \`\`\`
-* **✅ Valid XML (Direct UTF-8):**
-  \`\`\`xml
-  <ce:para>The α-synuclein étude demonstrated ±5% variation. </ce:para>
-  \`\`\`
-* **🛠️ Remediation Tool:** Use **[Open XML Tag Cleaner](#/tagCleaner)** or **[Open Reference Structure Repair](#/structuralArchitect)** to automatically convert named and numerical entities into standard native UTF-8 characters.
+I have corrected the \`<ce:affiliation>\` IDs to be sequential in increments of 5 (\`af0005\`, \`af0010\`, \`af0015\`...) and synchronized all corresponding cross-reference links:
 
----
+- **Total Affiliations:** ${result.totalAffiliations}
+- **IDs Corrected:** ${result.changedCount}
+- **Cross-Ref Links Synchronized:** ${result.totalCrossRefsUpdated}${result.crossRefChanges.length > 0 ? ` (e.g. \`refid="${result.crossRefChanges[0].oldRefId}"\` -> \`refid="${result.crossRefChanges[0].newRefId}"\`)` : ''}
+- **Integrity Guarantee:** \`<ce:author>\`, \`<ce:cross-ref id="...">\`, \`<ce:sup>\`, and \`affiliation-id\` remain strictly preserved.
 
-#### 🚨 2. Critical Error: Element 'ce:other-ref' should have an 'id' attribute
-* **Publishing Standard:** In the Journal CE DTD schema, the attribute list declaration for \`<ce:other-ref>\` explicitly mandates:
-  \`<!ATTLIST ce:other-ref id ID #REQUIRED ...>\`
-* **Root Cause & Impact:** Every unstructured or non-journal reference encapsulated in \`<ce:other-ref>\` must possess a unique document identifier (e.g., \`id="bib0010"\` or \`id="b1"\`). Without this attribute, the XML validator immediately rejects the manuscript with the error *Element 'ce:other-ref' should have an 'id' attribute*, and in-text citation callouts (\`<ce:cross-ref refid="...">\`) cannot resolve their target hyperlink anchors.
-* **❌ Invalid XML:**
-  \`\`\`xml
-  <ce:other-ref>
-    <ce:textref>World Health Organization. Guidelines on hepatitis B. Geneva: WHO; 2020.</ce:textref>
-  </ce:other-ref>
-  \`\`\`
-* **✅ Valid XML:**
-  \`\`\`xml
-  <ce:other-ref id="bib0020">
-    <ce:textref>World Health Organization. Guidelines on hepatitis B. Geneva: WHO; 2020.</ce:textref>
-  </ce:other-ref>
-  \`\`\`
-* **🛠️ Remediation Tool:** Use **[Open Other-Ref Scanner](#/otherRefScanner)** to instantly scan all unparsed references and inject missing sequential ID attributes, or use **[Open ID Prefix Auditor](#/idAuditor)** to standardize ID naming patterns.
+\`\`\`xml
+${result.outputXml}
+\`\`\`
 
----
+👉 **[Open Affiliation Sequencer Tool](#/affiliationSequencer)**`;
+    }
 
-#### 🚨 3. Critical Error: The content of element type "sb:issue" must match "(sb:editors?,((sb:title,sb:translated-title?)|sb:translated-title)?,sb:conference?,sb:series,sb:issue-nr?,sb:date)"
-* **Publishing Standard:** In structured bibliographic references, the container node \`<sb:issue>\` represents the series/journal issue. The DTD content model is strictly sequential:
-  \`(sb:editors?, ((sb:title, sb:translated-title?) | sb:translated-title)?, sb:conference?, sb:series, sb:issue-nr?, sb:date)\`
-* **Strict Content Model Constraints:**
-  1. **Mandatory Elements:** Both \`<sb:series>\` and \`<sb:date>\` are **mandatory** (they lack a \`?\` quantifier). Omitting either element triggers fatal DTD mismatch.
-  2. **Strict Ordering:** Elements must appear in the exact DTD declaration order. Placing \`<sb:date>\` before \`<sb:series>\`, or placing \`<sb:issue-nr>\` after \`<sb:date>\`, causes an immediate validation failure.
-  3. **Illegal Child Nesting:** Tags such as \`<sb:volume-nr>\`, \`<sb:first-page>\`, \`<sb:last-page>\`, and \`<sb:pages>\` **cannot** be placed directly inside \`<sb:issue>\`—they belong inside \`<sb:series>\` or the parent \`<sb:host>\`.
-* **❌ Invalid XML (Missing series & date out of order):**
-  \`\`\`xml
-  <sb:issue>
-    <sb:date><sb:year>2023</sb:year></sb:date>
-    <!-- Missing mandatory <sb:series> and date placed prematurely -->
-  </sb:issue>
-  \`\`\`
-* **✅ Valid XML:**
-  \`\`\`xml
-  <sb:issue>
-    <sb:series>
-      <sb:title><ce:italic>Lancet</ce:italic></sb:title>
-      <sb:volume-nr>401</sb:volume-nr>
-    </sb:series>
-    <sb:issue-nr>10375</sb:issue-nr>
-    <sb:date><sb:year>2023</sb:year></sb:date>
-  </sb:issue>
-  \`\`\`
-* **🛠️ Remediation Tool:** Use **[Open Reference Structure Repair](#/structuralArchitect)** or **[Open Reference Updater](#/referenceGen)** to reorganize and sequence the child elements of \`<sb:issue>\` to conform to the DTD model.
+    if (lower.includes('cross-ref') || lower.includes('cross ref') || lower.includes('refid') || lower.includes('af0025') || lower.includes('reflecting')) {
+      return `### 🐾 Cross-Reference Synchronization Update
 
----
+I have updated the **Affiliation Sequencer** and Keeper's processing engine to automatically synchronize author \`<ce:cross-ref refid="...">\` links when affiliation IDs are corrected!
 
-#### 🚨 4. Critical Error: Element 'sb:article-number' is not correctly formatted
-* **Publishing Standard:** The element \`<sb:article-number>\` is reserved for publisher electronic locators / e-identifiers in online-only or article-based journals (e.g. \`10294\`, \`e20230012\`).
-* **Root Cause & Impact:** Content inside \`<sb:article-number>\` must contain **only the clean alphanumeric article number string**. Including conversational text or prefixes such as *"Art. No."*, *"Article"*, *"No."*, or trailing punctuation/whitespace (e.g. \`Art. No. 10294\` or \`Article 10294.\`) violates the schema definition and breaks Crossref/PubMed DOI resolution.
-* **❌ Invalid XML:**
-  \`\`\`xml
-  <sb:article-number>Art. No. 10294</sb:article-number>
-  \`\`\`
-* **✅ Valid XML:**
-  \`\`\`xml
-  <sb:article-number>10294</sb:article-number>
-  \`\`\`
-* **🛠️ Remediation Tool:** Use **[Open Reference Structure Repair](#/structuralArchitect)** to strip prefixes and clean article number strings down to valid alphanumeric values.
+#### 🔄 What Was Corrected:
+- When an affiliation ID is corrected (for example, re-sequencing an affiliation from \`af0025\` to \`af0020\`), any associated author cross-reference call:
+  \`<ce:cross-ref refid="af0025" id="cf0040"><ce:sup>d</ce:sup></ce:cross-ref>\`
+  is now automatically updated to:
+  \`<ce:cross-ref refid="af0020" id="cf0040"><ce:sup>d</ce:sup></ce:cross-ref>\`
+- **Integrity Guarantee:** The cross-reference's own \`id="cf0040"\`, inner \`<ce:sup>d</ce:sup>\`, and parent \`<ce:author>\` structures remain strictly intact.
 
----
+#### 🚀 How to Apply:
+1. Go to the **[Affiliation Sequencer](#/affiliationSequencer)** tool.
+2. Paste your XML content into the Input buffer.
+3. Click **Process XML** to sequentially renumber affiliation IDs and synchronize all cross-reference links!
 
-#### ⚠️ 5. Warning: Punctuation characters ".,;?!:" should not be preceded by a space character ("impaired , along")
-* **Typography & Editorial Standard:** In professional academic typesetting and XML authoring, punctuation characters (\`.\`, \`,\`, \`;\`, \`?\`, \`!\`, \`:\`) must cling directly to the preceding word without an intervening space.
-* **Root Cause & Impact:** Spurious leading spaces (e.g. \`"impaired , along"\`) frequently arise from copy-editing merges, regex substitutions, or OCR extraction. In automated composition engines, a preceding space creates an **orphan punctuation mark**, allowing the comma, period, or colon to wrap to the beginning of the next line by itself.
-* **❌ Invalid Typography:**
-  \`\`\`text
-  "impaired , along with the secondary markers . In conclusion ;"
-  \`\`\`
-* **✅ Valid Typography:**
-  \`\`\`text
-  "impaired, along with the secondary markers. In conclusion;"
-  \`\`\`
-* **🛠️ Remediation Tool:** Use **[Open XML Tag Cleaner](#/tagCleaner)** or **[Open Quick Text Diff](#/quickDiff)** to run global punctuation adhesion cleanup across all text and paragraph nodes.
+Or paste your complete XML buffer into the chat, and I will sequence the affiliation IDs and synchronize all cross-ref links for you directly.`;
+    }
 
----
+    return `### 🐾 Affiliation Sequencer (ID Normalizer & Cross-Ref Sync)
 
-#### 🛠️ Direct Remediation Tools on Dashboard:
-* **[Open XML Tag Cleaner](#/tagCleaner)** — Decode named/numerical entities to UTF-8 and strip spurious spaces before punctuation.
-* **[Open Other-Ref Scanner](#/otherRefScanner)** — Isolate \`<ce:other-ref>\` nodes and inject missing \`id\` attributes.
-* **[Open Reference Structure Repair](#/structuralArchitect)** — Rectify \`<sb:issue>\` content models, clean \`<sb:article-number>\`, and validate author initials.
-* **[Open ID Prefix Auditor](#/idAuditor)** — Standardize ID prefixes and bibliography node sequences.
-* **[Open Citation Linker Pro](#/citationLinker)** — Re-link in-text citation calls to repaired reference IDs.`;
+The **Affiliation Sequencer** is ready to use in your workspace!
+
+- **Direct Link:** **[Open Affiliation Sequencer](#/affiliationSequencer)**
+- **On the Dashboard:** Go to **[Workspace Dashboard](#/dashboard)** and look for the **Affiliation Sequencer** card with the green building icon (or search for *"Affiliation"*).
+
+#### 🛠️ Core Capabilities:
+- **Sequential IDs (+5 Step):** Renumbers \`id\` attributes of \`<ce:affiliation>\` tags to \`af0005\`, \`af0010\`, \`af0015\`, \`af0020\`... by occurrence order.
+- **Cross-Reference Synchronization:** Automatically synchronizes author \`<ce:cross-ref refid="...">\` attributes and superscripts to match the new affiliation sequence.
+- **DTD Integrity Preservation:** Preserves internal \`affiliation-id\`, \`<ce:cross-ref id="...">\`, author tags, and document markup 100% intact.
+
+👉 **[Open Affiliation Sequencer Tool](#/affiliationSequencer)**`;
   }
 
   // 1. Corresponding author email required / deleted / missing
@@ -994,7 +470,7 @@ The file is in pending status until the matter is resolved. Thank you.`;
   ) {
     return `### 🧭 Production Toolkit Pro — Complete Editorial Tool Directory
 
-Production Toolkit Pro includes a full suite of 17 established editorial modules available directly on the Workspace Dashboard for Journal CE and JATS XML:
+Production Toolkit Pro includes a full suite of 18 established editorial modules available directly on the Workspace Dashboard for Journal CE and JATS XML:
 
 #### 1. 🔢 Citations & References
 * **[Open XML Normalizer](#/xmlRenumber)** — Sequentially renumbers bibliography references and synchronizes all in-text \`<ce:cross-ref>\` callouts in order of appearance.
@@ -1007,6 +483,7 @@ Production Toolkit Pro includes a full suite of 17 established editorial modules
 * **[Open Other-Ref Scanner](#/otherRefScanner)** — Isolates unstructured \`<ce:other-ref>\` nodes for external catalog lookup or manual markup.
 
 #### 2. 🛠️ XML Structure & Document Markup
+* **[Open Affiliation Sequencer](#/affiliationSequencer)** — Sequentially renumbers \`<ce:affiliation>\` IDs in increments of 5 (\`af0005\`, \`af0010\`, \`af0015\`...) with strict preservation of affiliation-id, authors, cross-refs, and labels.
 * **[Open CRediT Tagging](#/creditGenerator)** — Auto-detects 14 official NISO CRediT contributor roles from raw text and generates standardized \`<ce:contributor-role>\` tags.
 * **[Open Grant Tagger](#/grantTagger)** — Wraps funding sponsors in \`<ce:grant-sponsor>\` and award numbers in \`<ce:grant-number>\`.
 * **[Open Table XML Beautifier](#/tableBeautifier)** — Formats single-line or minified table XML into indented, human-readable blocks.
@@ -1024,7 +501,7 @@ Production Toolkit Pro includes a full suite of 17 established editorial modules
   }
 
   // 8. Reference Renumbering & Normalization Tools
-  if (lower.includes('renumber') || lower.includes('out of order') || lower.includes('numeric order') || lower.includes('sequence')) {
+  if ((lower.includes('renumber') || lower.includes('out of order') || lower.includes('numeric order') || lower.includes('sequence')) && !lower.includes('affiliation')) {
     return `Use **[Open XML Normalizer](#/xmlRenumber)** to resequence citation callouts and references sequentially by order of appearance.`;
   }
 
@@ -1149,19 +626,6 @@ When upstream automated validation or QA checkers return a manuscript for a left
 ---
 
 > 💡 **Editorial Note on JM Queries:** If this was an internal production/conversion artifact, **do not send a query to the Journal Manager**. Simply purge the leftover section and renormalize the file. Only query the JM if the author explicitly requested these references to be kept but provided no citation locations.`;
-  }
-
-  // 21c. Raw XML Input Sniffing & Comprehensive Validator Inspection
-  if (
-    text.includes('<ce:para') || 
-    text.includes('<ce:bib-reference') || 
-    text.includes('</ce:article>') || 
-    text.includes('<article') || 
-    text.includes('<ce:section') ||
-    text.includes('<ce:bibliography') ||
-    (text.includes('<') && text.includes('>') && text.length > 80)
-  ) {
-    return performKeeperXmlAudit(text);
   }
 
   // 22. XML Schemas & Structure
@@ -1332,8 +796,9 @@ CRITICAL DIRECTIVES:
    - CANINE EDITORIAL SNOUT: Keeper has a super-sensitive editorial nose that instantly sniffs out anything fishy or off in manuscript XML (misplaced float anchors, leftover uncited sections, dangling cross-references, unlinked tables, plural label typos, or broken author tags). Keeper hates the smell of fishy markup!
    - DELIVERY: Always summarize what is fishy, itemize the exact problems found with clear snippets/diagnostics, and guide the user on how to fix them using the established workspace tools.
 
-7. DASHBOARD-ONLY TOOL ROUTING DIRECTIVE:
-   - You MUST ONLY recommend and route users to the 17 established production tools present on the Workspace Dashboard:
+7. WORKSPACE TOOL ROUTING DIRECTIVE:
+   - You MUST recommend and route users to the 18 established production tools present on the Workspace Dashboard:
+     * **[Open Affiliation Sequencer](#/affiliationSequencer)** — Sequentially normalizes <ce:affiliation> IDs in increments of 5 (af0005, af0010, af0015...) and automatically synchronizes author cross-reference links with strict DTD integrity.
      * **[Open XML Normalizer](#/xmlRenumber)** — Sequentially renumbers references and syncs callouts.
      * **[Open Citation Linker Pro](#/citationLinker)** — Links unlinked in-text citations to bibliography entries.
      * **[Open Reference Structure Repair](#/structuralArchitect)** — Audits and auto-repairs broken XML nodes and author initials.
@@ -1353,38 +818,19 @@ CRITICAL DIRECTIVES:
      * **[Open Quick Text Diff](#/quickDiff)** — Side-by-side text and XML comparison.
      * **[Open Workspace Dashboard](#/dashboard)** — Workspace console.
 
-8. USER SUBSCRIPTION & ROLE IDENTIFICATION:
+8. AFFILIATION SEQUENCER & AFFILIATION ID INCREMENTS OF 5:
+   - When the user asks about the Affiliation Sequencer, affiliation IDs, or renumbering/sequencing affiliation tags in increments of 5 (af0005, af0010, af0015, af0020, af0025...):
+   - You DO know about it! Direct them directly to **[Open Affiliation Sequencer](#/affiliationSequencer)** and explain it is available on the Workspace Dashboard.
+   - Explain that it sequentially normalizes affiliation IDs in increments of 5 (af0005, af0010, af0015, af0020...), automatically synchronizes corresponding author <ce:cross-ref refid="..."> links and <ce:sup> labels, while strictly preserving affiliation-id attributes, author names, cross-ref IDs, and document structure intact.
+   - If user asks to modify XML according to this requirement, sequence the affiliation IDs and synchronize cross-references as requested.
+
+9. USER SUBSCRIPTION & ROLE IDENTIFICATION:
    When the user asks about their subscription status, role, or tier:
    - Clearly and accurately identify their email, display name, system role (Admin vs Standard User), subscription status (Active Subscription vs Inactive / Expired), subscription tier, expiration/renewal status, and any unlocked keys/tools.
 
-9. COMPREHENSIVE XML VALIDATION & AUDITING PROTOCOL (WHEN USER INPUTS XML OR ASKS FOR XML INSPECTION / UPSTREAM FEEDBACK):
-   When the user pastes XML into chat or asks you to check, validate, analyze, or audit their XML (or mentions upstream feedback regarding forgotten uncited reference sections):
-   - You MUST act as an expert Senior Production XML Validator.
-   - Thoroughly parse and evaluate the provided XML and present an itemized diagnostic audit report:
-     * 🚨 **Critical Defects & Blockers**:
-       - **Disallowed Named Entities & Numerical Unicode Entities**: Named entities (e.g. &alpha;, &eacute;, &nbsp;) and numerical Unicode entities (e.g. &#x00E9;, &#233;) are strictly prohibited. Files must be encoded natively in UTF-8 using only the 5 standard XML entities (&amp;, &lt;, &gt;, &quot;, &apos;). Direct the user to **[Open XML Tag Cleaner](#/tagCleaner)**.
-       - **Element 'ce:other-ref' Missing 'id' Attribute**: Every &lt;ce:other-ref&gt; element must possess a declared id attribute for cross-reference linking. Direct to **[Open Other-Ref Scanner](#/otherRefScanner)** or **[Open ID Prefix Auditor](#/idAuditor)**.
-       - **Content Model Violation in &lt;sb:issue&gt;**: Content of &lt;sb:issue&gt; must strictly match "(sb:editors?,((sb:title,sb:translated-title?)|sb:translated-title)?,sb:conference?,sb:series,sb:issue-nr?,sb:date)". Both &lt;sb:series&gt; and &lt;sb:date&gt; are mandatory, and child tags must appear in declaration sequence without illegal direct child nodes like &lt;sb:volume-nr&gt; or &lt;sb:pages&gt;. Direct to **[Open Reference Structure Repair](#/structuralArchitect)**.
-       - **Element 'sb:article-number' Formatting**: Must contain only clean alphanumeric article numbers (e.g. "10294"), never conversational prefixes like "Art. No.", "Article", "No.", or stray punctuation/whitespace. Direct to **[Open Reference Structure Repair](#/structuralArchitect)**.
-       - **Unlinked / Incomplete &lt;ce:cross-ref&gt; Tags (Missing refid Attribute)**: If tags like &lt;ce:cross-ref&gt;Table 1&lt;/ce:cross-ref&gt; or &lt;ce:cross-ref&gt;Fig. 2&lt;/ce:cross-ref&gt; appear without a refid attribute, flag this as unlinked markup and direct the user to **[Open Citation Linker Pro](#/citationLinker)** to link them to their target IDs.
-       - **Misplaced / Clustered Float Anchors (&lt;ce:float-anchor&gt;)**: Every &lt;ce:float-anchor refid="..." /&gt; must be placed immediately following the paragraph containing the **first in-text citation** of that table or figure. Bundling/dumping all table anchors together in one paragraph (e.g. at section end) is a critical composition defect.
-       - **Leftover "Uncited Reference" / "Further Reading" placeholder sections or headings** (must be purged with **[Open Uncited Ref Cleaner](#/uncitedCleaner)**).
-       - **Broken in-text citation links** (&lt;ce:cross-ref refid="..."&gt; pointing to reference IDs that do not exist in the bibliography).
-     * ⚠️ **Structural Warnings & Inconsistencies**:
-       - **Punctuation Spacing Warning**: Punctuation characters ".,;?!:" should not be preceded by a space character (e.g. "impaired , along" must be corrected to "impaired, along"). Preceding spaces cause orphan punctuation wrapping. Direct to **[Open XML Tag Cleaner](#/tagCleaner)** or **[Open Quick Text Diff](#/quickDiff)**.
-       - **Float Citations**: Check if all floats in &lt;ce:floats&gt; (figures & tables) have in-text citations. Flag uncited floats or raw plain-text mentions lacking &lt;ce:cross-ref&gt; tags (e.g. raw "Table 1" or "Table 9").
-       - **Dual-View Paragraphs**: Check if &lt;ce:para view="extended"&gt; and &lt;ce:para view="compact-standard"&gt; (or "compact") exist. Remember: Dual views are intentional standard publishing architecture for multi-layout rendering. Do NOT query the JM to remove one. Direct the user to **[Open View Synchronizer](#/viewSync)**.
-       - **Uncited Bibliography Entries**: References in &lt;ce:bibliography&gt; not cited anywhere in body text.
-       - **Mixed Reference ID Prefixes**: Mixing prefixes (e.g. bib0010 vs bb0005 vs b1). Direct to **[Open ID Prefix Auditor](#/idAuditor)**.
-       - **Unlinked plain-text citation numbers** (e.g. [1], [2-4]) lacking &lt;ce:cross-ref&gt; tags. Direct to **[Open Citation Linker Pro](#/citationLinker)**.
-     * 💡 **Formatting & Semantic Markup Notices**:
-       - **Float Label Typos**: Plural label tags on individual table/figure nodes (e.g. &lt;ce:label&gt;Tables 6&lt;/ce:label&gt;).
-       - **Author initials format** in &lt;ce:initials&gt; (missing periods or unspaced initials like "J.D." vs "J. D."). Direct to **[Open Reference Structure Repair](#/structuralArchitect)**.
-       - **Untagged CRediT Author Contribution statements**. Direct to **[Open CRediT Tagging](#/creditGenerator)**.
-       - **Untagged funding/grant acknowledgments**. Direct to **[Open Grant Tagger](#/grantTagger)**.
-       - **Unstructured &lt;ce:other-ref&gt; nodes**. Direct to **[Open Other-Ref Scanner](#/otherRefScanner)**.
-   - Always itemize findings with clear bullet points, root cause explanations, and exact clickable markdown tool links so the user can immediately jump to the right tool.
-   - STRICT PROHIBITION ON UNNECESSARY TOOL SUGGESTIONS: If the XML has NO defects/anomalies (clean/pristine XML with zero issues), you MUST NOT suggest, recommend, or list any remediation tools. Explicitly state that the manuscript XML is in pristine shape and zero tool action is required.
+10. SUBSCRIPTION-ONLY INTERACTION RULE:
+   - Keeper AI is an exclusive assistant reserved strictly for members with an active subscription or verified Admin privileges.
+   - If the user's account context indicates they are inactive, unauthenticated, expired, or on a free guest tier (and not an Admin), Keeper MUST refuse to process manuscripts or draft JM queries, and instead politely instruct them to subscribe or activate their subscription in Account Settings ([Open Settings](#/settings)).
 
 ${context ? `Current user workspace context:\n${context}` : ''}`;
 };

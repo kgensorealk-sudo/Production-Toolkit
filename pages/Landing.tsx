@@ -290,31 +290,31 @@ const Landing: React.FC = () => {
 
                             <div className="p-8 md:p-10 space-y-6">
                                 <p className="text-slate-600 leading-relaxed text-center font-medium text-sm">
-                                    To activate an Individual License or Group Subscription, contact the <span className="text-indigo-600 font-bold">Administrator</span> directly.
+                                    To coordinate operator access or arrange team workspace allocation, contact the <span className="text-indigo-600 font-bold">Administrator</span> directly.
                                 </p>
 
-                                {/* Pricing Cards */}
+                                {/* Allocation Cards */}
                                 <div className="space-y-2">
-                                    <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 text-center">Designated Monthly Rates</div>
+                                    <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 text-center">Operator Allocations</div>
                                     <div className="grid grid-cols-3 gap-2">
                                         <div className="p-3 rounded-2xl bg-slate-50 border border-slate-100 text-center">
-                                            <div className="text-[9px] font-bold text-slate-400 uppercase">Solo</div>
-                                            <div className="text-base font-black text-slate-900 mt-0.5">₱300</div>
-                                            <div className="text-[8px] text-slate-500">per month</div>
+                                            <div className="text-[9px] font-bold text-slate-400 uppercase">Individual</div>
+                                            <div className="text-xs font-black text-slate-900 mt-1">Contact Admin</div>
+                                            <div className="text-[8px] text-slate-500 mt-0.5">Dedicated Workspace</div>
                                         </div>
                                         <div className="p-3 rounded-2xl bg-slate-50 border border-slate-100 text-center">
-                                            <div className="text-[9px] font-bold text-slate-400 uppercase">2 Users</div>
-                                            <div className="text-base font-black text-slate-900 mt-0.5">₱250</div>
-                                            <div className="text-[8px] text-slate-500">each / mo</div>
+                                            <div className="text-[9px] font-bold text-slate-400 uppercase">Pair</div>
+                                            <div className="text-xs font-black text-slate-900 mt-1">Contact Admin</div>
+                                            <div className="text-[8px] text-slate-500 mt-0.5">Dual Setup</div>
                                         </div>
                                         <div className="p-3 rounded-2xl bg-indigo-50/70 border border-indigo-200 text-center">
-                                            <div className="text-[9px] font-bold text-indigo-700 uppercase">3+ Users</div>
-                                            <div className="text-base font-black text-indigo-700 mt-0.5">₱175</div>
-                                            <div className="text-[8px] text-indigo-600">each / mo</div>
+                                            <div className="text-[9px] font-bold text-indigo-700 uppercase">Team</div>
+                                            <div className="text-xs font-black text-indigo-700 mt-1">Contact Admin</div>
+                                            <div className="text-[8px] text-indigo-600 mt-0.5">Multi-Seat Setup</div>
                                         </div>
                                     </div>
                                     <p className="text-[10px] text-slate-400 text-center italic">
-                                        Group rates apply to separate individual active subscribers.
+                                        Access is provisioned privately for operational use. Contact the Administrator for onboarding.
                                     </p>
                                 </div>
                                 

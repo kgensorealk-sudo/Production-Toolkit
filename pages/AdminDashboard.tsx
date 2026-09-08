@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import { UserProfile, ToolId, DefaultAvatar } from '../types';
-import { useAuth, withRetry } from '../contexts/AuthContext';
+import { useAuth, withRetry, isAdminEmail } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
@@ -10,7 +10,8 @@ import RichTextEditor from '../components/RichTextEditor';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { History, Info, X, Radio, Signal, Terminal, Eye, Send, Save, Trash2, Layout as LayoutIcon, Play, Square, AlertTriangle, CheckCircle2, AlertCircle, ShieldCheck, Database, Zap, ExternalLink, Search, Filter, Copy, ChevronDown, ChevronUp, RefreshCw, Sparkles, Plus, Edit3, Sliders, Layers, Maximize2, Minimize2, MoreVertical, Calendar, CalendarPlus, Clock } from 'lucide-react';
+import { History, Info, X, Radio, Signal, Terminal, Eye, Send, Save, Trash2, Layout as LayoutIcon, Play, Square, AlertTriangle, CheckCircle2, AlertCircle, ShieldCheck, ShieldAlert, Database, Zap, ExternalLink, Search, Filter, Copy, ChevronDown, ChevronUp, RefreshCw, Sparkles, Plus, Edit3, Sliders, Layers, Maximize2, Minimize2, MoreVertical, Calendar, CalendarPlus, Clock, CheckCheck, KeyRound, HelpCircle } from 'lucide-react';
+import { usageMetricsService } from '../services/usageMetricsService';
 
 interface Announcement {
     id: string;
@@ -39,6 +40,8 @@ interface UsageLog {
     tool_id: string;
     user_id: string;
     timestamp: string;
+    duration_seconds?: number;
+    metadata?: Record<string, any>;
 }
 
 interface FeedbackRecord {
@@ -158,6 +161,42 @@ const AdminDashboard: React.FC = () => {
     const [feedbacks, setFeedbacks] = useState<FeedbackRecord[]>([]);
     const [intelRange, setIntelRange] = useState<IntelligenceRange>('7d');
     const [focusedUserId, setFocusedUserId] = useState<string | null>(null);
+
+    // Security Anomalies Management State
+    const [acknowledgedAnomalyIds, setAcknowledgedAnomalyIds] = useState<string[]>(() => {
+        try {
+            return JSON.parse(localStorage.getItem('admin_acknowledged_anomalies') || '[]');
+        } catch {
+            return [];
+        }
+    });
+    const [anomalySearch, setAnomalySearch] = useState<string>('');
+    const [showAcknowledgedAnomalies, setShowAcknowledgedAnomalies] = useState<boolean>(false);
+    const [isAnomalyHelpOpen, setIsAnomalyHelpOpen] = useState<boolean>(false);
+
+    const acknowledgeAnomaly = (id: string) => {
+        setAcknowledgedAnomalyIds(prev => {
+            const next = Array.from(new Set([...prev, id]));
+            try { localStorage.setItem('admin_acknowledged_anomalies', JSON.stringify(next)); } catch {}
+            return next;
+        });
+        setToast({ msg: 'Security anomaly marked as reviewed / acknowledged.', type: 'success' });
+    };
+
+    const acknowledgeAllAnomalies = (ids: string[]) => {
+        setAcknowledgedAnomalyIds(prev => {
+            const next = Array.from(new Set([...prev, ...ids]));
+            try { localStorage.setItem('admin_acknowledged_anomalies', JSON.stringify(next)); } catch {}
+            return next;
+        });
+        setToast({ msg: `Acknowledged ${ids.length} anomalies.`, type: 'success' });
+    };
+
+    const clearAcknowledgedAnomalies = () => {
+        setAcknowledgedAnomalyIds([]);
+        try { localStorage.removeItem('admin_acknowledged_anomalies'); } catch {}
+        setToast({ msg: 'Reset acknowledged anomaly registry.', type: 'success' });
+    };
     
     const [promoDuration, setPromoDuration] = useState<number>(7);
     const lastSyncTimeRef = useRef<number>(Date.now());
@@ -420,7 +459,7 @@ const AdminDashboard: React.FC = () => {
 
     const exportRawTelemetry = () => {
         if (usageLogs.length === 0) return;
-        const headers = ['Timestamp', 'Operator_ID', 'Protocol_ID', 'Status_Role'];
+        const headers = ['Timestamp', 'Operator_ID', 'Protocol_ID', 'Duration_Sec', 'Status_Role'];
         const userMap = new Map<string, UserProfile>(users.map(u => [u.id, u]));
         
         const rows = usageLogs.map(log => {
@@ -429,6 +468,7 @@ const AdminDashboard: React.FC = () => {
                 log.timestamp,
                 user?.email || `DELETED_USER_${log.user_id.substring(0,8)}`,
                 log.tool_id,
+                log.duration_seconds ?? 0,
                 user?.is_subscribed ? 'PREMIUM' : 'STANDARD'
             ];
         });
@@ -1023,7 +1063,7 @@ const AdminDashboard: React.FC = () => {
     }, [focusedUserId, users, usageLogs]);
 
     const intelligenceMetrics = useMemo(() => {
-        if (usageLogs.length === 0) return { globalRanking: [], userAffinities: [], rareTools: [], filteredTotal: 0, growth: 0, segments: { premium: 0, standard: 0, segmentCounts: { premium: {}, standard: {} } }, hourlyIntensity: new Array(24).fill(0), recentActivity: [], toolUsage24h: {}, anomalies: [] };
+        if (usageLogs.length === 0) return { globalRanking: [], userAffinities: [], rareTools: [], filteredTotal: 0, growth: 0, segments: { premium: 0, standard: 0, segmentCounts: { premium: {} as Record<string, number>, standard: {} as Record<string, number> } }, hourlyIntensity: new Array(24).fill(0), recentActivity: [], toolUsage24h: {}, anomalies: [], grandTotalDuration: 0 };
 
         const now = new Date().getTime();
         const userMap = new Map<string, UserProfile>(users.map(u => [u.id, u]));
@@ -1070,11 +1110,13 @@ const AdminDashboard: React.FC = () => {
         }
 
         const toolCounts: Record<string, number> = {};
+        const toolDurations: Record<string, number> = {};
         const userToolCounts: Record<string, Record<string, number>> = {};
         const userLastAction: Record<string, { tool: string, time: string }> = {};
         
         let premiumUsage = 0;
         let standardUsage = 0;
+        let grandTotalDuration = 0;
         const segmentCounts: Record<string, Record<string, number>> = { premium: {}, standard: {} };
 
         filteredLogs.forEach(log => {
@@ -1087,14 +1129,30 @@ const AdminDashboard: React.FC = () => {
                 standardUsage++;
                 segmentCounts.standard[log.tool_id] = (segmentCounts.standard[log.tool_id] || 0) + 1;
             }
+
+            const dur = typeof log.duration_seconds === 'number' ? Math.max(0, log.duration_seconds) : 0;
             toolCounts[log.tool_id] = (toolCounts[log.tool_id] || 0) + 1;
+            toolDurations[log.tool_id] = (toolDurations[log.tool_id] || 0) + dur;
+            grandTotalDuration += dur;
+
             if (!userToolCounts[log.user_id]) userToolCounts[log.user_id] = {};
             userToolCounts[log.user_id][log.tool_id] = (userToolCounts[log.user_id][log.tool_id] || 0) + 1;
             if (!userLastAction[log.user_id]) userLastAction[log.user_id] = { tool: log.tool_id, time: log.timestamp };
         });
 
         const allAvailableTools = Object.values(ToolId).filter(id => id !== 'dashboard' && id !== 'docs');
-        const globalRanking = allAvailableTools.map(id => ({ id, name: getToolName(id), count: toolCounts[id] || 0 })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+        const globalRanking = allAvailableTools.map(id => {
+            const count = toolCounts[id] || 0;
+            const totalDuration = toolDurations[id] || 0;
+            const avgDuration = count > 0 ? Math.round(totalDuration / count) : 0;
+            return {
+                id,
+                name: getToolName(id),
+                count,
+                totalDuration,
+                avgDuration
+            };
+        }).sort((a, b) => b.count - a.count || b.totalDuration - a.totalDuration || a.name.localeCompare(b.name));
         const rareTools = globalRanking.filter(r => r.count < (intelRange === '30d' ? 5 : 2)).reverse();
 
         const userAffinities = users.map(user => {
@@ -1126,23 +1184,50 @@ const AdminDashboard: React.FC = () => {
         const anomalies = filteredLogs.filter(log => {
             const user = userMap.get(log.user_id);
             if (!user) return false;
-            const isPremium = !!user.is_subscribed;
+
+            // 1. Exclude public and non-restricted utilities
+            const publicViews = ['dashboard', 'docs', 'settings', 'terms', 'experimental', 'SYSTEM_RESERVED_VAL', ToolId.DASHBOARD, ToolId.DOCS];
+            if (publicViews.includes(log.tool_id as any)) return false;
+
+            // 2. Administrators have platform-wide clearance and must never be recorded as security anomalies
+            const isAdmin = user.role?.toLowerCase() === 'admin' || isAdminEmail(user.email);
+            if (isAdmin) return false;
+
+            // 3. Check active subscription (is_subscribed flag OR valid unexpired subscription_end)
+            const isSubscribed = !!user.is_subscribed || (user.subscription_end ? new Date(user.subscription_end).getTime() > now : false);
+            if (isSubscribed) return false;
+
+            // 4. Check if tool is currently marked as free in active protocol settings
             const isFree = !!freeToolsData[log.tool_id];
-            const hasKey = accessKeys.some(k => k.user_id === log.user_id && (k.tool === log.tool_id || k.tool === 'universal') && k.is_used);
-            return !isPremium && !isFree && !hasKey;
+            if (isFree) return false;
+
+            // 5. Check if user unlocked the tool via access key or profile unlocked_tools
+            const hasKey = accessKeys.some(k => k.user_id === log.user_id && (k.tool === log.tool_id || k.tool === 'universal') && k.is_used) ||
+                (user.unlocked_tools && (user.unlocked_tools.includes(log.tool_id) || user.unlocked_tools.includes('universal')));
+            if (hasKey) return false;
+
+            return true;
         }).map(log => {
             const user = userMap.get(log.user_id);
+            let reason = 'Subscription Inactive (No Valid Key)';
+            if (user?.subscription_end && new Date(user.subscription_end).getTime() <= now) {
+                reason = 'Subscription Expired';
+            }
             return {
                 id: log.id,
                 timestamp: log.timestamp,
                 toolName: getToolName(log.tool_id),
+                toolId: log.tool_id,
                 user: user?.email || `Unknown_${log.user_id.slice(0,4)}`,
                 userId: log.user_id,
-                avatar_url: user?.avatar_url
+                avatar_url: user?.avatar_url,
+                userRole: user?.role || 'user',
+                reason,
+                duration: log.duration_seconds || 0
             };
         });
 
-        return { globalRanking, userAffinities, rareTools, filteredTotal: filteredLogs.length, growth, segments: { premium: premiumUsage, standard: standardUsage, segmentCounts }, hourlyIntensity, recentActivity, toolUsage24h, anomalies };
+        return { globalRanking, userAffinities, rareTools, filteredTotal: filteredLogs.length, growth, segments: { premium: premiumUsage, standard: standardUsage, segmentCounts }, hourlyIntensity, recentActivity, toolUsage24h, anomalies, grandTotalDuration };
     }, [usageLogs, users, intelRange, freeToolsData, accessKeys]);
 
     const focusedUser = useMemo(() => {
@@ -1768,26 +1853,43 @@ const AdminDashboard: React.FC = () => {
                                             <Info size={10} className="text-slate-300" />
                                         </span>
                                     </div>
-                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-auto">Utilization Ranking</span>
+                                    <div className="flex items-center gap-2 ml-auto">
+                                        {(intelligenceMetrics.grandTotalDuration ?? 0) > 0 && (
+                                            <span className="text-[8px] font-bold text-slate-600 uppercase tracking-wider bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/60">
+                                                Total Active Time: {usageMetricsService.formatDuration(intelligenceMetrics.grandTotalDuration || 0)}
+                                            </span>
+                                        )}
+                                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Utilization Ranking</span>
+                                    </div>
                                 </div>
                                 <div className="space-y-4 max-h-[350px] overflow-y-auto custom-scrollbar pr-2">
                                     {intelligenceMetrics.globalRanking.length > 0 ? intelligenceMetrics.globalRanking.map((tool, tIdx) => {
-                                        const premCount = intelligenceMetrics.segments.segmentCounts.premium[tool.id] || 0;
-                                        const stdCount = intelligenceMetrics.segments.segmentCounts.standard[tool.id] || 0;
+                                        const premCount = (intelligenceMetrics.segments.segmentCounts.premium as Record<string, number>)[tool.id] || 0;
+                                        const stdCount = (intelligenceMetrics.segments.segmentCounts.standard as Record<string, number>)[tool.id] || 0;
                                         const premPercent = tool.count > 0 ? (premCount / tool.count) * 100 : 0;
                                         return (
-                                            <div key={`rank-${tool.id}-${tIdx}`} className="relative group p-2 rounded-xl hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-100">
-                                                <div className="flex justify-between items-end mb-1">
+                                            <div key={`rank-${tool.id}-${tIdx}`} className="relative group p-2.5 rounded-xl hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-100">
+                                                <div className="flex justify-between items-start mb-1.5">
                                                     <div className="flex flex-col">
                                                         <span className="text-[11px] font-black text-slate-800 uppercase tracking-widest">{tool.name}</span>
-                                                        <div className="flex items-center gap-2 mt-0.5">
+                                                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                                                             <span className="text-[8px] font-black text-indigo-500 uppercase">PREM: {premCount}</span>
                                                             <span className="text-[8px] font-black text-emerald-500 uppercase">STD: {stdCount}</span>
+                                                            {tool.totalDuration > 0 && (
+                                                                <span className="text-[8px] font-bold text-amber-700 uppercase bg-amber-50 border border-amber-200/60 px-1.5 py-0.5 rounded">
+                                                                    TIME: {usageMetricsService.formatDuration(tool.totalDuration)}
+                                                                </span>
+                                                            )}
                                                         </div>
                                                     </div>
-                                                    <span className="text-[10px] font-mono font-black text-indigo-600">{tool.count}</span>
+                                                    <div className="flex flex-col items-end shrink-0 ml-2">
+                                                        <span className="text-[11px] font-mono font-black text-indigo-600">{tool.count} runs</span>
+                                                        {tool.avgDuration > 0 && (
+                                                            <span className="text-[8px] font-mono text-slate-400">~{usageMetricsService.formatDuration(tool.avgDuration)}/session</span>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                                <div className="h-1 w-full bg-slate-100 rounded-full overflow-hidden flex">
+                                                <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden flex">
                                                     <div className="h-full bg-indigo-500 transition-all duration-1000" style={{ width: `${premPercent}%` }}></div>
                                                     <div className="h-full bg-emerald-400 transition-all duration-1000" style={{ width: `${100 - premPercent}%` }}></div>
                                                 </div>
@@ -1833,77 +1935,184 @@ const AdminDashboard: React.FC = () => {
                         </div>
 
                         <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-                            <section className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm">
-                                <div className="flex items-center justify-between mb-4">
+                            <section className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm flex flex-col">
+                                <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                                     <div className="flex items-center gap-2">
-                                        <div className="w-8 h-8 bg-rose-50 rounded-lg flex items-center justify-center text-rose-600 border border-rose-100">
-                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center border ${intelligenceMetrics.anomalies.some(a => !acknowledgedAnomalyIds.includes(a.id)) ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
+                                            {intelligenceMetrics.anomalies.some(a => !acknowledgedAnomalyIds.includes(a.id)) ? (
+                                                <ShieldAlert className="h-4 w-4" />
+                                            ) : (
+                                                <ShieldCheck className="h-4 w-4" />
+                                            )}
                                         </div>
                                         <div className="flex items-center gap-1.5">
                                             <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Security Anomalies</h3>
-                                            <span title="Logs module access attempts that do not meet authorization criteria (e.g., non-premium users accessing premium-only modules without a valid key)." className="cursor-help">
-                                                <Info size={12} className="text-slate-300" />
-                                            </span>
+                                            <button 
+                                                onClick={() => setIsAnomalyHelpOpen(true)}
+                                                className="text-slate-400 hover:text-slate-700 transition-colors p-0.5 rounded-full hover:bg-slate-100"
+                                                title="View Security Anomaly Diagnostics & Architecture Guide"
+                                            >
+                                                <HelpCircle size={13} />
+                                            </button>
                                         </div>
-                                        <span className="text-[9px] font-black text-rose-400 uppercase tracking-widest ml-auto">Access Violations</span>
+                                        <span className="text-[9px] font-black text-rose-400 uppercase tracking-widest ml-1">Access Perimeter</span>
                                     </div>
-                                    {intelligenceMetrics.anomalies && intelligenceMetrics.anomalies.length > 0 && (
-                                        <span className="px-2.5 py-1 bg-rose-600 text-white text-[10px] font-black rounded-full uppercase tracking-widest animate-pulse">
-                                            {intelligenceMetrics.anomalies.length} BREACHES
-                                        </span>
-                                    )}
-                                </div>
-                                <div className="overflow-hidden">
-                                    <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
-                                        {intelligenceMetrics.anomalies && intelligenceMetrics.anomalies.length > 0 ? (
-                                            <table className="min-w-full divide-y divide-slate-100">
-                                                <thead className="bg-slate-50 sticky top-0 z-10">
-                                                    <tr>
-                                                        <th className="px-4 py-3 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Operator</th>
-                                                        <th className="px-4 py-3 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Module</th>
-                                                        <th className="px-4 py-3 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">Time</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-slate-100">
-                                                    {intelligenceMetrics.anomalies.map((anomaly, idx) => (
-                                                        <tr key={`anomaly-${anomaly.id || idx}`} className="hover:bg-rose-50/30 transition-colors group">
-                                                            <td className="px-4 py-3">
-                                                                <div className="flex items-center gap-3">
-                                                                    <div className="w-8 h-8 rounded-lg bg-slate-100 flex-shrink-0 flex items-center justify-center text-[10px] font-black text-slate-400 border border-slate-200 overflow-hidden">
-                                                                        {anomaly.avatar_url ? (
-                                                                            <img src={anomaly.avatar_url} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                                                                        ) : (
-                                                                            anomaly.user[0].toUpperCase()
-                                                                        )}
-                                                                    </div>
-                                                                    <div className="flex flex-col">
-                                                                        <span className="text-xs font-bold text-slate-900 group-hover:text-rose-700 truncate max-w-[120px]">{anomaly.user}</span>
-                                                                        <span className="text-[9px] font-mono text-slate-400 uppercase">{anomaly.userId.slice(0, 8)}</span>
-                                                                    </div>
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-4 py-3">
-                                                                <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-black rounded uppercase border border-slate-200">
-                                                                    {anomaly.toolName}
-                                                                </span>
-                                                            </td>
-                                                            <td className="px-4 py-3 text-right">
-                                                                <span className="text-[11px] font-mono font-bold text-slate-400">
-                                                                    {new Date(anomaly.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit' })}
-                                                                </span>
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
+                                    <div className="flex items-center gap-2 ml-auto">
+                                        {intelligenceMetrics.anomalies.filter(a => !acknowledgedAnomalyIds.includes(a.id)).length > 0 ? (
+                                            <>
+                                                <span className="px-2.5 py-1 bg-rose-600 text-white text-[10px] font-black rounded-full uppercase tracking-widest animate-pulse">
+                                                    {intelligenceMetrics.anomalies.filter(a => !acknowledgedAnomalyIds.includes(a.id)).length} BREACHES
+                                                </span>
+                                                <button
+                                                    onClick={() => acknowledgeAllAnomalies(intelligenceMetrics.anomalies.map(a => a.id))}
+                                                    className="text-[9px] font-black uppercase tracking-wider text-slate-500 hover:text-slate-900 px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors"
+                                                    title="Mark all current anomalies as reviewed / acknowledged"
+                                                >
+                                                    Acknowledge All
+                                                </button>
+                                            </>
                                         ) : (
-                                            <div className="py-12 flex flex-col items-center justify-center text-center">
-                                                <div className="w-10 h-10 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-500 mb-3 border border-emerald-100">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
-                                                </div>
-                                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Perimeter Secure</p>
-                                            </div>
+                                            <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black rounded-full uppercase tracking-widest flex items-center gap-1">
+                                                <CheckCircle2 size={11} /> Perimeter Secure
+                                            </span>
                                         )}
+                                    </div>
+                                </div>
+
+                                {intelligenceMetrics.anomalies.length > 0 && (
+                                    <div className="mb-3 flex items-center justify-between gap-2 text-xs">
+                                        <div className="relative flex-grow max-w-xs">
+                                            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                                            <input 
+                                                type="text"
+                                                value={anomalySearch}
+                                                onChange={(e) => setAnomalySearch(e.target.value)}
+                                                placeholder="Filter operator or tool..."
+                                                className="w-full pl-8 pr-2 py-1 text-[11px] bg-slate-50 border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium"
+                                            />
+                                        </div>
+                                        <div className="flex items-center gap-1.5 ml-auto">
+                                            {acknowledgedAnomalyIds.length > 0 && (
+                                                <button
+                                                    onClick={() => setShowAcknowledgedAnomalies(prev => !prev)}
+                                                    className={`text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded border transition-colors ${showAcknowledgedAnomalies ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'}`}
+                                                >
+                                                    {showAcknowledgedAnomalies ? 'Active Only' : `Archived (${acknowledgedAnomalyIds.length})`}
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="overflow-hidden flex-grow">
+                                    <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
+                                        {(() => {
+                                            const activeList = intelligenceMetrics.anomalies.filter(a => !acknowledgedAnomalyIds.includes(a.id));
+                                            const baseList = showAcknowledgedAnomalies ? intelligenceMetrics.anomalies : activeList;
+                                            const filteredList = anomalySearch.trim()
+                                                ? baseList.filter(a => a.user.toLowerCase().includes(anomalySearch.toLowerCase()) || a.toolName.toLowerCase().includes(anomalySearch.toLowerCase()) || a.toolId.toLowerCase().includes(anomalySearch.toLowerCase()))
+                                                : baseList;
+
+                                            if (filteredList.length === 0) {
+                                                return (
+                                                    <div className="py-12 flex flex-col items-center justify-center text-center">
+                                                        <div className="w-10 h-10 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-500 mb-3 border border-emerald-100">
+                                                            <ShieldCheck className="h-5 w-5" />
+                                                        </div>
+                                                        <p className="text-[10px] font-black text-slate-700 uppercase tracking-widest">Perimeter Secure</p>
+                                                        <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
+                                                            Zero unauthorized operational access attempts recorded. Administrator clearance and public utilities are verified.
+                                                        </p>
+                                                        {acknowledgedAnomalyIds.length > 0 && !showAcknowledgedAnomalies && (
+                                                            <button
+                                                                onClick={() => setShowAcknowledgedAnomalies(true)}
+                                                                className="mt-3 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 underline"
+                                                            >
+                                                                View {acknowledgedAnomalyIds.length} acknowledged archive items
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                );
+                                            }
+
+                                            return (
+                                                <table className="min-w-full divide-y divide-slate-100">
+                                                    <thead className="bg-slate-50 sticky top-0 z-10">
+                                                        <tr>
+                                                            <th className="px-4 py-3 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Operator</th>
+                                                            <th className="px-4 py-3 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Module</th>
+                                                            <th className="px-4 py-3 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">Status / Action</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-100">
+                                                        {filteredList.map((anomaly, idx) => {
+                                                            const isAck = acknowledgedAnomalyIds.includes(anomaly.id);
+                                                            return (
+                                                                <tr key={`anomaly-${anomaly.id || idx}`} className={`hover:bg-rose-50/30 transition-colors group ${isAck ? 'opacity-50' : ''}`}>
+                                                                    <td className="px-4 py-3">
+                                                                        <div 
+                                                                            onClick={() => setFocusedUserId(anomaly.userId)}
+                                                                            className="flex items-center gap-3 cursor-pointer group/item"
+                                                                            title="Click to view operator profile & telemetry"
+                                                                        >
+                                                                            <div className="w-8 h-8 rounded-lg bg-slate-100 flex-shrink-0 flex items-center justify-center text-[10px] font-black text-slate-400 border border-slate-200 overflow-hidden group-hover/item:border-indigo-400">
+                                                                                {anomaly.avatar_url ? (
+                                                                                    <img src={anomaly.avatar_url} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                                                                ) : (
+                                                                                    anomaly.user[0].toUpperCase()
+                                                                                )}
+                                                                            </div>
+                                                                            <div className="flex flex-col min-w-0">
+                                                                                <span className="text-xs font-bold text-slate-900 group-hover/item:text-indigo-600 truncate max-w-[130px]">{anomaly.user}</span>
+                                                                                <div className="flex items-center gap-1.5">
+                                                                                    <span className="text-[9px] font-mono text-slate-400 uppercase">{anomaly.userId.slice(0, 8)}</span>
+                                                                                    <span className="text-[8px] font-bold text-rose-500 uppercase tracking-tight">{anomaly.reason}</span>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    </td>
+                                                                    <td className="px-4 py-3">
+                                                                        <div className="flex flex-col">
+                                                                            <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-black rounded uppercase border border-slate-200 inline-block w-fit">
+                                                                                {anomaly.toolName}
+                                                                            </span>
+                                                                            <span className="text-[8px] font-mono text-slate-400 mt-0.5">{anomaly.toolId}</span>
+                                                                        </div>
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                                                                        <div className="flex items-center justify-end gap-1.5">
+                                                                            <span className="text-[11px] font-mono font-bold text-slate-400 mr-1">
+                                                                                {new Date(anomaly.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit' })}
+                                                                            </span>
+                                                                            <button
+                                                                                onClick={() => setFocusedUserId(anomaly.userId)}
+                                                                                className="p-1.5 hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 rounded-lg transition-colors border border-transparent hover:border-indigo-100"
+                                                                                title="Inspect Operator Profile"
+                                                                            >
+                                                                                <Eye size={13} />
+                                                                            </button>
+                                                                            {!isAck ? (
+                                                                                <button
+                                                                                    onClick={() => acknowledgeAnomaly(anomaly.id)}
+                                                                                    className="p-1.5 hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 rounded-lg transition-colors border border-transparent hover:border-emerald-100"
+                                                                                    title="Acknowledge / Mark as Reviewed"
+                                                                                >
+                                                                                    <CheckCircle2 size={13} />
+                                                                                </button>
+                                                                            ) : (
+                                                                                <span className="text-[8px] font-bold uppercase text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                                                                    Reviewed
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            );
+                                        })()}
                                     </div>
                                 </div>
                             </section>
@@ -3012,6 +3221,85 @@ const AdminDashboard: React.FC = () => {
                             >
                                 <CalendarPlus className="w-4 h-4" />
                                 <span>Confirm Extension</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {isAnomalyHelpOpen && (
+                <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white border border-slate-200 rounded-3xl max-w-xl w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                        <div className="p-6 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center">
+                                    <ShieldAlert className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-black tracking-tight">Security Anomalies & Perimeter Intelligence</h3>
+                                    <p className="text-xs text-slate-400 font-medium">Platform Access Audit & Diagnostic Architecture</p>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => setIsAnomalyHelpOpen(false)}
+                                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-all"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto custom-scrollbar text-xs text-slate-600 leading-relaxed">
+                            <div className="p-4 bg-indigo-50/50 border border-indigo-100 rounded-2xl space-y-1.5">
+                                <h4 className="text-[11px] font-black uppercase tracking-wider text-indigo-950 flex items-center gap-1.5">
+                                    <ShieldCheck className="w-4 h-4 text-indigo-600" />
+                                    What Triggers a Security Anomaly?
+                                </h4>
+                                <p className="text-slate-600 text-[11px]">
+                                    A security anomaly is recorded in administrative telemetry whenever an operator navigates to an editorial utility without meeting access prerequisites (such as having no active subscription, no unexpired free protocol window, and no valid access key).
+                                </p>
+                            </div>
+
+                            <div className="space-y-3">
+                                <div className="border border-slate-200 rounded-2xl p-4 bg-slate-50/50">
+                                    <h5 className="font-bold text-slate-900 mb-1 flex items-center gap-1.5">
+                                        <KeyRound className="w-3.5 h-3.5 text-indigo-500" />
+                                        1. Gatekeeper Enforcement (Perimeter Defense)
+                                    </h5>
+                                    <p className="text-slate-500 text-[11px]">
+                                        Non-authorized users cannot access or run protected editorial tools. The <code className="bg-slate-200 px-1 py-0.5 rounded text-slate-800 font-mono">NodeAccessController</code> gatekeeper intercepts them at the perimeter, keeping processing servers secure while logging the attempted utility access for administrative oversight.
+                                    </p>
+                                </div>
+
+                                <div className="border border-slate-200 rounded-2xl p-4 bg-slate-50/50">
+                                    <h5 className="font-bold text-slate-900 mb-1 flex items-center gap-1.5">
+                                        <CheckCheck className="w-3.5 h-3.5 text-emerald-500" />
+                                        2. Administrative Clearance & Whitelisting
+                                    </h5>
+                                    <p className="text-slate-500 text-[11px]">
+                                        Administrators (<code className="bg-slate-200 px-1 py-0.5 rounded text-slate-800 font-mono">kgenso.realK@gmail.com</code> and <code className="bg-slate-200 px-1 py-0.5 rounded text-slate-800 font-mono">generalkevin53@gmail.com</code>) and open platform utilities (Dashboard, Documentation, Settings, Terms) have global operational clearance and are automatically filtered out from security alerts to prevent false positives.
+                                    </p>
+                                </div>
+
+                                <div className="border border-slate-200 rounded-2xl p-4 bg-slate-50/50">
+                                    <h5 className="font-bold text-slate-900 mb-1 flex items-center gap-1.5">
+                                        <Sliders className="w-3.5 h-3.5 text-indigo-500" />
+                                        3. Administrator Remediation Actions
+                                    </h5>
+                                    <ul className="list-disc pl-4 space-y-1 text-slate-500 text-[11px]">
+                                        <li><strong>Audit Operator</strong>: Click the eye icon or operator name to inspect their full activity history.</li>
+                                        <li><strong>Provision Access Key</strong>: Issue a tool-specific or universal key from the Access Keys console.</li>
+                                        <li><strong>Extend Expiry</strong>: Grant or renew subscription duration directly from the operator drawer.</li>
+                                        <li><strong>Acknowledge / Archive</strong>: Dismiss reviewed anomalies to maintain a clear active incident log.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end">
+                            <button
+                                onClick={() => setIsAnomalyHelpOpen(false)}
+                                className="px-5 py-2 text-xs font-black uppercase tracking-widest text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-all"
+                            >
+                                Got it
                             </button>
                         </div>
                     </div>

@@ -70,8 +70,8 @@ const TermsGateModal: React.FC<TermsGateModalProps> = ({ isOpen }) => {
                                 1
                             </div>
                             <div>
-                                <p className="font-black text-slate-800 uppercase tracking-wide text-[11px]">Individual User License</p>
-                                <p className="text-slate-500 text-[11px] mt-0.5">Non-transferable license strictly bound to one user. Account and credential sharing are prohibited.</p>
+                                <p className="font-black text-slate-800 uppercase tracking-wide text-[11px]">Individual Operator Authorization</p>
+                                <p className="text-slate-500 text-[11px] mt-0.5">Non-transferable authorization strictly bound to one verified operator. Credential sharing is prohibited.</p>
                             </div>
                         </div>
 
@@ -81,7 +81,7 @@ const TermsGateModal: React.FC<TermsGateModalProps> = ({ isOpen }) => {
                             </div>
                             <div>
                                 <p className="font-black text-slate-800 uppercase tracking-wide text-[11px]">Prohibited Proxy Processing</p>
-                                <p className="text-slate-500 text-[11px] mt-0.5">Running conversions, normalizations, or scripts on behalf of non-subscribed third parties is strictly forbidden.</p>
+                                <p className="text-slate-500 text-[11px] mt-0.5">Running conversions, normalizations, or scripts on behalf of unauthorized non-members is strictly forbidden.</p>
                             </div>
                         </div>
 
@@ -90,8 +90,8 @@ const TermsGateModal: React.FC<TermsGateModalProps> = ({ isOpen }) => {
                                 3
                             </div>
                             <div>
-                                <p className="font-black text-slate-800 uppercase tracking-wide text-[11px]">Compliance & Monitoring</p>
-                                <p className="text-slate-500 text-[11px] mt-0.5">Usage telemetry and device binding protocols are enforced. Violations result in immediate access revocation.</p>
+                                <p className="font-black text-slate-800 uppercase tracking-wide text-[11px]">System Integrity & Enforcement</p>
+                                <p className="text-slate-500 text-[11px] mt-0.5">Platform access is provisioned privately for verified operational use. Policy violations or commercial resale result in immediate access revocation.</p>
                             </div>
                         </div>
                     </div>

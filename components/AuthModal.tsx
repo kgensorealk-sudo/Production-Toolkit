@@ -40,44 +40,18 @@ const AuthModal: React.FC<AuthModalProps> = ({ toolId, toolDisplayName, onSucces
         try {
             const currentDeviceId = getDeviceId();
 
-            // 1. Check if key exists
-            const { data: keyData, error: fetchError } = await supabase
-                .from('access_keys')
-                .select('*')
-                .eq('key', keyString)
-                .single();
+            // Atomic RPC redemption (enforces exact string lookup, tool compatibility, and single-user binding)
+            const { data, error: rpcError } = await supabase.rpc('redeem_access_key', {
+                key_code: keyString,
+                device_id_input: currentDeviceId,
+                target_tool_input: toolId
+            });
 
-            if (fetchError || !keyData) {
-                throw new Error("Invalid access key.");
+            if (rpcError) {
+                throw new Error(rpcError.message || "Invalid access key.");
             }
 
-            // 2. Ensure key matches tool
-            if (keyData.tool !== toolId && keyData.tool !== 'universal') {
-                throw new Error(`This key is not valid for ${toolDisplayName}.`);
-            }
-
-            // 3. Check usage status with Graceful Re-binding
-            // If the key is used, but belongs to the CURRENT user, we allow them to update the device_id
-            if (keyData.is_used && keyData.user_id !== user.id) {
-                throw new Error("This key is already bound to another user account.");
-            }
-
-            // 4. Bind (or Re-bind) to current User AND current Device
-            const { error: updateError } = await supabase
-                .from('access_keys')
-                .update({ 
-                    is_used: true, 
-                    used_at: new Date().toISOString(),
-                    user_id: user.id,
-                    device_id: currentDeviceId 
-                })
-                .eq('id', keyData.id);
-
-            if (updateError) {
-                throw new Error("Activation failed. Please try again.");
-            }
-
-            // 5. Success
+            // Success
             await refreshProfile();
             onSuccess();
         } catch (err: any) {

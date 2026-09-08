@@ -7,13 +7,14 @@ import {
     ArrowLeft, 
     FileText, 
     Users, 
-    DollarSign, 
+    UserCheck, 
     Ban, 
     AlertTriangle, 
     CheckCircle2, 
     Printer, 
     Mail,
-    Lock
+    Lock,
+    KeyRound
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -40,7 +41,7 @@ const Terms: React.FC = () => {
                     <div className="h-4 w-px bg-slate-200"></div>
                     <div className="flex items-center gap-2">
                         <Scale size={18} className="text-indigo-600" />
-                        <span className="text-xs font-black uppercase tracking-wider text-slate-800">Production Toolkit Legal</span>
+                        <span className="text-xs font-black uppercase tracking-wider text-slate-800">Production Toolkit Access & Terms</span>
                     </div>
                 </div>
 
@@ -68,18 +69,18 @@ const Terms: React.FC = () => {
                     <div className="relative z-10 space-y-4">
                         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 text-xs font-bold uppercase tracking-widest">
                             <Scale size={14} />
-                            <span>Legal Agreement & Code of Conduct</span>
+                            <span>Platform Access Agreement & Code of Conduct</span>
                         </div>
                         <h1 className="text-3xl md:text-5xl font-black tracking-tight text-white uppercase">
                             Terms and Conditions of Use
                         </h1>
                         <p className="text-slate-300 text-sm md:text-base leading-relaxed max-w-2xl font-light">
-                            By subscribing to or using these tools, you agree to comply with and be bound by the following Terms and Conditions. Please read them carefully.
+                            By requesting access, activating credentials, or using these editorial utilities, you agree to comply with and be bound by the following Terms and Conditions of Use. This platform is a specialized operational workspace maintained for authorized editorial operators.
                         </p>
                     </div>
                 </motion.div>
 
-                {/* Section 1: Subscription & Account Access */}
+                {/* Section 1: Authorized Access & Operator Verification */}
                 <motion.section 
                     initial={{ opacity: 0, y: 15 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -92,9 +93,9 @@ const Terms: React.FC = () => {
                         </div>
                         <div>
                             <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">
-                                Subscription & Account Access
+                                Authorized Access & Operator Verification
                             </h2>
-                            <p className="text-xs text-slate-400 font-medium">Individual licensing and credential security</p>
+                            <p className="text-xs text-slate-400 font-medium">Individual operator authorization and credential integrity</p>
                         </div>
                     </div>
 
@@ -102,26 +103,26 @@ const Terms: React.FC = () => {
                         <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2">
                             <div className="flex items-center gap-2 text-indigo-700 font-bold text-sm">
                                 <Lock size={16} />
-                                <h3>Individual License</h3>
+                                <h3>Individual Operator Authorization</h3>
                             </div>
                             <p className="text-xs text-slate-600 leading-relaxed">
-                                Each subscription grants a <strong>non-transferable, non-exclusive license</strong> for one individual user only.
+                                Each provisioned account grants <strong>individual, non-transferable authorization</strong> strictly for the designated registered operator.
                             </p>
                         </div>
 
                         <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2">
                             <div className="flex items-center gap-2 text-rose-600 font-bold text-sm">
                                 <ShieldCheck size={16} />
-                                <h3>No Account Sharing</h3>
+                                <h3>No Credential Sharing</h3>
                             </div>
                             <p className="text-xs text-slate-600 leading-relaxed">
-                                Sharing credentials, login details, or tool access with non-subscribers is <strong>strictly prohibited</strong>.
+                                Sharing login credentials, access tokens, or tool sessions with unauthorized individuals or non-members is <strong>strictly prohibited</strong>.
                             </p>
                         </div>
                     </div>
                 </motion.section>
 
-                {/* Section 2: Prohibited Activities & Unauthorized Commercial Use */}
+                {/* Section 2: Prohibited Misuse & Unauthorized External Services */}
                 <motion.section 
                     initial={{ opacity: 0, y: 15 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -134,9 +135,9 @@ const Terms: React.FC = () => {
                         </div>
                         <div>
                             <h2 className="text-xl font-black text-rose-950 uppercase tracking-tight">
-                                Prohibited Activities & Unauthorized Commercial Use
+                                Prohibited Misuse & Unauthorized External Services
                             </h2>
-                            <p className="text-xs text-rose-600 font-medium">Restrictions on proxy usage and monetization</p>
+                            <p className="text-xs text-rose-600 font-medium">Protection of private tool pipelines and restrictions on proxy processing</p>
                         </div>
                     </div>
 
@@ -147,23 +148,23 @@ const Terms: React.FC = () => {
                                 <h3>No Proxy Processing</h3>
                             </div>
                             <p className="text-xs text-slate-700 leading-relaxed">
-                                You are <strong>strictly forbidden</strong> from running XML conversions, renumbering, or executing scripts/tools on behalf of non-subscribed users.
+                                You are <strong>strictly forbidden</strong> from running XML conversions, renumbering, or executing scripts/tools on behalf of unauthorized non-members.
                             </p>
                         </div>
 
                         <div className="p-5 rounded-2xl bg-rose-50/40 border border-rose-200 space-y-2">
                             <div className="flex items-center gap-2 text-rose-800 font-bold text-sm">
                                 <Ban size={16} />
-                                <h3>No Reselling or Outsourcing Services</h3>
+                                <h3>No Commercial Exploitation or Resale</h3>
                             </div>
                             <p className="text-xs text-slate-700 leading-relaxed">
-                                You may <strong>not sell, rent, or monetize</strong> services using these tools to third parties or non-members.
+                                You may <strong>not sell, broker, rent, or commercially exploit</strong> these internal utilities or offer commercial outsourcing services using this platform.
                             </p>
                         </div>
                     </div>
                 </motion.section>
 
-                {/* Section 3: Pricing & Group Rates */}
+                {/* Section 3: Access Allocation & Team Arrangements */}
                 <motion.section 
                     initial={{ opacity: 0, y: 15 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -176,48 +177,70 @@ const Terms: React.FC = () => {
                         </div>
                         <div>
                             <h2 className="text-xl font-black text-emerald-950 uppercase tracking-tight">
-                                Pricing & Group Rates
+                                Access Allocation & Team Arrangements
                             </h2>
-                            <p className="text-xs text-emerald-600 font-medium">Monthly billing tiers and group eligibility</p>
+                            <p className="text-xs text-emerald-600 font-medium">Infrastructure maintenance coordination and authorized operator tiers</p>
                         </div>
                     </div>
 
                     <p className="text-xs text-slate-600 leading-relaxed">
-                        Subscriptions are billed on a monthly basis at designated rates:
+                        The Production Toolkit is a personally developed operational environment. Access to editorial utilities, automated XML pipelines, and the Keeper editorial assistant is provisioned privately through the Administrator for verified editorial personnel to sustain ongoing server infrastructure and maintenance:
                     </p>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div className="p-6 rounded-2xl bg-emerald-50/30 border border-emerald-200 text-center space-y-2 hover:shadow-md transition-all">
-                            <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">Solo User</span>
-                            <div className="text-3xl font-black text-emerald-700">₱300<span className="text-sm font-normal text-slate-500">/mo</span></div>
-                            <p className="text-xs text-slate-500">1 Individual Subscriber</p>
+                            <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">Individual Operator</span>
+                            <div className="text-sm font-black text-emerald-800 py-1 uppercase tracking-wide">Authorized Seat</div>
+                            <p className="text-xs text-slate-500">1 Dedicated Operator Workspace</p>
                         </div>
 
                         <div className="p-6 rounded-2xl bg-emerald-50/30 border border-emerald-200 text-center space-y-2 hover:shadow-md transition-all">
-                            <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">2 Users</span>
-                            <div className="text-3xl font-black text-emerald-700">₱250<span className="text-sm font-normal text-slate-500">/mo each</span></div>
-                            <p className="text-xs text-slate-500">Individual licenses</p>
+                            <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">Editorial Pair</span>
+                            <div className="text-sm font-black text-emerald-800 py-1 uppercase tracking-wide">Dual Allocation</div>
+                            <p className="text-xs text-slate-500">Coordinated partner credentials</p>
                         </div>
 
                         <div className="p-6 rounded-2xl bg-emerald-50/70 border-2 border-emerald-400 text-center space-y-2 shadow-sm hover:shadow-md transition-all relative">
                             <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-[9px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                                Best Value
+                                Team Collaboration
                             </div>
-                            <span className="text-[11px] font-black uppercase tracking-wider text-emerald-800">3+ Users</span>
-                            <div className="text-3xl font-black text-emerald-800">₱175<span className="text-sm font-normal text-slate-600">/mo each</span></div>
-                            <p className="text-xs text-emerald-700 font-medium">Individual licenses</p>
+                            <span className="text-[11px] font-black uppercase tracking-wider text-emerald-800">Editorial Team</span>
+                            <div className="text-sm font-black text-emerald-800 py-1 uppercase tracking-wide">Multi-Seat Allocation</div>
+                            <p className="text-xs text-emerald-700 font-medium">Coordinated team arrangement</p>
                         </div>
                     </div>
 
-                    <div className="p-4 rounded-2xl bg-emerald-50/40 border border-emerald-200 text-xs text-slate-700 flex items-start gap-2.5">
+                    <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+                        <div className="flex items-start gap-2.5">
+                            <Mail size={18} className="text-emerald-700 shrink-0 mt-0.5" />
+                            <div>
+                                <span className="font-bold text-emerald-950 block">Direct Administrator Inquiry:</span>
+                                <span className="text-emerald-800">
+                                    To request account provisioning, arrange operational access, or coordinate team accounts, contact the Administrator at{' '}
+                                    <a href="mailto:kgenso.realK@gmail.com" className="font-bold underline text-emerald-950 hover:text-emerald-700">
+                                        kgenso.realK@gmail.com
+                                    </a>.
+                                </span>
+                            </div>
+                        </div>
+                        <a 
+                            href="mailto:kgenso.realK@gmail.com?subject=Production%20Toolkit%20Access%20Inquiry"
+                            className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-bold uppercase tracking-wider text-[10px] shrink-0 transition-all shadow-xs inline-flex items-center gap-1.5"
+                        >
+                            <Mail size={13} />
+                            <span>Request Access</span>
+                        </a>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-700 flex items-start gap-2.5">
                         <CheckCircle2 size={16} className="text-emerald-600 shrink-0 mt-0.5" />
                         <span>
-                            <strong>Group Rate Notice:</strong> Group rates apply strictly to separate, individual active subscribers joining together and do not grant shared account access.
+                            <strong>Collaborative Team Notice:</strong> Multi-seat arrangements apply strictly to separate, verified individual accounts collaborating within the workflow and do not permit shared logins. Contact the administrator to coordinate team onboarding.
                         </span>
                     </div>
                 </motion.section>
 
-                {/* Section 4: Account Banning, Subscription Cancellation, & Service Termination */}
+                {/* Section 4: Access Revocation & System Integrity Enforcement */}
                 <motion.section 
                     initial={{ opacity: 0, y: 15 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -230,9 +253,9 @@ const Terms: React.FC = () => {
                         </div>
                         <div>
                             <h2 className="text-xl font-black text-amber-950 uppercase tracking-tight">
-                                Account Banning, Subscription Cancellation, & Service Termination
+                                Access Revocation & System Integrity Enforcement
                             </h2>
-                            <p className="text-xs text-amber-700 font-medium">Enforcement policy for policy violations and system abuse</p>
+                            <p className="text-xs text-amber-700 font-medium">Enforcement policy for credential misuse and platform protection</p>
                         </div>
                     </div>
 
@@ -240,9 +263,9 @@ const Terms: React.FC = () => {
                         <div className="p-5 rounded-2xl bg-amber-50/40 border border-amber-200 flex items-start gap-3">
                             <AlertTriangle size={18} className="text-amber-600 shrink-0 mt-0.5" />
                             <div>
-                                <h3 className="font-bold text-amber-950 text-sm mb-1">Banning & Cancellation</h3>
+                                <h3 className="font-bold text-amber-950 text-sm mb-1">Access Revocation</h3>
                                 <p className="text-xs text-slate-700 leading-relaxed">
-                                    Anyone caught sharing their account, acting as a proxy for non-paying users, or selling services using these tools will be <strong>permanently banned and have their subscription discontinued immediately by the Admin without a refund</strong>.
+                                    Anyone caught sharing their account credentials, acting as an unauthorized proxy, or commercially exploiting these tools will have their <strong>access revoked permanently and immediately by the Administrator</strong>.
                                 </p>
                             </div>
                         </div>
@@ -250,16 +273,16 @@ const Terms: React.FC = () => {
                         <div className="p-5 rounded-2xl bg-amber-50/40 border border-amber-200 flex items-start gap-3">
                             <Ban size={18} className="text-amber-700 shrink-0 mt-0.5" />
                             <div>
-                                <h3 className="font-bold text-amber-950 text-sm mb-1">Public Service Shutdown</h3>
+                                <h3 className="font-bold text-amber-950 text-sm mb-1">Platform Protection & Suspension</h3>
                                 <p className="text-xs text-slate-700 leading-relaxed">
-                                    If widespread system abuse or proxy usage persists, the <strong>Admin reserves the right to permanently shut down public access for all users without prior notice</strong>.
+                                    If widespread system abuse, unauthorized proxy processing, or security circumvention persists, the <strong>Administrator reserves the right to suspend or restrict platform access to protect server resources</strong>.
                                 </p>
                             </div>
                         </div>
                     </div>
                 </motion.section>
 
-                {/* Section 5: Service Availability & Modifications */}
+                {/* Section 5: Operational Status & Utility Modifications */}
                 <motion.section 
                     initial={{ opacity: 0, y: 15 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -272,24 +295,24 @@ const Terms: React.FC = () => {
                         </div>
                         <div>
                             <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">
-                                Service Availability & Modifications
+                                Operational Status & Utility Modifications
                             </h2>
-                            <p className="text-xs text-slate-400 font-medium">As-is provision and operational rights</p>
+                            <p className="text-xs text-slate-400 font-medium">Internal tool status and system administration</p>
                         </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-slate-600">
                         <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2">
-                            <h3 className="font-bold text-slate-900 text-sm">"As-Is" Status</h3>
+                            <h3 className="font-bold text-slate-900 text-sm">"As-Is" Utility Provision</h3>
                             <p className="leading-relaxed">
-                                Tools are provided on an <strong>"as-is" and "as-available"</strong> basis.
+                                Tools and conversion pipelines are provided on an <strong>"as-is" and "as-available"</strong> basis for editorial workflow assistance.
                             </p>
                         </div>
 
                         <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2">
-                            <h3 className="font-bold text-slate-900 text-sm">Right to Modify</h3>
+                            <h3 className="font-bold text-slate-900 text-sm">System Evolution</h3>
                             <p className="leading-relaxed">
-                                Features, security protocols, and pricing tiers are subject to modification at the <strong>sole discretion of the Admin</strong> to maintain system sustainability.
+                                Tool features, algorithmic pipelines, security controls, and access guidelines are subject to modification at the <strong>sole discretion of the Administrator</strong> to maintain operational sustainability and system integrity.
                             </p>
                         </div>
                     </div>
@@ -302,7 +325,7 @@ const Terms: React.FC = () => {
                             <Mail size={20} />
                         </div>
                         <div>
-                            <div className="text-xs font-black uppercase tracking-widest text-slate-400">Questions or Subscription Inquiries?</div>
+                            <div className="text-xs font-black uppercase tracking-widest text-slate-400">Questions or Access Inquiries?</div>
                             <div className="text-sm font-bold text-white mt-0.5">kgenso.realK@gmail.com</div>
                         </div>
                     </div>
@@ -315,7 +338,7 @@ const Terms: React.FC = () => {
                 </div>
 
                 <div className="text-center text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] pt-4 pb-8">
-                    &copy; 2026 Editorial Systems Pro. All rights reserved.
+                    &copy; 2026 Production Toolkit. Personal Editorial Platform.
                 </div>
             </main>
         </div>

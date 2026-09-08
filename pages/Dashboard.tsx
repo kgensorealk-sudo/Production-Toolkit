@@ -28,7 +28,8 @@ import {
     Trash2,
     ShieldAlert,
     SortAsc,
-    FileCode
+    FileCode,
+    Building2
 } from 'lucide-react';
 import { ToolId } from '../types';
 import { useAuth, withRetry } from '../contexts/AuthContext';
@@ -246,7 +247,8 @@ const Dashboard: React.FC = () => {
         { id: ToolId.TABLE_BEAUTIFIER, title: "Table XML Beautifier", desc: "Transform single-line table rows into structured multi-line formatted entry blocks.", iconBg: "bg-pink-50", iconText: "text-pink-600", borderColor: "bg-pink-400", Icon: Sparkles },
         { id: ToolId.WORD_TO_XML, title: "MS Word to XML Converter", desc: "Paste MS Word text with superscript, subscript, bold, italics, & paragraphs to automatically scan and generate XML.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: FileCode },
         { id: ToolId.VIEW_SYNC, title: "View Synchronizer", desc: "Mirror content between paragraph views while maintaining ID integrity and references.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: RefreshCw },
-        { id: ToolId.STRUCTURAL_ARCHITECT, title: "Reference Structure Repair", desc: "Audit and auto-repair XML reference structures, ID sequences, author initials, empty tags, and source text.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: Cpu }
+        { id: ToolId.STRUCTURAL_ARCHITECT, title: "Reference Structure Repair", desc: "Audit and auto-repair XML reference structures, ID sequences, author initials, empty tags, and source text.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: Cpu },
+        { id: ToolId.AFFILIATION_SEQUENCER, title: "Affiliation Sequencer", desc: "Sequentially renumbers affiliation IDs in increments of 5 (af0005, af0010...) or synchronizes author superscripts & cross-refs.", iconBg: "bg-emerald-50", iconText: "text-emerald-600", borderColor: "bg-emerald-500", Icon: Building2 }
     ];
 
     const filteredTools = useMemo(() => {

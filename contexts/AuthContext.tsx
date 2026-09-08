@@ -26,6 +26,16 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const SUPER_ADMIN_EMAIL = 'generalkevin53@gmail.com';
 const SECONDARY_ADMIN_EMAIL = 'kgenso.realK@gmail.com';
+
+/**
+ * Case-insensitive helper to test if an email belongs to a designated administrator.
+ */
+export const isAdminEmail = (email?: string | null): boolean => {
+    if (!email) return false;
+    const clean = email.trim().toLowerCase();
+    return clean === SUPER_ADMIN_EMAIL.toLowerCase() || clean === SECONDARY_ADMIN_EMAIL.toLowerCase();
+};
+
 const HEARTBEAT_INTERVAL = 60 * 1000; 
 const MAX_SESSION_AGE = 24 * 60 * 60 * 1000; // 24 Hours Hard Cutoff
 
@@ -117,8 +127,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const WAKE_SYNC_COOLDOWN = 5 * 60 * 1000; // 5 Minutes
 
     const isAdmin = (
-        user?.email === SUPER_ADMIN_EMAIL ||
-        user?.email === SECONDARY_ADMIN_EMAIL ||
+        isAdminEmail(user?.email) ||
+        isAdminEmail(profile?.email) ||
         user?.app_metadata?.role?.toLowerCase() === 'admin' ||
         profile?.role?.toLowerCase() === 'admin'
     );
@@ -215,19 +225,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         if (error) throw error;
                         
                         if (!data) {
+                            const isDesignatedAdmin = isAdminEmail(email);
                             const { data: newData, error: createError } = await supabase.from('profiles').upsert([{ 
                                 id: userId, 
                                 email: email || '', 
-                                role: (email === SUPER_ADMIN_EMAIL || email === SECONDARY_ADMIN_EMAIL) ? 'admin' : 'user' 
+                                role: isDesignatedAdmin ? 'admin' : 'user',
+                                is_subscribed: isDesignatedAdmin ? true : false
                             }]).select().maybeSingle();
                             if (createError) throw createError;
                             return newData;
                         }
                         
-                        // If profile exists but role is not admin for admin emails, fix it
-                        if ((email === SUPER_ADMIN_EMAIL || email === SECONDARY_ADMIN_EMAIL) && data.role !== 'admin') {
+                        // If profile exists but role is not admin for designated admins, or is_subscribed is false, synchronize it
+                        if (isAdminEmail(email || data.email) && (data.role !== 'admin' || !data.is_subscribed)) {
                             const { data: updatedData, error: updateError } = await supabase.from('profiles').update({ 
-                                role: 'admin' 
+                                role: 'admin',
+                                is_subscribed: true
                             }).eq('id', userId).select().maybeSingle();
                             if (!updateError && updatedData) return updatedData;
                         }
@@ -236,10 +249,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     }, 3);
                 } catch (dbErr) {
                     console.warn("Profile fetch/creation encountered an issue, using fallback profile:", dbErr);
+                    const isDesignatedAdmin = isAdminEmail(email);
                     profileData = {
                         id: userId,
                         email: email || '',
-                        role: (email === SUPER_ADMIN_EMAIL || email === SECONDARY_ADMIN_EMAIL) ? 'admin' : 'user',
+                        role: isDesignatedAdmin ? 'admin' : 'user',
                         display_name: email ? email.split('@')[0] : 'User',
                         is_subscribed: true,
                         created_at: new Date().toISOString(),
@@ -248,10 +262,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 }
 
                 if (!profileData) {
+                    const isDesignatedAdmin = isAdminEmail(email);
                     profileData = {
                         id: userId,
                         email: email || '',
-                        role: (email === SUPER_ADMIN_EMAIL || email === SECONDARY_ADMIN_EMAIL) ? 'admin' : 'user',
+                        role: isDesignatedAdmin ? 'admin' : 'user',
                         display_name: email ? email.split('@')[0] : 'User',
                         is_subscribed: true,
                         created_at: new Date().toISOString(),
@@ -273,8 +288,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     console.warn("Access keys sync notice:", keysErr);
                 }
 
+                const isDesignatedAdmin = isAdminEmail(email) || isAdminEmail(profileData.email);
                 let isActive = profileData.is_subscribed ?? true;
-                if (email === SUPER_ADMIN_EMAIL || profileData.email === SUPER_ADMIN_EMAIL) isActive = true;
+                if (isDesignatedAdmin) isActive = true;
                 else if (profileData.subscription_end && new Date(profileData.subscription_end) < new Date()) isActive = false;
 
                 const localTermsAccepted = localStorage.getItem(`terms_accepted_${userId}`) === 'true';
@@ -282,8 +298,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     profileData.terms_accepted || 
                     profileData.accepted_terms_at || 
                     localTermsAccepted || 
-                    email === SUPER_ADMIN_EMAIL || 
-                    email === SECONDARY_ADMIN_EMAIL
+                    isDesignatedAdmin
                 );
 
                 setProfile({ 

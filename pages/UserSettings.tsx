@@ -243,40 +243,21 @@ const UserSettings: React.FC = () => {
             const currentDeviceId = getDeviceId();
 
             await withRetry(async () => {
-                // 1. Check if key exists
-                const { data: keyData, error: fetchError } = await supabase
-                    .from('access_keys')
-                    .select('*')
-                    .eq('key', keyString)
-                    .single();
+                // Atomic RPC redemption (enforces exact string lookup, validates single-use, and binds to user)
+                const { data, error: rpcError } = await supabase.rpc('redeem_access_key', {
+                    key_code: keyString,
+                    device_id_input: currentDeviceId,
+                    target_tool_input: null
+                });
 
-                if (fetchError || !keyData) {
-                    throw new Error("Invalid access key. Please check the code and try again.");
+                if (rpcError) {
+                    throw new Error(rpcError.message || "Activation failed. Please check your key and try again.");
                 }
 
-                // 2. Check usage status
-                if (keyData.is_used && keyData.user_id !== user.id) {
-                    throw new Error("This key is already bound to another user account.");
-                }
-
-                // 3. Bind to current User AND current Device
-                const { error: updateError } = await supabase
-                    .from('access_keys')
-                    .update({ 
-                        is_used: true, 
-                        used_at: new Date().toISOString(),
-                        user_id: user.id,
-                        device_id: currentDeviceId 
-                    })
-                    .eq('id', keyData.id);
-
-                if (updateError) {
-                    throw new Error("Activation failed. Please try again.");
-                }
-
-                // 4. Success
+                // Success
                 await refreshProfile();
-                setKeySuccess(`Successfully unlocked: ${keyData.tool === 'universal' ? 'All Modules (Universal Access)' : keyData.tool}`);
+                const unlockedTool = (data as any)?.tool;
+                setKeySuccess(`Successfully unlocked: ${unlockedTool === 'universal' ? 'All Modules (Universal Access)' : (unlockedTool || 'Module')}`);
             }, 3);
             setKeyInput('');
         } catch (err: any) {

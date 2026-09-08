@@ -33,6 +33,7 @@ const Docs: React.FC = () => {
                     <NavBtn id="diff" label="Quick Text Diff" />
                     <NavBtn id="tag" label="XML Tag Cleaner" />
                     <NavBtn id="ref-repair" label="Reference Structure Repair" />
+                    <NavBtn id="affiliation" label="Affiliation Sequencer" />
                     <div className="pt-4 pb-2 px-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Legal & Policies</div>
                     <NavBtn id="terms" label="Terms of Use" />
                 </nav>
@@ -227,41 +228,63 @@ const Docs: React.FC = () => {
                             </div>
                         </section>
                     )}
+                    {section === 'affiliation' && (
+                        <section className="animate-fade-in">
+                            <h2 className="text-3xl font-extrabold text-slate-900 mb-6 uppercase tracking-tight">Affiliation Sequencer (ID Normalizer)</h2>
+                            <div className="prose prose-slate max-w-none space-y-4">
+                                <p className="text-slate-600">
+                                    Normalizes and sequentially renumbers <code>&lt;ce:affiliation&gt;</code> IDs in increments of 5 (e.g., <code>af0005</code>, <code>af0010</code>, <code>af0015</code>, <code>af0020</code>...).
+                                </p>
+                                <div className="p-4 bg-emerald-50/70 border border-emerald-200 rounded-xl">
+                                    <h4 className="font-bold text-emerald-950 text-sm mb-1">Strict ID Mode (+5 Step)</h4>
+                                    <p className="text-xs text-emerald-800">
+                                        Modifies ONLY the <code>id</code> attribute of <code>&lt;ce:affiliation&gt;</code> elements. Strictly preserves <code>affiliation-id</code>, <code>&lt;ce:author&gt;</code>, <code>&lt;ce:cross-ref refid="..."&gt;</code>, <code>&lt;ce:label&gt;</code>, and all inner text 100% intact.
+                                    </p>
+                                </div>
+                                <div className="p-4 bg-indigo-50/70 border border-indigo-200 rounded-xl">
+                                    <h4 className="font-bold text-indigo-950 text-sm mb-1">Full Relinker Mode</h4>
+                                    <p className="text-xs text-indigo-800">
+                                        Synchronizes author superscript labels and cross-reference callout tags if affiliations were re-ordered or re-indexed.
+                                    </p>
+                                </div>
+                            </div>
+                        </section>
+                    )}
                     {section === 'terms' && (
                         <section className="animate-fade-in space-y-6">
                             <h2 className="text-3xl font-extrabold text-slate-900 mb-2 uppercase tracking-tight">Terms and Conditions of Use</h2>
                             <p className="text-slate-600 text-sm">
-                                By subscribing to or using these tools, you agree to comply with and be bound by the following Terms and Conditions. Please read them carefully.
+                                By requesting access, activating credentials, or using these editorial utilities, you agree to comply with and be bound by the following Terms and Conditions of Use. This platform is a specialized operational workspace maintained for authorized editorial operators.
                             </p>
 
                             <div className="space-y-4 text-sm text-slate-700">
                                 <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-2">
-                                    <h3 className="text-base font-bold text-slate-900">1. Subscription & Account Access</h3>
-                                    <p><strong>Individual License:</strong> Each subscription grants a non-transferable, non-exclusive license for one individual user only.</p>
-                                    <p><strong>No Account Sharing:</strong> Sharing credentials, login details, or tool access with non-subscribers is strictly prohibited.</p>
+                                    <h3 className="text-base font-bold text-slate-900">1. Authorized Access & Operator Verification</h3>
+                                    <p><strong>Individual Operator Authorization:</strong> Each provisioned account grants individual, non-transferable authorization strictly for the designated registered operator.</p>
+                                    <p><strong>No Credential Sharing:</strong> Sharing login credentials, access tokens, or tool sessions with unauthorized individuals is strictly prohibited.</p>
                                 </div>
 
                                 <div className="p-5 rounded-2xl bg-rose-50/50 border border-rose-200 shadow-2xs space-y-2">
-                                    <h3 className="text-base font-bold text-rose-950">2. Prohibited Activities & Unauthorized Commercial Use</h3>
-                                    <p><strong>No Proxy Processing:</strong> You are strictly forbidden from running XML conversions, renumbering, or executing scripts/tools on behalf of non-subscribed users.</p>
-                                    <p><strong>No Reselling or Outsourcing Services:</strong> You may not sell, rent, or monetize services using these tools to third parties or non-members.</p>
+                                    <h3 className="text-base font-bold text-rose-950">2. Prohibited Misuse & Unauthorized External Services</h3>
+                                    <p><strong>No Proxy Processing:</strong> You are strictly forbidden from running XML conversions, renumbering, or executing scripts/tools on behalf of unauthorized non-members.</p>
+                                    <p><strong>No Commercial Exploitation or Resale:</strong> You may not sell, broker, rent, or commercially exploit these internal utilities or offer commercial outsourcing services using this platform.</p>
                                 </div>
 
                                 <div className="p-5 rounded-2xl bg-emerald-50/50 border border-emerald-200 shadow-2xs space-y-2">
-                                    <h3 className="text-base font-bold text-emerald-950">3. Pricing & Group Rates</h3>
-                                    <p>Subscriptions are billed on a monthly basis at designated rates (Solo: ₱300/mo, 2 Users: ₱250/mo each, 3+ Users: ₱175/mo each).</p>
-                                    <p>Group rates apply strictly to separate, individual active subscribers joining together and do not grant shared account access.</p>
+                                    <h3 className="text-base font-bold text-emerald-950">3. Access Allocation & Team Arrangements</h3>
+                                    <p>The Production Toolkit is a personally developed operational environment. Access to editorial utilities, automated XML pipelines, and the Keeper assistant is provisioned privately through the Administrator (<span className="font-semibold text-slate-800">kgenso.realK@gmail.com</span>) for verified editorial personnel to sustain ongoing server infrastructure and maintenance.</p>
+                                    <p>Collaborative arrangements apply strictly to separate, verified individual accounts collaborating within the workflow and do not permit shared logins.</p>
                                 </div>
 
                                 <div className="p-5 rounded-2xl bg-amber-50/50 border border-amber-200 shadow-2xs space-y-2">
-                                    <h3 className="text-base font-bold text-amber-950">4. Account Banning, Subscription Cancellation, & Service Termination</h3>
-                                    <p>Anyone caught sharing their account, acting as a proxy for non-paying users, or selling services using these tools will be permanently banned and have their subscription discontinued immediately by the Admin without a refund.</p>
-                                    <p>If widespread system abuse or proxy usage persists, the Admin reserves the right to permanently shut down public access for all users without prior notice.</p>
+                                    <h3 className="text-base font-bold text-amber-950">4. Access Revocation & System Integrity Enforcement</h3>
+                                    <p>Anyone caught sharing credentials, acting as an unauthorized proxy, or commercially exploiting these tools will have their access revoked permanently and immediately by the Administrator.</p>
+                                    <p>If widespread system abuse, proxy processing, or security circumvention persists, the Administrator reserves the right to suspend or restrict platform access to protect server resources.</p>
                                 </div>
 
                                 <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-2">
-                                    <h3 className="text-base font-bold text-slate-900">5. Service Availability & Modifications</h3>
-                                    <p>Tools are provided on an "as-is" and "as-available" basis. Features, security protocols, and pricing tiers are subject to modification at the sole discretion of the Admin to maintain system sustainability.</p>
+                                    <h3 className="text-base font-bold text-slate-900">5. Operational Status & Utility Modifications</h3>
+                                    <p>Tools are provided on an "as-is" and "as-available" basis for editorial workflow assistance. Tool features, algorithmic pipelines, security controls, and access guidelines are subject to modification at the sole discretion of the Administrator to maintain operational sustainability and system integrity.</p>
                                 </div>
                             </div>
                         </section>

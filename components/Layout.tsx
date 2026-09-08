@@ -28,6 +28,7 @@ import Toast from './Toast';
 import AIAssistantBubble from './AIAssistantBubble';
 import { KeeperAvatar } from './KeeperAvatar';
 import { MessageSquare, Scale } from 'lucide-react';
+import { useToolMetrics } from '../services/usageMetricsService';
 
 interface LayoutProps {
     children: React.ReactNode;
@@ -68,26 +69,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
         window.dispatchEvent(new CustomEvent('app:toggle-keeper'));
     };
 
-    useEffect(() => {
-        if (!currentTool || !user?.id || authLoading) return;
-
-        const logUsage = async (attempt = 1) => {
-            try {
-                const { error } = await supabase.from('usage_logs').insert([{
-                    user_id: user.id,
-                    tool_id: currentTool
-                }]);
-                
-                if (error && attempt < 3) {
-                    setTimeout(() => logUsage(attempt + 1), 2000);
-                }
-            } catch (e) {
-                if (attempt < 3) setTimeout(() => logUsage(attempt + 1), 2000);
-            }
-        };
-
-        logUsage();
-    }, [currentTool, user?.id, authLoading]);
+    // Automatically track tool session frequency, active duration, and dwell time metrics
+    useToolMetrics(currentTool);
 
     const profileRef = useRef(profile);
     useEffect(() => {
