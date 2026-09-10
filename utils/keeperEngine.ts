@@ -680,19 +680,17 @@ What manuscript puzzle can I solve for you without getting up?
  * Performs a rigorous syntactic and semantic editorial audit on Journal XML input.
  * Itemizes defects, structural inconsistencies, leftover conversion artifacts, and formatting warnings.
  */
-export const generateOfflineKeeperResponse = (
-  userPrompt: string, 
-  userContext?: string | KeeperUserContext,
-  includeLazyIntro: boolean = true
-): string => {
-  const text = userPrompt.trim();
-  const lower = text.toLowerCase();
-
-  // Extract user context from object or string
-  let user: KeeperUserContext = {};
+/**
+ * Parses the KeeperUserContext out of either a structured object or the
+ * plain-text "User Email: ...\nDisplay Name: ..." block chatHandler.ts builds.
+ * Shared by generateOfflineKeeperResponse and getOfflineFaqResponse so both
+ * paths resolve admin/subscription status identically.
+ */
+function parseKeeperUserContext(userContext?: string | KeeperUserContext): KeeperUserContext {
   if (typeof userContext === 'object' && userContext !== null) {
-    user = userContext;
-  } else if (typeof userContext === 'string') {
+    return userContext;
+  }
+  if (typeof userContext === 'string') {
     const emailMatch = userContext.match(/User Email:\s*([^\n]+)/i);
     const nameMatch = userContext.match(/Display Name:\s*([^\n]+)/i);
     const roleMatch = userContext.match(/System Role:\s*([^\n]+)/i);
@@ -703,7 +701,7 @@ export const generateOfflineKeeperResponse = (
     const unlockedMatch = userContext.match(/Unlocked Tools:\s*([^\n]+)/i);
     const freeToolsMatch = userContext.match(/Active Free Trial Tools:\s*([^\n]+)/i);
 
-    user = {
+    return {
       email: emailMatch && emailMatch[1].trim() !== 'Unknown' ? emailMatch[1].trim() : undefined,
       displayName: nameMatch ? nameMatch[1].trim() : undefined,
       isAdmin: adminMatch ? true : (roleMatch ? roleMatch[1].toLowerCase().includes('admin') : false),
@@ -711,9 +709,21 @@ export const generateOfflineKeeperResponse = (
       subscriptionTier: tierMatch ? tierMatch[1].trim() : undefined,
       subscriptionEnd: expiryMatch ? expiryMatch[1].trim() : undefined,
       unlockedTools: unlockedMatch && unlockedMatch[1].trim() !== 'None' ? unlockedMatch[1].split(',').map(s => s.trim()) : [],
-      freeTools: freeToolsMatch && freeToolsMatch[1].trim() !== 'None' ? freeToolsMatch[1].split(',').map(s => s.trim()) : []
+      freeTools: freeToolsMatch && freeToolsMatch[1].trim() !== 'None' ? freeToolsMatch[1].split(',').map(s => s.trim()) : [],
     };
   }
+  return {};
+}
+
+export const generateOfflineKeeperResponse = (
+  userPrompt: string, 
+  userContext?: string | KeeperUserContext,
+  includeLazyIntro: boolean = true
+): string => {
+  const text = userPrompt.trim();
+  const lower = text.toLowerCase();
+
+  const user: KeeperUserContext = parseKeeperUserContext(userContext);
 
   // Subscription Enforcement: Keeper only responds to users with active subscriptions or admin privileges
   const hasActiveSubscription = Boolean(
@@ -810,6 +820,79 @@ Throw a manuscript scenario at me, and I'll sort it right out! 😴`;
 
   return wrapWithLazyPrefix(coreAnswer);
 };
+
+/**
+ * OFFLINE FAQ / TOPIC-SELECT MODE
+ * ================================
+ * While the offline classifier above is much better than the old if-chain,
+ * it's still a guess from free text. When Keeper is offline, the frontend
+ * should stop accepting free-text chat entirely and instead render this
+ * fixed topic list as buttons — the user picks a topic, and the response is
+ * looked up deterministically (no keyword guessing at all). Each topic maps
+ * to one of the existing OFFLINE_INTENT_RULES ids, so the answer text is
+ * identical to what that rule already produces — nothing is duplicated.
+ *
+ * Frontend contract: when a chat response comes back with `offline: true`,
+ * switch the input box to disabled/hidden and render `faqTopics` as a button
+ * list. Send follow-ups as `{ topicId: '<id>' }` instead of `{ messages: [...] }`.
+ */
+export interface OfflineFaqTopic {
+  id: string;
+  label: string;
+  ruleId: string;
+}
+
+export const OFFLINE_FAQ_TOPICS: OfflineFaqTopic[] = [
+  { id: 'jm-query-help', label: '📝 Draft a "TO THE JM:" Query', ruleId: 'generic-jm-query-passthrough' },
+  { id: 'affiliation-sequencer', label: '🐾 Affiliation Sequencer & Cross-Refs', ruleId: 'affiliation-keyword' },
+  { id: 'tool-catalog', label: '🧭 Browse All 18 Editorial Tools', ruleId: 'tool-catalog' },
+  { id: 'uncited-cleanup', label: '🧹 Clean Up Uncited References', ruleId: 'uncited-cleaner-tool' },
+  { id: 'word-to-xml', label: '📄 Convert Word Doc to XML', ruleId: 'word-to-xml-tool' },
+  { id: 'view-sync', label: '🔍 Paragraph View Sync (Extended vs Compact)', ruleId: 'view-sync-info' },
+  { id: 'xml-schema-help', label: '🏷️ Journal XML Schema & Tag Reference', ruleId: 'xml-schema-info' },
+  { id: 'subscription-status', label: '👤 Check My Subscription / Admin Status', ruleId: 'subscription-status' },
+];
+
+/** Shown alongside the topic list wherever Keeper is offline. */
+export const KEEPER_CONTACT_ADMIN_NOTICE =
+  'Keeper\'s live AI chat is temporarily unavailable. Pick a topic above for an instant answer — to chat with Keeper directly, please contact your administrator.';
+
+/**
+ * Deterministically resolves one of OFFLINE_FAQ_TOPICS to its canned answer.
+ * No keyword matching involved — the topicId IS the selection, so this can
+ * never misfire the way free-text classification can.
+ *
+ * `extraInput` is optional: a couple of topics (e.g. drafting a specific JM
+ * query, or pasting XML to sequence) genuinely need user-supplied content.
+ * If the frontend doesn't collect it, the rule's respond() falls back to its
+ * own generic placeholder text rather than erroring.
+ */
+export function getOfflineFaqResponse(
+  topicId: string,
+  userContext?: string | KeeperUserContext,
+  extraInput?: string
+): string {
+  const topic = OFFLINE_FAQ_TOPICS.find(t => t.id === topicId);
+  if (!topic) {
+    return `That topic isn't recognized. Please pick one from the list — or contact your administrator if you need something else.`;
+  }
+
+  const rule = OFFLINE_INTENT_RULES.find(r => r.id === topic.ruleId);
+  if (!rule) {
+    return `That topic isn't available right now. Please contact your administrator.`;
+  }
+
+  const user = parseKeeperUserContext(userContext);
+  const inputText = (extraInput && extraInput.trim()) || topic.label;
+  const ctx: OfflineIntentContext = {
+    text: inputText,
+    lower: inputText.toLowerCase(),
+    user,
+    includeLazyIntro: false,
+  };
+
+  return rule.respond(ctx);
+}
 
 /**
  * Builds the comprehensive Keeper persona system instruction.

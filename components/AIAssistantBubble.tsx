@@ -31,7 +31,7 @@ import { ToolId } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { isExperimentalTool, getToolInfo } from '../utils/toolRegistry';
 import { startTypingSimulation, TypingSimulatorController } from '../utils/typingSimulator';
-import { generateOfflineKeeperResponse, sanitizeOutput, KeeperUserContext } from '../utils/keeperEngine';
+import { generateOfflineKeeperResponse, sanitizeOutput, KeeperUserContext, OFFLINE_FAQ_TOPICS, KEEPER_CONTACT_ADMIN_NOTICE, getOfflineFaqResponse } from '../utils/keeperEngine';
 import { KeeperAvatar, KeeperState } from './KeeperAvatar';
 import { supabase } from '../supabaseClient';
 
@@ -301,6 +301,16 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
     const [hasUnread, setHasUnread] = useState(false);
     const [successCelebration, setSuccessCelebration] = useState(false);
     const [isLazyMode, setIsLazyMode] = useState(false);
+
+    // Offline FAQ mode: when the backend (or a network failure) signals `offline: true`,
+    // Keeper stops accepting free text entirely and shows a fixed topic list instead —
+    // free-text classification is what caused wrong/confusing answers, so once we know
+    // the live models are down, don't keep guessing from typed text.
+    const [isOfflineFaqMode, setIsOfflineFaqMode] = useState(false);
+    const [offlineFaqTopics, setOfflineFaqTopics] = useState<{ id: string; label: string }[]>(
+        OFFLINE_FAQ_TOPICS.map(({ id, label }) => ({ id, label }))
+    );
+    const [offlineNotice, setOfflineNotice] = useState<string>(KEEPER_CONTACT_ADMIN_NOTICE);
 
     // Inactivity timer to trigger lazy mode (power nap)
     useEffect(() => {
@@ -674,6 +684,18 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
         }
     };
 
+    /** Builds the KeeperUserContext payload shared between free-text chat and FAQ-topic selection. */
+    const buildUserContextPayload = (): KeeperUserContext => ({
+        email: user?.email,
+        displayName: profile?.display_name || user?.email?.split('@')[0],
+        isAdmin,
+        isSubscribed: profile?.is_subscribed,
+        subscriptionTier: profile?.subscription_tier,
+        subscriptionEnd: profile?.subscription_end ? new Date(profile.subscription_end).toLocaleDateString() : undefined,
+        unlockedTools: profile?.unlocked_tools,
+        freeTools
+    });
+
     const handleSendMessage = async (textToSend?: string) => {
         const text = (textToSend || inputPrompt).trim();
         if (!text || isLoading) return;
@@ -787,16 +809,7 @@ ${timeContext}`
 
 ${userAuthContext}`;
 
-            const userContextPayload: KeeperUserContext = {
-                email: user?.email,
-                displayName: profile?.display_name || user?.email?.split('@')[0],
-                isAdmin,
-                isSubscribed: profile?.is_subscribed,
-                subscriptionTier: profile?.subscription_tier,
-                subscriptionEnd: profile?.subscription_end ? new Date(profile.subscription_end).toLocaleDateString() : undefined,
-                unlockedTools: profile?.unlocked_tools,
-                freeTools
-            };
+            const userContextPayload: KeeperUserContext = buildUserContextPayload();
 
             const payloadMessages = newMessages
                 .filter(m => !m.id.startsWith('init-'))
@@ -837,19 +850,33 @@ ${userAuthContext}`;
                     const data = await response.json();
                     return {
                         reply: data.reply || 'No response generated.',
-                        modelUsed: data.modelUsed
+                        modelUsed: data.modelUsed,
+                        offline: Boolean(data.offline),
+                        faqTopics: data.faqTopics,
+                        note: data.note
                     };
                 } catch (err: any) {
                     console.warn("AI Chat server fallback to Keeper smart offline engine:", err?.message || err);
                     const offlineReply = generateOfflineKeeperResponse(text, userContextPayload);
                     return {
                         reply: offlineReply,
-                        modelUsed: 'offline-keeper'
+                        modelUsed: 'offline-keeper',
+                        offline: true,
+                        faqTopics: OFFLINE_FAQ_TOPICS.map(({ id, label }) => ({ id, label })),
+                        note: KEEPER_CONTACT_ADMIN_NOTICE
                     };
                 }
             })();
 
             const responseData = await generateResponsePromise;
+
+            if (responseData.offline) {
+                setIsOfflineFaqMode(true);
+                setOfflineFaqTopics(responseData.faqTopics || OFFLINE_FAQ_TOPICS.map(({ id, label }) => ({ id, label })));
+                setOfflineNotice(responseData.note || KEEPER_CONTACT_ADMIN_NOTICE);
+            } else {
+                setIsOfflineFaqMode(false);
+            }
 
             const rawContent = responseData.reply;
             const sanitizedContent = sanitizeOutput(rawContent);
@@ -901,6 +928,101 @@ ${userAuthContext}`;
             console.error("Critical error in AI chat message handling:", err);
             setIsLoading(false);
         }
+    };
+
+    /**
+     * Deterministic counterpart to handleSendMessage, used only while isOfflineFaqMode
+     * is active. Sends `{ topicId }` instead of free text — the selection IS the intent,
+     * so there's no keyword classification involved and this can't misfire the way
+     * free-text routing can.
+     */
+    const handleSelectFaqTopic = async (topic: { id: string; label: string }) => {
+        if (isLoading) return;
+        if (currentlyTypingId) {
+            handleSkipTyping();
+        }
+
+        const userMessage: Message = {
+            id: `usr-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+            role: 'user',
+            content: topic.label,
+            timestamp: Date.now()
+        };
+        setMessages(prev => [...prev, userMessage]);
+        setIsLoading(true);
+
+        let replyText = '';
+        let modelUsed = 'offline-keeper-faq';
+        let nextTopics = OFFLINE_FAQ_TOPICS.map(({ id, label }) => ({ id, label }));
+        let notice = KEEPER_CONTACT_ADMIN_NOTICE;
+
+        try {
+            const sessionData = await supabase.auth.getSession();
+            const token = sessionData?.data?.session?.access_token || session?.access_token;
+
+            const response = await fetch('/api/ai/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                },
+                body: JSON.stringify({ topicId: topic.id })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Request failed with status ${response.status}`);
+            }
+
+            const data = await response.json();
+            replyText = data.reply || '';
+            modelUsed = data.modelUsed || modelUsed;
+            nextTopics = data.faqTopics || nextTopics;
+            notice = data.note || notice;
+        } catch (netErr) {
+            // Even a network failure resolves the topic locally instead of leaving
+            // the user stuck — the topic list itself never depends on connectivity.
+            console.warn("FAQ topic request failed, resolving locally:", netErr);
+            replyText = getOfflineFaqResponse(topic.id, buildUserContextPayload());
+        }
+
+        setIsOfflineFaqMode(true);
+        setOfflineFaqTopics(nextTopics);
+        setOfflineNotice(notice);
+
+        const sanitizedContent = sanitizeOutput(replyText);
+        const assistantMessageId = `ast-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+
+        setIsLoading(false);
+        setMessages(prev => [...prev, {
+            id: assistantMessageId,
+            role: 'assistant',
+            content: '',
+            timestamp: Date.now(),
+            modelUsed
+        }]);
+        setCurrentlyTypingId(assistantMessageId);
+        if (!isOpen) {
+            setHasUnread(true);
+        }
+        scrollToBottom(true);
+
+        typingControllerRef.current = startTypingSimulation({
+            fullText: sanitizedContent,
+            onUpdate: (displayedText) => {
+                setMessages(prev => prev.map(m => m.id === assistantMessageId ? { ...m, content: displayedText } : m));
+                if (messagesContainerRef.current) {
+                    const container = messagesContainerRef.current;
+                    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 120;
+                    if (isNearBottom) {
+                        container.scrollTop = container.scrollHeight;
+                    }
+                }
+            },
+            onComplete: () => {
+                setCurrentlyTypingId(null);
+                typingControllerRef.current = null;
+            }
+        });
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1598,6 +1720,7 @@ ${userAuthContext}`;
                             </div>
 
                             {/* Space-Saving Collapsible Editorial Scenarios Bar */}
+                            {!isOfflineFaqMode && (
                             <div className="border-t border-slate-200/70 bg-slate-50/90 shrink-0 transition-all">
                                 <div className="px-3 py-1.5 flex items-center justify-between text-[11px]">
                                     <button
@@ -1674,9 +1797,38 @@ ${userAuthContext}`;
                                     </div>
                                 )}
                             </div>
+                            )}
 
                             {/* Input Footer */}
                             <div className="p-3 bg-white border-t border-slate-200 shrink-0">
+                                {isOfflineFaqMode ? (
+                                    /* Offline FAQ Mode: free text is disabled entirely — the topic
+                                       IS the input, so there's nothing left to misclassify. */
+                                    <div className="space-y-2">
+                                        <div className="px-2.5 py-2 rounded-lg bg-amber-50 border border-amber-200/80 text-[11px] text-amber-900 leading-relaxed shadow-2xs flex items-start gap-2">
+                                            <span className="shrink-0">😴</span>
+                                            <span>{offlineNotice}</span>
+                                        </div>
+                                        <div className="max-h-40 overflow-y-auto custom-scrollbar space-y-1.5 pr-1">
+                                            {offlineFaqTopics.map((topic) => (
+                                                <button
+                                                    key={topic.id}
+                                                    type="button"
+                                                    disabled={isLoading}
+                                                    onClick={() => handleSelectFaqTopic(topic)}
+                                                    className="w-full text-left text-[11px] px-2.5 py-1.5 rounded-lg bg-slate-50 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 border border-slate-200/80 transition-all active:scale-95 disabled:opacity-50 cursor-pointer flex items-center justify-between gap-2"
+                                                >
+                                                    <span>{topic.label}</span>
+                                                    <ArrowRight className="w-3 h-3 text-slate-300 shrink-0" />
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <div className="text-center text-[9px] text-slate-400 pt-0.5">
+                                            🐾 Offline FAQ mode — pick a topic above
+                                        </div>
+                                    </div>
+                                ) : (
+                                <>
                                 {/* Quick JM Query Preset Toolbar */}
                                 <div className="mb-2.5 flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-1 text-[11px]">
                                     <span className="text-slate-500 font-semibold uppercase tracking-wider shrink-0 flex items-center gap-1 text-[10px]">
@@ -1820,6 +1972,8 @@ ${userAuthContext}`;
                                         </span>
                                     )}
                                 </div>
+                                </>
+                                )}
                             </div>
                         </motion.div>
                     )}

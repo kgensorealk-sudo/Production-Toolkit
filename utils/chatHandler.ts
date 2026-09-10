@@ -7,6 +7,9 @@ import {
   sanitizeOutput,
   generateOfflineKeeperResponse,
   buildKeeperSystemInstruction,
+  OFFLINE_FAQ_TOPICS,
+  KEEPER_CONTACT_ADMIN_NOTICE,
+  getOfflineFaqResponse,
 } from './keeperEngine.js';
 import { sequenceAffiliationIdsStrict } from './affiliationSequencerLogic.js';
 
@@ -150,7 +153,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { messages, context } = req.body || {};
+    const { messages, context, topicId } = req.body || {};
+
+    // Offline FAQ mode: the frontend sends a selected topicId instead of free
+    // text once it has switched to button-only mode. This is fully
+    // deterministic — no keyword classification involved — so answer it
+    // immediately regardless of whether live models are currently up.
+    if (typeof topicId === 'string' && topicId.trim()) {
+      const faqReply = getOfflineFaqResponse(topicId.trim(), context);
+      return res.json({
+        reply: sanitizeOutput(faqReply),
+        modelUsed: 'offline-keeper-faq',
+        offline: true,
+        faqTopics: OFFLINE_FAQ_TOPICS.map(({ id, label }) => ({ id, label })),
+        note: KEEPER_CONTACT_ADMIN_NOTICE,
+      });
+    }
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({ error: 'Messages array is required.' });
@@ -255,7 +273,9 @@ The **Affiliation Sequencer** is available directly in the workspace:
       return res.json({
         reply: sanitizeOutput(offlineReply),
         modelUsed: 'offline-keeper',
-        note: 'No AI provider API keys configured (GEMINI_API_KEY / OPENAI_API_KEY). Running in Offline Editorial Engine mode.',
+        offline: true,
+        faqTopics: OFFLINE_FAQ_TOPICS.map(({ id, label }) => ({ id, label })),
+        note: KEEPER_CONTACT_ADMIN_NOTICE,
       });
     }
 
@@ -348,7 +368,9 @@ The **Affiliation Sequencer** is available directly in the workspace:
       return res.json({
         reply: sanitizeOutput(fallbackReply),
         modelUsed: 'offline-keeper-fallback',
-        note: `All live AI models temporarily unavailable or under high demand. Handled by Keeper editorial engine.`,
+        offline: true,
+        faqTopics: OFFLINE_FAQ_TOPICS.map(({ id, label }) => ({ id, label })),
+        note: KEEPER_CONTACT_ADMIN_NOTICE,
       });
     }
 
@@ -366,7 +388,9 @@ The **Affiliation Sequencer** is available directly in the workspace:
     return res.json({
       reply: sanitizeOutput(offlineReply),
       modelUsed: 'offline-keeper-recovery',
-      note: 'Recovered using offline editorial rules engine.',
+      offline: true,
+      faqTopics: OFFLINE_FAQ_TOPICS.map(({ id, label }) => ({ id, label })),
+      note: KEEPER_CONTACT_ADMIN_NOTICE,
     });
   }
 }
