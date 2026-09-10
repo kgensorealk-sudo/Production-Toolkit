@@ -97,6 +97,586 @@ export interface KeeperUserContext {
 }
 
 /**
+ * OFFLINE INTENT CLASSIFICATION
+ * ==============================
+ * The offline engine used to be a sequential if/else chain: the FIRST rule whose
+ * keywords matched won, regardless of how weak or coincidental that match was.
+ * This caused wrong/confusing answers whenever two rules' keywords both appeared
+ * in a message — whichever rule happened to sit earlier in the file always won,
+ * even when a rule further down was a much more specific/confident match.
+ *
+ * This is now a scored classifier instead: every rule is checked, and the
+ * HIGHEST-WEIGHT match wins. `weight` is a rough specificity score — rules that
+ * require multiple distinct keyword groups, exact phrases, or real structural
+ * evidence (e.g. actual pasted XML) score higher than rules that fire off a
+ * single loose keyword. These weights are a tuned starting point, not a fixed
+ * law — if you see a wrong rule win in practice, that rule's weight is too high
+ * (or the correct one is too low). Bump the numbers, don't add more nested ifs.
+ */
+interface OfflineIntentContext {
+  text: string;
+  lower: string;
+  user: KeeperUserContext;
+  includeLazyIntro: boolean;
+}
+
+interface OfflineIntentRule {
+  id: string;
+  /** Rough specificity score (higher = more confident/specific match). */
+  weight: number;
+  match: (ctx: OfflineIntentContext) => boolean;
+  respond: (ctx: OfflineIntentContext) => string;
+}
+
+/**
+ * A matched rule below this weight is treated as too weak/coincidental to commit
+ * to on its own. Below this bar, Keeper admits it isn't confident rather than
+ * guessing — see `getEditorialCore`'s use of this constant.
+ */
+const MIN_OFFLINE_CONFIDENCE = 4;
+
+/**
+ * Scans every rule and returns the highest-weight match (or null if nothing
+ * matched at all). Ties keep whichever rule appears first in OFFLINE_INTENT_RULES.
+ */
+function pickBestOfflineIntent(
+  rules: OfflineIntentRule[],
+  ctx: OfflineIntentContext
+): OfflineIntentRule | null {
+  let best: OfflineIntentRule | null = null;
+  for (const rule of rules) {
+    if (!rule.match(ctx)) continue;
+    if (!best || rule.weight > best.weight) {
+      best = rule;
+    }
+  }
+  return best;
+}
+
+/**
+ * All offline intents, highest-specificity-wins. Each rule's `weight` reflects
+ * roughly how many distinct conditions must ALL be true, and whether it requires
+ * an exact phrase / real structural evidence rather than a single loose keyword:
+ *   20      = real structural evidence (actual XML pasted in) — always wins
+ *   8-9     = multiple ANDed keyword groups, or an exact/anchored phrase
+ *   6-7     = one AND of two keyword groups, or a longer specific OR-list
+ *   4-5     = a single loose keyword or short OR-list
+ * Tune these numbers as you see real misfires — don't add more nested ifs.
+ */
+const OFFLINE_INTENT_RULES: OfflineIntentRule[] = [
+  {
+    id: 'subscription-status',
+    weight: 9,
+    match: ({ lower }) =>
+      lower.includes('subscription') ||
+      lower.includes('sub status') ||
+      (lower.includes('admin') && (lower.includes('am i') || lower.includes('status') || lower.includes('role') || lower.includes('or not') || lower.includes('check') || lower.includes('who') || lower.includes('identify'))) ||
+      lower.includes('my account') ||
+      lower.includes('my role') ||
+      lower.includes('my status') ||
+      lower.includes('am i admin') ||
+      lower.includes('am i subscribed') ||
+      (lower.includes('active') && (lower.includes('sub') || lower.includes('plan') || lower.includes('membership'))) ||
+      (lower.includes('identify') && (lower.includes('user') || lower.includes('sub') || lower.includes('status'))),
+    respond: ({ user }) => {
+      const isAdmin = Boolean(user.isAdmin);
+      const isSubscribed = Boolean(isAdmin || user.isSubscribed);
+      const userEmail = user.email || 'Current Logged-in User';
+      const displayName = user.displayName || (user.email ? user.email.split('@')[0] : 'User');
+      const tier = isAdmin
+        ? 'Master Administrator Tier'
+        : (user.subscriptionTier && user.subscriptionTier.toLowerCase() !== 'none'
+            ? user.subscriptionTier.toUpperCase()
+            : (isSubscribed ? 'Active Professional Tier' : 'Unsubscribed / Free Tier'));
+      const expiry = isAdmin
+        ? 'Unlimited (Perpetual Admin Access)'
+        : (user.subscriptionEnd && user.subscriptionEnd !== 'Not set'
+            ? user.subscriptionEnd
+            : (isSubscribed ? 'Active' : 'Expired / Not Active'));
+      const unlocked = user.unlockedTools && user.unlockedTools.length > 0
+        ? user.unlockedTools.join(', ')
+        : (isAdmin ? 'All Modules Unlocked (Admin Master Override)' : 'None');
+
+      return `### 👤 Account & Subscription Identification
+
+Here is the verified identification and subscription breakdown:
+
+* **User Email:** \`${userEmail}\`
+* **Display Name:** **${displayName}**
+* **Admin Status:** ${isAdmin ? '🛡️ **YES (Administrator)**' : '👤 **NO (Standard User)**'}
+* **Subscription Status:** ${isSubscribed ? '🟢 **ACTIVE SUBSCRIPTION**' : '🔴 **INACTIVE / EXPIRED**'}
+* **Subscription Tier:** **${tier}**
+* **Access Expiration:** **${expiry}**
+* **Unlocked Keys / Tools:** ${unlocked}
+
+---
+
+${isAdmin
+  ? `⭐ **Administrator Privileges Active:** You have full master access across all tools, key generation, and can view/manage other user subscriptions in the **[Admin Portal](#/admin)**.`
+  : isSubscribed
+    ? `✨ **Full Active Subscription:** All standard Production Toolkit Pro modules (XML Renumber, Citation Linker, CRediT Tagging, Word to XML, Table Beautifier, etc.) are active for production workflows.`
+    : `💡 **Subscription Notice:** Your account does not have an active subscription. You can utilize free tools or contact an administrator for an access key or subscription renewal.`}`;
+    },
+  },
+  {
+    // Real pasted XML is unambiguous structural evidence — this must always win
+    // over any keyword-only rule, even "uncited" or "table" mentioned nearby.
+    id: 'affiliation-xml-process',
+    weight: 20,
+    match: ({ text }) => text.includes('<ce:affiliation') || text.includes('<ce:cross-ref'),
+    respond: ({ text, lower }) => {
+      const xmlMatch = text.match(/<([a-zA-Z0-9:]+\b[\s\S]*>)/);
+      const xmlToProcess = xmlMatch ? xmlMatch[0] : text;
+      const result = sequenceAffiliationIdsStrict(xmlToProcess, 5, true);
+
+      if (lower.includes('do not provide explanations') || lower.includes('modify the xml below according to one requirement only') || lower.includes('complete xml, not a partial excerpt')) {
+        return result.outputXml;
+      }
+
+      return `### 🐾 Affiliation ID Sequence & Cross-Ref Synchronization (+5 Increments)
+
+I have corrected the \`<ce:affiliation>\` IDs to be sequential in increments of 5 (\`af0005\`, \`af0010\`, \`af0015\`...) and synchronized all corresponding cross-reference links:
+
+- **Total Affiliations:** ${result.totalAffiliations}
+- **IDs Corrected:** ${result.changedCount}
+- **Cross-Ref Links Synchronized:** ${result.totalCrossRefsUpdated}${result.crossRefChanges.length > 0 ? ` (e.g. \`refid="${result.crossRefChanges[0].oldRefId}"\` -> \`refid="${result.crossRefChanges[0].newRefId}"\`)` : ''}
+- **Integrity Guarantee:** \`<ce:author>\`, \`<ce:cross-ref id="...">\`, \`<ce:sup>\`, and \`affiliation-id\` remain strictly preserved.
+
+\`\`\`xml
+${result.outputXml}
+\`\`\`
+
+👉 **[Open Affiliation Sequencer Tool](#/affiliationSequencer)**`;
+    },
+  },
+  {
+    id: 'affiliation-keyword',
+    weight: 7,
+    match: ({ lower }) =>
+      lower.includes('affiliation') ||
+      lower.includes('af0005') ||
+      lower.includes('af0010') ||
+      lower.includes('af0020') ||
+      lower.includes('af0025') ||
+      lower.includes('cross-ref') ||
+      lower.includes('cross ref') ||
+      ((lower.includes("can't find") || lower.includes("cannot find") || lower.includes("where is the tool") || lower.includes("find the tool") || lower.includes("where is") || lower.includes("does not know")) &&
+       (lower.includes('keeper') || lower.includes('tool') || lower.includes('affiliation') || lower.includes('sequencer'))),
+    respond: ({ lower }) => {
+      if (lower.includes('cross-ref') || lower.includes('cross ref') || lower.includes('refid') || lower.includes('af0025')) {
+        return `### 🐾 Cross-Reference Synchronization Update
+
+I have updated the **Affiliation Sequencer** and Keeper's processing engine to automatically synchronize author \`<ce:cross-ref refid="...">\` links when affiliation IDs are corrected!
+
+#### 🔄 What Was Corrected:
+- When an affiliation ID is corrected (for example, re-sequencing an affiliation from \`af0025\` to \`af0020\`), any associated author cross-reference call:
+  \`<ce:cross-ref refid="af0025" id="cf0040"><ce:sup>d</ce:sup></ce:cross-ref>\`
+  is now automatically updated to:
+  \`<ce:cross-ref refid="af0020" id="cf0040"><ce:sup>d</ce:sup></ce:cross-ref>\`
+- **Integrity Guarantee:** The cross-reference's own \`id="cf0040"\`, inner \`<ce:sup>d</ce:sup>\`, and parent \`<ce:author>\` structures remain strictly intact.
+
+#### 🚀 How to Apply:
+1. Go to the **[Affiliation Sequencer](#/affiliationSequencer)** tool.
+2. Paste your XML content into the Input buffer.
+3. Click **Process XML** to sequentially renumber affiliation IDs and synchronize all cross-reference links!
+
+Or paste your complete XML buffer into the chat, and I will sequence the affiliation IDs and synchronize all cross-ref links for you directly.`;
+      }
+
+      return `### 🐾 Affiliation Sequencer (ID Normalizer & Cross-Ref Sync)
+
+The **Affiliation Sequencer** is ready to use in your workspace!
+
+- **Direct Link:** **[Open Affiliation Sequencer](#/affiliationSequencer)**
+- **On the Dashboard:** Go to **[Workspace Dashboard](#/dashboard)** and look for the **Affiliation Sequencer** card with the green building icon (or search for *"Affiliation"*).
+
+#### 🛠️ Core Capabilities:
+- **Sequential IDs (+5 Step):** Renumbers \`id\` attributes of \`<ce:affiliation>\` tags to \`af0005\`, \`af0010\`, \`af0015\`, \`af0020\`... by occurrence order.
+- **Cross-Reference Synchronization:** Automatically synchronizes author \`<ce:cross-ref refid="...">\` attributes and superscripts to match the new affiliation sequence.
+- **DTD Integrity Preservation:** Preserves internal \`affiliation-id\`, \`<ce:cross-ref id="...">\`, author tags, and document markup 100% intact.
+
+👉 **[Open Affiliation Sequencer Tool](#/affiliationSequencer)**`;
+    },
+  },
+  {
+    id: 'corresponding-author-email',
+    weight: 8,
+    match: ({ lower }) =>
+      (lower.includes('corresponding') || lower.includes('corresp') || lower.includes('author email')) &&
+      (lower.includes('email') || lower.includes('address') || lower.includes('required') || lower.includes('disregard') || lower.includes('provide') || lower.includes('deleted')),
+    respond: () => `TO THE JM: Apologies for not including this in our previous query. The author has deleted the corresponding author's email address. As an email address is required for the corresponding author, kindly advise whether we should disregard the author's request or ask the author to provide a valid email address. Otherwise, the comment will be ignored.
+
+The file is in pending status until the matter is resolved. Thank you.`,
+  },
+  {
+    id: 'author-order-exchange',
+    weight: 9,
+    match: ({ lower }) =>
+      (lower.includes('author order') || lower.includes('authorship') || lower.includes('exchange the positions') || lower.includes('swap the positions') || (lower.includes('exchange') && lower.includes('author'))) &&
+      (lower.includes('second') || lower.includes('third') || lower.includes('position') || lower.includes('order') || lower.includes('author') || lower.includes('change form')),
+    respond: ({ text, lower }) => {
+      let authorDetails = 'the second author and the third author';
+      const exchangeMatch = text.match(/exchange\s+the\s+positions\s+of\s+(?:the\s+)?([^,.\n]+?(?:\([^\)]+\))?[^,.\n]*?)(?:,|\.|\band\s+the\s+request|\bwhich\b|$)/i);
+      if (exchangeMatch && exchangeMatch[1]) {
+        let matched = exchangeMatch[1].trim();
+        const namesMatch = matched.match(/second\s+and\s+third\s+authors\s*\(([^)]+)\s+and\s+([^)]+)\)/i);
+        if (namesMatch) {
+          authorDetails = `the second author (${namesMatch[1].trim()}) and the third author (${namesMatch[2].trim()})`;
+        } else {
+          authorDetails = matched.startsWith('the ') ? matched : `the ${matched}`;
+        }
+      }
+
+      const hasSignedForm = lower.includes('authorship change form') || lower.includes('form has been signed') || lower.includes('signed');
+      const formStatement = hasSignedForm ? ' The author has stated that a signed authorship change form has been submitted to the journal.' : '';
+
+      return `TO THE JM: The authors have requested to exchange the positions of ${authorDetails}.${formStatement} Please advise if we should proceed with the change or retain the current order.
+
+The file is in pending status until the matter is resolved. Thank you.`;
+    },
+  },
+  {
+    id: 'author-name-change',
+    weight: 8,
+    match: ({ lower }) =>
+      (lower.includes('author name') || lower.includes('name change') || (lower.includes('change') && lower.includes('author'))) &&
+      (lower.includes('from') || lower.includes('to') || lower.includes('correct') || lower.includes('spelling') || lower.includes('requested')),
+    respond: ({ text }) => {
+      const match = text.match(/from\s+["']?([^"'\n]+?)["']?\s+to\s+["']?([^"'\n]+?)["']?(\.|$)/i) ||
+                    text.match(/["']([^"']+)["']\s+to\s+["']([^"']+)["']/i);
+      const oldName = match ? match[1].trim() : 'the original spelling';
+      const newName = match ? match[2].trim() : 'the amended spelling';
+
+      return `TO THE JM:
+
+The author has requested to change the author name from "${oldName}" to "${newName}." Kindly validate the requested author name correction; otherwise, it will be ignored.
+
+The file is in pending status until the matter is resolved. Thank you.`;
+    },
+  },
+  {
+    id: 'title-change',
+    weight: 7,
+    match: ({ lower }) => lower.includes('title') && (lower.includes('revised') || lower.includes('change') || lower.includes('new title')),
+    respond: ({ text }) => {
+      const titleMatch = text.match(/(?:revised|new)\s+(?:article\s+)?title\s*(?:is|:)?\s*["']?([^"'\n]+?)["']?(\.|$)/i);
+      const newTitle = titleMatch ? titleMatch[1].trim() : '[New Title]';
+      return `TO THE JM: The author has provided a revised article title: "${newTitle}". Kindly validate this change. If affirmed, kindly update the coversheet accordingly reflecting the revised article title.
+
+The file is in pending status until the matter is resolved. Thank you.`;
+    },
+  },
+  {
+    id: 'given-name-surname-clarification',
+    weight: 7,
+    match: ({ lower }) => lower.includes('given name') || lower.includes('surname') || (lower.includes('indexing') && lower.includes('name')),
+    respond: ({ text }) => {
+      const namesMatch = text.match(/["']?([^"'\n,]+?)["']?\s+(?:is|as)\s+the\s+given\s+name.*?["']?([^"'\n,]+?)["']?\s+(?:is|as)\s+the\s+surname/i);
+      const nameA = namesMatch ? namesMatch[1].trim() : '[Name A]';
+      const nameB = namesMatch ? namesMatch[2].trim() : '[Name B]';
+      return `TO THE JM: Please confirm if "${nameA}" is the given name and "${nameB}" is the surname to ensure correct indexing.
+
+The file is in pending status until the matter is resolved. Thank you.`;
+    },
+  },
+  {
+    id: 'author-add-remove-reorder',
+    weight: 5,
+    match: ({ lower }) =>
+      (lower.includes('add') || lower.includes('remove') || lower.includes('delete') || lower.includes('reorder')) &&
+      lower.includes('author') &&
+      !lower.includes('form'),
+    respond: ({ lower }) => {
+      const action = lower.includes('add') ? 'add' : lower.includes('remove') || lower.includes('delete') ? 'remove' : 'reorder';
+      return `TO THE JM: Please validate the author's request to ${action} the author(s) as described.
+
+The file is in pending status until the matter is resolved. Thank you.`;
+    },
+  },
+  {
+    id: 'figure-replacement',
+    weight: 8,
+    match: ({ lower }) => lower.includes('figure') && (lower.includes('replacement') || lower.includes('replace') || lower.includes('replaced') || lower.includes('new figure')),
+    respond: ({ text }) => {
+      const figMatch = text.match(/figure\s*(\d+[a-z]?)/i);
+      const figName = figMatch ? `Figure ${figMatch[1]}` : 'the designated figure(s)';
+      return `TO THE JM: The author provided a replacement for ${figName}. However, it's unclear whether the reason for this replacement is quality improvement, the addition or removal of elements, or changed content. Could you please validate if we can proceed with the new version?
+
+The file is in pending status until the matter is resolved. Thank you.`;
+    },
+  },
+  {
+    id: 'uncited-reference-jm-query',
+    weight: 5,
+    match: ({ lower }) => lower.includes('uncited') || lower.includes('not cited') || lower.includes('unreferenced'),
+    respond: ({ text }) => {
+      const refMatch = text.match(/reference\s*\[?(\d+)\]?/i) || text.match(/\[(\d+)\]/);
+      const itemLabel = refMatch ? `Reference [${refMatch[1]}]` : 'Reference [X]';
+      return `TO THE JM:
+
+${itemLabel} is currently uncited in the text body. Kindly ask the author to provide citations for ${itemLabel} in the text body or confirm if this could be deleted.
+
+The file is in pending status until the matter is resolved. Thank you.`;
+    },
+  },
+  {
+    id: 'panel-mismatch',
+    weight: 7,
+    match: ({ lower }) => lower.includes('panel') && (lower.includes('mismatch') || lower.includes('not found') || lower.includes('caption')),
+    respond: ({ text }) => {
+      const figMatch = text.match(/figure\s*(\d+[a-z]?)/i);
+      const figName = figMatch ? `Figure ${figMatch[1]}` : 'the figure';
+      const panelMatch = text.match(/panels?\s*([a-z0-9,\s()&]+)/i);
+      const panels = panelMatch ? panelMatch[1].trim() : '(c) and (d)';
+      return `TO THE JM:
+
+Panels ${panels} are mentioned in the caption for ${figName} but are not found in the artwork. Please check and amend as necessary.
+
+The file is in pending status until the matter is resolved. Thank you.`;
+    },
+  },
+  {
+    id: 'generic-jm-query-passthrough',
+    weight: 9,
+    match: ({ lower }) =>
+      lower.startsWith('query to jm:') ||
+      lower.startsWith('to the jm:') ||
+      lower.startsWith('jm query:') ||
+      lower.startsWith('query to jm') ||
+      lower.startsWith('create a jm query') ||
+      lower.startsWith('draft a jm query'),
+    respond: ({ text }) => {
+      const rawNote = text
+        .replace(/^(?:query to jm:|to the jm:|jm query:|query to jm|create a jm query:|draft a jm query:)\s*/i, '')
+        .trim();
+      if (rawNote.length > 5) {
+        return `TO THE JM:
+
+${rawNote}
+
+The file is in pending status until the matter is resolved. Thank you.`;
+      }
+      return `Tell me the specific issue and I'll draft the "TO THE JM:" query for you.`;
+    },
+  },
+  {
+    id: 'tool-catalog',
+    weight: 6,
+    match: ({ lower }) =>
+      (lower.includes('find') && (lower.includes('editorial tool') || lower.includes('tool'))) ||
+      lower.includes('what tools') ||
+      lower.includes('available tools') ||
+      lower.includes('list of tools') ||
+      lower.includes('tool directory') ||
+      lower.includes('tool guide') ||
+      lower.includes('all tools') ||
+      (lower.includes('which tool') && !lower.includes('out of order') && !lower.includes('renumber') && !lower.includes('cross-ref') && !lower.includes('uncited') && !lower.includes('duplicate') && !lower.includes('word') && !lower.includes('credit')),
+    respond: () => `### 🧭 Production Toolkit Pro — Complete Editorial Tool Directory
+
+Production Toolkit Pro includes a full suite of 18 established editorial modules available directly on the Workspace Dashboard for Journal CE and JATS XML:
+
+#### 1. 🔢 Citations & References
+* **[Open XML Normalizer](#/xmlRenumber)** — Sequentially renumbers bibliography references and synchronizes all in-text \`<ce:cross-ref>\` callouts in order of appearance.
+* **[Open Citation Linker Pro](#/citationLinker)** — Automatically scans orphan plain-text citations (e.g. \`[1-3]\`, \`Smith et al., 2020\`) and connects them to target bibliography IDs.
+* **[Open Reference Structure Repair](#/structuralArchitect)** — Audits malformed XML, fixes author initials/periods, repairs incomplete tags, and ensures standard compliance.
+* **[Open Uncited Ref Cleaner](#/uncitedCleaner)** — Audits references that have no matching in-text callouts and performs clean removal.
+* **[Open Bibliography Extractor](#/refExtractor)** — Extracts clean plain-text reference lists from XML for MS Word proofing.
+* **[Open ID Prefix Auditor](#/idAuditor)** — Audits and normalizes ID sequences in references and tables while maintaining internal document cross-links.
+* **[Open Reference Updater](#/referenceGen)** — Merges corrected external reference records into existing XML bibliographies while preserving ID integrity.
+* **[Open Other-Ref Scanner](#/otherRefScanner)** — Isolates unstructured \`<ce:other-ref>\` nodes for external catalog lookup or manual markup.
+
+#### 2. 🛠️ XML Structure & Document Markup
+* **[Open Affiliation Sequencer](#/affiliationSequencer)** — Sequentially renumbers \`<ce:affiliation>\` IDs in increments of 5 (\`af0005\`, \`af0010\`, \`af0015\`...) with strict preservation of affiliation-id, authors, cross-refs, and labels.
+* **[Open CRediT Tagging](#/creditGenerator)** — Auto-detects 14 official NISO CRediT contributor roles from raw text and generates standardized \`<ce:contributor-role>\` tags.
+* **[Open Grant Tagger](#/grantTagger)** — Wraps funding sponsors in \`<ce:grant-sponsor>\` and award numbers in \`<ce:grant-number>\`.
+* **[Open Table XML Beautifier](#/tableBeautifier)** — Formats single-line or minified table XML into indented, human-readable blocks.
+* **[Open XML Table Fixer](#/tableFixer)** — Manages table footnotes by detaching notes into \`<legend>\` blocks or reattaching to cells.
+* **[Open XML Tag Cleaner](#/tagCleaner)** — Safely removes unwanted inline tags, revision markers, or review comments.
+* **[Open Article Highlights Gen](#/highlightsGen)** — Converts author research bullets into standard \`<ce:highlights>\` XML.
+* **[Open View Synchronizer](#/viewSync)** — Mirrors content between paragraph views while maintaining ID integrity and references.
+
+#### 3. 📄 Conversion & Utilities
+* **[Open MS Word to XML Converter](#/wordToXml)** — Converts rich Word text (chemical subscripts \`<ce:inf>\`, superscripts \`<ce:sup>\`, bold, italics) into clean Journal CE XML.
+* **[Open Quick Text Diff](#/quickDiff)** — Side-by-side text and XML comparison with character-level difference highlighting.
+
+---
+💡 *Tip: All modules can be launched directly or accessed from the **[Workspace Dashboard](#/dashboard)**.*`,
+  },
+  {
+    id: 'renumber-tool',
+    weight: 5,
+    match: ({ lower }) => (lower.includes('renumber') || lower.includes('out of order') || lower.includes('numeric order') || lower.includes('sequence')) && !lower.includes('affiliation'),
+    respond: () => `Use **[Open XML Normalizer](#/xmlRenumber)** to resequence citation callouts and references sequentially by order of appearance.`,
+  },
+  {
+    id: 'citation-linker-tool',
+    weight: 5,
+    match: ({ lower }) => lower.includes('cross-ref') || lower.includes('unlinked') || lower.includes('link citation') || lower.includes('broken link'),
+    respond: () => `Use **[Open Citation Linker Pro](#/citationLinker)** to automatically link in-text citations with your bibliography entries.`,
+  },
+  {
+    id: 'structural-repair-tool',
+    weight: 5,
+    match: ({ lower }) => lower.includes('structural') || lower.includes('author initial') || lower.includes('malformed') || lower.includes('broken xml') || lower.includes('repair reference'),
+    respond: () => `Use **[Open Reference Structure Repair](#/structuralArchitect)** to audit malformed reference XML, validate missing tags, and fix unformatted author initials and names according to standard Journal XML schemas.`,
+  },
+  {
+    id: 'uncited-cleaner-tool',
+    weight: 6,
+    match: ({ lower }) => lower.includes('uncited ref') || lower.includes('clean uncited') || (lower.includes('uncited') && lower.includes('clean')),
+    respond: () => `Use **[Open Uncited Ref Cleaner](#/uncitedCleaner)** to audit and remove references that are not cited in the text body.`,
+  },
+  {
+    id: 'dedup-tool',
+    weight: 4,
+    match: ({ lower }) => lower.includes('duplicate') || lower.includes('dedup') || lower.includes('identical reference'),
+    respond: () => `To audit references and verify bibliography consistency, use **[Open Reference Structure Repair](#/structuralArchitect)** or **[Open XML Normalizer](#/xmlRenumber)** to synchronize numbering and IDs. You can also view all established modules in the **[Workspace Dashboard](#/dashboard)**.`,
+  },
+  {
+    id: 'word-to-xml-tool',
+    weight: 6,
+    match: ({ lower }) => lower.includes('word') && lower.includes('xml'),
+    respond: () => `Use **[Open MS Word to XML Converter](#/wordToXml)** to convert formatted Word text (preserving chemical subscripts, superscripts, bold, and italics) into clean Journal CE XML.`,
+  },
+  {
+    id: 'credit-tool',
+    weight: 4,
+    match: ({ lower }) => lower.includes('credit') || lower.includes('contributor') || lower.includes('author contributions'),
+    respond: () => `Use **[Open CRediT Tagging](#/creditGenerator)** to convert author contribution statements into standardized \`<ce:contributor-role>\` XML tags.`,
+  },
+  {
+    id: 'table-tools',
+    weight: 6,
+    match: ({ lower }) => lower.includes('table') && (lower.includes('beautif') || lower.includes('format') || lower.includes('indent') || lower.includes('footnote') || lower.includes('legend') || lower.includes('fix')),
+    respond: () => `For XML table workflows:
+- **[Open Table XML Beautifier](#/tableBeautifier)** — Reformat and indent single-line or minified table XML into readable blocks.
+- **[Open XML Table Fixer](#/tableFixer)** — Detach footnote markers into \`<legend>\` notes or attach legend notes back to cells.`,
+  },
+  {
+    id: 'grant-tool',
+    weight: 4,
+    match: ({ lower }) => lower.includes('grant') || lower.includes('sponsor') || lower.includes('funding'),
+    respond: () => `Use **[Open Grant Tagger](#/grantTagger)** to identify funding agencies and grant numbers and wrap them in \`<ce:grant-sponsor>\` and \`<ce:grant-number>\` XML tags.`,
+  },
+  {
+    id: 'id-prefix-tool',
+    weight: 4,
+    match: ({ lower }) => lower.includes('prefix') || lower.includes('id auditor') || lower.includes('bib00') || lower.includes('b1'),
+    respond: () => `Use **[Open ID Prefix Auditor](#/idAuditor)** to audit and normalize ID prefixes across reference lists and internal document links.`,
+  },
+  {
+    id: 'bibliography-extractor-tool',
+    weight: 5,
+    match: ({ lower }) => lower.includes('extract') && (lower.includes('ref') || lower.includes('bib') || lower.includes('text')),
+    respond: () => `Use **[Open Bibliography Extractor](#/refExtractor)** to isolate clean plain-text reference lists from XML with normalized punctuation for MS Word proofing.`,
+  },
+  {
+    id: 'tag-cleaner-tool',
+    weight: 5,
+    match: ({ lower }) => lower.includes('tag cleaner') || lower.includes('strip tag') || lower.includes('remove tag'),
+    respond: () => `Use **[Open XML Tag Cleaner](#/tagCleaner)** to safely strip unwanted inline tags or editing markers while preserving document integrity.`,
+  },
+  {
+    id: 'diff-tool',
+    weight: 4,
+    match: ({ lower }) => lower.includes('diff') || lower.includes('compare'),
+    respond: () => `Use **[Open Quick Text Diff](#/quickDiff)** for side-by-side text and XML comparison with character-level highlight tracking.`,
+  },
+  {
+    id: 'view-sync-info',
+    weight: 7,
+    match: ({ lower }) =>
+      lower.includes('view sync') ||
+      lower.includes('synchronize view') ||
+      lower.includes('view attribute') ||
+      lower.includes('view="extended"') ||
+      lower.includes('view="compact') ||
+      lower.includes('check the view') ||
+      lower.includes('check view') ||
+      (lower.includes('view') && (lower.includes('extended') || lower.includes('compact') || lower.includes('paragraph') || lower.includes('duplicate') || lower.includes('inconsistent'))),
+    respond: () => `### 🔍 Paragraph View Analysis & Synchronization
+
+In Journal CE XML publishing, paragraphs often carry **dual view attributes** (such as \`view="extended"\`, \`view="compact-standard"\`, or \`view="compact"\`).
+
+#### 💡 Editorial Best Practice:
+* **Dual Views are Standard:** Having paired paragraphs with different view attributes is an intentional journal publishing design (used to support dual compact/print vs extended/digital reading layouts).
+* **Do NOT Query the JM:** This is **not** an error to query the Journal Manager about. You should not ask the JM which version to delete or whether to remove view attributes.
+* **Synchronize Edits:** When text updates, chemical formulas, or citation links are modified in one view, they must be aligned with the corresponding paragraph in the other view.
+
+👉 Use **[Open View Synchronizer](#/viewSync)** to compare, align, and mirror edits and \`<ce:cross-ref>\` citation tags across your paragraph views while preserving paragraph ID integrity! You can also use **[Open Quick Text Diff](#/quickDiff)** for side-by-side character-level comparison.`,
+  },
+  {
+    id: 'upstream-uncited-section',
+    weight: 9,
+    match: ({ lower }) =>
+      (lower.includes('upstream') && (lower.includes('feedback') || lower.includes('uncited') || lower.includes('reference') || lower.includes('section') || lower.includes('error') || lower.includes('return'))) ||
+      (lower.includes('forgot') && lower.includes('uncited')) ||
+      (lower.includes('remove') && lower.includes('uncited reference section')) ||
+      (lower.includes('uncited reference') && lower.includes('section')),
+    respond: () => `### 🚨 Upstream Feedback Resolution: Leftover Uncited Reference Section
+
+When upstream automated validation or QA checkers return a manuscript for a leftover **"Uncited Reference" section** or unreferenced bibliography entries, follow this standardized editorial resolution procedure:
+
+---
+
+#### 🔍 Root Cause Analysis:
+1. **Conversion Artifact:** During initial document ingestion or conversion, an author may have had an informal "Uncited references" / "Further reading" section or standalone uncited references that were retained as a placeholder \`<ce:section>\` or \`<ce:further-reading>\`.
+2. **Strict Production Rules:** Final Journal XML schemas strictly prohibit orphaned or unverified "Uncited Reference" placeholder sections unless explicitly allowed as formal Further Reading by the journal's editorial office.
+
+---
+
+#### 🛠️ Step-by-Step Remediation Plan:
+
+* **Step 1: Purge Unwanted Uncited References & Sections**
+  👉 Use **[Open Uncited Ref Cleaner](#/uncitedCleaner)** to automatically detect, isolate, and safely purge the leftover uncited section and remove unlinked \`<ce:bib-reference>\` nodes from the bibliography.
+
+* **Step 2: Verify If Any References Were Meant to Be Cited**
+  👉 Use **[Open Citation Linker Pro](#/citationLinker)** to scan the text body paragraphs (including \`view="extended"\` and \`view="compact-standard"\` views) to ensure none of the references were cited in plain text (e.g., as \`[1]\` or \`Smith et al.\`) without \`<ce:cross-ref>\` markup.
+
+* **Step 3: Resequence & Renumber Citations**
+  👉 Use **[Open XML Normalizer](#/xmlRenumber)** to renumber the remaining bibliography and re-link all in-text \`<ce:cross-ref>\` tags in sequential appearance order (\`[1], [2], [3]...\`).
+
+* **Step 4: Clean Residual Tags**
+  👉 Use **[Open XML Tag Cleaner](#/tagCleaner)** if any empty tags (like empty \`<ce:section>\` or trailing comments) remain.
+
+---
+
+> 💡 **Editorial Note on JM Queries:** If this was an internal production/conversion artifact, **do not send a query to the Journal Manager**. Simply purge the leftover section and renormalize the file. Only query the JM if the author explicitly requested these references to be kept but provided no citation locations.`,
+  },
+  {
+    id: 'xml-schema-info',
+    weight: 5,
+    match: ({ lower }) => lower.includes('dtd') || lower.includes('schema') || lower.includes('jats') || lower.includes('xml structure'),
+    respond: () => `In **Journal Publishing XML**:
+- **References:** Grouped in \`<ce:bibliography>\` with individual \`<ce:bib-reference id="bib...">\`. Inside, structured references use \`<sb:reference>\` with \`<sb:contribution>\` and \`<sb:host>\`.
+- **In-Text Cross-Refs:** Linked via \`<ce:cross-ref refid="bib0010">[1]</ce:cross-ref>\`.
+- **Formatting:** Superscripts use \`<ce:sup>\`, subscripts use \`<ce:inf>\`, and paragraphs use \`<ce:para>\`.
+- **Dual Views:** Extended and compact views use \`<ce:para view="extended">\` and \`<ce:para view="compact-standard">\` (synchronized via **[Open View Synchronizer](#/viewSync)**).
+
+Need structural repairs? Use **[Open Reference Structure Repair](#/structuralArchitect)** to validate tags and fix author initials.`,
+  },
+  {
+    id: 'greeting',
+    weight: 9,
+    match: ({ lower }) => /^(hi|hello|hey|good morning|good afternoon|good evening|greetings|woof)\b/i.test(lower) && lower.length < 30,
+    respond: ({ includeLazyIntro }) => {
+      if (includeLazyIntro) {
+        return `*yawns, blinks sluggishly, and gives a slow tail-wag* 🐾 **Woof...** 
+
+The cloud neural network is currently off-grid or snoozing, so you've reached me in **Lazy Offline Mode**. I'm lounging comfortably on the office rug, but my editorial brain is fully loaded.
+
+What manuscript puzzle can I solve for you without getting up?
+- 📝 **Draft a "TO THE JM:" Query** (author order, missing emails, figure replacements)
+- 🧭 **Find an Editorial Tool** (View Synchronizer, XML Normalizer, Citation Linker, Word to XML)
+- 🏷️ **XML & Schema Syntax** (CRediT roles, references, cross-refs, paragraph views)
+- 👤 **Check Subscription & Account Status**`;
+      }
+      return `Woof! 🐾 Keeper on duty! Ready to fetch your journal queries, tidy up citations, or guide you to any of our 17 production tools. How may I help you with your manuscript, XML, or editorial tasks today?`;
+    },
+  },
+];
+
+/**
  * Performs a rigorous syntactic and semantic editorial audit on Journal XML input.
  * Itemizes defects, structural inconsistencies, leftover conversion artifacts, and formatting warnings.
  */
@@ -186,478 +766,17 @@ So go ahead, toss me your manuscript problems — I'll solve them without even l
   };
 
   const getEditorialCore = (): string => {
+    const ctx: OfflineIntentContext = { text, lower, user, includeLazyIntro };
+    const best = pickBestOfflineIntent(OFFLINE_INTENT_RULES, ctx);
 
-  // 0. User Subscription & Admin Status Identification
-  if (
-    lower.includes('subscription') ||
-    lower.includes('sub status') ||
-    (lower.includes('admin') && (lower.includes('am i') || lower.includes('status') || lower.includes('role') || lower.includes('or not') || lower.includes('check') || lower.includes('who') || lower.includes('identify'))) ||
-    lower.includes('my account') ||
-    lower.includes('my role') ||
-    lower.includes('my status') ||
-    lower.includes('am i admin') ||
-    lower.includes('am i subscribed') ||
-    (lower.includes('active') && (lower.includes('sub') || lower.includes('plan') || lower.includes('membership'))) ||
-    (lower.includes('identify') && (lower.includes('user') || lower.includes('sub') || lower.includes('status')))
-  ) {
-    const isAdmin = Boolean(user.isAdmin);
-    const isSubscribed = Boolean(isAdmin || user.isSubscribed);
-    const userEmail = user.email || 'Current Logged-in User';
-    const displayName = user.displayName || (user.email ? user.email.split('@')[0] : 'User');
-    const tier = isAdmin 
-      ? 'Master Administrator Tier' 
-      : (user.subscriptionTier && user.subscriptionTier.toLowerCase() !== 'none' 
-          ? user.subscriptionTier.toUpperCase() 
-          : (isSubscribed ? 'Active Professional Tier' : 'Unsubscribed / Free Tier'));
-    const expiry = isAdmin 
-      ? 'Unlimited (Perpetual Admin Access)' 
-      : (user.subscriptionEnd && user.subscriptionEnd !== 'Not set' 
-          ? user.subscriptionEnd 
-          : (isSubscribed ? 'Active' : 'Expired / Not Active'));
-    const unlocked = user.unlockedTools && user.unlockedTools.length > 0 
-      ? user.unlockedTools.join(', ') 
-      : (isAdmin ? 'All Modules Unlocked (Admin Master Override)' : 'None');
-
-    return `### 👤 Account & Subscription Identification
-
-Here is the verified identification and subscription breakdown:
-
-* **User Email:** \`${userEmail}\`
-* **Display Name:** **${displayName}**
-* **Admin Status:** ${isAdmin ? '🛡️ **YES (Administrator)**' : '👤 **NO (Standard User)**'}
-* **Subscription Status:** ${isSubscribed ? '🟢 **ACTIVE SUBSCRIPTION**' : '🔴 **INACTIVE / EXPIRED**'}
-* **Subscription Tier:** **${tier}**
-* **Access Expiration:** **${expiry}**
-* **Unlocked Keys / Tools:** ${unlocked}
-
----
-
-${isAdmin 
-  ? `⭐ **Administrator Privileges Active:** You have full master access across all tools, key generation, and can view/manage other user subscriptions in the **[Admin Portal](#/admin)**.` 
-  : isSubscribed 
-    ? `✨ **Full Active Subscription:** All standard Production Toolkit Pro modules (XML Renumber, Citation Linker, CRediT Tagging, Word to XML, Table Beautifier, etc.) are active for production workflows.` 
-    : `💡 **Subscription Notice:** Your account does not have an active subscription. You can utilize free tools or contact an administrator for an access key or subscription renewal.`}`;
-  }
-
-  // 0. Affiliation ID Sequencer / Increments of 5 Normalizer & Cross-Ref Synchronizer
-  if (
-    lower.includes('affiliation') ||
-    lower.includes('af0005') ||
-    lower.includes('af0010') ||
-    lower.includes('af0020') ||
-    lower.includes('af0025') ||
-    lower.includes('cross-ref') ||
-    lower.includes('cross ref') ||
-    ((lower.includes("can't find") || lower.includes("cannot find") || lower.includes("where is the tool") || lower.includes("find the tool") || lower.includes("where is") || lower.includes("does not know")) && 
-     (lower.includes('keeper') || lower.includes('tool') || lower.includes('affiliation') || lower.includes('sequencer')))
-  ) {
-    // Check if XML is embedded in the prompt
-    const xmlMatch = text.match(/<([a-zA-Z0-9:]+\b[\s\S]*>)/);
-    if (xmlMatch && (text.includes('<ce:affiliation') || text.includes('<ce:cross-ref'))) {
-      const xmlToProcess = xmlMatch[0];
-      const result = sequenceAffiliationIdsStrict(xmlToProcess, 5, true);
-
-      // If user strictly requested: "Return the COMPLETE XML, not a partial excerpt. Do not provide explanations"
-      if (lower.includes('do not provide explanations') || lower.includes('modify the xml below according to one requirement only') || lower.includes('complete xml, not a partial excerpt')) {
-        return result.outputXml;
-      }
-
-      return `### 🐾 Affiliation ID Sequence & Cross-Ref Synchronization (+5 Increments)
-
-I have corrected the \`<ce:affiliation>\` IDs to be sequential in increments of 5 (\`af0005\`, \`af0010\`, \`af0015\`...) and synchronized all corresponding cross-reference links:
-
-- **Total Affiliations:** ${result.totalAffiliations}
-- **IDs Corrected:** ${result.changedCount}
-- **Cross-Ref Links Synchronized:** ${result.totalCrossRefsUpdated}${result.crossRefChanges.length > 0 ? ` (e.g. \`refid="${result.crossRefChanges[0].oldRefId}"\` -> \`refid="${result.crossRefChanges[0].newRefId}"\`)` : ''}
-- **Integrity Guarantee:** \`<ce:author>\`, \`<ce:cross-ref id="...">\`, \`<ce:sup>\`, and \`affiliation-id\` remain strictly preserved.
-
-\`\`\`xml
-${result.outputXml}
-\`\`\`
-
-👉 **[Open Affiliation Sequencer Tool](#/affiliationSequencer)**`;
+    if (best && best.weight >= MIN_OFFLINE_CONFIDENCE) {
+      return best.respond(ctx);
     }
 
-    if (lower.includes('cross-ref') || lower.includes('cross ref') || lower.includes('refid') || lower.includes('af0025') || lower.includes('reflecting')) {
-      return `### 🐾 Cross-Reference Synchronization Update
-
-I have updated the **Affiliation Sequencer** and Keeper's processing engine to automatically synchronize author \`<ce:cross-ref refid="...">\` links when affiliation IDs are corrected!
-
-#### 🔄 What Was Corrected:
-- When an affiliation ID is corrected (for example, re-sequencing an affiliation from \`af0025\` to \`af0020\`), any associated author cross-reference call:
-  \`<ce:cross-ref refid="af0025" id="cf0040"><ce:sup>d</ce:sup></ce:cross-ref>\`
-  is now automatically updated to:
-  \`<ce:cross-ref refid="af0020" id="cf0040"><ce:sup>d</ce:sup></ce:cross-ref>\`
-- **Integrity Guarantee:** The cross-reference's own \`id="cf0040"\`, inner \`<ce:sup>d</ce:sup>\`, and parent \`<ce:author>\` structures remain strictly intact.
-
-#### 🚀 How to Apply:
-1. Go to the **[Affiliation Sequencer](#/affiliationSequencer)** tool.
-2. Paste your XML content into the Input buffer.
-3. Click **Process XML** to sequentially renumber affiliation IDs and synchronize all cross-reference links!
-
-Or paste your complete XML buffer into the chat, and I will sequence the affiliation IDs and synchronize all cross-ref links for you directly.`;
-    }
-
-    return `### 🐾 Affiliation Sequencer (ID Normalizer & Cross-Ref Sync)
-
-The **Affiliation Sequencer** is ready to use in your workspace!
-
-- **Direct Link:** **[Open Affiliation Sequencer](#/affiliationSequencer)**
-- **On the Dashboard:** Go to **[Workspace Dashboard](#/dashboard)** and look for the **Affiliation Sequencer** card with the green building icon (or search for *"Affiliation"*).
-
-#### 🛠️ Core Capabilities:
-- **Sequential IDs (+5 Step):** Renumbers \`id\` attributes of \`<ce:affiliation>\` tags to \`af0005\`, \`af0010\`, \`af0015\`, \`af0020\`... by occurrence order.
-- **Cross-Reference Synchronization:** Automatically synchronizes author \`<ce:cross-ref refid="...">\` attributes and superscripts to match the new affiliation sequence.
-- **DTD Integrity Preservation:** Preserves internal \`affiliation-id\`, \`<ce:cross-ref id="...">\`, author tags, and document markup 100% intact.
-
-👉 **[Open Affiliation Sequencer Tool](#/affiliationSequencer)**`;
-  }
-
-  // 1. Corresponding author email required / deleted / missing
-  if (
-    (lower.includes('corresponding') || lower.includes('corresp') || lower.includes('author email')) &&
-    (lower.includes('email') || lower.includes('address') || lower.includes('required') || lower.includes('disregard') || lower.includes('provide') || lower.includes('deleted'))
-  ) {
-    return `TO THE JM: Apologies for not including this in our previous query. The author has deleted the corresponding author's email address. As an email address is required for the corresponding author, kindly advise whether we should disregard the author's request or ask the author to provide a valid email address. Otherwise, the comment will be ignored.
-
-The file is in pending status until the matter is resolved. Thank you.`;
-  }
-
-  // 2. Author Order / Position Exchange / Authorship Change Query
-  if (
-    (lower.includes('author order') || lower.includes('authorship') || lower.includes('exchange the positions') || lower.includes('swap the positions') || (lower.includes('exchange') && lower.includes('author'))) &&
-    (lower.includes('second') || lower.includes('third') || lower.includes('position') || lower.includes('order') || lower.includes('author') || lower.includes('change form'))
-  ) {
-    let authorDetails = 'the second author and the third author';
-    const exchangeMatch = text.match(/exchange\s+the\s+positions\s+of\s+(?:the\s+)?([^,.\n]+?(?:\([^\)]+\))?[^,.\n]*?)(?:,|\.|\band\s+the\s+request|\bwhich\b|$)/i);
-    if (exchangeMatch && exchangeMatch[1]) {
-      let matched = exchangeMatch[1].trim();
-      // Format cleanly if contains parenthesis and names like "second and third authors (Yiqi Wang and Wei Peng)"
-      const namesMatch = matched.match(/second\s+and\s+third\s+authors\s*\(([^)]+)\s+and\s+([^)]+)\)/i);
-      if (namesMatch) {
-        authorDetails = `the second author (${namesMatch[1].trim()}) and the third author (${namesMatch[2].trim()})`;
-      } else {
-        authorDetails = matched.startsWith('the ') ? matched : `the ${matched}`;
-      }
-    }
-
-    const hasSignedForm = lower.includes('authorship change form') || lower.includes('form has been signed') || lower.includes('signed');
-    const formStatement = hasSignedForm ? ' The author has stated that a signed authorship change form has been submitted to the journal.' : '';
-
-    return `TO THE JM: The authors have requested to exchange the positions of ${authorDetails}.${formStatement} Please advise if we should proceed with the change or retain the current order.
-
-The file is in pending status until the matter is resolved. Thank you.`;
-  }
-
-  // 3. Author Name change / Spelling correction query
-  if (
-    (lower.includes('author name') || lower.includes('name change') || (lower.includes('change') && lower.includes('author'))) &&
-    (lower.includes('from') || lower.includes('to') || lower.includes('correct') || lower.includes('spelling') || lower.includes('requested'))
-  ) {
-    const match = text.match(/from\s+["']?([^"'\n]+?)["']?\s+to\s+["']?([^"'\n]+?)["']?(\.|$)/i) ||
-                  text.match(/["']([^"']+)["']\s+to\s+["']([^"']+)["']/i);
-    const oldName = match ? match[1].trim() : 'the original spelling';
-    const newName = match ? match[2].trim() : 'the amended spelling';
-
-    return `TO THE JM:
-
-The author has requested to change the author name from "${oldName}" to "${newName}." Kindly validate the requested author name correction; otherwise, it will be ignored.
-
-The file is in pending status until the matter is resolved. Thank you.`;
-  }
-
-  // 3a. Title change query
-  if (lower.includes('title') && (lower.includes('revised') || lower.includes('change') || lower.includes('new title'))) {
-    const titleMatch = text.match(/(?:revised|new)\s+(?:article\s+)?title\s*(?:is|:)?\s*["']?([^"'\n]+?)["']?(\.|$)/i);
-    const newTitle = titleMatch ? titleMatch[1].trim() : '[New Title]';
-
-    return `TO THE JM: The author has provided a revised article title: "${newTitle}". Kindly validate this change. If affirmed, kindly update the coversheet accordingly reflecting the revised article title.
-
-The file is in pending status until the matter is resolved. Thank you.`;
-  }
-
-  // 3b. Given name / surname clarification
-  if (lower.includes('given name') || lower.includes('surname') || (lower.includes('indexing') && lower.includes('name'))) {
-    const namesMatch = text.match(/["']?([^"'\n,]+?)["']?\s+(?:is|as)\s+the\s+given\s+name.*?["']?([^"'\n,]+?)["']?\s+(?:is|as)\s+the\s+surname/i);
-    const nameA = namesMatch ? namesMatch[1].trim() : '[Name A]';
-    const nameB = namesMatch ? namesMatch[2].trim() : '[Name B]';
-
-    return `TO THE JM: Please confirm if "${nameA}" is the given name and "${nameB}" is the surname to ensure correct indexing.
-
-The file is in pending status until the matter is resolved. Thank you.`;
-  }
-
-  // 3c. Author addition/removal/reorder (no signed form mentioned)
-  if (
-    (lower.includes('add') || lower.includes('remove') || lower.includes('delete') || lower.includes('reorder')) &&
-    lower.includes('author') &&
-    !lower.includes('form')
-  ) {
-    const action = lower.includes('add') ? 'add' : lower.includes('remove') || lower.includes('delete') ? 'remove' : 'reorder';
-    return `TO THE JM: Please validate the author's request to ${action} the author(s) as described.
-
-The file is in pending status until the matter is resolved. Thank you.`;
-  }
-
-  // 3. Figure Replacement Query
-  if (lower.includes('figure') && (lower.includes('replacement') || lower.includes('replace') || lower.includes('replaced') || lower.includes('new figure'))) {
-    const figMatch = text.match(/figure\s*(\d+[a-z]?)/i);
-    const figName = figMatch ? `Figure ${figMatch[1]}` : 'the designated figure(s)';
-
-    return `TO THE JM: The author provided a replacement for ${figName}. However, it's unclear whether the reason for this replacement is quality improvement, the addition or removal of elements, or changed content. Could you please validate if we can proceed with the new version?
-
-The file is in pending status until the matter is resolved. Thank you.`;
-  }
-
-  // 4. Uncited references / items in text body
-  if (lower.includes('uncited') || lower.includes('not cited') || lower.includes('unreferenced')) {
-    const refMatch = text.match(/reference\s*\[?(\d+)\]?/i) || text.match(/\[(\d+)\]/);
-    const itemLabel = refMatch ? `Reference [${refMatch[1]}]` : 'Reference [X]';
-
-    return `TO THE JM:
-
-${itemLabel} is currently uncited in the text body. Kindly ask the author to provide citations for ${itemLabel} in the text body or confirm if this could be deleted.
-
-The file is in pending status until the matter is resolved. Thank you.`;
-  }
-
-  // 5. Figure panel / symbol mismatch
-  if (lower.includes('panel') && (lower.includes('mismatch') || lower.includes('not found') || lower.includes('caption'))) {
-    const figMatch = text.match(/figure\s*(\d+[a-z]?)/i);
-    const figName = figMatch ? `Figure ${figMatch[1]}` : 'the figure';
-    const panelMatch = text.match(/panels?\s*([a-z0-9,\s()&]+)/i);
-    const panels = panelMatch ? panelMatch[1].trim() : '(c) and (d)';
-
-    return `TO THE JM:
-
-Panels ${panels} are mentioned in the caption for ${figName} but are not found in the artwork. Please check and amend as necessary.
-
-The file is in pending status until the matter is resolved. Thank you.`;
-  }
-
-  // 6. Generic JM Query request when raw text is provided
-  if (
-    lower.startsWith('query to jm:') ||
-    lower.startsWith('to the jm:') ||
-    lower.startsWith('jm query:') ||
-    lower.startsWith('query to jm') ||
-    lower.startsWith('create a jm query') ||
-    lower.startsWith('draft a jm query')
-  ) {
-    const rawNote = text
-      .replace(/^(?:query to jm:|to the jm:|jm query:|query to jm|create a jm query:|draft a jm query:)\s*/i, '')
-      .trim();
-
-    if (rawNote.length > 5) {
-      return `TO THE JM:
-
-${rawNote}
-
-The file is in pending status until the matter is resolved. Thank you.`;
-    }
-  }
-
-  // 7. General Editorial Tools Catalog / "Find an Editorial Tool" / "What tools do you have"
-  if (
-    (lower.includes('find') && (lower.includes('editorial tool') || lower.includes('tool'))) ||
-    lower.includes('what tools') ||
-    lower.includes('available tools') ||
-    lower.includes('list of tools') ||
-    lower.includes('tool directory') ||
-    lower.includes('tool guide') ||
-    lower.includes('all tools') ||
-    lower.includes('which tool') && !lower.includes('out of order') && !lower.includes('renumber') && !lower.includes('cross-ref') && !lower.includes('uncited') && !lower.includes('duplicate') && !lower.includes('word') && !lower.includes('credit')
-  ) {
-    return `### 🧭 Production Toolkit Pro — Complete Editorial Tool Directory
-
-Production Toolkit Pro includes a full suite of 18 established editorial modules available directly on the Workspace Dashboard for Journal CE and JATS XML:
-
-#### 1. 🔢 Citations & References
-* **[Open XML Normalizer](#/xmlRenumber)** — Sequentially renumbers bibliography references and synchronizes all in-text \`<ce:cross-ref>\` callouts in order of appearance.
-* **[Open Citation Linker Pro](#/citationLinker)** — Automatically scans orphan plain-text citations (e.g. \`[1-3]\`, \`Smith et al., 2020\`) and connects them to target bibliography IDs.
-* **[Open Reference Structure Repair](#/structuralArchitect)** — Audits malformed XML, fixes author initials/periods, repairs incomplete tags, and ensures standard compliance.
-* **[Open Uncited Ref Cleaner](#/uncitedCleaner)** — Audits references that have no matching in-text callouts and performs clean removal.
-* **[Open Bibliography Extractor](#/refExtractor)** — Extracts clean plain-text reference lists from XML for MS Word proofing.
-* **[Open ID Prefix Auditor](#/idAuditor)** — Audits and normalizes ID sequences in references and tables while maintaining internal document cross-links.
-* **[Open Reference Updater](#/referenceGen)** — Merges corrected external reference records into existing XML bibliographies while preserving ID integrity.
-* **[Open Other-Ref Scanner](#/otherRefScanner)** — Isolates unstructured \`<ce:other-ref>\` nodes for external catalog lookup or manual markup.
-
-#### 2. 🛠️ XML Structure & Document Markup
-* **[Open Affiliation Sequencer](#/affiliationSequencer)** — Sequentially renumbers \`<ce:affiliation>\` IDs in increments of 5 (\`af0005\`, \`af0010\`, \`af0015\`...) with strict preservation of affiliation-id, authors, cross-refs, and labels.
-* **[Open CRediT Tagging](#/creditGenerator)** — Auto-detects 14 official NISO CRediT contributor roles from raw text and generates standardized \`<ce:contributor-role>\` tags.
-* **[Open Grant Tagger](#/grantTagger)** — Wraps funding sponsors in \`<ce:grant-sponsor>\` and award numbers in \`<ce:grant-number>\`.
-* **[Open Table XML Beautifier](#/tableBeautifier)** — Formats single-line or minified table XML into indented, human-readable blocks.
-* **[Open XML Table Fixer](#/tableFixer)** — Manages table footnotes by detaching notes into \`<legend>\` blocks or reattaching to cells.
-* **[Open XML Tag Cleaner](#/tagCleaner)** — Safely removes unwanted inline tags, revision markers, or review comments.
-* **[Open Article Highlights Gen](#/highlightsGen)** — Converts author research bullets into standard \`<ce:highlights>\` XML.
-* **[Open View Synchronizer](#/viewSync)** — Mirrors content between paragraph views while maintaining ID integrity and references.
-
-#### 3. 📄 Conversion & Utilities
-* **[Open MS Word to XML Converter](#/wordToXml)** — Converts rich Word text (chemical subscripts \`<ce:inf>\`, superscripts \`<ce:sup>\`, bold, italics) into clean Journal CE XML.
-* **[Open Quick Text Diff](#/quickDiff)** — Side-by-side text and XML comparison with character-level difference highlighting.
-
----
-💡 *Tip: All modules can be launched directly or accessed from the **[Workspace Dashboard](#/dashboard)**.*`;
-  }
-
-  // 8. Reference Renumbering & Normalization Tools
-  if ((lower.includes('renumber') || lower.includes('out of order') || lower.includes('numeric order') || lower.includes('sequence')) && !lower.includes('affiliation')) {
-    return `Use **[Open XML Normalizer](#/xmlRenumber)** to resequence citation callouts and references sequentially by order of appearance.`;
-  }
-
-  // 9. Citation Linking Tools
-  if (lower.includes('cross-ref') || lower.includes('unlinked') || lower.includes('link citation') || lower.includes('broken link')) {
-    return `Use **[Open Citation Linker Pro](#/citationLinker)** to automatically link in-text citations with your bibliography entries.`;
-  }
-
-  // 10. Reference Structure Repair
-  if (lower.includes('structural') || lower.includes('author initial') || lower.includes('malformed') || lower.includes('broken xml') || lower.includes('repair reference')) {
-    return `Use **[Open Reference Structure Repair](#/structuralArchitect)** to audit malformed reference XML, validate missing tags, and fix unformatted author initials and names according to standard Journal XML schemas.`;
-  }
-
-  // 11. Uncited Reference Cleaner Tool
-  if (lower.includes('uncited ref') || lower.includes('clean uncited') || (lower.includes('uncited') && lower.includes('clean'))) {
-    return `Use **[Open Uncited Ref Cleaner](#/uncitedCleaner)** to audit and remove references that are not cited in the text body.`;
-  }
-
-  // 12. Deduplication & Reference Integrity
-  if (lower.includes('duplicate') || lower.includes('dedup') || lower.includes('identical reference')) {
-    return `To audit references and verify bibliography consistency, use **[Open Reference Structure Repair](#/structuralArchitect)** or **[Open XML Normalizer](#/xmlRenumber)** to synchronize numbering and IDs. You can also view all established modules in the **[Workspace Dashboard](#/dashboard)**.`;
-  }
-
-  // 13. MS Word to XML Converter
-  if (lower.includes('word') && lower.includes('xml')) {
-    return `Use **[Open MS Word to XML Converter](#/wordToXml)** to convert formatted Word text (preserving chemical subscripts, superscripts, bold, and italics) into clean Journal CE XML.`;
-  }
-
-  // 14. CRediT Tagging Tool
-  if (lower.includes('credit') || lower.includes('contributor') || lower.includes('author contributions')) {
-    return `Use **[Open CRediT Tagging](#/creditGenerator)** to convert author contribution statements into standardized \`<ce:contributor-role>\` XML tags.`;
-  }
-
-  // 15. Table Tools
-  if (lower.includes('table') && (lower.includes('beautif') || lower.includes('format') || lower.includes('indent') || lower.includes('footnote') || lower.includes('legend') || lower.includes('fix'))) {
-    return `For XML table workflows:
-- **[Open Table XML Beautifier](#/tableBeautifier)** — Reformat and indent single-line or minified table XML into readable blocks.
-- **[Open XML Table Fixer](#/tableFixer)** — Detach footnote markers into \`<legend>\` notes or attach legend notes back to cells.`;
-  }
-
-  // 16. Grant Tagging Tool
-  if (lower.includes('grant') || lower.includes('sponsor') || lower.includes('funding')) {
-    return `Use **[Open Grant Tagger](#/grantTagger)** to identify funding agencies and grant numbers and wrap them in \`<ce:grant-sponsor>\` and \`<ce:grant-number>\` XML tags.`;
-  }
-
-  // 17. ID Prefix Auditor
-  if (lower.includes('prefix') || lower.includes('id auditor') || lower.includes('bib00') || lower.includes('b1')) {
-    return `Use **[Open ID Prefix Auditor](#/idAuditor)** to audit and normalize ID prefixes across reference lists and internal document links.`;
-  }
-
-  // 18. Bibliography Extractor
-  if (lower.includes('extract') && (lower.includes('ref') || lower.includes('bib') || lower.includes('text'))) {
-    return `Use **[Open Bibliography Extractor](#/refExtractor)** to isolate clean plain-text reference lists from XML with normalized punctuation for MS Word proofing.`;
-  }
-
-  // 19. Tag Cleaner
-  if (lower.includes('tag cleaner') || lower.includes('strip tag') || lower.includes('remove tag')) {
-    return `Use **[Open XML Tag Cleaner](#/tagCleaner)** to safely strip unwanted inline tags or editing markers while preserving document integrity.`;
-  }
-
-  // 20. Diff Tool
-  if (lower.includes('diff') || lower.includes('compare')) {
-    return `Use **[Open Quick Text Diff](#/quickDiff)** for side-by-side text and XML comparison with character-level highlight tracking.`;
-  }
-
-  // 21. View Synchronizer & Paragraph View Attributes Inspection
-  if (
-    lower.includes('view sync') || 
-    lower.includes('synchronize view') || 
-    lower.includes('view attribute') || 
-    lower.includes('view="extended"') || 
-    lower.includes('view="compact') || 
-    lower.includes('check the view') ||
-    lower.includes('check view') ||
-    (lower.includes('view') && (lower.includes('extended') || lower.includes('compact') || lower.includes('paragraph') || lower.includes('duplicate') || lower.includes('inconsistent')))
-  ) {
-    return `### 🔍 Paragraph View Analysis & Synchronization
-
-In Journal CE XML publishing, paragraphs often carry **dual view attributes** (such as \`view="extended"\`, \`view="compact-standard"\`, or \`view="compact"\`).
-
-#### 💡 Editorial Best Practice:
-* **Dual Views are Standard:** Having paired paragraphs with different view attributes is an intentional journal publishing design (used to support dual compact/print vs extended/digital reading layouts).
-* **Do NOT Query the JM:** This is **not** an error to query the Journal Manager about. You should not ask the JM which version to delete or whether to remove view attributes.
-* **Synchronize Edits:** When text updates, chemical formulas, or citation links are modified in one view, they must be aligned with the corresponding paragraph in the other view.
-
-👉 Use **[Open View Synchronizer](#/viewSync)** to compare, align, and mirror edits and \`<ce:cross-ref>\` citation tags across your paragraph views while preserving paragraph ID integrity! You can also use **[Open Quick Text Diff](#/quickDiff)** for side-by-side character-level comparison.`;
-  }
-
-  // 21b. Upstream Feedback & Leftover Uncited Reference Section
-  if (
-    (lower.includes('upstream') && (lower.includes('feedback') || lower.includes('uncited') || lower.includes('reference') || lower.includes('section') || lower.includes('error') || lower.includes('return'))) ||
-    (lower.includes('forgot') && lower.includes('uncited')) ||
-    (lower.includes('remove') && lower.includes('uncited reference section')) ||
-    (lower.includes('uncited reference') && lower.includes('section'))
-  ) {
-    return `### 🚨 Upstream Feedback Resolution: Leftover Uncited Reference Section
-
-When upstream automated validation or QA checkers return a manuscript for a leftover **"Uncited Reference" section** or unreferenced bibliography entries, follow this standardized editorial resolution procedure:
-
----
-
-#### 🔍 Root Cause Analysis:
-1. **Conversion Artifact:** During initial document ingestion or conversion, an author may have had an informal "Uncited references" / "Further reading" section or standalone uncited references that were retained as a placeholder \`<ce:section>\` or \`<ce:further-reading>\`.
-2. **Strict Production Rules:** Final Journal XML schemas strictly prohibit orphaned or unverified "Uncited Reference" placeholder sections unless explicitly allowed as formal Further Reading by the journal's editorial office.
-
----
-
-#### 🛠️ Step-by-Step Remediation Plan:
-
-* **Step 1: Purge Unwanted Uncited References & Sections**
-  👉 Use **[Open Uncited Ref Cleaner](#/uncitedCleaner)** to automatically detect, isolate, and safely purge the leftover uncited section and remove unlinked \`<ce:bib-reference>\` nodes from the bibliography.
-
-* **Step 2: Verify If Any References Were Meant to Be Cited**
-  👉 Use **[Open Citation Linker Pro](#/citationLinker)** to scan the text body paragraphs (including \`view="extended"\` and \`view="compact-standard"\` views) to ensure none of the references were cited in plain text (e.g., as \`[1]\` or \`Smith et al.\`) without \`<ce:cross-ref>\` markup.
-
-* **Step 3: Resequence & Renumber Citations**
-  👉 Use **[Open XML Normalizer](#/xmlRenumber)** to renumber the remaining bibliography and re-link all in-text \`<ce:cross-ref>\` tags in sequential appearance order (\`[1], [2], [3]...\`).
-
-* **Step 4: Clean Residual Tags**
-  👉 Use **[Open XML Tag Cleaner](#/tagCleaner)** if any empty tags (like empty \`<ce:section>\` or trailing comments) remain.
-
----
-
-> 💡 **Editorial Note on JM Queries:** If this was an internal production/conversion artifact, **do not send a query to the Journal Manager**. Simply purge the leftover section and renormalize the file. Only query the JM if the author explicitly requested these references to be kept but provided no citation locations.`;
-  }
-
-  // 22. XML Schemas & Structure
-  if (lower.includes('dtd') || lower.includes('schema') || lower.includes('jats') || lower.includes('xml structure')) {
-    return `In **Journal Publishing XML**:
-- **References:** Grouped in \`<ce:bibliography>\` with individual \`<ce:bib-reference id="bib...">\`. Inside, structured references use \`<sb:reference>\` with \`<sb:contribution>\` and \`<sb:host>\`.
-- **In-Text Cross-Refs:** Linked via \`<ce:cross-ref refid="bib0010">[1]</ce:cross-ref>\`.
-- **Formatting:** Superscripts use \`<ce:sup>\`, subscripts use \`<ce:inf>\`, and paragraphs use \`<ce:para>\`.
-- **Dual Views:** Extended and compact views use \`<ce:para view="extended">\` and \`<ce:para view="compact-standard">\` (synchronized via **[Open View Synchronizer](#/viewSync)**).
-
-Need structural repairs? Use **[Open Reference Structure Repair](#/structuralArchitect)** to validate tags and fix author initials.`;
-  }
-
-  // Greetings
-  if (/^(hi|hello|hey|good morning|good afternoon|good evening|greetings|woof)\b/i.test(lower) && lower.length < 30) {
+    // Nothing matched confidently — admit it honestly instead of forcing a
+    // coincidental low-weight rule to answer. Route to the general catalog.
     if (includeLazyIntro) {
-      return `*yawns, blinks sluggishly, and gives a slow tail-wag* 🐾 **Woof...** 
-
-The cloud neural network is currently off-grid or snoozing, so you've reached me in **Lazy Offline Mode**. I'm lounging comfortably on the office rug, but my editorial brain is fully loaded.
-
-What manuscript puzzle can I solve for you without getting up?
-- 📝 **Draft a "TO THE JM:" Query** (author order, missing emails, figure replacements)
-- 🧭 **Find an Editorial Tool** (View Synchronizer, XML Normalizer, Citation Linker, Word to XML)
-- 🏷️ **XML & Schema Syntax** (CRediT roles, references, cross-refs, paragraph views)
-- 👤 **Check Subscription & Account Status**`;
-    }
-    return `Woof! 🐾 Keeper on duty! Ready to fetch your journal queries, tidy up citations, or guide you to any of our 17 production tools. How may I help you with your manuscript, XML, or editorial tasks today?`;
-  }
-
-  // Default direct assistance
-  if (includeLazyIntro) {
-    return `*scratches ear lazily with hind paw and lets out a relaxed pup sigh* 🐾
+      return `*scratches ear lazily with hind paw and lets out a relaxed pup sigh* 🐾
 
 The live AI models are temporarily resting, so I'm running on local offline power. Here is what I can handle for you instantly from my offline memory banks:
 
@@ -667,9 +786,9 @@ The live AI models are temporarily resting, so I'm running on local offline powe
 4. **Subscription Status:** Ask "Am I subscribed?" or "Check my admin status".
 
 Throw a manuscript scenario at me, and I'll sort it right out! 😴`;
-  }
+    }
 
-  return `How may I help you with your manuscript, XML, or editorial tasks today? 🐾
+    return `How may I help you with your manuscript, XML, or editorial tasks today? 🐾
 
 - **Draft a "TO THE JM:" Query:** Paste raw author comments or describe the scenario (author order swaps, email deletions, figure replacements, uncited refs).
 - **Recommend Production Tools:** Tell me what needs fixing (synchronize paragraph views, resequence references, link citations, convert Word to XML).
