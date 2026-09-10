@@ -3,7 +3,7 @@
  * Shared between Express server (AI Studio/Docker) and Vercel Serverless Functions (/api).
  */
 
-import { sequenceAffiliationIdsStrict } from './affiliationSequencerLogic';
+import { sequenceAffiliationIdsStrict } from './affiliationSequencerLogic.js';
 
 /**
  * Ordered by capability, NOT tried in list order historically — this was the bug.

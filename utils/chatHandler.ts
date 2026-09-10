@@ -17,8 +17,12 @@ export const config = {
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://jtrvpqxhjqpifglrhbzu.supabase.co';
 const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp0cnZwcXhoanFwaWZnbHJoYnp1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcxODI2MDcsImV4cCI6MjA4Mjc1ODYwN30.5uPoLzqW6GW4yY14mgA9rBcWgZOnPYom7LbLIQOkDao';
-const SUPER_ADMIN_EMAIL = 'generalkevin53@gmail.com';
-const SECONDARY_ADMIN_EMAIL = 'kgenso.realK@gmail.com';
+// Admin status is no longer hardcoded by email. It is driven entirely by:
+//   1. auth.users.app_metadata.role === 'admin'  (server/service-role settable only)
+//   2. profiles.role === 'admin'                 (DB column, protect with RLS)
+// Deliberately NOT checking user_metadata here — that object is client-editable
+// via the Supabase JS SDK, so trusting it would let any signed-in user grant
+// themselves admin from the browser.
 
 async function verifySubscriptionAccess(req: VercelRequest): Promise<{ authorized: boolean; error?: string; status?: number; user?: any }> {
   try {
@@ -58,12 +62,7 @@ async function verifySubscriptionAccess(req: VercelRequest): Promise<{ authorize
       };
     }
 
-    const userEmail = (user.email || '').toLowerCase().trim();
-    const isAdmin = 
-      userEmail === SUPER_ADMIN_EMAIL.toLowerCase() ||
-      userEmail === SECONDARY_ADMIN_EMAIL.toLowerCase() ||
-      user.app_metadata?.role?.toLowerCase() === 'admin' ||
-      user.user_metadata?.role?.toLowerCase() === 'admin';
+    const isAdmin = user.app_metadata?.role?.toLowerCase() === 'admin';
 
     if (isAdmin) {
       return { authorized: true, user };
