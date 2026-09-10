@@ -949,6 +949,41 @@ ${userAuthContext}`;
             timestamp: Date.now()
         };
         setMessages(prev => [...prev, userMessage]);
+
+        // Same gate as handleSendMessage: the FAQ is a deterministic subset of the
+        // same paid chat feature, not a free side door. A subscription that expires
+        // mid-session (while the topic buttons are still on screen) must still hit
+        // this wall, not just rely on the server rejecting the request.
+        if (!hasActiveSubscription) {
+            const subscriptionLockReply = `### 🐾 **Subscription Required to Chat with Keeper**\n\nWoof! Keeper's editorial AI assistant, automated Journal Manager (JM) query drafting, and XML manuscript diagnostics — including this FAQ topic list — are reserved exclusively for members with an **Active Subscription**.\n\n${user ? '👉 **[Go to Account Settings & Subscriptions](#/settings)** to activate or renew your subscription.' : '👉 **[Log In / Register](#/login)** to access your subscribed account.'}`;
+
+            const assistantMessageId = `ast-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+            setMessages(prev => [...prev, {
+                id: assistantMessageId,
+                role: 'assistant',
+                content: '',
+                timestamp: Date.now(),
+                modelUsed: 'keeper-subscription-lock'
+            }]);
+            setCurrentlyTypingId(assistantMessageId);
+            if (!isOpen) {
+                setHasUnread(true);
+            }
+            scrollToBottom(true);
+
+            typingControllerRef.current = startTypingSimulation({
+                fullText: subscriptionLockReply,
+                onUpdate: (displayedText) => {
+                    setMessages(prev => prev.map(m => m.id === assistantMessageId ? { ...m, content: displayedText } : m));
+                },
+                onComplete: () => {
+                    setCurrentlyTypingId(null);
+                    typingControllerRef.current = null;
+                }
+            });
+            return;
+        }
+
         setIsLoading(true);
 
         let replyText = '';
@@ -959,6 +994,7 @@ ${userAuthContext}`;
         try {
             const sessionData = await supabase.auth.getSession();
             const token = sessionData?.data?.session?.access_token || session?.access_token;
+
 
             const response = await fetch('/api/ai/chat', {
                 method: 'POST',
