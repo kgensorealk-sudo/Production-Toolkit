@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import { UserProfile, ToolId, DefaultAvatar } from '../types';
-import { useAuth, withRetry, isAdminEmail } from '../contexts/AuthContext';
+import { useAuth, withRetry } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
@@ -1190,7 +1190,7 @@ const AdminDashboard: React.FC = () => {
             if (publicViews.includes(log.tool_id as any)) return false;
 
             // 2. Administrators have platform-wide clearance and must never be recorded as security anomalies
-            const isAdmin = user.role?.toLowerCase() === 'admin' || isAdminEmail(user.email);
+            const isAdmin = user.role?.toLowerCase() === 'admin';
             if (isAdmin) return false;
 
             // 3. Check active subscription (is_subscribed flag OR valid unexpired subscription_end)
@@ -3275,7 +3275,7 @@ const AdminDashboard: React.FC = () => {
                                         2. Administrative Clearance & Whitelisting
                                     </h5>
                                     <p className="text-slate-500 text-[11px]">
-                                        Administrators (<code className="bg-slate-200 px-1 py-0.5 rounded text-slate-800 font-mono">kgenso.realK@gmail.com</code> and <code className="bg-slate-200 px-1 py-0.5 rounded text-slate-800 font-mono">generalkevin53@gmail.com</code>) and open platform utilities (Dashboard, Documentation, Settings, Terms) have global operational clearance and are automatically filtered out from security alerts to prevent false positives.
+                                        Users with an <code className="bg-slate-200 px-1 py-0.5 rounded text-slate-800 font-mono">admin</code> role and open platform utilities (Dashboard, Documentation, Settings, Terms) have global operational clearance and are automatically filtered out from security alerts to prevent false positives.
                                     </p>
                                 </div>
 
