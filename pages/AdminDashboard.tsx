@@ -1068,6 +1068,15 @@ const AdminDashboard: React.FC = () => {
         const now = new Date().getTime();
         const userMap = new Map<string, UserProfile>(users.map(u => [u.id, u]));
 
+        // usageMetricsService fires a 'session_start' log the instant a tool page mounts —
+        // i.e. the moment someone clicks it from the dashboard, even if NodeAccessController
+        // immediately blocks them with a paywall/key modal underneath. That's a page-open
+        // ping, not real usage, and counting it here both inflates every tool's numbers
+        // (roughly 2x, since a real session also logs a 'session_complete'/'session_unload')
+        // and pollutes the anomaly detector with people who never actually touched the tool.
+        // Everything below uses only the real, completed-usage subset.
+        const realLogs = usageLogs.filter(log => log.metadata?.action !== 'session_start');
+
         const getRangeMs = (r: IntelligenceRange) => {
             switch(r) {
                 case '24h': return 24 * 60 * 60 * 1000;
@@ -1079,13 +1088,13 @@ const AdminDashboard: React.FC = () => {
 
         const rangeMs = getRangeMs(intelRange);
         
-        const filteredLogs = usageLogs.filter(log => {
+        const filteredLogs = realLogs.filter(log => {
             const logTime = new Date(log.timestamp).getTime();
             return (now - logTime) <= rangeMs;
         });
 
         const toolUsage24h: Record<string, number> = {};
-        usageLogs.forEach(log => {
+        realLogs.forEach(log => {
             if ((now - new Date(log.timestamp).getTime()) <= (24 * 60 * 60 * 1000)) {
                 toolUsage24h[log.tool_id] = (toolUsage24h[log.tool_id] || 0) + 1;
             }
@@ -1098,7 +1107,7 @@ const AdminDashboard: React.FC = () => {
         });
 
         let growth = 0;
-        const prevWindowLogs = usageLogs.filter(log => {
+        const prevWindowLogs = realLogs.filter(log => {
             const logTime = new Date(log.timestamp).getTime();
             const diff = now - logTime;
             return diff > rangeMs && diff <= (rangeMs * 2);
@@ -1169,7 +1178,7 @@ const AdminDashboard: React.FC = () => {
             };
         }).filter(ua => ua.totalActions > 0).sort((a, b) => b.totalActions - a.totalActions);
 
-        const recentActivity = usageLogs.slice(0, 10).map(log => {
+        const recentActivity = realLogs.slice(0, 10).map(log => {
             const user = userMap.get(log.user_id);
             return {
                 id: log.id,

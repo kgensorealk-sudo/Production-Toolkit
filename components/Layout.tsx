@@ -28,7 +28,6 @@ import Toast from './Toast';
 import AIAssistantBubble from './AIAssistantBubble';
 import { KeeperAvatar } from './KeeperAvatar';
 import { MessageSquare, Scale } from 'lucide-react';
-import { useToolMetrics } from '../services/usageMetricsService';
 
 interface LayoutProps {
     children: React.ReactNode;
@@ -69,8 +68,9 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
         window.dispatchEvent(new CustomEvent('app:toggle-keeper'));
     };
 
-    // Automatically track tool session frequency, active duration, and dwell time metrics
-    useToolMetrics(currentTool);
+    // Tool usage tracking now happens in NodeAccessController (App.tsx), not here —
+    // Layout mounts before access is checked, so tracking here counted paywalled
+    // visits as real usage. See NodeAccessController for the corrected version.
 
     const profileRef = useRef(profile);
     useEffect(() => {

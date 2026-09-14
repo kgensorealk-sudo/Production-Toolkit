@@ -43,6 +43,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SettingsProvider } from './contexts/SettingsContext';
 import LoadingOverlay from './components/LoadingOverlay';
 import ErrorBoundary from './components/ErrorBoundary';
+import { useToolMetrics } from './services/usageMetricsService';
 
 /**
  * NODE ACCESS CONTROLLER
@@ -63,6 +64,13 @@ const NodeAccessController: React.FC<{
         (profile?.unlocked_tools?.includes(toolId) || profile?.unlocked_tools?.includes('universal'));
 
     const hasAccess = isAdmin || isFree || isSubscribed || isUnlockedViaKey;
+
+    // Only count this as tool usage once access is actually granted — this is the
+    // one branch below that renders the real tool (`return children`). Passing
+    // undefined when access is denied makes useToolMetrics's own effect no-op/clean
+    // up, so someone sitting on the paywall or key-gate screen below never logs as
+    // having used the tool at all.
+    useToolMetrics(hasAccess ? toolId : undefined);
 
     if (hasAccess) return children;
 

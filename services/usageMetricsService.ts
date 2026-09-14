@@ -33,7 +33,6 @@ interface ActiveSessionState {
     lastTick: number;
     isActive: boolean;
     metadata: Record<string, any>;
-    initialLogSent: boolean;
 }
 
 /**
@@ -95,22 +94,14 @@ class UsageMetricsService {
             accumulatedSeconds: 0,
             lastTick: now,
             isActive: typeof document !== 'undefined' ? document.visibilityState === 'visible' : true,
-            metadata,
-            initialLogSent: false
+            metadata
         };
 
-        // Immediately send an entry log so call frequency is captured immediately
-        this.logToolUsage({
-            userId,
-            toolId,
-            durationSeconds: 0,
-            action: 'session_start',
-            metadata: { ...metadata, stage: 'start' }
-        }).then(() => {
-            if (this.activeSession && this.activeSession.toolId === toolId) {
-                this.activeSession.initialLogSent = true;
-            }
-        });
+        // No immediate log here on purpose: logging on mount only measures that a tool
+        // page was opened (e.g. clicked from the dashboard), not that it was actually
+        // used — even a user blocked by a paywall/key gate underneath this page would
+        // count. Real usage is captured by endSession() (real dwell time) below, or by
+        // an explicit trackToolAction() call from the tool's own action button.
 
         // Setup periodic heartbeat every 60s for long sessions
         this.startHeartbeat();
