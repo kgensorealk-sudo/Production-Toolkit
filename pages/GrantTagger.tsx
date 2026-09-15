@@ -6,7 +6,7 @@ import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 import { KeeperAvatar, KeeperState } from '../components/KeeperAvatar';
-import { extractGrantsOffline, sanitizeGrantExtractionResult, ExtractedGrantPair } from '../utils/grantExtractor';
+import { extractGrantsOffline, sanitizeGrantExtractionResult, getSharedNumberWarning, ExtractedGrantPair } from '../utils/grantExtractor';
 
 interface GrantPair {
     sponsor: string;
@@ -104,6 +104,10 @@ const GrantTagger: React.FC = () => {
                             msg: `🐾 Keeper extracted ${sponsors.length} grant sponsor(s) into matrix!`,
                             type: 'success'
                         });
+                        const sharedWarning = getSharedNumberWarning(data.pairs || []);
+                        if (sharedWarning) {
+                            setTimeout(() => setToast({ msg: sharedWarning, type: 'warn' }), 600);
+                        }
                         applied = true;
                     }
                 }
@@ -130,6 +134,10 @@ const GrantTagger: React.FC = () => {
                         msg: `🐾 Keeper extracted ${sponsors.length} grant sponsor(s) into matrix!`,
                         type: 'success'
                     });
+                    const sharedWarning = getSharedNumberWarning(offline.pairs);
+                    if (sharedWarning) {
+                        setTimeout(() => setToast({ msg: sharedWarning, type: 'warn' }), 600);
+                    }
                 } else {
                     setKeeperState('idle');
                     setKeeperMessage(
