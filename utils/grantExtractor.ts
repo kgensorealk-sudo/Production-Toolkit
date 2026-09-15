@@ -16,6 +16,7 @@ Rules:
 - If a sponsor has multiple grant numbers, list them on the same line separated by commas. Only include numbers/codes that are genuinely grant or award identifiers — never include a project title, team name, or descriptive phrase as if it were a grant number, even if it appears in the same parenthetical as a real grant number.
 - Each grant number belongs ONLY to the sponsor it is stated with. Never carry a number over to a sponsor that has none of its own, and never assign the same number to more than one sponsor unless the text explicitly says it funded both.
 - Keep each organization's full name intact as written. Do not split a single name at internal words (e.g. "Japan Society for the Promotion of Science" is ONE sponsor, not "Japan Society" plus "Promotion of Science"), and do not merge two sponsors listed together (e.g. "the Leverhulme Trust and the Royal Society" is TWO separate sponsors).
+- The identifier may be introduced by a label other than "grant number" — e.g. "award ID," "project ID," "project number," "contract number," or "reference number" all serve the same purpose and must be captured as the Grant Number. This is different from a project TITLE (a descriptive name, which is never captured) — a project ID/number is a short alphanumeric code, not a description.
 - If no grant number is stated for a given sponsor, write: No grant number provided
 - Do not infer, assume, or generate missing information. Ignore disclaimers and non-funding statements. If the text states that no specific funding was received, return no sponsors at all.
 
@@ -119,7 +120,7 @@ export function extractGrantsOffline(statement: string): {
   //    "Ministry of Science and Technology" whole while still splitting a list like
   //    "Leverhulme Trust *and the* Royal Society" into two separate sponsors.
   const properNounPattern = /\b[A-Z][A-Za-z0-9]*(?:(?:\s+(?:of|for|in|the|de|des|du|der|von)){1,3}\s+[A-Z][A-Za-z0-9]+|\s+(?:and|&)\s+[A-Z][A-Za-z0-9]+|\s+[A-Z][A-Za-z0-9]+)+\b/g;
-  const orgWordPattern = /(?:Foundation|Institutes?|Council|Agency|Trust|Society|Department|Ministry|Association|Organization|Fund|University|Commission|Center|Centre|Laboratory|Program|Academy|Board|Federation|Union|Health|Science|Research)\b/i;
+  const orgWordPattern = /(?:Foundation|Institutes?|Council|Agency|Trust|Society|Department|Ministry|Association|Organization|Fund|University|Commission|Center|Centre|Laboratory|Program|Academy|Board|Federation|Union|Initiative|Health|Science|Research)\b/i;
   const leadingNoise = /^(?:This|The|Authors?|Study|Work|Research|Financial|Acknowledgement|Funding|Also|Additionally|Furthermore|In|At|By|From|For|We|With|Grant|Grants)\s+/i;
 
   const foundCandidates: Array<{ name: string; index: number; length: number }> = [];
