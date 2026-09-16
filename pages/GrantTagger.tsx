@@ -23,6 +23,7 @@ const GrantTagger: React.FC = () => {
     const [output, setOutput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [toast, setToast] = useState<{ msg: string, type: 'success' | 'warn' | 'error' | 'info' } | null>(null);
+    const [sharedNumberWarning, setSharedNumberWarning] = useState<string | null>(null);
 
     // Keeper State Management
     const [keeperState, setKeeperState] = useState<KeeperState>('idle');
@@ -64,6 +65,7 @@ const GrantTagger: React.FC = () => {
             setKeeperState('idle');
             setKeeperMessage('Paste or type a funding statement into Box 1. I will automatically analyze it and populate the Grant Sponsor and Grant Number into the matrix for you!');
             setDetectedSponsors([]);
+            setSharedNumberWarning(null);
             return;
         }
 
@@ -74,6 +76,7 @@ const GrantTagger: React.FC = () => {
         setIsKeeperAnalyzing(true);
         setKeeperState('thinking');
         setKeeperMessage('*sniff sniff* 🐾 Keeper spotted a funding statement! Analyzing explicit funding bodies and grant numbers...');
+        setSharedNumberWarning(null);
 
         try {
             let applied = false;
@@ -104,10 +107,7 @@ const GrantTagger: React.FC = () => {
                             msg: `🐾 Keeper extracted ${sponsors.length} grant sponsor(s) into matrix!`,
                             type: 'success'
                         });
-                        const sharedWarning = getSharedNumberWarning(data.pairs || []);
-                        if (sharedWarning) {
-                            setTimeout(() => setToast({ msg: sharedWarning, type: 'warn' }), 600);
-                        }
+                        setSharedNumberWarning(getSharedNumberWarning(data.pairs || []));
                         applied = true;
                     }
                 }
@@ -134,10 +134,7 @@ const GrantTagger: React.FC = () => {
                         msg: `🐾 Keeper extracted ${sponsors.length} grant sponsor(s) into matrix!`,
                         type: 'success'
                     });
-                    const sharedWarning = getSharedNumberWarning(offline.pairs);
-                    if (sharedWarning) {
-                        setTimeout(() => setToast({ msg: sharedWarning, type: 'warn' }), 600);
-                    }
+                    setSharedNumberWarning(getSharedNumberWarning(offline.pairs));
                 } else {
                     setKeeperState('idle');
                     setKeeperMessage(
@@ -411,6 +408,16 @@ const GrantTagger: React.FC = () => {
                             <p className="text-xs text-slate-600 mt-1 max-w-2xl font-medium leading-relaxed">
                                 {keeperMessage}
                             </p>
+
+                            {/* Shared Grant Number Warning */}
+                            {sharedNumberWarning && (
+                                <div className="mt-2.5 flex items-start gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200/80 max-w-2xl">
+                                    <span className="shrink-0 mt-px">⚠️</span>
+                                    <p className="text-[11px] text-amber-900 font-medium leading-relaxed">
+                                        {sharedNumberWarning}
+                                    </p>
+                                </div>
+                            )}
 
                             {/* Detected Sponsors Chips */}
                             {detectedSponsors.length > 0 && (
