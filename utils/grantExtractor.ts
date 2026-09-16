@@ -16,9 +16,16 @@ Rules:
 - If a sponsor has multiple grant numbers, list them on the same line separated by commas. Only include numbers/codes that are genuinely grant or award identifiers — never include a project title, team name, or descriptive phrase as if it were a grant number, even if it appears in the same parenthetical as a real grant number.
 - Each grant number belongs ONLY to the sponsor it is stated with. Never carry a number over to a sponsor that has none of its own, and never assign the same number to more than one sponsor unless the text explicitly says it funded both.
 - Keep each organization's full name intact as written. Do not split a single name at internal words (e.g. "Japan Society for the Promotion of Science" is ONE sponsor, not "Japan Society" plus "Promotion of Science"), and do not merge two sponsors listed together (e.g. "the Leverhulme Trust and the Royal Society" is TWO separate sponsors).
-- The identifier may be introduced by a label other than "grant number" — e.g. "award ID," "project ID," "project number," "contract number," or "reference number" all serve the same purpose and must be captured as the Grant Number. This is different from a project TITLE (a descriptive name, which is never captured) — a project ID/number is a short alphanumeric code, not a description.
+- The identifier may be introduced by a label other than "grant number" — e.g. "award ID," "project ID," "project number," "contract number," "reference number," "sub-award," or "sub-grant" all serve the same purpose and must be captured as the Grant Number. This is different from a project TITLE (a descriptive name, which is never captured) — a project ID/number is a short alphanumeric code, not a description.
+- A sub-award or sub-grant number belongs on the SAME sponsor's Grant Number line as any other number already stated for that sponsor (comma-separated) — it is an additional identifier for the same funding relationship, not a new sponsor and not a separate field.
 - If no grant number is stated for a given sponsor, write: No grant number provided
 - Do not infer, assume, or generate missing information. Ignore disclaimers and non-funding statements. If the text states that no specific funding was received, return no sponsors at all.
+
+Before writing your final answer, verify each sponsor–number pairing you are about to give, in a few brief lines:
+1. Is this number stated explicitly for this specific sponsor — not just physically nearby in the text, and not borrowed from a different sponsor mentioned elsewhere in the passage?
+2. If you are about to give the SAME number to more than one sponsor, does the text explicitly say the funding is joint, shared, or co-funded? If it does not say that, each sponsor must get only its own stated number (or "No grant number provided" if it has none).
+3. Is each organization's full name kept intact — not split into two entries at an internal word, and not merged with a different organization that happens to be listed nearby?
+Keep this check short. After it, give your final answer using ONLY the exact format below, with no other text following it.
 
 Output Format (strictly follow):
 Grant Sponsor:
