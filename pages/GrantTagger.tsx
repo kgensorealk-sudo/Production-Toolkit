@@ -28,7 +28,7 @@ const GrantTagger: React.FC = () => {
     // Keeper State Management
     const [keeperState, setKeeperState] = useState<KeeperState>('idle');
     const [keeperMessage, setKeeperMessage] = useState(
-        'Paste or type a funding statement into Box 1, then click Analyze when you're ready — I'll populate the Grant Sponsor and Grant Number into the matrix for you!'
+        'Paste or type a funding statement into Box 1, then click Analyze when ready. I will populate the Grant Sponsor and Grant Number into the matrix for you!'
     );
     const [isKeeperAnalyzing, setIsKeeperAnalyzing] = useState(false);
     const [lastAnalyzedText, setLastAnalyzedText] = useState('');
@@ -63,7 +63,7 @@ const GrantTagger: React.FC = () => {
         const trimmed = (inputText || '').trim();
         if (!trimmed) {
             setKeeperState('idle');
-            setKeeperMessage('Paste or type a funding statement into Box 1, then click Analyze when you're ready — I'll populate the Grant Sponsor and Grant Number into the matrix for you!');
+            setKeeperMessage('Paste or type a funding statement into Box 1, then click Analyze when ready. I will populate the Grant Sponsor and Grant Number into the matrix for you!');
             setDetectedSponsors([]);
             setSharedNumberWarning(null);
             return;
@@ -159,7 +159,7 @@ const GrantTagger: React.FC = () => {
         if (trimmed.length < 15) {
             if (!trimmed) {
                 setKeeperState('idle');
-                setKeeperMessage('Paste or type a funding statement into Box 1, then click Analyze when you're ready — I'll populate the Grant Sponsor and Grant Number into the matrix for you!');
+                setKeeperMessage('Paste or type a funding statement into Box 1, then click Analyze when ready. I will populate the Grant Sponsor and Grant Number into the matrix for you!');
                 setDetectedSponsors([]);
                 setModelBadge('');
             }
@@ -363,7 +363,7 @@ const GrantTagger: React.FC = () => {
             setOutput('');
             setDetectedSponsors([]);
             setKeeperState('idle');
-            setKeeperMessage('Paste or type a funding statement into Box 1, then click Analyze when you're ready — I'll populate the Grant Sponsor and Grant Number into the matrix for you!');
+            setKeeperMessage('Paste or type a funding statement into Box 1, then click Analyze when ready. I will populate the Grant Sponsor and Grant Number into the matrix for you!');
         }
     }, [statement, grantList]);
 
@@ -496,7 +496,7 @@ const GrantTagger: React.FC = () => {
                                         setGrantList(''); 
                                         setDetectedSponsors([]); 
                                         setKeeperState('idle'); 
-                                        setKeeperMessage('Paste or type a funding statement into Box 1, then click Analyze when you're ready — I'll populate the Grant Sponsor and Grant Number into the matrix for you!'); 
+                                        setKeeperMessage('Paste or type a funding statement into Box 1, then click Analyze when ready. I will populate the Grant Sponsor and Grant Number into the matrix for you!'); 
                                     }} 
                                     className="text-[10px] font-bold text-slate-400 hover:text-rose-500 uppercase transition-colors cursor-pointer"
                                 >
@@ -509,7 +509,7 @@ const GrantTagger: React.FC = () => {
                             onChange={e => setStatement(e.target.value)} 
                             onPaste={handlePaste}
                             className="flex-grow p-8 font-mono text-sm border-0 focus:ring-0 resize-none bg-transparent leading-relaxed" 
-                            placeholder="Paste the raw funding paragraph from the manuscript (Keeper will automatically analyze it)..."
+                            placeholder="Paste the raw funding paragraph from the manuscript, then click Analyze..."
                             spellCheck={false}
                         />
                     </div>
