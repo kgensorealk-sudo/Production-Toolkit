@@ -28,14 +28,14 @@ const GrantTagger: React.FC = () => {
     // Keeper State Management
     const [keeperState, setKeeperState] = useState<KeeperState>('idle');
     const [keeperMessage, setKeeperMessage] = useState(
-        'Paste or type a funding statement into Box 1. I will automatically analyze it and populate the Grant Sponsor and Grant Number into the matrix for you!'
+        'Paste or type a funding statement into Box 1, then click Analyze when you're ready — I'll populate the Grant Sponsor and Grant Number into the matrix for you!'
     );
     const [isKeeperAnalyzing, setIsKeeperAnalyzing] = useState(false);
     const [lastAnalyzedText, setLastAnalyzedText] = useState('');
     const [detectedSponsors, setDetectedSponsors] = useState<string[]>([]);
     const [modelBadge, setModelBadge] = useState<string>('');
     const [matrixHighlight, setMatrixHighlight] = useState(false);
-    const [autoAnalyzeEnabled, setAutoAnalyzeEnabled] = useState(true);
+    const [autoAnalyzeEnabled, setAutoAnalyzeEnabled] = useState(false);
 
     const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -63,7 +63,7 @@ const GrantTagger: React.FC = () => {
         const trimmed = (inputText || '').trim();
         if (!trimmed) {
             setKeeperState('idle');
-            setKeeperMessage('Paste or type a funding statement into Box 1. I will automatically analyze it and populate the Grant Sponsor and Grant Number into the matrix for you!');
+            setKeeperMessage('Paste or type a funding statement into Box 1, then click Analyze when you're ready — I'll populate the Grant Sponsor and Grant Number into the matrix for you!');
             setDetectedSponsors([]);
             setSharedNumberWarning(null);
             return;
@@ -159,7 +159,7 @@ const GrantTagger: React.FC = () => {
         if (trimmed.length < 15) {
             if (!trimmed) {
                 setKeeperState('idle');
-                setKeeperMessage('Paste or type a funding statement into Box 1. I will automatically analyze it and populate the Grant Sponsor and Grant Number into the matrix for you!');
+                setKeeperMessage('Paste or type a funding statement into Box 1, then click Analyze when you're ready — I'll populate the Grant Sponsor and Grant Number into the matrix for you!');
                 setDetectedSponsors([]);
                 setModelBadge('');
             }
@@ -183,8 +183,10 @@ const GrantTagger: React.FC = () => {
         };
     }, [statement, autoAnalyzeEnabled, lastAnalyzedText]);
 
-    // Handle immediate analysis on paste
+    // Handle immediate analysis on paste (only when auto-analyze is explicitly enabled —
+    // otherwise pasting just fills the box, same as typing, and the user clicks Analyze)
     const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+        if (!autoAnalyzeEnabled) return;
         const pastedText = e.clipboardData.getData('text');
         if (pastedText && pastedText.trim().length >= 15) {
             setTimeout(() => {
@@ -361,7 +363,7 @@ const GrantTagger: React.FC = () => {
             setOutput('');
             setDetectedSponsors([]);
             setKeeperState('idle');
-            setKeeperMessage('Paste or type a funding statement into Box 1. I will automatically analyze it and populate your Grant Entity Matrix!');
+            setKeeperMessage('Paste or type a funding statement into Box 1, then click Analyze when you're ready — I'll populate the Grant Sponsor and Grant Number into the matrix for you!');
         }
     }, [statement, grantList]);
 
@@ -494,7 +496,7 @@ const GrantTagger: React.FC = () => {
                                         setGrantList(''); 
                                         setDetectedSponsors([]); 
                                         setKeeperState('idle'); 
-                                        setKeeperMessage('Paste or type a funding statement into Box 1. I will automatically analyze it and populate your Grant Entity Matrix!'); 
+                                        setKeeperMessage('Paste or type a funding statement into Box 1, then click Analyze when you're ready — I'll populate the Grant Sponsor and Grant Number into the matrix for you!'); 
                                     }} 
                                     className="text-[10px] font-bold text-slate-400 hover:text-rose-500 uppercase transition-colors cursor-pointer"
                                 >
