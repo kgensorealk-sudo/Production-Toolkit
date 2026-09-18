@@ -154,6 +154,18 @@ function pickBestOfflineIntent(
 }
 
 /**
+ * Whole-word match instead of `.includes()`. Short/generic keywords used bare
+ * (diff, credit, table, sub) were matching inside unrelated words —
+ * "difficult" tripped the diff rule, "discredit"/"accreditation" tripped
+ * credit, "acceptable"/"adjustable" tripped table, "submission"/"subject"
+ * tripped the subscription check. `pattern` is a raw regex source (no need
+ * to escape `?`/`|` for simple alternatives like 'plans?').
+ */
+function matchesWord(text: string, pattern: string): boolean {
+  return new RegExp(`\\b(?:${pattern})\\b`, 'i').test(text);
+}
+
+/**
  * All offline intents, highest-specificity-wins. Each rule's `weight` reflects
  * roughly how many distinct conditions must ALL be true, and whether it requires
  * an exact phrase / real structural evidence rather than a single loose keyword:
@@ -554,8 +566,14 @@ Production Toolkit Pro includes a full suite of 18 established editorial modules
   },
   {
     id: 'grant-tool',
-    weight: 4,
-    match: ({ lower }) => lower.includes('grant') || lower.includes('sponsor') || lower.includes('funding'),
+    weight: 7,
+    match: ({ lower }) =>
+      lower.includes('grant tagger') ||
+      lower.includes('ce:grant') ||
+      (
+        (lower.includes('grant') || lower.includes('sponsor') || lower.includes('funding')) &&
+        (lower.includes('tag') || lower.includes('wrap') || lower.includes('identify') || lower.includes('convert') || lower.includes('mark up') || lower.includes('xml'))
+      ),
     respond: () => `Use **[Open Grant Tagger](#/grantTagger)** to identify funding agencies and grant numbers and wrap them in \`<ce:grant-sponsor>\` and \`<ce:grant-number>\` XML tags.`,
   },
   {
@@ -937,8 +955,9 @@ CRITICAL DIRECTIVES:
    - Every query must begin exactly with: TO THE JM:
    - Every query involving an unresolved production issue must end exactly with: "The file is in pending status until the matter is resolved. Thank you."
    - Use "the text body" instead of "the manuscript" for uncited items.
-   - If the user's input describes MULTIPLE distinct issues, MERGE them into ONE cohesive query. Do NOT repeat "TO THE JM:" or the pending clause per issue — use a single opening and a single closing clause, and label each distinct concern inline as (a), (b), (c), etc. within the same paragraph. Do NOT use line breaks or bullet points inside the query body; it must read as one continuous block of text.
-   - Do NOT use generic placeholder text like "[State the specific production issue here]". Always write the actual, specific query tailored to what the user described. If a concrete detail (a name, figure number, reference number) is missing, use a clearly bracketed placeholder like "[Figure X]".
+   - If the user's input describes MULTIPLE distinct issues, MERGE them into ONE cohesive query. Do NOT repeat "TO THE JM:" or the pending clause per issue — use a single opening and a single closing clause, and label each distinct concern inline within the same paragraph. Do NOT use line breaks or bullet points inside the query body; it must read as one continuous block of text.
+   - ITEM LABELING VS. FIGURE PANEL LABELS (CRITICAL): By default, label each distinct merged concern as (1), (2), (3), etc. — NOT (a), (b), (c). Numbers are the safe default because any one of the merged items may itself discuss a figure with lettered panels (e.g., "panel (c)"); if the outer item list ALSO uses letters, "(c)" becomes ambiguous — item (c), or panel (c)? Only use letters for the outer item list when you are certain none of the merged items mention a lettered panel anywhere in the query. NEVER rename or alter a panel's actual label to dodge this collision — a panel labeled "(c)" in the real artwork must always be written as "panel (c)" exactly as it appears in the image; only the outer item numbering changes, never the panel reference itself.
+   - Do NOT use generic placeholder text like "[State the specific production issue here]". Always write the actual, specific query tailored to what the user described. If a concrete detail (a name, figure number, reference number, or supplementary file number such as mmc1/mmc2) is missing, use a clearly bracketed placeholder like "[Figure X]" or "[mmc#]". If the user describes a supplementary material replacement or correction without stating which mmc number it is, ask them for it before finalizing the query — a JM cannot act on a supplementary file request without that identifier.
 
    TONE SELECTION:
    - Direct/Strict — for technical faults, unusable files, missing required metadata. Use phrasing like "Kindly provide", "Unusable due to...", "The file is unreadable", "Please resupply in acceptable format".
