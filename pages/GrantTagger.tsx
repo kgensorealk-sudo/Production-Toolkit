@@ -7,6 +7,8 @@ import LoadingOverlay from '../components/LoadingOverlay';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 import { KeeperAvatar, KeeperState } from '../components/KeeperAvatar';
 import { extractGrantsOffline, sanitizeGrantExtractionResult, getSharedNumberWarning, ExtractedGrantPair } from '../utils/grantExtractor';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../supabaseClient';
 
 interface GrantPair {
     sponsor: string;
@@ -18,6 +20,7 @@ interface GrantPair {
 const GrantTagger: React.FC = () => {
     const location = useLocation();
     const navigate = useNavigate();
+    const { user } = useAuth();
     const [statement, setStatement] = useState('');
     const [grantList, setGrantList] = useState('');
     const [output, setOutput] = useState('');
@@ -36,6 +39,15 @@ const GrantTagger: React.FC = () => {
     const [modelBadge, setModelBadge] = useState<string>('');
     const [matrixHighlight, setMatrixHighlight] = useState(false);
     const [autoAnalyzeEnabled, setAutoAnalyzeEnabled] = useState(false);
+
+    // Accuracy feedback tracking — lets real usage measure Grant Tagger's actual
+    // accuracy over time (online vs. offline), instead of guessing at a percentage.
+    const [lastResultPairs, setLastResultPairs] = useState<ExtractedGrantPair[]>([]);
+    const [lastModelUsedRaw, setLastModelUsedRaw] = useState<string>('');
+    const [feedbackGiven, setFeedbackGiven] = useState(false);
+    const [showCorrectionNote, setShowCorrectionNote] = useState(false);
+    const [correctionNoteText, setCorrectionNoteText] = useState('');
+    const [submittingFeedback, setSubmittingFeedback] = useState(false);
 
     const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -96,6 +108,11 @@ const GrantTagger: React.FC = () => {
                         setLastAnalyzedText(trimmed);
                         const sponsors = data.pairs?.map((p: ExtractedGrantPair) => p.sponsor) || [];
                         setDetectedSponsors(sponsors);
+                        setLastResultPairs(data.pairs || []);
+                        setLastModelUsedRaw(data.modelUsed || 'unknown-ai-model');
+                        setFeedbackGiven(false);
+                        setShowCorrectionNote(false);
+                        setCorrectionNoteText('');
                         setModelBadge(data.modelUsed || 'Gemini Flash');
                         setKeeperState('success');
                         setKeeperMessage(
@@ -123,6 +140,11 @@ const GrantTagger: React.FC = () => {
                     setLastAnalyzedText(trimmed);
                     const sponsors = offline.pairs.map(p => p.sponsor);
                     setDetectedSponsors(sponsors);
+                    setLastResultPairs(offline.pairs);
+                    setLastModelUsedRaw('offline-keeper-client');
+                    setFeedbackGiven(false);
+                    setShowCorrectionNote(false);
+                    setCorrectionNoteText('');
                     setModelBadge('Offline Keeper Engine');
                     setKeeperState('success');
                     setKeeperMessage(
@@ -192,6 +214,39 @@ const GrantTagger: React.FC = () => {
             setTimeout(() => {
                 runKeeperAnalysis(pastedText.trim(), true);
             }, 100);
+        }
+    };
+
+    /**
+     * Submits real accuracy feedback on the last extraction result. This is the only
+     * way to ever measure Grant Tagger's real-world accuracy — there is no ground
+     * truth available anywhere else, so this data is genuinely valuable even from a
+     * small number of responses, and becomes more meaningful the more it accumulates.
+     */
+    const submitGrantFeedback = async (isCorrect: boolean, note?: string) => {
+        if (!user?.id || lastResultPairs.length === 0 || submittingFeedback) return;
+        setSubmittingFeedback(true);
+        try {
+            const { error } = await supabase.from('grant_extraction_feedback').insert({
+                user_id: user.id,
+                model_used: lastModelUsedRaw || 'unknown',
+                statement_excerpt: lastAnalyzedText.slice(0, 2000),
+                extracted_pairs: lastResultPairs,
+                is_correct: isCorrect,
+                correction_note: note || null,
+            });
+            if (error) throw error;
+            setFeedbackGiven(true);
+            setShowCorrectionNote(false);
+            setToast({
+                msg: isCorrect ? '🐾 Thanks! Marked as correct.' : '🐾 Thanks for the correction — this helps Keeper improve.',
+                type: 'success'
+            });
+        } catch (err) {
+            console.error('[GrantTagger] Failed to submit feedback:', err);
+            setToast({ msg: 'Could not save feedback. Please try again.', type: 'error' });
+        } finally {
+            setSubmittingFeedback(false);
         }
     };
 
@@ -432,6 +487,57 @@ const GrantTagger: React.FC = () => {
                                         </span>
                                     ))}
                                 </div>
+                            )}
+
+                            {/* Accuracy Feedback — the only real signal on whether Grant Tagger is
+                                actually getting this right in production, online or offline. */}
+                            {detectedSponsors.length > 0 && (
+                                feedbackGiven ? (
+                                    <p className="mt-2.5 text-[11px] text-emerald-700 font-semibold flex items-center gap-1.5">
+                                        <Check className="w-3 h-3" /> Thanks for confirming — this helps track Keeper's real accuracy.
+                                    </p>
+                                ) : (
+                                    <div className="mt-2.5 max-w-2xl">
+                                        <div className="flex items-center gap-2 text-[11px]">
+                                            <span className="text-slate-500 font-medium">Was this correct?</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => submitGrantFeedback(true)}
+                                                disabled={submittingFeedback}
+                                                className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold border border-emerald-200/70 transition-colors cursor-pointer disabled:opacity-50"
+                                            >
+                                                👍 Correct
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowCorrectionNote(true)}
+                                                disabled={submittingFeedback}
+                                                className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold border border-rose-200/70 transition-colors cursor-pointer disabled:opacity-50"
+                                            >
+                                                👎 Not quite
+                                            </button>
+                                        </div>
+                                        {showCorrectionNote && (
+                                            <div className="mt-1.5 flex items-start gap-1.5">
+                                                <input
+                                                    type="text"
+                                                    value={correctionNoteText}
+                                                    onChange={(e) => setCorrectionNoteText(e.target.value)}
+                                                    placeholder="Optional: what was wrong? (e.g. wrong sponsor, merged numbers)"
+                                                    className="flex-grow px-2.5 py-1.5 rounded-lg border border-slate-200 text-[11px] outline-hidden focus:border-rose-400"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => submitGrantFeedback(false, correctionNoteText.trim() || undefined)}
+                                                    disabled={submittingFeedback}
+                                                    className="px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold transition-colors cursor-pointer disabled:opacity-50 shrink-0"
+                                                >
+                                                    Submit
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )
                             )}
                         </div>
                     </div>
