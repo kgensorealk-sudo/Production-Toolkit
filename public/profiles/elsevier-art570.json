@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "name": "Elsevier article 5.7.0",
+  "source": "art570.dtd / common170.ent",
+  "systemId": "art570.dtd",
+  "elements": {
+    "reference": "ce:bib-reference",
+    "label": "ce:label",
+    "singleCitation": "ce:cross-ref",
+    "groupedCitation": "ce:cross-refs",
+    "otherReference": "ce:other-ref"
+  },
+  "attributes": {
+    "id": "id",
+    "targets": "refid"
+  },
+  "rules": {
+    "labelRequired": true,
+    "labelFirst": true
+  }
+}

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE article SYSTEM "custom.dtd">
+<article>
+  <paragraph>Single: <citation targets="r1">8</citation>. Group: <citations targets="r1 r2">8,9</citations>.</paragraph>
+  <references>
+    <reference id="r1"><label>8</label><other-reference>First example reference.</other-reference></reference>
+    <reference id="r2"><label>9</label><other-reference>Second example reference.</other-reference></reference>
+  </references>
+</article>

@@ -23,18 +23,17 @@ function useSessionStorage<T>(key: string, initialValue: T): [T, (value: T | ((p
     const [storedValue, setStoredValue] = useState<T>(readValue);
 
     const setValue = useCallback((value: T | ((prev: T) => T)) => {
+        setStoredValue(value);
+    }, []);
+
+    useEffect(() => {
         try {
-            setStoredValue((prev) => {
-                const valueToStore = value instanceof Function ? value(prev) : value;
-                if (typeof window !== 'undefined') {
-                    window.sessionStorage.setItem(key, JSON.stringify(valueToStore));
-                }
-                return valueToStore;
-            });
+            if (typeof window !== 'undefined') window.sessionStorage.setItem(key, JSON.stringify(storedValue));
         } catch (error) {
+            // Storage quota failures must never prevent an in-memory edit.
             console.warn(`Error setting sessionStorage key “${key}”:`, error);
         }
-    }, [key]);
+    }, [key, storedValue]);
 
     return [storedValue, setValue];
 }

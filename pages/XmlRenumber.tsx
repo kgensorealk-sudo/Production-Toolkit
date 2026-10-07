@@ -10,6 +10,7 @@ import LoadingOverlay from '../components/LoadingOverlay';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 import useLocalStorage from '../hooks/useLocalStorage';
 import useSessionStorage from '../hooks/useSessionStorage';
+import { ELSEVIER_PROFILE, parseRenumberProfile, renumberWithProfile, RenumberProfile, RenumberIssue } from '../utils/xmlRenumberProfile';
 
 interface ReferenceChange {
     id: string;
@@ -17,6 +18,8 @@ interface ReferenceChange {
     newLabel: string;
     changed: boolean;
     isOtherRef: boolean;
+    missingLabel?: boolean;
+    issue?: string;
 }
 
 const XmlRenumber: React.FC = () => {
@@ -25,8 +28,21 @@ const XmlRenumber: React.FC = () => {
     const [input, setInput] = useSessionStorage<string>('xml_renumber_input', '');
     const [output, setOutput] = useSessionStorage<string>('xml_renumber_output', '');
     const [lastProcessedInput, setLastProcessedInput] = useSessionStorage<string>('xml_renumber_last_processed_input', '');
-    const [prefix, setPrefix] = useState('[');
-    const [suffix, setSuffix] = useState(']');
+    const [prefix, setPrefix] = useSessionStorage('xml_renumber_prefix', '[');
+    const [suffix, setSuffix] = useSessionStorage('xml_renumber_suffix', ']');
+    const [storedProfile, setActiveProfile] = useSessionStorage<RenumberProfile>('xml_renumber_profile', ELSEVIER_PROFILE);
+    const activeProfile = React.useMemo(() => {
+        try { return parseRenumberProfile(JSON.stringify(storedProfile)); }
+        catch { return ELSEVIER_PROFILE; }
+    }, [storedProfile]);
+    const [profileIssues, setProfileIssues] = useSessionStorage<RenumberIssue[]>('xml_renumber_profile_issues', []);
+    const [processedSettings, setProcessedSettings] = useSessionStorage('xml_renumber_processed_settings', '');
+    const currentSettings = JSON.stringify({ prefix, suffix, activeProfile });
+    const processingRef = useRef(false);
+    const operationRef = useRef(0);
+    const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    useEffect(() => () => { operationRef.current++; if (timerRef.current) clearTimeout(timerRef.current); }, []);
+    const profileInputRef = useRef<HTMLInputElement>(null);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [suggestions, setSuggestions] = useState<SmartSuggestion[]>([]);
@@ -38,6 +54,75 @@ const XmlRenumber: React.FC = () => {
     const [currentChangeIndex, setCurrentChangeIndex] = useState(0);
     const [totalChanges, setTotalChanges] = useState(0);
     const diffContainerRef = useRef<HTMLDivElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const latestInputRef = useRef(input);
+    latestInputRef.current = input;
+
+    useEffect(() => {
+        if (!['raw', 'diff', 'report'].includes(activeTab)) setActiveTab('raw');
+    }, [activeTab, setActiveTab]);
+
+    const cancelPending = () => {
+        operationRef.current++;
+        if (timerRef.current) clearTimeout(timerRef.current);
+        processingRef.current = false;
+        setIsLoading(false);
+    };
+
+    const loadInput = (xml: string, message: string) => {
+        cancelPending();
+        setProcessedSettings('');
+        setSearchQuery('');
+        setFilterChangedOnly(false);
+        setFilterOtherRefOnly(false);
+        setProfileIssues([]);
+        setInput(xml);
+        setOutput('');
+        setLastProcessedInput('');
+        setReportData([]);
+        setExtractedRefs([]);
+        setSuggestions([]);
+        setDiffElements(null);
+        setTotalChanges(0);
+        setCurrentChangeIndex(0);
+        setActiveTab('raw');
+        setToast({ msg: message, type: 'success' });
+    };
+
+    const handleLoadFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+        const operation = ++operationRef.current;
+        try {
+            const xml = await file.text();
+            if (operation !== operationRef.current) return;
+            if (!xml.trim()) {
+                setToast({ msg: 'The selected file is empty.', type: 'warn' });
+                return;
+            }
+            loadInput(xml, `Loaded ${file.name}. Click Process XML to check it.`);
+        } catch {
+            if (operation !== operationRef.current) return;
+            setToast({ msg: 'Could not read the selected file.', type: 'error' });
+        }
+    };
+
+    const handleLoadProfile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+        const operation = ++operationRef.current;
+        try {
+            const profile = parseRenumberProfile(await file.text());
+            if (operation !== operationRef.current) return;
+            setActiveProfile(profile);
+            loadInput(latestInputRef.current, `Profile loaded: ${profile.name}. Process XML to apply its rules.`);
+        } catch (error) {
+            if (operation !== operationRef.current) return;
+            setToast({ msg: error instanceof Error ? error.message : 'Could not load profile.', type: 'error' });
+        }
+    };
     
     const [searchQuery, setSearchQuery] = useState('');
     const [filterChangedOnly, setFilterChangedOnly] = useState(false);
@@ -45,7 +130,7 @@ const XmlRenumber: React.FC = () => {
 
     useEffect(() => {
         if (location.state?.transferredXml) {
-            setInput(location.state.transferredXml);
+            loadInput(location.state.transferredXml, 'Transferred XML loaded.');
             setToast({ 
                 msg: `Data successfully imported from ${location.state.sourceTool || 'previous tool'}.`, 
                 type: 'success' 
@@ -92,38 +177,25 @@ const XmlRenumber: React.FC = () => {
         }
     };
 
-    const copyRichText = (htmlContent: string, isBatch: boolean = false) => {
+    const copyOutput = async () => {
         try {
-            let plainText = htmlContent.replace(/<[^>]+>/g, '');
-            plainText = plainText
-                .replace(/&amp;/g, '&')
-                .replace(/&lt;/g, '<')
-                .replace(/&gt;/g, '>')
-                .replace(/&nbsp;/g, ' ');
+            await navigator.clipboard.writeText(output);
+            setToast({ msg: 'Copied output!', type: 'success' });
+        } catch { setToast({ msg: 'Clipboard access failed. Select and copy the output manually.', type: 'error' }); }
+    };
 
-            const finalHtml = isBatch 
-                ? htmlContent 
-                : `<span>${htmlContent}</span>`;
-            
-            const htmlBlob = new Blob([finalHtml], { type: 'text/html' });
-            const textBlob = new Blob([plainText], { type: 'text/plain' });
-            
-            if (typeof ClipboardItem !== 'undefined') {
-                const data = [new ClipboardItem({ 
-                    "text/html": htmlBlob, 
-                    "text/plain": textBlob 
-                })];
-                navigator.clipboard.write(data).then(() => {
-                    setToast({ msg: 'Copied with formatting!', type: 'success' });
-                });
-            } else {
-                navigator.clipboard.writeText(plainText).then(() => {
-                    setToast({ msg: 'Copied plain text (Browser limit)', type: 'warn' });
-                });
-            }
-        } catch (err) {
-            navigator.clipboard.writeText(htmlContent);
-            setToast({ msg: 'Copied raw HTML (Rich text failed)', type: 'warn' });
+    const copyRichText = async (htmlContent: string, isBatch: boolean = false) => {
+        const plainText = htmlContent.replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&');
+        try {
+            if (typeof ClipboardItem === 'undefined') throw new Error('Rich clipboard unavailable');
+            await navigator.clipboard.write([new ClipboardItem({
+                'text/html': new Blob([isBatch ? htmlContent : '<span>' + htmlContent + '</span>'], { type: 'text/html' }),
+                'text/plain': new Blob([plainText], { type: 'text/plain' })
+            })]);
+            setToast({ msg: 'Copied with formatting!', type: 'success' });
+        } catch {
+            try { await navigator.clipboard.writeText(plainText); setToast({ msg: 'Copied plain text.', type: 'warn' }); }
+            catch { setToast({ msg: 'Clipboard access failed.', type: 'error' }); }
         }
     };
 
@@ -159,7 +231,8 @@ const XmlRenumber: React.FC = () => {
         });
 
         if (activeClass) currentLine += '</span>';
-        lines.push(currentLine);
+        const visibleText = diffParts.filter(p => isLeft ? !p.added : !p.removed).map(p => p.value).join('');
+        if (visibleText && !visibleText.endsWith('\n')) lines.push(currentLine);
         return lines;
     };
 
@@ -262,10 +335,10 @@ const XmlRenumber: React.FC = () => {
     useEffect(() => {
         // Only generate diff if the user is actually looking at the diff tab
         // and we have content to diff. This prevents UI freezes on large files.
-        if (activeTab === 'diff' && input && output && !diffElements) {
-            generateDiff(input, output);
+        if (activeTab === 'diff' && lastProcessedInput && output && !diffElements) {
+            generateDiff(lastProcessedInput, output);
         }
-    }, [input, output, diffElements, generateDiff, activeTab]);
+    }, [lastProcessedInput, output, diffElements, generateDiff, activeTab]);
 
     const scrollToChange = (direction: 'next' | 'prev') => {
         if (!diffContainerRef.current || totalChanges === 0) return;
@@ -291,101 +364,33 @@ const XmlRenumber: React.FC = () => {
         activeRows.forEach(row => {
             row.classList.add('bg-indigo-50/50', 'ring-1', 'ring-indigo-200', 'ring-inset', 'z-10', 'relative');
         });
-    }, [currentChangeIndex]);
+    }, [currentChangeIndex, diffElements, activeTab]);
 
     const renumber = () => {
+        if (processingRef.current) return;
         if (!input.trim()) {
             setToast({ msg: 'Please paste input text first.', type: 'warn' });
             return;
         }
 
+        processingRef.current = true;
+        const operation = ++operationRef.current;
         setIsLoading(true);
+        setOutput(''); setReportData([]); setExtractedRefs([]); setProfileIssues([]); setSuggestions([]); setDiffElements(null); setTotalChanges(0); setCurrentChangeIndex(0);
 
-        setTimeout(() => {
+        timerRef.current = setTimeout(() => {
+            if (operation !== operationRef.current) return;
             try {
-                const otherRefIds = new Set<string>();
-                const fullRefRegexScan = /<ce:bib-reference\b[^>]*?\bid="([^"]+)"[^>]*>([\s\S]*?)<\/ce:bib-reference>/g;
-                let m;
-                while ((m = fullRefRegexScan.exec(input)) !== null) {
-                    if (m[2].indexOf('<ce:other-ref') !== -1) {
-                        otherRefIds.add(m[1]);
-                    }
-                }
-
-                const bibRefRegex = /(<ce:bib-reference\b[^>]*?\bid="([^"]+)"[^>]*>[\s\S]*?)<ce:label\b[^>]*>([\s\S]*?)<\/ce:label>/g;
-                const singleCrossRefRegex = /(?:\[\s*)?(<ce:cross-ref\b[^>]*?\brefid="([^"]+)"[^>]*?>)[\s\S]*?<\/ce:cross-ref>(?:\s*\])?/g;
-                const rangeCrossRefRegex = /(?:\[\s*)?(<ce:cross-refs\b[^>]*?\brefid="([^"]+)"[^>]*?>)[\s\S]*?<\/ce:cross-refs>(?:\s*\])?/g;
-
-                let counter = 1;
-                let bibMatchCount = 0;
-                const referenceMap: Record<string, number> = {}; 
-                const changes: ReferenceChange[] = [];
-
-                let renumberedText = input.replace(bibRefRegex, (match, prefixGroup, uniqueId, originalLabelContent) => {
-                    bibMatchCount++;
-                    const newNumber = counter;
-                    const newLabel = `${prefix}${newNumber}${suffix}`;
-                    const cleanOld = originalLabelContent.trim();
-                    const isOther = otherRefIds.has(uniqueId);
-                    
-                    changes.push({
-                        id: uniqueId,
-                        oldLabel: cleanOld,
-                        newLabel: newLabel,
-                        changed: cleanOld !== newLabel,
-                        isOtherRef: isOther
-                    });
-
-                    referenceMap[uniqueId] = newNumber;
-                    const newTag = `<ce:label>${newLabel}</ce:label>`;
-                    counter++;
-                    return `${prefixGroup}${newTag}`;
-                });
-
-                if (bibMatchCount === 0) {
-                    setToast({ msg: 'No <ce:label> tags found.', type: 'error' });
-                    setIsLoading(false);
+                const result = renumberWithProfile(input, activeProfile, prefix, suffix);
+                const renumberedText = result.output;
+                const changes = result.changes;
+                const bibMatchCount = result.processed;
+                const missingLabelCount = result.missingLabelCount;
+                if (changes.length === 0 && result.issues.length === 0) {
+                    setToast({ msg: 'No references match the selected profile.', type: 'error' });
                     return;
                 }
-
-                renumberedText = renumberedText.replace(singleCrossRefRegex, (match, openTag, refId) => {
-                    const newNumber = referenceMap[refId];
-                    if (newNumber === undefined) return match; 
-                    return `${openTag}${prefix}${newNumber}${suffix}</ce:cross-ref>`;
-                });
-
-                const collapseRanges = (numbers: number[]) => {
-                    if (numbers.length === 0) return '';
-                    const sorted = [...new Set(numbers)].sort((a, b) => a - b);
-                    const ranges: string[] = [];
-                    
-                    let i = 0;
-                    while (i < sorted.length) {
-                        let start = sorted[i];
-                        let end = start;
-                        while (i + 1 < sorted.length && sorted[i + 1] === end + 1) {
-                            end = sorted[i + 1];
-                            i++;
-                        }
-                        if (start === end) {
-                            ranges.push(start.toString());
-                        } else if (end - start === 1) {
-                            ranges.push(start.toString());
-                            ranges.push(end.toString());
-                        } else {
-                            ranges.push(`${start}–${end}`);
-                        }
-                        i++;
-                    }
-                    return ranges.join(',');
-                };
-
-                renumberedText = renumberedText.replace(rangeCrossRefRegex, (match, openTag, refIdsString) => {
-                    const refIds = refIdsString.split(/\s+/).filter((id: string) => id.trim() !== '');
-                    const uniqueNumbers = [...new Set(refIds.map((id: string) => referenceMap[id]).filter((num: number) => num !== undefined))];
-                    if (uniqueNumbers.length === 0) return match; 
-                    return `${openTag}${prefix}${collapseRanges(uniqueNumbers as number[])}${suffix}</ce:cross-refs>`;
-                });
+                setProfileIssues(result.issues);
 
                 const extracted: string[] = [];
                 const fullRefRegexExtract = /<ce:bib-reference\b[^>]*?\bid="([^"]+)"[^>]*>([\s\S]*?)<\/ce:bib-reference>/g;
@@ -418,6 +423,7 @@ const XmlRenumber: React.FC = () => {
                 setExtractedRefs(extracted);
                 setOutput(renumberedText);
                 setLastProcessedInput(input);
+                setProcessedSettings(currentSettings);
                 setReportData(changes);
                 setDiffElements(null); // Force regeneration when user switches to diff tab
                 
@@ -464,10 +470,8 @@ const XmlRenumber: React.FC = () => {
                 }
 
                 // 4. Uncited Ref Cleaner
-                const bibRefIds = Array.from(renumberedText.matchAll(/<ce:bib-reference\b[^>]*?\bid="([^"]+)"/g)).map(m => m[1]);
-                if (bibRefIds.length > 0) {
-                    const crossRefIds = new Set(Array.from(renumberedText.matchAll(/\brefid="([^"]+)"/g)).map(m => m[1]));
-                    const uncited = bibRefIds.filter(id => !crossRefIds.has(id));
+                if (changes.length > 0) {
+                    const uncited = result.uncitedIds;
                     if (uncited.length > 0) {
                         newSuggestions.push({
                             id: 'uncited-cleaner',
@@ -505,18 +509,30 @@ const XmlRenumber: React.FC = () => {
                     });
                 }
 
-                setSuggestions(newSuggestions);
+                setSuggestions(activeProfile.elements.reference === 'ce:bib-reference' ? newSuggestions : []);
                 setActiveTab('report');
-                setToast({ msg: `Successfully processed ${bibMatchCount} references.`, type: 'success' });
+                setToast({
+                    msg: missingLabelCount > 0
+                        ? `Processed ${bibMatchCount} references. Skipped ${missingLabelCount} references without labels; review the profile checks.`
+                        : result.issues.length > 0 ? `Processed ${bibMatchCount} references with ${result.issues.length} issues to review.` : `Successfully processed ${bibMatchCount} references.`,
+                    type: result.issues.length > 0 ? 'warn' : 'success'
+                });
             } catch (e) {
-                setToast({ msg: 'An error occurred during processing.', type: 'error' });
+                setToast({ msg: e instanceof Error ? e.message : 'An error occurred during processing.', type: 'error' });
             } finally {
+                processingRef.current = false;
+                timerRef.current = null;
                 setIsLoading(false);
             }
         }, 600);
     };
 
     const clearAll = () => {
+        cancelPending();
+        setProcessedSettings('');
+        setSuggestions([]);
+        setSearchQuery(''); setFilterChangedOnly(false); setFilterOtherRefOnly(false);
+        setProfileIssues([]);
         setInput('');
         setOutput('');
         setLastProcessedInput('');
@@ -538,14 +554,13 @@ const XmlRenumber: React.FC = () => {
         setToast({ msg: 'All cleared', type: 'warn' });
     };
 
-    const isStale = output && input !== lastProcessedInput;
+    const isStale = output && (input !== lastProcessedInput || currentSettings !== processedSettings);
 
     useKeyboardShortcuts({
         onPrimary: renumber,
         onCopy: () => {
             if (activeTab === 'raw' && output) {
-                navigator.clipboard.writeText(output);
-                setToast({msg: 'Copied output!', type:'success'});
+                void copyOutput();
             } else if (activeTab === 'extraction' && extractedRefs.length > 0) {
                 copyRichText(extractedRefs.map(r => `<p>${r}</p>`).join('\n'), true);
             }
@@ -554,15 +569,17 @@ const XmlRenumber: React.FC = () => {
     }, [input, output, activeTab, extractedRefs, lastProcessedInput]);
 
     const downloadCSV = () => {
-        if (reportData.length === 0) return;
-        const headers = ['ID', 'Old Label', 'New Label', 'Status', 'Type'];
+        if (reportData.length === 0 && profileIssues.length === 0) return;
+        const headers = ['ID', 'Old Label', 'New Label', 'Status', 'Type', 'Details'];
         const rows = reportData.map(item => [
             item.id,
             item.oldLabel,
             item.newLabel,
-            item.changed ? 'Changed' : 'Unchanged',
-            item.isOtherRef ? 'Other-Ref' : 'Standard'
+            item.missingLabel ? 'Skipped — missing label' : item.issue ? 'Skipped — profile violation' : item.changed ? 'Changed' : 'Unchanged',
+            item.isOtherRef ? 'Other-Ref' : 'Standard',
+            item.issue || ''
         ]);
+        rows.push(...profileIssues.filter(issue => !reportData.some(item => item.id === issue.target && item.issue === issue.message)).map(issue => [issue.target, '', '', 'Needs review', 'QC issue', issue.message]));
         const csvContent = [
             headers.join(','),
             ...rows.map(row => row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(','))
@@ -575,6 +592,7 @@ const XmlRenumber: React.FC = () => {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(url), 0);
     };
 
     const filteredReportData = reportData.filter(item => {
@@ -591,7 +609,8 @@ const XmlRenumber: React.FC = () => {
     const stats = {
         total: reportData.length,
         changed: reportData.filter(i => i.changed).length,
-        otherRefs: reportData.filter(i => i.isOtherRef).length
+        otherRefs: reportData.filter(i => i.isOtherRef).length,
+        skipped: reportData.filter(i => i.issue || i.missingLabel).length
     };
 
     return (
@@ -601,6 +620,26 @@ const XmlRenumber: React.FC = () => {
                 <p className="text-lg text-slate-500 max-w-2xl mx-auto">Standardize citations and automatically update cross-references.</p>
             </div>
 
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 mb-4 space-y-2">
+                <div className="flex flex-wrap items-center gap-3">
+                    <span className="font-bold text-slate-700">XML profile: {activeProfile.name}</span>
+                    <input ref={profileInputRef} type="file" accept=".json,application/json" onChange={handleLoadProfile} className="hidden" aria-label="Choose XML renumbering profile" />
+                    <button disabled={isLoading} onClick={() => profileInputRef.current?.click()} className="text-sm text-indigo-600 font-semibold disabled:opacity-50">Import Profile</button>
+                    <button disabled={isLoading} onClick={() => { setActiveProfile(ELSEVIER_PROFILE); loadInput(input, 'Elsevier 5.7.0 profile selected.'); }} className="text-sm text-indigo-600 font-semibold disabled:opacity-50">Use Elsevier 5.7.0</button>
+                    <a href="/profiles/elsevier-art570.json" download className="text-sm text-indigo-600">Download Elsevier Profile</a>
+                    <a href="/profiles/custom-example.json" download className="text-sm text-indigo-600">Download Custom Template</a>
+                    <a href="/profiles/custom-example.xml" download className="text-sm text-indigo-600">Download Custom Sample XML</a>
+                </div>
+                <p className="text-xs text-slate-500">Source: {activeProfile.source}. These checks cover reference labels and citation targets; they do not validate the complete DTD. Import a reviewed profile for another publisher or DTD version.</p>
+            </div>
+            {profileIssues.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4">
+                    <h2 className="font-bold text-amber-900">Profile checks: {profileIssues.length} issues</h2>
+                    <ul className="text-sm text-amber-900 list-disc pl-5">
+                        {profileIssues.map((issue, index) => <li key={index}><b>{issue.target}</b>: {issue.message}</li>)}
+                    </ul>
+                </div>
+            )}
             <div className="glass-panel bg-white/50 rounded-2xl p-6 mb-8 flex flex-col md:flex-row items-center justify-between gap-6 shadow-sm">
                 <div className="flex items-center gap-3">
                     <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
@@ -613,9 +652,9 @@ const XmlRenumber: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-4 bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
                     <div className="flex items-center">
-                        <input type="text" value={prefix} onChange={(e) => setPrefix(e.target.value)} maxLength={10} className="w-32 text-center font-mono font-bold text-slate-700 outline-none border-b-2 border-transparent focus:border-indigo-500 transition-colors bg-transparent placeholder-slate-300" placeholder="[" />
+                        <input disabled={isLoading} type="text" value={prefix} onChange={(e) => setPrefix(e.target.value)} maxLength={10} className="w-32 text-center font-mono font-bold text-slate-700 outline-none border-b-2 border-transparent focus:border-indigo-500 transition-colors bg-transparent placeholder-slate-300" placeholder="[" />
                         <span className="text-slate-400 font-mono px-2 text-sm">#</span>
-                        <input type="text" value={suffix} onChange={(e) => setSuffix(e.target.value)} maxLength={10} className="w-32 text-center font-mono font-bold text-slate-700 outline-none border-b-2 border-transparent focus:border-indigo-500 transition-colors bg-transparent placeholder-slate-300" placeholder="]" />
+                        <input disabled={isLoading} type="text" value={suffix} onChange={(e) => setSuffix(e.target.value)} maxLength={10} className="w-32 text-center font-mono font-bold text-slate-700 outline-none border-b-2 border-transparent focus:border-indigo-500 transition-colors bg-transparent placeholder-slate-300" placeholder="]" />
                     </div>
                     <div className="h-8 w-px bg-slate-200 mx-2"></div>
                     <div className="text-xs text-slate-500 font-medium pr-2">
@@ -678,11 +717,16 @@ const XmlRenumber: React.FC = () => {
                             <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white border border-slate-200 text-xs text-slate-500 font-mono shadow-sm">IN</span>
                             Input XML
                         </label>
-                         <button onClick={clearAll} title="Alt+Delete" className="text-xs font-semibold text-slate-400 hover:text-red-500 hover:bg-red-50 px-2 py-1 rounded transition-colors">Clear All</button>
+                         <div className="flex flex-wrap items-center gap-2">
+                             <input ref={fileInputRef} type="file" accept=".xml,.txt,text/xml,application/xml,text/plain" onChange={handleLoadFile} aria-label="Choose XML file" className="hidden" />
+                             <button disabled={isLoading} onClick={() => fileInputRef.current?.click()} className="text-xs font-semibold text-indigo-600 hover:bg-indigo-50 px-2 py-1 rounded disabled:opacity-50">Open XML File</button>
+                             <button onClick={clearAll} title="Alt+Delete" className="text-xs font-semibold text-slate-400 hover:text-red-500 hover:bg-red-50 px-2 py-1 rounded transition-colors">Clear All</button>
+                         </div>
                     </div>
                     <textarea 
+                        disabled={isLoading}
                         value={input} 
-                        onChange={(e) => setInput(e.target.value)} 
+                        onChange={(e) => { operationRef.current++; setInput(e.target.value); }}
                         className="w-full flex-grow p-6 text-sm font-mono text-slate-800 bg-white border-0 focus:ring-0 outline-none resize-none leading-relaxed selection:bg-indigo-100 placeholder-slate-300" 
                         placeholder="Paste your XML content here..." 
                         spellCheck={false}
@@ -708,7 +752,7 @@ const XmlRenumber: React.FC = () => {
                             )}
                             {activeTab === 'raw' && (
                                 <button 
-                                    onClick={() => { navigator.clipboard.writeText(output); setToast({msg: 'Copied to clipboard!', type:'success'}); }} 
+                                    onClick={copyOutput}
                                     title="Ctrl+Shift+C" 
                                     className={`text-xs font-bold px-3 py-1.5 rounded border transition-all flex items-center gap-1 active:scale-95 ${isStale ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100' : 'text-emerald-600 hover:bg-emerald-50 border-transparent hover:border-emerald-100'}`}
                                 >
@@ -801,6 +845,7 @@ const XmlRenumber: React.FC = () => {
                                                 <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-slate-400"></span> Total: <b>{stats.total}</b></div>
                                                 <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-400"></span> Changed: <b>{stats.changed}</b></div>
                                                 <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-purple-400"></span> Other Refs: <b>{stats.otherRefs}</b></div>
+                                                <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-500"></span> Skipped: <b>{stats.skipped}</b></div>
                                             </div>
                                             <button onClick={downloadCSV} className="text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 px-3 py-1.5 rounded shadow-sm transition-colors flex items-center gap-2">
                                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
@@ -844,7 +889,7 @@ const XmlRenumber: React.FC = () => {
                                             </thead>
                                             <tbody className="bg-white divide-y divide-slate-200">
                                                 {filteredReportData.length > 0 ? filteredReportData.map((item) => (
-                                                    <tr key={item.id} className={`transition-colors ${item.changed ? 'bg-emerald-50/40 border-l-4 border-l-emerald-500 hover:bg-emerald-50/70' : 'hover:bg-slate-50 opacity-80'}`}>
+                                                    <tr key={item.id} className={`transition-colors ${item.issue || item.missingLabel ? 'bg-amber-50 border-l-4 border-l-amber-500' : item.changed ? 'bg-emerald-50/40 border-l-4 border-l-emerald-500 hover:bg-emerald-50/70' : 'hover:bg-slate-50 opacity-80'}`}>
                                                         <td className="px-6 py-3 whitespace-nowrap text-sm font-mono text-slate-700 font-bold">{item.id}</td>
                                                         <td className="px-6 py-3 whitespace-nowrap text-sm font-mono">
                                                             {item.changed ? (
@@ -861,7 +906,9 @@ const XmlRenumber: React.FC = () => {
                                                             )}
                                                         </td>
                                                         <td className="px-6 py-3 whitespace-nowrap flex items-center gap-2">
-                                                            {item.changed ? (
+                                                            {item.issue || item.missingLabel ? (
+                                                                <span className="px-3 py-0.5 inline-flex text-xs leading-5 font-bold rounded-full bg-amber-100 text-amber-900">{item.missingLabel ? 'Skipped — missing label' : 'Skipped — profile violation'}</span>
+                                                            ) : item.changed ? (
                                                                 <span className="px-3 py-0.5 inline-flex text-xs leading-5 font-black rounded-full bg-emerald-600 text-white shadow-2xs uppercase tracking-wide">Renumbered</span>
                                                             ) : (
                                                                 <span className="px-2.5 py-0.5 inline-flex text-xs leading-5 font-medium rounded-full bg-slate-100 text-slate-400">Unchanged</span>

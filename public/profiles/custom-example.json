@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "name": "Custom example — replace with reviewed publisher rules",
+  "source": "Example mappings only; not a verified publisher DTD",
+  "systemId": "custom.dtd",
+  "elements": {
+    "reference": "reference",
+    "label": "label",
+    "singleCitation": "citation",
+    "groupedCitation": "citations",
+    "otherReference": "other-reference"
+  },
+  "attributes": {
+    "id": "id",
+    "targets": "targets"
+  },
+  "rules": {
+    "labelRequired": true,
+    "labelFirst": true
+  }
+}
