@@ -1,0 +1,134 @@
+[
+    {
+        "name":  "single-original",
+        "kind":  "original",
+        "dtdIssues":  [
+
+                      ],
+        "errors":  "0",
+        "warnings":  "2",
+        "skipped":  "0",
+        "messages":  [
+                         {
+                             "code":  "MSC529",
+                             "severity":  "warning",
+                             "message":  "Element \u0027ce:grant-sponsor\u0027 should preferably have a sponsor ID (attribute \u0027sponsor-id\u0027)."
+                         },
+                         {
+                             "code":  "ROL517",
+                             "severity":  "warning",
+                             "message":  "Either the role attribute is missing or the role value is inappropriate."
+                         }
+                     ]
+    },
+    {
+        "name":  "single-original",
+        "kind":  "output",
+        "dtdIssues":  [
+
+                      ],
+        "errors":  "0",
+        "warnings":  "2",
+        "skipped":  "0",
+        "messages":  [
+                         {
+                             "code":  "MSC529",
+                             "severity":  "warning",
+                             "message":  "Element \u0027ce:grant-sponsor\u0027 should preferably have a sponsor ID (attribute \u0027sponsor-id\u0027)."
+                         },
+                         {
+                             "code":  "ROL517",
+                             "severity":  "warning",
+                             "message":  "Either the role attribute is missing or the role value is inappropriate."
+                         }
+                     ]
+    },
+    {
+        "name":  "single-updated",
+        "kind":  "original",
+        "dtdIssues":  [
+
+                      ],
+        "errors":  "0",
+        "warnings":  "2",
+        "skipped":  "0",
+        "messages":  [
+                         {
+                             "code":  "MSC529",
+                             "severity":  "warning",
+                             "message":  "Element \u0027ce:grant-sponsor\u0027 should preferably have a sponsor ID (attribute \u0027sponsor-id\u0027)."
+                         },
+                         {
+                             "code":  "ROL517",
+                             "severity":  "warning",
+                             "message":  "Either the role attribute is missing or the role value is inappropriate."
+                         }
+                     ]
+    },
+    {
+        "name":  "single-updated",
+        "kind":  "output",
+        "dtdIssues":  [
+
+                      ],
+        "errors":  "0",
+        "warnings":  "2",
+        "skipped":  "0",
+        "messages":  [
+                         {
+                             "code":  "MSC529",
+                             "severity":  "warning",
+                             "message":  "Element \u0027ce:grant-sponsor\u0027 should preferably have a sponsor ID (attribute \u0027sponsor-id\u0027)."
+                         },
+                         {
+                             "code":  "ROL517",
+                             "severity":  "warning",
+                             "message":  "Either the role attribute is missing or the role value is inappropriate."
+                         }
+                     ]
+    },
+    {
+        "name":  "both-single",
+        "kind":  "original",
+        "dtdIssues":  [
+
+                      ],
+        "errors":  "0",
+        "warnings":  "2",
+        "skipped":  "0",
+        "messages":  [
+                         {
+                             "code":  "MSC529",
+                             "severity":  "warning",
+                             "message":  "Element \u0027ce:grant-sponsor\u0027 should preferably have a sponsor ID (attribute \u0027sponsor-id\u0027)."
+                         },
+                         {
+                             "code":  "ROL517",
+                             "severity":  "warning",
+                             "message":  "Either the role attribute is missing or the role value is inappropriate."
+                         }
+                     ]
+    },
+    {
+        "name":  "both-single",
+        "kind":  "output",
+        "dtdIssues":  [
+
+                      ],
+        "errors":  "0",
+        "warnings":  "2",
+        "skipped":  "0",
+        "messages":  [
+                         {
+                             "code":  "MSC529",
+                             "severity":  "warning",
+                             "message":  "Element \u0027ce:grant-sponsor\u0027 should preferably have a sponsor ID (attribute \u0027sponsor-id\u0027)."
+                         },
+                         {
+                             "code":  "ROL517",
+                             "severity":  "warning",
+                             "message":  "Either the role attribute is missing or the role value is inappropriate."
+                         }
+                     ]
+    }
+]

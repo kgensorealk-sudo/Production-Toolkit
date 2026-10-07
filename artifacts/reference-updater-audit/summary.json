@@ -1,0 +1,195 @@
+[
+  {
+    "name": "numeric-label-wrong-paper",
+    "status": [
+      {
+        "status": "update",
+        "match": "Label",
+        "original": 0,
+        "updated": 0
+      }
+    ],
+    "hasOutput": true
+  },
+  {
+    "name": "unicode-content-hash-collision",
+    "status": [
+      {
+        "status": "update",
+        "match": "Content",
+        "original": 0,
+        "updated": 0
+      }
+    ],
+    "hasOutput": true
+  },
+  {
+    "name": "conflicting-doi-normalized-as-content",
+    "status": [
+      {
+        "status": "update",
+        "match": "Content",
+        "original": 0,
+        "updated": 0
+      }
+    ],
+    "hasOutput": true
+  },
+  {
+    "name": "internal-ids-collapse-to-last-prefix",
+    "status": [
+      {
+        "status": "update",
+        "match": "DOI",
+        "original": 0,
+        "updated": 0
+      }
+    ],
+    "hasOutput": true
+  },
+  {
+    "name": "internal-links-not-remapped",
+    "status": [
+      {
+        "status": "update",
+        "match": "Label",
+        "original": 0,
+        "updated": 0
+      }
+    ],
+    "hasOutput": true
+  },
+  {
+    "name": "valid-single-quoted-ids-replaced",
+    "status": [
+      {
+        "status": "update",
+        "match": "DOI",
+        "original": 0,
+        "updated": 0
+      }
+    ],
+    "hasOutput": true
+  },
+  {
+    "name": "preserve-off-control",
+    "status": [
+      {
+        "status": "update",
+        "match": "DOI",
+        "original": 0,
+        "updated": 0
+      },
+      {
+        "status": "add",
+        "original": null,
+        "updated": 1
+      }
+    ],
+    "hasOutput": true
+  },
+  {
+    "name": "preserve-off-orphan-collision",
+    "status": [
+      {
+        "status": "unchanged",
+        "original": 0,
+        "updated": null
+      },
+      {
+        "status": "add",
+        "original": null,
+        "updated": 0
+      }
+    ],
+    "hasOutput": true
+  },
+  {
+    "name": "stale-original-input-swapped",
+    "status": [
+      {
+        "status": "update",
+        "match": "DOI",
+        "original": 0,
+        "updated": 0
+      },
+      {
+        "status": "unchanged",
+        "original": 1,
+        "updated": null
+      }
+    ],
+    "hasOutput": true
+  },
+  {
+    "name": "changed-numeric-label-kept-from-external-set",
+    "status": [
+      {
+        "status": "update",
+        "match": "DOI",
+        "original": 0,
+        "updated": 0
+      }
+    ],
+    "hasOutput": true
+  },
+  {
+    "name": "malformed-updated-xml-emitted",
+    "status": [
+      {
+        "status": "update",
+        "match": "DOI",
+        "original": 0,
+        "updated": 0
+      }
+    ],
+    "hasOutput": true
+  },
+  {
+    "name": "review-candidate-index-wrong-list",
+    "status": [
+      {
+        "status": "potential_duplicate",
+        "match": "Surname-Year",
+        "original": 0,
+        "updated": 1
+      },
+      {
+        "status": "unchanged",
+        "original": 1,
+        "updated": null
+      },
+      {
+        "status": "add",
+        "original": null,
+        "updated": 0
+      }
+    ],
+    "hasOutput": true
+  },
+  {
+    "name": "drag-order-reset",
+    "hasOutput": true
+  },
+  {
+    "name": "duplicate-filter-bulk-selection-does-nothing",
+    "hasOutput": true
+  },
+  {
+    "name": "unchecked-correction-omits-original",
+    "status": [
+      {
+        "status": "update",
+        "match": "DOI",
+        "original": 0,
+        "updated": 0
+      },
+      {
+        "status": "unchanged",
+        "original": 1,
+        "updated": null
+      }
+    ],
+    "hasOutput": true
+  }
+]

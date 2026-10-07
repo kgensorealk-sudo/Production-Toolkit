@@ -1,0 +1,90 @@
+[
+    {
+        "name":  "numeric-label-wrong-paper",
+        "kind":  "original",
+        "dtdIssues":  [
+
+                      ],
+        "errors":  "0",
+        "warnings":  "2",
+        "skipped":  "0",
+        "messages":  [
+                         {
+                             "code":  "MSC529",
+                             "severity":  "warning",
+                             "message":  "Element \u0027ce:grant-sponsor\u0027 should preferably have a sponsor ID (attribute \u0027sponsor-id\u0027)."
+                         },
+                         {
+                             "code":  "ROL517",
+                             "severity":  "warning",
+                             "message":  "Either the role attribute is missing or the role value is inappropriate."
+                         }
+                     ]
+    },
+    {
+        "name":  "numeric-label-wrong-paper",
+        "kind":  "output",
+        "dtdIssues":  [
+
+                      ],
+        "errors":  "0",
+        "warnings":  "2",
+        "skipped":  "0",
+        "messages":  [
+                         {
+                             "code":  "MSC529",
+                             "severity":  "warning",
+                             "message":  "Element \u0027ce:grant-sponsor\u0027 should preferably have a sponsor ID (attribute \u0027sponsor-id\u0027)."
+                         },
+                         {
+                             "code":  "ROL517",
+                             "severity":  "warning",
+                             "message":  "Either the role attribute is missing or the role value is inappropriate."
+                         }
+                     ]
+    },
+    {
+        "name":  "genuine-doi-correction",
+        "kind":  "original",
+        "dtdIssues":  [
+
+                      ],
+        "errors":  "0",
+        "warnings":  "2",
+        "skipped":  "0",
+        "messages":  [
+                         {
+                             "code":  "MSC529",
+                             "severity":  "warning",
+                             "message":  "Element \u0027ce:grant-sponsor\u0027 should preferably have a sponsor ID (attribute \u0027sponsor-id\u0027)."
+                         },
+                         {
+                             "code":  "ROL517",
+                             "severity":  "warning",
+                             "message":  "Either the role attribute is missing or the role value is inappropriate."
+                         }
+                     ]
+    },
+    {
+        "name":  "genuine-doi-correction",
+        "kind":  "output",
+        "dtdIssues":  [
+
+                      ],
+        "errors":  "0",
+        "warnings":  "2",
+        "skipped":  "0",
+        "messages":  [
+                         {
+                             "code":  "MSC529",
+                             "severity":  "warning",
+                             "message":  "Element \u0027ce:grant-sponsor\u0027 should preferably have a sponsor ID (attribute \u0027sponsor-id\u0027)."
+                         },
+                         {
+                             "code":  "ROL517",
+                             "severity":  "warning",
+                             "message":  "Either the role attribute is missing or the role value is inappropriate."
+                         }
+                     ]
+    }
+]

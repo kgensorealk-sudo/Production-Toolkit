@@ -1,0 +1,8 @@
+[
+  {
+    "name": "doi-name-date",
+    "original": "<ce:bib-reference id=\"bb5\"><ce:label>Smith, 2020</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Alpha paper</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book><ce:doi>10.1234/alpha</ce:doi></sb:host></sb:reference><ce:source-text id=\"se5\">Alpha paper.</ce:source-text></ce:bib-reference>",
+    "updated": "<ce:bib-reference id=\"bb900\"><ce:label>Smith, 2020</ce:label><sb:reference id=\"rf900\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Entirely different investigation</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book><ce:doi>10.1234/alpha</ce:doi></sb:host></sb:reference><ce:source-text id=\"se900\">Entirely different investigation.</ce:source-text></ce:bib-reference>",
+    "output": "<ce:bib-reference id=\"bb5\"><ce:label>Smith, 2020</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Entirely different investigation</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book><ce:doi>10.1234/alpha</ce:doi></sb:host></sb:reference><ce:source-text id=\"se5\">Entirely different investigation.</ce:source-text></ce:bib-reference>"
+  }
+]

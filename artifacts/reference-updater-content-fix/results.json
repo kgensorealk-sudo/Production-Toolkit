@@ -1,0 +1,148 @@
+[
+  {
+    "name": "unicode-collision",
+    "original": "<ce:bib-reference id=\"bb5\"><ce:label>[1]</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:authors><sb:author><ce:surname>张</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>甲乙研究</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se5\">甲乙研究。</ce:source-text></ce:bib-reference>",
+    "updated": "<ce:bib-reference id=\"bb900\"><ce:label>[1]</ce:label><sb:reference id=\"rf900\"><sb:contribution><sb:authors><sb:author><ce:surname>李</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>丙丁分析</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se900\">丙丁分析。</ce:source-text></ce:bib-reference>",
+    "output": "<ce:bib-reference id=\"bb5\"><ce:label>[1]</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:authors><sb:author><ce:surname>张</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>甲乙研究</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se5\">甲乙研究。</ce:source-text></ce:bib-reference>",
+    "analysis": [
+      {
+        "uid": "dyio0itnjtr",
+        "label": "[1]",
+        "id": "bb5",
+        "status": "unchanged",
+        "preview": "[1]张...",
+        "isSynthetic": false,
+        "selected": true,
+        "sortKey": "[1]",
+        "originalIndex": 0,
+        "updatedIndex": null
+      },
+      {
+        "uid": "q5ebezov8r",
+        "label": "[1]",
+        "id": "bb900",
+        "status": "orphan",
+        "preview": "[1]<ce:surname...",
+        "isSynthetic": false,
+        "selected": false,
+        "sortKey": "[1]",
+        "originalIndex": null,
+        "updatedIndex": 0
+      }
+    ]
+  },
+  {
+    "name": "doi-conflict-[1]",
+    "original": "<ce:bib-reference id=\"bb5\"><ce:label>[1]</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Alpha</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book><ce:doi>10.1234/a-b</ce:doi></sb:host></sb:reference></ce:bib-reference>",
+    "updated": "<ce:bib-reference id=\"bb900\"><ce:label>[1]</ce:label><sb:reference id=\"rf900\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Alpha</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book><ce:doi>10.1234/ab</ce:doi></sb:host></sb:reference></ce:bib-reference>",
+    "output": null,
+    "analysis": [
+      {
+        "uid": "3o3hu9dnt4n",
+        "label": "[1]",
+        "id": "bb5",
+        "status": "conflict",
+        "reviewed": false,
+        "matchType": "Full-Text",
+        "matchScore": 97,
+        "preview": "[1]<ce:surname...",
+        "isSynthetic": false,
+        "selected": true,
+        "sortKey": "[1]",
+        "originalIndex": 0,
+        "updatedIndex": 0,
+        "candidateSource": "updated",
+        "potentialMatches": [
+          {
+            "index": 0,
+            "score": 97,
+            "matchType": "Full-Text",
+            "label": "[1]",
+            "preview": "[1]<sb:contrib"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "doi-conflict-Smith, 2020",
+    "original": "<ce:bib-reference id=\"bb5\"><ce:label>Smith, 2020</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Alpha</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book><ce:doi>10.1234/a-b</ce:doi></sb:host></sb:reference></ce:bib-reference>",
+    "updated": "<ce:bib-reference id=\"bb900\"><ce:label>Smith, 2020</ce:label><sb:reference id=\"rf900\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Alpha</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book><ce:doi>10.1234/ab</ce:doi></sb:host></sb:reference></ce:bib-reference>",
+    "output": null,
+    "analysis": [
+      {
+        "uid": "enlmkgfm9n6",
+        "label": "Smith, 2020",
+        "id": "bb5",
+        "status": "conflict",
+        "reviewed": false,
+        "matchType": "Full-Text",
+        "matchScore": 98,
+        "preview": "Smith, 2020<ce...",
+        "isSynthetic": false,
+        "selected": true,
+        "sortKey": "Smith, 2020",
+        "originalIndex": 0,
+        "updatedIndex": 0,
+        "candidateSource": "updated",
+        "potentialMatches": [
+          {
+            "index": 0,
+            "score": 98,
+            "matchType": "Full-Text",
+            "label": "Smith, 2020",
+            "preview": "Smith, 2020<sb"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "identical-unicode-content",
+    "original": "<ce:bib-reference id=\"bb5\"><ce:label>[1]</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:authors><sb:author><ce:surname>张</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>甲乙研究</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se5\">甲乙研究。</ce:source-text></ce:bib-reference>",
+    "updated": "<ce:bib-reference id=\"bb900\"><ce:label>[1]</ce:label><sb:reference id=\"rf900\"><sb:contribution><sb:authors><sb:author><ce:surname>张</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>甲乙研究</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se900\">甲乙研究。</ce:source-text></ce:bib-reference>",
+    "output": "<ce:bib-reference id=\"bb5\"><ce:label>[1]</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:authors><sb:author><ce:surname>张</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>甲乙研究</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se5\">甲乙研究。</ce:source-text></ce:bib-reference>",
+    "analysis": [
+      {
+        "uid": "6qs9yjsc6ok",
+        "label": "[1]",
+        "id": "bb5",
+        "status": "update",
+        "reviewed": false,
+        "matchType": "Content",
+        "matchScore": 100,
+        "preview": "[1]<ce:surname...",
+        "isSynthetic": false,
+        "selected": true,
+        "sortKey": "[1]",
+        "originalIndex": 0,
+        "updatedIndex": 0,
+        "candidateSource": "updated"
+      }
+    ]
+  },
+  {
+    "name": "identical-content",
+    "original": "<ce:bib-reference id=\"bb5\"><ce:label>[1]</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Alpha evidence</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book><ce:doi>10.1234/alpha</ce:doi></sb:host></sb:reference><ce:source-text id=\"se5\">Alpha evidence.</ce:source-text></ce:bib-reference>",
+    "updated": "<ce:bib-reference id=\"bb900\"><ce:label>[1]</ce:label><sb:reference id=\"rf900\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Alpha evidence</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book><ce:doi>10.1234/alpha</ce:doi></sb:host></sb:reference><ce:source-text id=\"se900\">Alpha evidence.</ce:source-text></ce:bib-reference>",
+    "output": "<ce:bib-reference id=\"bb5\"><ce:label>[1]</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Alpha evidence</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book><ce:doi>10.1234/alpha</ce:doi></sb:host></sb:reference><ce:source-text id=\"se5\">Alpha evidence.</ce:source-text></ce:bib-reference>",
+    "analysis": [
+      {
+        "uid": "10avbbbf0pw",
+        "label": "[1]",
+        "id": "bb5",
+        "status": "update",
+        "reviewed": false,
+        "matchType": "Content",
+        "matchScore": 100,
+        "preview": "[1]<ce:surname...",
+        "isSynthetic": false,
+        "selected": true,
+        "sortKey": "[1]",
+        "originalIndex": 0,
+        "updatedIndex": 0,
+        "candidateSource": "updated"
+      }
+    ]
+  }
+]

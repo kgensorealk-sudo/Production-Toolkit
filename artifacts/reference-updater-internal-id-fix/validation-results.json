@@ -1,0 +1,134 @@
+[
+    {
+        "name":  "repeated-internal-ids",
+        "kind":  "original",
+        "dtdIssues":  [
+
+                      ],
+        "errors":  "0",
+        "warnings":  "2",
+        "skipped":  "0",
+        "messages":  [
+                         {
+                             "code":  "MSC529",
+                             "severity":  "warning",
+                             "message":  "Element \u0027ce:grant-sponsor\u0027 should preferably have a sponsor ID (attribute \u0027sponsor-id\u0027)."
+                         },
+                         {
+                             "code":  "ROL517",
+                             "severity":  "warning",
+                             "message":  "Either the role attribute is missing or the role value is inappropriate."
+                         }
+                     ]
+    },
+    {
+        "name":  "repeated-internal-ids",
+        "kind":  "output",
+        "dtdIssues":  [
+
+                      ],
+        "errors":  "0",
+        "warnings":  "2",
+        "skipped":  "0",
+        "messages":  [
+                         {
+                             "code":  "MSC529",
+                             "severity":  "warning",
+                             "message":  "Element \u0027ce:grant-sponsor\u0027 should preferably have a sponsor ID (attribute \u0027sponsor-id\u0027)."
+                         },
+                         {
+                             "code":  "ROL517",
+                             "severity":  "warning",
+                             "message":  "Either the role attribute is missing or the role value is inappropriate."
+                         }
+                     ]
+    },
+    {
+        "name":  "added-internal-element",
+        "kind":  "original",
+        "dtdIssues":  [
+
+                      ],
+        "errors":  "0",
+        "warnings":  "2",
+        "skipped":  "0",
+        "messages":  [
+                         {
+                             "code":  "MSC529",
+                             "severity":  "warning",
+                             "message":  "Element \u0027ce:grant-sponsor\u0027 should preferably have a sponsor ID (attribute \u0027sponsor-id\u0027)."
+                         },
+                         {
+                             "code":  "ROL517",
+                             "severity":  "warning",
+                             "message":  "Either the role attribute is missing or the role value is inappropriate."
+                         }
+                     ]
+    },
+    {
+        "name":  "added-internal-element",
+        "kind":  "output",
+        "dtdIssues":  [
+
+                      ],
+        "errors":  "0",
+        "warnings":  "2",
+        "skipped":  "0",
+        "messages":  [
+                         {
+                             "code":  "MSC529",
+                             "severity":  "warning",
+                             "message":  "Element \u0027ce:grant-sponsor\u0027 should preferably have a sponsor ID (attribute \u0027sponsor-id\u0027)."
+                         },
+                         {
+                             "code":  "ROL517",
+                             "severity":  "warning",
+                             "message":  "Either the role attribute is missing or the role value is inappropriate."
+                         }
+                     ]
+    },
+    {
+        "name":  "removed-internal-element",
+        "kind":  "original",
+        "dtdIssues":  [
+
+                      ],
+        "errors":  "0",
+        "warnings":  "2",
+        "skipped":  "0",
+        "messages":  [
+                         {
+                             "code":  "MSC529",
+                             "severity":  "warning",
+                             "message":  "Element \u0027ce:grant-sponsor\u0027 should preferably have a sponsor ID (attribute \u0027sponsor-id\u0027)."
+                         },
+                         {
+                             "code":  "ROL517",
+                             "severity":  "warning",
+                             "message":  "Either the role attribute is missing or the role value is inappropriate."
+                         }
+                     ]
+    },
+    {
+        "name":  "removed-internal-element",
+        "kind":  "output",
+        "dtdIssues":  [
+
+                      ],
+        "errors":  "0",
+        "warnings":  "2",
+        "skipped":  "0",
+        "messages":  [
+                         {
+                             "code":  "MSC529",
+                             "severity":  "warning",
+                             "message":  "Element \u0027ce:grant-sponsor\u0027 should preferably have a sponsor ID (attribute \u0027sponsor-id\u0027)."
+                         },
+                         {
+                             "code":  "ROL517",
+                             "severity":  "warning",
+                             "message":  "Either the role attribute is missing or the role value is inappropriate."
+                         }
+                     ]
+    }
+]

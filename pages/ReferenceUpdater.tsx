@@ -50,9 +50,11 @@ interface RefBlock {
     title?: string;
     doi?: string;
     rawAuthor?: string;
+    rawAuthors?: string[];
+    authorsTruncated?: boolean;
     rawYear?: string;
     rawTitle?: string;
-    subIds?: Record<string, string>;
+    subIds?: Record<string, string[]>;
 }
 
 interface ScanCandidate {
@@ -79,6 +81,8 @@ interface ScanItem {
     updatedIndex: number | null;
     candidates?: ScanCandidate[];
     potentialMatches?: ScanCandidate[];
+    candidateSource?: 'original' | 'updated';
+    incomingDuplicates?: number[];
 }
 
 const ReferenceUpdater: React.FC = () => {
@@ -106,6 +110,18 @@ const ReferenceUpdater: React.FC = () => {
     const [currentChangeIndex, setCurrentChangeIndex] = useState(0);
     const [totalChanges, setTotalChanges] = useState(0);
     const diffContainerRef = useRef<HTMLDivElement>(null);
+    const analysisKey = JSON.stringify([originalXml, updatedXml, addOrphans]);
+    const analysisKeyRef = useRef(analysisKey);
+    const analysisSnapshotRef = useRef<string | null>(null);
+    analysisKeyRef.current = analysisKey;
+    useEffect(() => {
+        if (analysisSnapshotRef.current === analysisKey) return;
+        analysisSnapshotRef.current = null;
+        setScanResults([]);
+        setReviewingItem(null);
+        setSuggestions([]);
+        setOutput('');
+    }, [analysisKey]);
 
     const escapeHtml = (unsafe: string) => unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -286,29 +302,31 @@ const ReferenceUpdater: React.FC = () => {
         let match;
         while ((match = regex.exec(xml)) !== null) {
             const content = match[2];
-            const idMatch = match[1].match(/id="([^"]+)"/);
-            let id = idMatch ? idMatch[1] : '';
+            const idMatch = match[1].match(/\s+id\s*=\s*(["'])(.*?)\1/);
+            let id = idMatch ? idMatch[2] : '';
             if (!id) {
                 // Generate a guaranteed unique fallback ID
                 id = `bb_fallback_${Math.random().toString(36).substring(2, 8)}`;
             }
             
             // Extract sub-element IDs for preservation
-            const subIds: Record<string, string> = {};
-            const subIdRegex = /<(?:sb:reference|ce:source-text|ce:inter-ref|sb:inter-ref|ce:other-ref|ce:textref|ce:doi)\b[^>]*?\bid="([^"]+)"/g;
+            const subIds: Record<string, string[]> = {};
+            const subIdRegex = /<(sb:reference|ce:source-text|ce:inter-ref|sb:inter-ref|ce:other-ref|ce:textref|ce:doi)\b[^>]*?\s+id\s*=\s*(["'])(.*?)\2/g;
             let sidm;
             while ((sidm = subIdRegex.exec(content)) !== null) {
-                const sid = sidm[1];
-                const prefix = sid.replace(/\d+$/, '');
-                subIds[prefix] = sid; 
+                const tagName = sidm[1];
+                (subIds[tagName] ??= []).push(sidm[3]);
             }
 
             const labelMatch = content.match(/<ce:label>(.*?)<\/ce:label>/);
             let label = labelMatch ? labelMatch[1].trim() : '', isSynthetic = false;
             
             const surnameMatches = Array.from(content.matchAll(/<(?:ce|sb):surname\b[^>]*>([\s\S]*?)<\/(?:ce|sb):surname>/gi));
+            const rawAuthors = Array.from(content.matchAll(/<sb:author\b[^>]*>([\s\S]*?)<\/sb:author>/gi), m =>
+                Array.from(m[1].matchAll(/<ce:(?:given-name|surname)\b[^>]*>([\s\S]*?)<\/ce:(?:given-name|surname)>/gi), name =>
+                    name[1].replace(/<[^>]+>/g, '').trim()).join(' ').trim()).filter(Boolean);
             const authCount = surnameMatches.length;
-            const author = authCount > 0 ? surnameMatches[0][1].toLowerCase().replace(/[^a-z]/g, '') : '';
+            const author = authCount > 0 ? surnameMatches[0][1].normalize('NFC').toLowerCase().replace(/[^\p{L}\p{M}]/gu, '') : '';
             
             const dateMatch = content.match(/<(?:ce|sb):year\b[^>]*>([\s\S]*?)<\/(?:ce|sb):year>/i) || 
                               content.match(/<(?:ce|sb):date\b[^>]*>([\s\S]*?)<\/(?:ce|sb):date>/i);
@@ -317,7 +335,7 @@ const ReferenceUpdater: React.FC = () => {
             
             const titleMatch = content.match(/<(?:ce|sb):title\b[^>]*>([\s\S]*?)<\/(?:ce|sb):title>/i);
             const titleRaw = titleMatch ? titleMatch[1] : '';
-            let title = titleRaw.replace(/<[^>]+>/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            let title = titleRaw.replace(/<[^>]+>/g, '').normalize('NFC').toLowerCase().replace(/[^\p{L}\p{M}\p{N}]/gu, '');
 
             const doiMatch = content.match(/<(?:ce|sb):doi\b[^>]*>([\s\S]*?)<\/(?:ce|sb):doi>/i);
             let doi = doiMatch ? doiMatch[1].replace(/<[^>]+>/g, '').trim().toLowerCase() : '';
@@ -325,11 +343,12 @@ const ReferenceUpdater: React.FC = () => {
             doi = doi.replace(/^(https?:\/\/)?(dx\.)?doi\.org\//, '').replace(/^doi:/, '');
             
             const cleanContent = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
-            const contentHash = cleanContent.replace(/[^a-z0-9]/g, '');
+            // Exact content matching must retain letters, punctuation, and word boundaries.
+            const contentHash = cleanContent.normalize('NFC');
 
             // Enhanced metadata extraction for unstructured references (ce:other-ref)
             let finalAuthor = author;
-            let finalAuthors = surnameMatches.map(m => m[1].toLowerCase().replace(/[^a-z]/g, ''));
+            let finalAuthors = surnameMatches.map(m => m[1].normalize('NFC').toLowerCase().replace(/[^\p{L}\p{M}]/gu, ''));
             let finalYear = year;
             let finalTitle = title;
             let finalAuthCount = authCount;
@@ -346,7 +365,7 @@ const ReferenceUpdater: React.FC = () => {
                     const aMatch = label.match(/^([A-Za-z'’\u00C0-\u017F]+(?:\s+[A-Za-z'’\u00C0-\u017F]+)?)/) || 
                                    textOnly.trim().match(/^([A-Za-z'’\u00C0-\u017F]+(?:\s+[A-Za-z'’\u00C0-\u017F]+)?)/);
                     if (aMatch) {
-                        finalAuthor = aMatch[1].toLowerCase().replace(/[^a-z]/g, '');
+                        finalAuthor = aMatch[1].normalize('NFC').toLowerCase().replace(/[^\p{L}\p{M}]/gu, '');
                         if (finalAuthors.length === 0) finalAuthors = [finalAuthor];
                     }
                 }
@@ -378,7 +397,7 @@ const ReferenceUpdater: React.FC = () => {
                             titleProxy = titleProxy.substring(label.length).trim();
                         }
                     }
-                    finalTitle = titleProxy.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 100);
+                    finalTitle = titleProxy.normalize('NFC').toLowerCase().replace(/[^\p{L}\p{M}\p{N}]/gu, '').substring(0, 100);
                 }
                 
                 // For unstructured refs, try to estimate author count by common separators if it looks like a list
@@ -417,6 +436,8 @@ const ReferenceUpdater: React.FC = () => {
                     title: finalTitle,
                     doi,
                     rawAuthor,
+                    rawAuthors,
+                    authorsTruncated: /<(?:ce|sb):et-al\b/i.test(content),
                     rawYear,
                     rawTitle,
                     subIds
@@ -426,12 +447,34 @@ const ReferenceUpdater: React.FC = () => {
         return refs;
     };
 
+    const compareNameDateMetadata = (original: RefBlock, updated: RefBlock) => {
+        const normalizeAuthor = (name: string) => name.normalize('NFC').toLowerCase().replace(/[^\p{L}\p{M}\p{N}]/gu, '');
+        const left = (original.rawAuthors || []).map(normalizeAuthor);
+        const right = (updated.rawAuthors || []).map(normalizeAuthor);
+        const authorsAvailable = left.length > 0 && right.length > 0;
+        const authorsMatch = authorsAvailable && !original.authorsTruncated && !updated.authorsTruncated && left.length === right.length && left.every((name, index) => name === right[index]);
+        const titlesAvailable = !!(original.title && updated.title);
+        const titleSimilarity = titlesAvailable ? getSimilarity(original.title!, updated.title!) : 0;
+        // Missing metadata supplies no supporting evidence; compare every listed author in order.
+        const score = 40 + (titlesAvailable ? titleSimilarity * 40 : 0) + (authorsMatch ? 20 : 0);
+        return {authorsAvailable, authorsMatch, titlesAvailable, titleSimilarity, score: Math.round(score)};
+    };
+
+    const hasDifferentNumericLabels = (original: RefBlock, updated: RefBlock) => {
+        const numericLabel = (label: string) => label.match(/^\s*[\[(]?\s*(\d+)\s*[\])]?\s*[.]?\s*$/)?.[1];
+        const left = numericLabel(original.label);
+        const right = numericLabel(updated.label);
+        return left !== undefined && right !== undefined && Number(left) !== Number(right);
+    };
+
     const runAnalysis = () => {
         if (!originalXml.trim() || !updatedXml.trim()) { setToast({ msg: "Paste both Original and Updated XML.", type: "warn" }); return; }
         setIsLoading(true);
         setSuggestions([]);
+        const requestedKey = analysisKey;
         
         setTimeout(() => {
+            if (analysisKeyRef.current !== requestedKey) { setIsLoading(false); return; }
             try {
                 const origRefs = parseReferences(originalXml);
                 const updatedRefs = parseReferences(updatedXml);
@@ -440,9 +483,11 @@ const ReferenceUpdater: React.FC = () => {
                 
                 origRefs.forEach((origRef, oIdx) => {
                     const candidates: ScanCandidate[] = [];
+                    const eligibleUpdates = updatedRefs.map((ref, index) => ({ref, index}))
+                        .filter(({ref}) => !hasDifferentNumericLabels(origRef, ref));
                     
                     // 1. Content Hash Match
-                    updatedRefs.forEach((u, idx) => {
+                    eligibleUpdates.forEach(({ref: u, index: idx}) => {
                         if (u.contentHash === origRef.contentHash) {
                             candidates.push({ index: idx, score: 100, matchType: 'Content', label: u.label, preview: u.content.substring(0, 60) });
                         }
@@ -450,7 +495,7 @@ const ReferenceUpdater: React.FC = () => {
 
                     // 2. DOI Match
                     if (candidates.length === 0 && origRef.doi) {
-                        updatedRefs.forEach((u, idx) => {
+                        eligibleUpdates.forEach(({ref: u, index: idx}) => {
                             if (u.doi === origRef.doi && u.doi !== '') {
                                 candidates.push({ index: idx, score: 100, matchType: 'DOI', label: u.label, preview: u.content.substring(0, 60) });
                             }
@@ -459,7 +504,7 @@ const ReferenceUpdater: React.FC = () => {
 
                     // 3. High-Confidence Full-Text Similarity
                     if (candidates.length === 0) {
-                        updatedRefs.forEach((u, idx) => {
+                        eligibleUpdates.forEach(({ref: u, index: idx}) => {
                             const textSim = getSimilarity(origRef.cleanContent || '', u.cleanContent || '');
                             if (textSim > 0.92) { // Extremely high threshold for direct text match
                                 candidates.push({ index: idx, score: Math.round(textSim * 100), matchType: 'Full-Text', label: u.label, preview: u.content.substring(0, 60) });
@@ -467,20 +512,26 @@ const ReferenceUpdater: React.FC = () => {
                         });
                     }
 
-                    // 4. Label Match
-                    if (candidates.length === 0 && origRef.label) {
+                    // Numeric labels describe position in a list, not the identity of a paper.
+                    // Let DOI/content/metadata matching resolve these entries instead.
+                    const isNumericLabel = /^\s*[\[(]?\s*\d+\s*[\])]?\s*[.]?\s*$/.test(origRef.label || '');
+
+                    // 4. Descriptive Label Match
+                    if (candidates.length === 0 && origRef.label && !isNumericLabel) {
                         const normOrigLabel = origRef.label.toLowerCase().replace(/['’]/g, "'").replace(/\s+/g, ' ');
-                        updatedRefs.forEach((u, idx) => {
+                        eligibleUpdates.forEach(({ref: u, index: idx}) => {
                             const normULabel = (u.label || '').toLowerCase().replace(/['’]/g, "'").replace(/\s+/g, ' ');
                             if (u.label && normULabel === normOrigLabel) {
-                                candidates.push({ index: idx, score: 100, matchType: 'Label', label: u.label, preview: u.content.substring(0, 60) });
+                                // Rank same-label possibilities using titles and the complete author list.
+                                const evidence = compareNameDateMetadata(origRef, u);
+                                candidates.push({ index: idx, score: evidence.score, matchType: 'Label', label: u.label, preview: u.content.substring(0, 60) });
                             }
                         });
                     }
 
                     // 5. Surname-Year Heuristic
                     if (candidates.length === 0) {
-                        updatedRefs.forEach((u, idx) => {
+                        eligibleUpdates.forEach(({ref: u, index: idx}) => {
                             const authMatch = (origRef.author && u.author && origRef.author === u.author);
                             const yearMatch = (origRef.year && u.year && origRef.year === u.year);
                             const countMatch = (origRef.authCount !== undefined && u.authCount !== undefined && origRef.authCount === u.authCount);
@@ -526,8 +577,11 @@ const ReferenceUpdater: React.FC = () => {
                         candidates.sort((a, b) => b.score - a.score);
                         
                         const best = candidates[0];
-                        const isConflict = candidates.length > 1 && candidates[1].score > 90;
-                        const isPotentialDupe = best.matchType === 'Surname-Year' && best.score <= 85;
+                        const matchedRef = updatedRefs[best.index];
+                        // A DOI correction may be intentional, but always requires explicit review.
+                        const hasDoiConflict = !!(origRef.doi && matchedRef.doi && origRef.doi !== matchedRef.doi);
+                        const isConflict = hasDoiConflict || (candidates.length > 1 && candidates[1].score > 90);
+                        const isPotentialDupe = best.matchType === 'Label' || (best.matchType === 'Surname-Year' && best.score <= 85);
 
                         analysis.push({ 
                             uid: Math.random().toString(36).substring(2, 15),
@@ -543,13 +597,14 @@ const ReferenceUpdater: React.FC = () => {
                             sortKey: updatedRefs[best.index].sortKey, 
                             originalIndex: oIdx, 
                             updatedIndex: best.index,
+                            candidateSource: 'updated',
                             candidates: candidates.length > 1 ? candidates : undefined,
-                            potentialMatches: (best.matchType === 'Surname-Year' || best.matchType === 'Fuzzy' || best.matchType === 'Full-Text') ? candidates.map(c => ({
+                            potentialMatches: (best.matchType === 'Label' || best.matchType === 'Surname-Year' || best.matchType === 'Fuzzy' || best.matchType === 'Full-Text') ? candidates.map(c => ({
                                 index: c.index,
                                 score: c.score,
                                 matchType: c.matchType,
-                                label: origRefs[oIdx].label,
-                                preview: origRefs[oIdx].content.substring(0, 60).replace(/<[^>]+>/g, '')
+                                label: c.label,
+                                preview: c.preview.replace(/<[^>]+>/g, '')
                             })) : undefined
                         });
                         usedUpdateIdx.add(best.index);
@@ -572,7 +627,7 @@ const ReferenceUpdater: React.FC = () => {
                 // Post-process to detect shared updates (multiple originals claiming same update)
                 const updateToOrigMap = new Map<number, number[]>();
                 analysis.forEach((item, aIdx) => {
-                    if (item.updatedIndex !== null && (item.status === 'update' || item.status === 'smart_match' || item.status === 'conflict')) {
+                    if (item.updatedIndex !== null && (item.status === 'update' || item.status === 'smart_match' || item.status === 'conflict' || item.status === 'potential_duplicate')) {
                         const list = updateToOrigMap.get(item.updatedIndex) || [];
                         list.push(aIdx);
                         updateToOrigMap.set(item.updatedIndex, list);
@@ -612,6 +667,7 @@ const ReferenceUpdater: React.FC = () => {
                         const potentials: ScanCandidate[] = [];
 
                         origRefs.forEach((o, oIdx) => {
+                            if (hasDifferentNumericLabels(o, u)) return;
                             // Enhanced Duplicate Detection: Surname-Year Heuristic
                             let score = 0;
                             let matchType = '';
@@ -678,6 +734,7 @@ const ReferenceUpdater: React.FC = () => {
                         if (potentials.length > 0) {
                             potentials.sort((a, b) => b.score - a.score);
                             item.potentialMatches = potentials;
+                            item.candidateSource = 'original';
                             item.status = 'potential_duplicate';
                             item.reviewed = false;
                             item.selected = true;
@@ -686,6 +743,21 @@ const ReferenceUpdater: React.FC = () => {
                     }
                 });
 
+                // Repeated incoming entries must not silently become separate additions.
+                updatedRefs.forEach((u, idx) => {
+                    const duplicates = updatedRefs.flatMap((other, otherIdx) =>
+                        otherIdx !== idx && ((u.doi && u.doi === other.doi) ||
+                            (u.contentHash && u.contentHash === other.contentHash)) ? [otherIdx] : []);
+                    if (duplicates.length) {
+                        analysis.filter(item => item.updatedIndex === idx).forEach(item => {
+                            item.incomingDuplicates = duplicates;
+                            if (item.status !== 'potential_duplicate') item.status = 'conflict';
+                            item.reviewed = false;
+                        });
+                    }
+                });
+
+                analysisSnapshotRef.current = requestedKey;
                 setScanResults(analysis); 
                 setActiveTab('scan'); 
                 setToast({ msg: `Analysis complete. Found ${analysis.filter(a => a.updatedIndex !== null).length} potential updates.`, type: "success" });
@@ -703,7 +775,7 @@ const ReferenceUpdater: React.FC = () => {
         // Find the original reference node. 
         // In primary scan matches (Surname-Year), the status is 'potential_duplicate'.
         // In secondary scan matches (orphan detection), the target is usually 'unchanged'.
-        const originalTarget = scanResults.find(r => r.originalIndex === originalIndex && (r.status === 'unchanged' || r.status === 'update' || r.status === 'conflict' || r.status === 'potential_duplicate' || r.status === 'orphan'));
+        const originalTarget = scanResults.find(r => r.originalIndex === originalIndex && r.candidateSource !== 'original' && (r.status === 'unchanged' || r.status === 'update' || r.status === 'smart_match' || r.status === 'conflict' || r.status === 'potential_duplicate' || r.status === 'orphan'));
         
         if (!originalTarget) {
              setToast({ msg: "Target original reference not found in scan set.", type: "error" });
@@ -740,6 +812,13 @@ const ReferenceUpdater: React.FC = () => {
 
     const splitMatch = (item: ScanItem) => {
         setScanResults((prev: ScanItem[]) => {
+            if (item.candidateSource === 'original') {
+                // This row is an incoming addition; its original target already has a row.
+                return prev.map(it => it.uid === item.uid ? {
+                    ...it, status: 'add' as const, originalIndex: null, reviewed: true,
+                    selected: true, candidateSource: undefined, potentialMatches: undefined
+                } : it);
+            }
             if (item.originalIndex !== null && item.updatedIndex !== null) {
                 // Determine if this update is still represented elsewhere in an active match
                 const isUpdateStillHandled = prev.some(it => 
@@ -808,7 +887,16 @@ const ReferenceUpdater: React.FC = () => {
     };
 
     const executeMergeAsync = async (origRefs: RefBlock[], updatedRefs: RefBlock[]) => {
+        if (analysisSnapshotRef.current !== analysisKey || analysisKeyRef.current !== analysisKey) {
+            analysisSnapshotRef.current = null;
+            setScanResults([]);
+            setReviewingItem(null);
+            setToast({ msg: 'Inputs or Auto-Add changed. Run Analyze again before merging.', type: 'warn' });
+            setIsLoading(false);
+            return;
+        }
         const unreviewed = scanResults.filter(r => {
+            if (!r.selected) return false;
             if (r.reviewed) return false;
             // Potential duplicates and conflicts ALWAYS require manual review
             if (r.status === 'conflict' || r.status === 'potential_duplicate') return true;
@@ -825,39 +913,44 @@ const ReferenceUpdater: React.FC = () => {
         }
 
         try {
-            const getNextIdMap = (xml1: string, xml2: string) => {
-                const prefixes = ['bb', 'rf', 'se', 'ir', 'ca', 'cf', 'or', 'tr', 'doi'];
-                const map: Record<string, number> = { bb: 3000, rf: 3000, se: 3000, ir: 3000, ca: 3000, cf: 3000, or: 3000, tr: 3000, doi: 3000 };
-                const combined = xml1 + ' ' + xml2;
-                prefixes.forEach(prefix => {
-                    const regex = new RegExp(`id="${prefix}(\\d+)"`, 'g');
-                    let m;
-                    while ((m = regex.exec(combined)) !== null) {
-                        const val = parseInt(m[1]);
-                        if (val >= map[prefix]) map[prefix] = val + 1;
-                    }
-                });
-                return map;
-            };
-
-            const idCounters = getNextIdMap(originalXml, updatedXml);
+            // Allocate only prefix + four digits, in steps of five within 0005–9995.
+            const idCounters: Record<string, number> = { bb: 5, rf: 5, se: 5, ir: 5, ca: 5, cf: 5, or: 5, tr: 5, doi: 5 };
             const existingAllIds = new Set<string>();
-            const idMatchRegex = /\bid="([^"]+)"/g;
+            const idMatchRegex = /\bid\s*=\s*(["'])(.*?)\1/g;
             let extMatch;
             const combinedXml = originalXml + " " + updatedXml;
             while ((extMatch = idMatchRegex.exec(combinedXml)) !== null) {
-                existingAllIds.add(extMatch[1]);
+                existingAllIds.add(extMatch[2]);
+                const numericId = extMatch[2].match(/^([a-z]+)(\d+)$/);
+                if (numericId && numericId[1] in idCounters) {
+                    const next = (Math.floor(Number(numericId[2]) / 5) + 1) * 5;
+                    idCounters[numericId[1]] = Math.max(idCounters[numericId[1]], next);
+                }
             }
 
             const generateUniqueSequentialId = (prefix: string): string => {
-                let candidate = `${prefix}${idCounters[prefix].toString().padStart(4, '0')}`;
-                while (existingAllIds.has(candidate)) {
+                for (let attempts = 0; attempts < 1999; attempts++) {
+                    if (idCounters[prefix] > 9995) idCounters[prefix] = 5;
+                    const candidate = `${prefix}${idCounters[prefix].toString().padStart(4, '0')}`;
                     idCounters[prefix] += 5;
-                    candidate = `${prefix}${idCounters[prefix].toString().padStart(4, '0')}`;
+                    if (existingAllIds.has(candidate)) continue;
+                    existingAllIds.add(candidate);
+                    return candidate;
                 }
-                existingAllIds.add(candidate);
-                idCounters[prefix] += 5;
-                return candidate;
+                throw new Error(`No available ${prefix} ID in the 0005–9995 range. Merge stopped.`);
+            };
+
+            // Keep newly added references identifiable by their bb3... IDs.
+            let addedReferenceCounter = 3000;
+            const generateAddedReferenceId = (): string => {
+                while (addedReferenceCounter <= 9995) {
+                    const candidate = `bb${String(addedReferenceCounter).padStart(4, '0')}`;
+                    addedReferenceCounter += 5;
+                    if (existingAllIds.has(candidate)) continue;
+                    existingAllIds.add(candidate);
+                    return candidate;
+                }
+                throw new Error('No available added-reference ID in the bb3000–bb9995 range. Merge stopped.');
             };
 
             const finalBlocks: string[] = [];
@@ -874,6 +967,9 @@ const ReferenceUpdater: React.FC = () => {
                     if (item.originalIndex !== null) {
                         const origRef = origRefs[item.originalIndex];
                         if (item.selected && item.updatedIndex !== null && (item.status === 'update' || (item.status === 'smart_match' && (autoUpdateSmartMatch || item.reviewed)))) {
+                            if (hasDifferentNumericLabels(origRef, updatedRefs[item.updatedIndex])) {
+                                throw new Error('Different numeric reference labels cannot replace one another. Run Analyze again.');
+                            }
                             blockMarkup = updatedRefs[item.updatedIndex].fullTag;
                             targetId = origRef.id;
                             if (targetId.startsWith('bb_fallback_') || !targetId) {
@@ -894,35 +990,58 @@ const ReferenceUpdater: React.FC = () => {
                     } else if (item.updatedIndex !== null && item.selected) {
                         const orphan = updatedRefs[item.updatedIndex];
                         blockMarkup = orphan.fullTag;
-                        targetId = generateUniqueSequentialId('bb');
+                        targetId = generateAddedReferenceId();
                         isTrulyUnchanged = false;
                     }
 
                     if (blockMarkup) {
                         // ONLY re-process IDs if the reference has actually changed
                         if (!isTrulyUnchanged) {
-                            if (preserveIds) {
-                                blockMarkup = blockMarkup.replace(/id="[^"]*"\s*/, '').replace('<ce:bib-reference', `<ce:bib-reference id="${targetId}"`);
+                            const renamedIds = new Map<string, string>();
+                            if (preserveIds || item.originalIndex === null) {
+                                blockMarkup = blockMarkup.replace(/<ce:bib-reference\b([^>]*)>/, (_tag, attrs: string) => {
+                                    const oldId = attrs.match(/\s+id\s*=\s*(["'])(.*?)\1/)?.[2];
+                                    if (oldId) renamedIds.set(oldId, targetId);
+                                    return `<ce:bib-reference id="${targetId}"${attrs.replace(/\s+id\s*=\s*(["']).*?\1/g, '')}>`;
+                                });
                             }
                             if (renumberInternal) {
                                 // Capture original subIds if available for this slot
                                 const origSubIds = (item.originalIndex !== null) ? origRefs[item.originalIndex].subIds : {};
+                                const subIdOffsets: Record<string, number> = {};
+                                const retainedSubIds = new Set<string>();
                                 
-                                blockMarkup = blockMarkup.replace(/(<(?:sb:reference|ce:source-text|ce:inter-ref|sb:inter-ref|ce:other-ref|ce:textref|ce:doi)\b[^>]*?)(\bid="[^"]+")([^>]*?>)/g, (m, p1, idAttr, p2) => {
+                                blockMarkup = blockMarkup.replace(/(<(?:sb:reference|ce:source-text|ce:inter-ref|sb:inter-ref|ce:other-ref|ce:textref|ce:doi)\b[^>]*?\s)(id\s*=\s*(["'])(.*?)\3)([^>]*?>)/g, (m, p1, idAttr, quote, oldId, p2) => {
                                     let tagTypeMatch = p1.match(/<(?:ce|sb):([a-z-]+)/);
                                     let tagType = tagTypeMatch ? tagTypeMatch[1] : '';
                                     let prefix = tagType === 'source-text' ? 'se' : tagType.includes('inter-ref') ? 'ir' : tagType === 'other-ref' ? 'or' : tagType === 'textref' ? 'tr' : tagType === 'doi' ? 'doi' : 'rf';
-                                    
-                                    // PRESERVE original ID if it exists and prefix matches
-                                    if (origSubIds && origSubIds[prefix]) {
-                                        return `${p1}id="${origSubIds[prefix]}"${p2}`;
-                                    }
+                                    const tagName = p1.match(/<([^\s>]+)/)?.[1] || '';
+                                    const offset = subIdOffsets[tagName] || 0;
+                                    subIdOffsets[tagName] = offset + 1;
+                                    const originalId = origSubIds?.[tagName]?.[offset];
 
-                                    let currentVal = idCounters[prefix] || 3000;
-                                    idCounters[prefix] = currentVal + 5;
-                                    return `${p1}id="${prefix}${currentVal.toString().padStart(4, '0')}"${p2}`;
+                                    // Preserve each corresponding element once, rather than reusing
+                                    // the last ID encountered for every element with the same prefix.
+                                    if (originalId && !retainedSubIds.has(originalId)) {
+                                        retainedSubIds.add(originalId);
+                                        renamedIds.set(oldId, originalId);
+                                        return `${p1}id="${originalId}"${p2}`;
+                                    }
+                                    const newId = generateUniqueSequentialId(prefix);
+                                    renamedIds.set(oldId, newId);
+                                    return `${p1}id="${newId}"${p2}`;
                                 });
                             }
+                            // Rewrite attributes in one pass, so chained mappings cannot
+                            // rename a target twice. External URLs and visible text stay intact.
+                            blockMarkup = blockMarkup.replace(/<[A-Za-z][^>]*>/g, tag => tag.replace(
+                                /(\s(?:refid|xlink:href)\s*=\s*)(["'])(.*?)\2/g,
+                                (_attr, start: string, quote: string, value: string) => {
+                                    const next = start.trimStart().startsWith('refid')
+                                        ? value.replace(/\S+/g, id => renamedIds.get(id) ?? id)
+                                        : value.startsWith('#') ? `#${renamedIds.get(value.slice(1)) ?? value.slice(1)}` : value;
+                                    return `${start}${quote}${next}${quote}`;
+                                }));
                             const labelMatch = blockMarkup.match(/<ce:label>(.*?)<\/ce:label>/);
                             if (labelMatch) {
                                 blockMarkup = blockMarkup.replace(/<ce:label>.*?<\/ce:label>/, `<ce:label>${formatLabel(labelMatch[1])}</ce:label>`);
@@ -934,6 +1053,10 @@ const ReferenceUpdater: React.FC = () => {
                 await new Promise(r => setTimeout(r, 0));
             }
 
+            if (analysisKeyRef.current !== analysisKey) {
+                setToast({ msg: 'Inputs changed during merging. Run Analyze again.', type: 'warn' });
+                return;
+            }
             const joinedResult = finalBlocks.join('\n');
             setOutput(joinedResult);
 
@@ -1004,15 +1127,18 @@ const ReferenceUpdater: React.FC = () => {
             setActiveTab('result');
             await generateDiffAsync(originalXml, joinedResult);
             setToast({ msg: "Merge Protocol Executed. Unchanged references preserved.", type: "success" });
-        } catch (e) { setToast({ msg: "Merge Protocol Failure.", type: "error" }); } finally { setIsLoading(false); }
+        } catch (e) { setToast({ msg: e instanceof Error ? e.message : "Merge Protocol Failure.", type: "error" }); } finally { setIsLoading(false); }
     };
+
+    const matchesScanFilter = (item: ScanItem) => filterStatus === 'all' ||
+        (filterStatus === 'review' && (item.status === 'smart_match' || item.status === 'conflict' || item.status === 'potential_duplicate') && !item.reviewed) ||
+        (filterStatus === 'duplicate' && (item.status === 'potential_duplicate' || !!item.incomingDuplicates?.length)) ||
+        (filterStatus === 'conflict' && item.status === 'conflict') ||
+        (filterStatus === 'add' && (item.status === 'add' || item.status === 'orphan'));
 
     const bulkSelect = (selected: boolean) => {
         setScanResults((prev: ScanItem[]) => prev.map((item: ScanItem) => {
-            const matchesFilter = filterStatus === 'all' || 
-                (filterStatus === 'review' && (item.status === 'smart_match' || item.status === 'conflict') && !item.reviewed) ||
-                (filterStatus === 'conflict' && item.status === 'conflict') ||
-                (filterStatus === 'add' && (item.status === 'add' || item.status === 'orphan'));
+            const matchesFilter = matchesScanFilter(item);
             
             return matchesFilter ? { ...item, selected } : item;
         }));
@@ -1146,7 +1272,7 @@ const ReferenceUpdater: React.FC = () => {
                                             {(['all', 'review', 'duplicate', 'conflict', 'add'] as const).map(f => {
                                                 const count = scanResults.filter(item => {
                                                     if (f === 'review') return (item.status === 'smart_match' || item.status === 'conflict' || item.status === 'potential_duplicate') && !item.reviewed;
-                                                    if (f === 'duplicate') return item.status === 'potential_duplicate';
+                                                    if (f === 'duplicate') return item.status === 'potential_duplicate' || !!item.incomingDuplicates?.length;
                                                     if (f === 'conflict') return item.status === 'conflict';
                                                     if (f === 'add') return item.status === 'add' || item.status === 'orphan';
                                                     return true;
@@ -1185,13 +1311,7 @@ const ReferenceUpdater: React.FC = () => {
                                                 <tr><td colSpan={4} className="p-20 text-center text-slate-300 uppercase tracking-[0.2em] font-black italic">Awaiting Set Scan...</td></tr>
                                             ) : (
                                                 scanResults
-                                                .filter(item => {
-                                                    if (filterStatus === 'review') return (item.status === 'smart_match' || item.status === 'conflict' || item.status === 'potential_duplicate') && !item.reviewed;
-                                                    if (filterStatus === 'duplicate') return item.status === 'potential_duplicate';
-                                                    if (filterStatus === 'conflict') return item.status === 'conflict';
-                                                    if (filterStatus === 'add') return item.status === 'add' || item.status === 'orphan';
-                                                    return true;
-                                                })
+                                                .filter(matchesScanFilter)
                                                 .map((item) => {
                                                     const isSmartMatch = item.status === 'smart_match' || item.status === 'conflict' || item.status === 'potential_duplicate';
                                                     const needsReview = isSmartMatch && !item.reviewed && !autoUpdateSmartMatch;
@@ -1571,6 +1691,13 @@ const ReferenceUpdater: React.FC = () => {
                                             
                                             <div className="space-y-4">
                                                 <div className="flex flex-col gap-1">
+                                                    <span className="text-[9px] font-black text-slate-300 uppercase">Listed Authors (in order)</span>
+                                                    <div className="grid grid-cols-2 gap-4 text-[11px] text-slate-600">
+                                                        <div>{parsedOriginalRefs[reviewingItem.originalIndex!]?.rawAuthors?.join('; ') || 'Not available'}{parsedOriginalRefs[reviewingItem.originalIndex!]?.authorsTruncated ? '; et al.' : ''}</div>
+                                                        <div>{parsedUpdatedRefs[reviewingItem.updatedIndex!]?.rawAuthors?.join('; ') || 'Not available'}{parsedUpdatedRefs[reviewingItem.updatedIndex!]?.authorsTruncated ? '; et al.' : ''}</div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex flex-col gap-1">
                                                     <span className="text-[9px] font-black text-slate-300 uppercase">Primary Authors</span>
                                                     <div className="grid grid-cols-2 gap-4">
                                                         <div className={`text-[11px] leading-tight ${parsedOriginalRefs[reviewingItem.originalIndex!]?.rawAuthor !== parsedUpdatedRefs[reviewingItem.updatedIndex!]?.rawAuthor ? 'text-slate-400 italic' : 'text-slate-600'}`}>
@@ -1636,7 +1763,7 @@ const ReferenceUpdater: React.FC = () => {
                                                         <button 
                                                             key={cIdx}
                                                             onClick={() => {
-                                                                if (reviewingItem.status === 'potential_duplicate') {
+                                                                if (reviewingItem.candidateSource === 'original') {
                                                                     setReviewingItem(prev => prev ? { ...prev, originalIndex: cand.index, matchScore: cand.score, matchType: cand.matchType as any } : null);
                                                                     setScanResults(prev => prev.map(it => it.uid === reviewingItem.uid ? { ...it, originalIndex: cand.index, matchScore: cand.score, matchType: cand.matchType as any } : it));
                                                                 } else {
@@ -1644,7 +1771,7 @@ const ReferenceUpdater: React.FC = () => {
                                                                     setScanResults(prev => prev.map(it => it.uid === reviewingItem.uid ? { ...it, updatedIndex: cand.index, matchScore: cand.score, matchType: cand.matchType as any, label: formatLabel(cand.label), preview: cand.preview + '...' } : it));
                                                                 }
                                                             }}
-                                                            className={`w-full p-4 rounded-2xl border text-left transition-all flex items-center justify-between group ${(reviewingItem.status === 'potential_duplicate' ? reviewingItem.originalIndex === cand.index : reviewingItem.updatedIndex === cand.index) ? 'bg-white border-indigo-400 shadow-md ring-1 ring-indigo-50' : 'bg-slate-50 border-transparent hover:border-slate-200 hover:bg-white'}`}
+                                                            className={`w-full p-4 rounded-2xl border text-left transition-all flex items-center justify-between group ${(reviewingItem.candidateSource === 'original' ? reviewingItem.originalIndex === cand.index : reviewingItem.updatedIndex === cand.index) ? 'bg-white border-indigo-400 shadow-md ring-1 ring-indigo-50' : 'bg-slate-50 border-transparent hover:border-slate-200 hover:bg-white'}`}
                                                         >
                                                             <div className="flex flex-col gap-1">
                                                                 <span className="text-[10px] font-black text-slate-700 uppercase tracking-tight">{cand.label}</span>
@@ -1677,6 +1804,11 @@ const ReferenceUpdater: React.FC = () => {
                                             </div>
                                             <p className="text-[11px] text-slate-300 mt-2 leading-relaxed font-medium">
                                                 Algorithm: <strong>{reviewingItem.matchType || 'Heuristic'} Validation</strong> ({reviewingItem.matchScore}%). 
+                                                {reviewingItem.matchType === 'Label' && reviewingItem.originalIndex !== null && reviewingItem.updatedIndex !== null && (() => {
+                                                    const evidence = compareNameDateMetadata(parsedOriginalRefs[reviewingItem.originalIndex], parsedUpdatedRefs[reviewingItem.updatedIndex]);
+                                                    return <span className="block mt-2">Title similarity: {evidence.titlesAvailable ? `${Math.round(evidence.titleSimilarity * 100)}%` : 'not available'}. Author list: {evidence.authorsMatch ? 'matches in full and in order' : evidence.authorsAvailable ? 'differs or is incomplete' : 'not available'}. Manual review is required.</span>;
+                                                })()}
+                                                {!!reviewingItem.incomingDuplicates?.length && <span className="block mt-2 text-amber-300">This entry shares a DOI or identical content with another entry in the updated list. Deselect unwanted copies, or confirm each entry you intend to retain.</span>}
                                                 {reviewingItem.status === 'potential_duplicate' 
                                                     ? (reviewingItem.matchType === 'Surname-Year' 
                                                         ? "Flagged via First Author & Year Match. While author lists or titles may vary in detail, the core metadata points to identical registration." 

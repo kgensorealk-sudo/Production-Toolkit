@@ -1,0 +1,8 @@
+[
+  {
+    "name": "internal-link-remap",
+    "original": "<ce:bib-reference id=\"bb0005\"><ce:label>Other reference</ce:label><ce:other-ref id=\"or0005\"><ce:textref id=\"tr0005\">Original text.</ce:textref></ce:other-ref></ce:bib-reference>",
+    "updated": "<ce:bib-reference id=\"bb0900\"><ce:label>Other reference</ce:label><ce:other-ref id=\"or0900\"><ce:textref id=\"tr0900\">Corrected text <ce:cross-ref id=\"cf0900\" refid=\"tr0900\">details</ce:cross-ref> <ce:inter-ref id=\"ir0900\" xlink:href=\"https://example.org/details\">local</ce:inter-ref>.</ce:textref></ce:other-ref></ce:bib-reference>",
+    "output": "<ce:bib-reference id=\"bb0005\"><ce:label>Other reference</ce:label><ce:other-ref id=\"or0005\"><ce:textref id=\"tr0005\">Corrected text <ce:cross-ref id=\"cf0900\" refid=\"tr0005\">details</ce:cross-ref> <ce:inter-ref id=\"ir0905\" xlink:href=\"https://example.org/details\">local</ce:inter-ref>.</ce:textref></ce:other-ref></ce:bib-reference>"
+  }
+]

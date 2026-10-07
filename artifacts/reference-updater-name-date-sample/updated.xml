@@ -1,0 +1,62 @@
+<ce:bib-reference id="bb0900">
+<ce:label>Smith, 2020</ce:label>
+<sb:reference id="rf0900">
+<sb:contribution>
+<sb:authors>
+<sb:author>
+<ce:given-name>A.</ce:given-name>
+<ce:surname>Smith</ce:surname>
+</sb:author>
+<sb:author>
+<ce:surname>Jones</ce:surname>
+</sb:author>
+<sb:author>
+<ce:surname>Brown</ce:surname>
+</sb:author>
+</sb:authors>
+<sb:title>
+<sb:maintitle>Unrelated investigation</sb:maintitle>
+</sb:title>
+</sb:contribution>
+<sb:host>
+<sb:book>
+<sb:title>
+<sb:maintitle>Book</sb:maintitle>
+</sb:title>
+<sb:date>2020</sb:date>
+</sb:book>
+</sb:host>
+</sb:reference>
+<ce:source-text id="se0900">Incoming prose</ce:source-text>
+</ce:bib-reference>
+<ce:bib-reference id="bb0905">
+<ce:label>Smith, 2020</ce:label>
+<sb:reference id="rf0905">
+<sb:contribution>
+<sb:authors>
+<sb:author>
+<ce:given-name>A.</ce:given-name>
+<ce:surname>Smith</ce:surname>
+</sb:author>
+<sb:author>
+<ce:surname>Jones</ce:surname>
+</sb:author>
+<sb:author>
+<ce:surname>Lee</ce:surname>
+</sb:author>
+</sb:authors>
+<sb:title>
+<sb:maintitle>Alpha evidence</sb:maintitle>
+</sb:title>
+</sb:contribution>
+<sb:host>
+<sb:book>
+<sb:title>
+<sb:maintitle>Book</sb:maintitle>
+</sb:title>
+<sb:date>2020</sb:date>
+</sb:book>
+</sb:host>
+</sb:reference>
+<ce:source-text id="se0905">Corrected prose</ce:source-text>
+</ce:bib-reference>

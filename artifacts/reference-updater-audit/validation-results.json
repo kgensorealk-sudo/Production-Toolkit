@@ -1,0 +1,144 @@
+[
+    {
+        "name":  "numeric-label-wrong-paper",
+        "kind":  "original",
+        "dtdIssues":  [
+
+                      ],
+        "errors":  "0",
+        "warnings":  "2",
+        "skipped":  "0",
+        "messages":  [
+                         {
+                             "code":  "MSC529",
+                             "severity":  "warning",
+                             "message":  "Element \u0027ce:grant-sponsor\u0027 should preferably have a sponsor ID (attribute \u0027sponsor-id\u0027)."
+                         },
+                         {
+                             "code":  "ROL517",
+                             "severity":  "warning",
+                             "message":  "Either the role attribute is missing or the role value is inappropriate."
+                         }
+                     ]
+    },
+    {
+        "name":  "numeric-label-wrong-paper",
+        "kind":  "output",
+        "dtdIssues":  [
+
+                      ],
+        "errors":  "0",
+        "warnings":  "2",
+        "skipped":  "0",
+        "messages":  [
+                         {
+                             "code":  "MSC529",
+                             "severity":  "warning",
+                             "message":  "Element \u0027ce:grant-sponsor\u0027 should preferably have a sponsor ID (attribute \u0027sponsor-id\u0027)."
+                         },
+                         {
+                             "code":  "ROL517",
+                             "severity":  "warning",
+                             "message":  "Either the role attribute is missing or the role value is inappropriate."
+                         }
+                     ]
+    },
+    {
+        "name":  "internal-ids-collapse-to-last-prefix",
+        "kind":  "original",
+        "dtdIssues":  [
+
+                      ],
+        "errors":  "0",
+        "warnings":  "2",
+        "skipped":  "0",
+        "messages":  [
+                         {
+                             "code":  "MSC529",
+                             "severity":  "warning",
+                             "message":  "Element \u0027ce:grant-sponsor\u0027 should preferably have a sponsor ID (attribute \u0027sponsor-id\u0027)."
+                         },
+                         {
+                             "code":  "ROL517",
+                             "severity":  "warning",
+                             "message":  "Either the role attribute is missing or the role value is inappropriate."
+                         }
+                     ]
+    },
+    {
+        "name":  "internal-ids-collapse-to-last-prefix",
+        "kind":  "output",
+        "dtdIssues":  [
+                          "\u0027ir10\u0027 is already used as an ID."
+                      ],
+        "errors":  "1",
+        "warnings":  "2",
+        "skipped":  "0",
+        "messages":  [
+                         {
+                             "code":  "MSC529",
+                             "severity":  "warning",
+                             "message":  "Element \u0027ce:grant-sponsor\u0027 should preferably have a sponsor ID (attribute \u0027sponsor-id\u0027)."
+                         },
+                         {
+                             "code":  "ROL517",
+                             "severity":  "warning",
+                             "message":  "Either the role attribute is missing or the role value is inappropriate."
+                         },
+                         {
+                             "code":  "parser",
+                             "severity":  "error",
+                             "message":  "Error: Attribute value \"ir10\" of type ID must be unique within the document."
+                         }
+                     ]
+    },
+    {
+        "name":  "malformed-updated-xml-emitted",
+        "kind":  "original",
+        "dtdIssues":  [
+
+                      ],
+        "errors":  "0",
+        "warnings":  "2",
+        "skipped":  "0",
+        "messages":  [
+                         {
+                             "code":  "MSC529",
+                             "severity":  "warning",
+                             "message":  "Element \u0027ce:grant-sponsor\u0027 should preferably have a sponsor ID (attribute \u0027sponsor-id\u0027)."
+                         },
+                         {
+                             "code":  "ROL517",
+                             "severity":  "warning",
+                             "message":  "Either the role attribute is missing or the role value is inappropriate."
+                         }
+                     ]
+    },
+    {
+        "name":  "malformed-updated-xml-emitted",
+        "kind":  "output",
+        "dtdIssues":  [
+                          "Exception calling \"Read\" with \"0\" argument(s): \"The \u0027sb:maintitle\u0027 start tag on line 1 position 57549 does not match the end tag of \u0027sb:title\u0027. Line 1, position 57588.\""
+                      ],
+        "errors":  "3",
+        "warnings":  "0",
+        "skipped":  "0",
+        "messages":  [
+                         {
+                             "code":  null,
+                             "severity":  "error",
+                             "message":  "Not able to validate: org.xml.sax.SAXParseException; systemId: file:/C:/Users/Kevin/AppData/Local/Temp/reference-updater-audit-1261f694ebd240db98cfac2c528ae53c/malformed-updated-xml-emitted-output.xml; lineNumber: 1; columnNumber: 57588; The element type \"sb:maintitle\" must be terminated by the matching end-tag \"\u003c/sb:maintitle\u003e\"."
+                         },
+                         {
+                             "code":  "parser",
+                             "severity":  "error",
+                             "message":  "Error: The element type \"sb:maintitle\" must be terminated by the matching end-tag \"\u003c/sb:maintitle\u003e\"."
+                         },
+                         {
+                             "code":  "Exception",
+                             "severity":  "error",
+                             "message":  "The element type \"sb:maintitle\" must be terminated by the matching end-tag \"\u003c/sb:maintitle\u003e\"."
+                         }
+                     ]
+    }
+]

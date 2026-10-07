@@ -1,0 +1,31 @@
+<ce:bib-reference id="bb0005">
+<ce:label>Smith, 2020</ce:label>
+<sb:reference id="rf0005">
+<sb:contribution>
+<sb:authors>
+<sb:author>
+<ce:given-name>A.</ce:given-name>
+<ce:surname>Smith</ce:surname>
+</sb:author>
+<sb:author>
+<ce:surname>Jones</ce:surname>
+</sb:author>
+<sb:author>
+<ce:surname>Lee</ce:surname>
+</sb:author>
+</sb:authors>
+<sb:title>
+<sb:maintitle>Alpha evidence</sb:maintitle>
+</sb:title>
+</sb:contribution>
+<sb:host>
+<sb:book>
+<sb:title>
+<sb:maintitle>Book</sb:maintitle>
+</sb:title>
+<sb:date>2020</sb:date>
+</sb:book>
+</sb:host>
+</sb:reference>
+<ce:source-text id="se0005">Original prose</ce:source-text>
+</ce:bib-reference>

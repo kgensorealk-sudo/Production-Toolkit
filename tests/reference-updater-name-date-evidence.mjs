@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {engine,ref,book,sourceText} from './reference-updater-harness.mjs';
+const authors=last=>`<sb:authors><sb:author><ce:given-name>A.</ce:given-name><ce:surname>Smith</ce:surname></sb:author><sb:author><ce:surname>Jones</ce:surname></sb:author><sb:author><ce:surname>${last}</ce:surname></sb:author></sb:authors>`;
+const mk=(id,title,last,text)=>ref('bb'+id,'Smith, 2020',book('rf'+id,'Smith','2020',title).replace(/<sb:authors>[\s\S]*?<\/sb:authors>/,authors(last))+sourceText('se'+id,text));
+const original=mk('5','Alpha evidence','Lee','Original prose');
+const bad=mk('900','Unrelated investigation','Brown','Incoming prose');
+const good=mk('905','Alpha evidence','Lee','Corrected prose');
+const state={scanResults:[]};engine(original,bad+good,state,{addOrphans:false}).runAnalysis();
+assert.equal(state.scanResults[0].updatedIndex,1);assert.equal(state.scanResults[0].matchType,'Label');
+assert.equal(state.scanResults[0].status,'potential_duplicate');
+await engine(original,bad+good,state,{addOrphans:false,autoUpdateSmartMatch:true}).initiateUpdate();assert.equal(state.output,undefined);
+engine(original,bad+good,state,{addOrphans:false}).mergeDuplicate(state.scanResults[0].uid,0);
+await engine(original,bad+good,state,{addOrphans:false}).initiateUpdate();assert.ok(state.output.includes('Corrected prose'));assert.ok(!state.output.includes('Brown'));
+// Same title and first two authors: a third-author difference must affect ranking.
+const list={scanResults:[]};engine(original,mk('900','Alpha evidence','Brown','Other prose')+good,list,{addOrphans:false}).runAnalysis();
+assert.equal(list.scanResults[0].updatedIndex,1);assert.ok(list.scanResults[0].candidates[0].score>list.scanResults[0].candidates[1].score);
+const parsed=engine('','').parseReferences(original)[0];assert.deepEqual(parsed.rawAuthors,['A. Smith','Jones','Lee']);
+const partial=good.replace('</sb:authors>','<sb:et-al/></sb:authors>');
+const truncated={scanResults:[]};engine(original,partial,truncated).runAnalysis();assert.ok(truncated.scanResults[0].matchScore<100);
+fs.mkdirSync('artifacts/reference-updater-name-date-evidence',{recursive:true});
+fs.writeFileSync('artifacts/reference-updater-name-date-evidence/results.json',JSON.stringify([{name:'title-author-review',original,updated:bad+good,output:state.output}],null,2));
+console.log('4 name-date evidence regression scenarios passed.');
