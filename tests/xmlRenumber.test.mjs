@@ -11,6 +11,107 @@ const missing = '<ce:bib-reference id="A"><ce:other-ref>Unlabelled</ce:other-ref
 const bib = (id, label) => `<ce:bib-reference id="${id}"><ce:label>${label}</ce:label></ce:bib-reference>`;
 const cite = (id, label = '9') => `<ce:cross-ref refid="${id}">${label}</ce:cross-ref>`;
 
+test('linked WHO author-date citation follows the expanded organization reference label', () => {
+    for (const text of ['WHO et al., 2020', '(WHO et al., 2020)', 'WHO et al.,2020', 'World Health Organization et al., 2020']) {
+        const result = run(bib('B', 'World Health Organization et al., 2020') + cite('B', text));
+        assert.equal(result.output, bib('B', '[1]') + cite('B', '[1]'));
+        assert.equal(result.issues.length, 0);
+        assert.equal(run(result.output).output, result.output);
+    }
+});
+
+test('renumbering a citation inside a parenthetical sentence keeps the sentence and closing parenthesis', () => {
+    const paragraph = '<ce:para>(This has been confirmed by ' + cite('B', 'WHO, 2020') + ')</ce:para>';
+    const result = run(bib('B', 'World Health Organization, 2020') + paragraph);
+    assert.equal(result.output, bib('B', '[1]') + '<ce:para>(This has been confirmed by ' + cite('B', '[1]') + ')</ce:para>');
+    assert.equal(result.issues.length, 0);
+    assert.equal(run(result.output).output, result.output);
+});
+
+test('linked author-date citations use their targets even when labels are already numbered', () => {
+    const result = run(bib('A', '[9]') + bib('B', '[10]') + cite('B', 'WHO et al., 2020'));
+    assert.equal(result.output, bib('A', '[1]') + bib('B', '[2]') + cite('B', '[2]'));
+    assert.equal(result.issues.length, 0);
+});
+
+test('external author-date parentheses become one configured citation bracket pair', () => {
+    for (const [prefix, suffix] of [['[', ']'], ['{', '}'], ['', '']]) {
+        const xml = bib('B', 'World Health Organization et al., 2020') + '<ce:para>(' + cite('B', 'WHO et al., 2020') + ')</ce:para>';
+        const result = renumberWithProfile(xml, ELSEVIER_PROFILE, prefix, suffix);
+        const citation = prefix === '[' ? cite('B', '[1]') : prefix + cite('B', '1') + suffix;
+        assert.equal(result.output, bib('B', prefix + '1' + suffix) + '<ce:para>' + citation + '</ce:para>');
+        assert.equal(result.issues.length, 0);
+        assert.equal(renumberWithProfile(result.output, ELSEVIER_PROFILE, prefix, suffix).output, result.output);
+    }
+});
+
+test('author-date formatting and encoded page locators survive conversion', () => {
+    const xml = bib('B', 'World Health Organization et al., 2020a') + cite('B', '<ce:italic>WHO et al., 2020a&#44; pp. 25&#x2013;27</ce:italic>');
+    assert.equal(run(xml).output, bib('B', '[1]') + cite('B', '<ce:italic>[1&#44; pp. 25&#x2013;27]</ce:italic>'));
+    assert.equal(renumberWithProfile(xml, ELSEVIER_PROFILE, '[', ']', false).output, bib('B', '[1]') + cite('B', '[1&#44; pp. 25&#x2013;27]'));
+});
+
+test('linked Unicode names and organizations with ampersands support author-date conversion', () => {
+    for (const text of ['García et al., 2020', 'O’Neill &amp; Müller, 2020', 'World Health Organization (WHO), 2020']) {
+        const result = run(bib('B', '9') + cite('B', text));
+        assert.equal(result.output, bib('B', '[1]') + cite('B', '[1]'));
+        assert.equal(result.issues.length, 0);
+    }
+});
+
+test('resolved author-date citation groups and separate links follow all target numbers', () => {
+    const refs = bib('A', 'World Health Organization et al., 2020') + bib('B', 'Smith, 2021');
+    const group = '<ce:cross-refs refid="B A">Smith, 2021; WHO et al., 2020</ce:cross-refs>';
+    assert.equal(run(refs + group).output, bib('A', '[1]') + bib('B', '[2]') + group.replace('Smith, 2021; WHO et al., 2020', '[1,2]'));
+    const separate = '<ce:para>(' + cite('A', 'WHO et al., 2020') + '; ' + cite('B', 'Smith, 2021') + ')</ce:para>';
+    assert.equal(run(refs + separate).output, bib('A', '[1]') + bib('B', '[2]') + '<ce:para>[' + cite('A', '1') + '; ' + cite('B', '2') + ']</ce:para>');
+});
+
+test('author-date conversion preserves unlinked text, unresolved links, prose, and complex markup', () => {
+    const refs = bib('B', 'World Health Organization et al., 2020');
+    const plain = '<ce:para>(WHO et al., 2020)</ce:para>';
+    assert.equal(run(refs + plain).output, bib('B', '[1]') + plain);
+    for (const citation of [cite('missing', 'WHO et al., 2020'), '<ce:cross-ref>WHO et al., 2020</ce:cross-ref>', cite('B', 'see WHO et al., 2020'), cite('B', 'WHO et al., 2020; Smith, 2021'), cite('B', 'WHO <ce:italic>et al.</ce:italic>, 2020')]) {
+        const result = run(refs + citation);
+        assert.ok(result.output.endsWith(citation));
+        assert.ok(result.issues.length);
+    }
+    const nonbib = '<ce:figure id="F"/>' + cite('F', 'WHO et al., 2020');
+    assert.equal(run(refs + nonbib).output, bib('B', '[1]') + nonbib);
+});
+
+test('ambiguous author-date markup does not trigger external bracket edits', () => {
+    const citation = '<ce:para>(' + cite('B', 'WHO <ce:italic>et al.</ce:italic>, 2020') + ')</ce:para>';
+    const result = run(bib('B', 'World Health Organization et al., 2020') + citation);
+    assert.ok(result.output.endsWith(citation));
+    assert.match(result.issues[0].message, /Complex citation markup/);
+});
+
+test('invalid target counts and grouped locators preserve the entire outer citation pair', () => {
+    const refs = bib('B', '9') + bib('C', '10');
+    for (const citation of ['<ce:cross-ref refid="B C">WHO et al., 2020</ce:cross-ref>', cite('B', '9,10'), '<ce:cross-refs refid="B C">9,10, p. 25</ce:cross-refs>']) {
+        const paragraph = '<ce:para>(' + citation + ')</ce:para>';
+        const result = run(refs + paragraph);
+        assert.ok(result.output.endsWith(paragraph));
+        assert.ok(result.issues.length);
+    }
+});
+
+test('author-date citations within bibliography text retain their external parentheses', () => {
+    const other = '<ce:other-ref id="or5"><ce:textref>(' + cite('C', 'Smith, 2021') + ')</ce:textref></ce:other-ref>';
+    const first = '<ce:bib-reference id="B"><ce:label>WHO, 2020</ce:label>' + other + '</ce:bib-reference>';
+    const result = run(first + bib('C', 'Smith, 2021'));
+    assert.equal(result.output, first.replace('>WHO, 2020<', '>[1]<') + bib('C', '[2]'));
+    assert.match(result.issues[0].message, /inside bibliography/);
+});
+
+test('author-date conversion respects custom element and target mappings', () => {
+    const profile = { ...ELSEVIER_PROFILE, elements: { reference: 'ref', label: 'label', singleCitation: 'cite', groupedCitation: 'cites' }, attributes: { id: 'key', targets: 'target' } };
+    const result = renumberWithProfile('<ref key="WHO"><label>World Health Organization et al., 2020</label></ref><cite target="WHO">WHO et al., 2020</cite>', profile, '[', ']');
+    assert.equal(result.output, '<ref key="WHO"><label>[1]</label></ref><cite target="WHO">[1]</cite>');
+    assert.equal(result.issues.length, 0);
+});
+
 test('outer citation brackets adopt configured delimiters without double wrapping', () => {
     const cases = [
         '[' + cite('B') + ']',

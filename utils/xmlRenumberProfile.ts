@@ -106,6 +106,15 @@ export interface RenumberChange { id: string; oldLabel: string; newLabel: string
 export interface RenumberIssue { target: string; message: string; }
 const escapeText = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+function authorDateCitation(text: string): { locator: string; locatorStart: number } | undefined {
+    // The existing refid determines the reference, including abbreviated group names.
+    // Accept a complete author–year citation, while keeping prose and partial citations for review.
+    const match = /^([\p{L}\p{M}][\p{L}\p{M}\p{N}\s.,'’ʻ&()\p{Pd}]*?)(?:\s*,\s*|\s+)(\d{4}[a-z]?)(\s*,\s*pp?\.\s*\d+(?:\s*[–—-]\s*\d+)?(?:\s*,\s*\d+(?:\s*[–—-]\s*\d+)?)*)?\s*$/iu.exec(text);
+    if (!match || /^(?:see|cf\.?|compare|e\.g\.?|ibid\.?)\s+\p{L}/iu.test(match[1])) return undefined;
+    const locator = match[3] || '';
+    return { locator, locatorStart: match[1].length + text.slice(match[1].length).indexOf(match[2]) + match[2].length };
+}
+
 export function renumberWithProfile(xml: string, profile: RenumberProfile, prefix: string, suffix: string, retainCitationFormatting = true, retainLabelFormatting = true, fixDuplicateCitationIds = false): { output: string; changes: RenumberChange[]; issues: RenumberIssue[]; processed: number; missingLabelCount: number; uncitedIds: string[] } {
     profile = parseRenumberProfile(JSON.stringify(profile));
     const nodes = scanXml(xml);
@@ -242,6 +251,32 @@ export function renumberWithProfile(xml: string, profile: RenumberProfile, prefi
         else edits.push({ start: label.openEnd, end: label.closeStart, text: labelContent });
         changes.push({ id, oldLabel: oldLabel.trim(), newLabel, changed: oldLabel !== labelContent, isOtherRef });
     }
+    const supportsAuthorDateText = (text: string, node: XmlNode): boolean => {
+        if (node.name === profile.elements.singleCitation) return !!authorDateCitation(text);
+        const entries = text.split(/\s*;\s*/);
+        const targets = (node.attributes[profile.attributes.targets] || '').trim().split(/\s+/).filter(Boolean);
+        return entries.length === targets.length && entries.every(entry => {
+            const parsed = authorDateCitation(entry);
+            return parsed && !parsed.locator;
+        });
+    };
+    const plainCitationText = (node: XmlNode): string | undefined => {
+        const formatting = new Set(['ce:italic', 'ce:bold', 'ce:sup', 'ce:inf']);
+        let leaf = node;
+        while (leaf.children.length) {
+            const child = leaf.children[0];
+            if (leaf.children.length !== 1 || !formatting.has(child.name) ||
+                xml.slice(leaf.openEnd, child.start).trim() || xml.slice(child.end, leaf.closeStart).trim() ||
+                /\/\s*>$/.test(xml.slice(child.start, child.openEnd))) return undefined;
+            leaf = child;
+        }
+        const original = xml.slice(leaf.openEnd, leaf.closeStart);
+        if (original.includes('<')) return undefined;
+        let text = decodeAttribute(original).trim();
+        const close = ({ '[': ']', '(': ')', '{': '}' } as Record<string, string>)[text[0]];
+        if (close && text.endsWith(close)) text = text.slice(1, -1).trim();
+        return text;
+    };
     const sharedBrackets = new Set<XmlNode>();
     {
         for (const parent of nodes.filter(node => node.children.some(child => bibliographyCitations.includes(child)))) {
@@ -268,10 +303,18 @@ export function renumberWithProfile(xml: string, profile: RenumberProfile, prefi
                 if (!/^\s*\uFFFC(?:\s*[,;–—-]\s*\uFFFC)*(?:\s*,\s*pp?\.\s*\d+(?:\s*[–—-]\s*\d+)?(?:\s*,\s*\d+(?:\s*[–—-]\s*\d+)?)*)?\s*$/.test(content)) continue;
                 const group = [...markers].filter(([position]) => position > match.index! && position < match.index! + match[0].length - 1).map(([, child]) => child);
                 // Preserve groups with empty, unresolved, or complex citations for review.
-                if (!group.every(child => (child.attributes[profile.attributes.targets] || '').trim().split(/\s+/).every(id => numbers.has(id)) &&
-                    /^\s*[\[({]?\d+(?:\s*[,;–—-]\s*\d+)*(?:\s*,\s*pp?\.\s*\d+(?:\s*[–—-]\s*\d+)?)?[\])}]?\s*$/.test(decodeAttribute(xml.slice(child.openEnd, child.closeStart).replace(/<\/?ce:(?:italic|bold|sup|inf)\b[^>]*>/g, ''))))) continue;
+                if (!group.every(child => {
+                    const targets = (child.attributes[profile.attributes.targets] || '').trim().split(/\s+/).filter(Boolean);
+                    if (!targets.length || (child.name === profile.elements.singleCitation && targets.length !== 1) || !targets.every(id => numbers.has(id))) return false;
+                    for (let ancestor = child.parent; ancestor; ancestor = ancestor.parent) if (ancestor.name === profile.elements.reference) return false;
+                    const text = plainCitationText(child);
+                    const numeric = child.name === profile.elements.singleCitation
+                        ? /^\d+(?:\s*,\s*pp?\.\s*\d+(?:\s*[–—-]\s*\d+)?(?:\s*,\s*\d+(?:\s*[–—-]\s*\d+)?)*)?\s*$/
+                        : /^\d+(?:\s*[,;–—-]\s*\d+)*$/;
+                    return text !== undefined && (numeric.test(text) || supportsAuthorDateText(text, child));
+                })) continue;
                 // Keep the established single square-bracket normalization.
-                if (match[1] === '[' && prefix === '[' && suffix === ']' && group.length === 1 && !/pp?\./.test(content)) continue;
+                if (prefix === '[' && suffix === ']' && group.length === 1 && !/pp?\./.test(content)) continue;
                 const opening = positions[match.index!], closing = positions[match.index! + match[0].length - 1];
                 edits.push({ start: opening, end: opening + 1, text: escapeText(prefix) }, { start: closing, end: closing + 1, text: escapeText(suffix) });
                 for (const [position, child] of markers) {
@@ -369,9 +412,12 @@ export function renumberWithProfile(xml: string, profile: RenumberProfile, prefi
             let locator = '';
             if (node.name === profile.elements.singleCitation) {
                 const match = /^(\d+)(\s*,\s*pp?\.\s*\d+(?:\s*[–—-]\s*\d+)?(?:\s*,\s*\d+(?:\s*[–—-]\s*\d+)?)*)?\s*$/.exec(text);
-                if (!match) return undefined;
-                if (match[2]) locator = original.slice(offsets[from + match[1].length], offsets[from + match[1].length + match[2].length]);
-            } else if (!/^\d+(?:\s*[,;–—-]\s*\d+)*$/.test(text)) return undefined;
+                const authorDate = match ? undefined : authorDateCitation(text);
+                if (!match && !authorDate) return undefined;
+                const locatorStart = match ? match[1].length : authorDate!.locatorStart;
+                const locatorText = match ? match[2] || '' : authorDate!.locator;
+                if (locatorText) locator = original.slice(offsets[from + locatorStart], offsets[from + locatorStart + locatorText.length]);
+            } else if (!/^\d+(?:\s*[,;–—-]\s*\d+)*$/.test(text) && !supportsAuthorDateText(text, node)) return undefined;
             return original.slice(0, offsets[outerFrom]) + escapeText(`${citationPrefix}${groups.join(',')}`) + locator + escapeText(citationSuffix) + original.slice(offsets[outerTo]);
         };
         let newText = escapeText(`${citationPrefix}${groups.join(',')}${citationSuffix}`);
@@ -418,9 +464,10 @@ export function renumberWithProfile(xml: string, profile: RenumberProfile, prefi
                 } else replacementContent = newText;
             }
         }
-        const before = /\[\s*$/.exec(xml.slice(0, node.start));
-        const after = /^\s*\]/.exec(xml.slice(node.end));
-        if (!sharedBrackets.has(node) && prefix === '[' && suffix === ']' && before && after) {
+        const before = /([\[({])\s*$/.exec(xml.slice(0, node.start));
+        const after = /^\s*([\])}])/.exec(xml.slice(node.end));
+        const matchedOuterPair = before && after && after[1] === ({ '[': ']', '(': ')', '{': '}' } as Record<string, string>)[before[1]];
+        if (!sharedBrackets.has(node) && prefix === '[' && suffix === ']' && matchedOuterPair) {
             // Normalize an existing bracket pair outside the citation into its text.
             start = node.start - before[0].length; end = node.end + after[0].length;
             edits.push({ start, end, text: replacementOpen + replacementContent + replacementClose });

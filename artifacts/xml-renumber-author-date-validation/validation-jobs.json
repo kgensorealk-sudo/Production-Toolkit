@@ -1,0 +1,38 @@
+[
+  {
+    "name": "baseline",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\xml-renumber-author-date-h7oB4w\\baseline.xml"
+  },
+  {
+    "name": "who-external-parentheses-input",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\xml-renumber-author-date-h7oB4w\\who-external-parentheses-input.xml"
+  },
+  {
+    "name": "who-external-parentheses-output",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\xml-renumber-author-date-h7oB4w\\who-external-parentheses-output.xml"
+  },
+  {
+    "name": "who-internal-parentheses-input",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\xml-renumber-author-date-h7oB4w\\who-internal-parentheses-input.xml"
+  },
+  {
+    "name": "who-internal-parentheses-output",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\xml-renumber-author-date-h7oB4w\\who-internal-parentheses-output.xml"
+  },
+  {
+    "name": "who-formatted-locator-input",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\xml-renumber-author-date-h7oB4w\\who-formatted-locator-input.xml"
+  },
+  {
+    "name": "who-formatted-locator-output",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\xml-renumber-author-date-h7oB4w\\who-formatted-locator-output.xml"
+  },
+  {
+    "name": "who-smith-group-input",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\xml-renumber-author-date-h7oB4w\\who-smith-group-input.xml"
+  },
+  {
+    "name": "who-smith-group-output",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\xml-renumber-author-date-h7oB4w\\who-smith-group-output.xml"
+  }
+]

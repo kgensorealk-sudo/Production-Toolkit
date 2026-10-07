@@ -1,0 +1,30 @@
+[
+  {
+    "name": "who-external-parentheses",
+    "citation": "(<ce:cross-ref id=\"cf990005\" refid=\"bb0005\">WHO et al., 2020</ce:cross-ref>)",
+    "expected": "<ce:cross-ref id=\"cf990005\" refid=\"bb0005\">[1]</ce:cross-ref>",
+    "processed": 47,
+    "issues": []
+  },
+  {
+    "name": "who-internal-parentheses",
+    "citation": "<ce:cross-ref id=\"cf990005\" refid=\"bb0005\">(WHO et al., 2020)</ce:cross-ref>",
+    "expected": "<ce:cross-ref id=\"cf990005\" refid=\"bb0005\">[1]</ce:cross-ref>",
+    "processed": 47,
+    "issues": []
+  },
+  {
+    "name": "who-formatted-locator",
+    "citation": "<ce:cross-ref id=\"cf990005\" refid=\"bb0005\"><ce:italic>WHO et al., 2020, pp. 25–27</ce:italic></ce:cross-ref>",
+    "expected": "<ce:cross-ref id=\"cf990005\" refid=\"bb0005\"><ce:italic>[1, pp. 25–27]</ce:italic></ce:cross-ref>",
+    "processed": 47,
+    "issues": []
+  },
+  {
+    "name": "who-smith-group",
+    "citation": "<ce:cross-refs id=\"cf990005\" refid=\"bb0005 bb0010\">WHO et al., 2020; Smith et al., 2021</ce:cross-refs>",
+    "expected": "<ce:cross-refs id=\"cf990005\" refid=\"bb0005 bb0010\">[1,2]</ce:cross-refs>",
+    "processed": 47,
+    "issues": []
+  }
+]

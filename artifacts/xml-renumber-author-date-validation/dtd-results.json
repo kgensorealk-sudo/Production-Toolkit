@@ -1,0 +1,47 @@
+[
+  {
+    "name": "baseline",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "who-external-parentheses-input",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "who-external-parentheses-output",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "who-internal-parentheses-input",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "who-internal-parentheses-output",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "who-formatted-locator-input",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "who-formatted-locator-output",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "who-smith-group-input",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "who-smith-group-output",
+    "passed": true,
+    "issues": []
+  }
+]
