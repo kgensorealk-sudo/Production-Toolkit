@@ -178,14 +178,38 @@ export function renumberWithProfile(xml: string, profile: RenumberProfile, prefi
         const selfClosing = /\/\s*>$/.test(citationOpen);
         const replacementOpen = selfClosing ? citationOpen.replace(/\/\s*>$/, '>') : citationOpen;
         const replacementClose = selfClosing ? `</${node.name}>` : xml.slice(node.closeStart, node.end);
+        const newText = escapeText(`${prefix}${groups.join(',')}${suffix}`);
+        let replacementContent = newText;
+        if (!node.children.length && xml.slice(node.openEnd, node.closeStart).includes('<')) {
+            issues.push({ target: ids.join(' '), message: 'Complex citation markup preserved; review numbering manually.' }); continue;
+        }
+        if (node.children.length) {
+            // A single chain of formatting wrappers has one unambiguous numeric
+            // text slot. Preserve every wrapper, attribute, and surrounding space.
+            const formatting = new Set(['ce:italic', 'ce:bold', 'ce:sup', 'ce:inf']);
+            let leaf = node, safe = true;
+            while (leaf.children.length) {
+                const child = leaf.children[0];
+                if (leaf.children.length !== 1 || !formatting.has(child.name) ||
+                    xml.slice(leaf.openEnd, child.start).trim() || xml.slice(child.end, leaf.closeStart).trim() ||
+                    /\/\s*>$/.test(xml.slice(child.start, child.openEnd))) { safe = false; break; }
+                leaf = child;
+            }
+            const text = xml.slice(leaf.openEnd, leaf.closeStart);
+            if (!safe || !/^\s*[\[(]?\s*\d+(?:\s*[,;–—-]\s*\d+)*\s*[\])]?\s*$/.test(text)) {
+                issues.push({ target: ids.join(' '), message: 'Complex citation markup preserved; review numbering manually.' }); continue;
+            }
+            const leading = /^\s*/.exec(text)![0], trailing = /\s*$/.exec(text)![0];
+            replacementContent = xml.slice(node.openEnd, leaf.openEnd) + leading + newText + trailing + xml.slice(leaf.closeStart, node.closeStart);
+        }
         const before = /\[\s*$/.exec(xml.slice(0, node.start));
         const after = /^\s*\]/.exec(xml.slice(node.end));
         if (prefix === '[' && suffix === ']' && before && after) {
             // Normalize an existing bracket pair outside the citation into its text.
             start = node.start - before[0].length; end = node.end + after[0].length;
-            edits.push({ start, end, text: replacementOpen + escapeText(`[${groups.join(',')}]`) + replacementClose });
+            edits.push({ start, end, text: replacementOpen + replacementContent + replacementClose });
         } else if (selfClosing) edits.push({ start: node.start, end: node.end, text: replacementOpen + escapeText(`${prefix}${groups.join(',')}${suffix}`) + replacementClose });
-        else edits.push({ start, end, text: escapeText(`${prefix}${groups.join(',')}${suffix}`) });
+        else edits.push({ start, end, text: replacementContent });
     }
     let output = xml;
     let boundary = xml.length;

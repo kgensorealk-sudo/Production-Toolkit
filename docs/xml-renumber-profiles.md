@@ -28,6 +28,8 @@ The existing rich-text extraction and tool recommendations remain Elsevier-speci
 
 ## Verification
 
+Numeric citations wrapped in a single chain of `ce:italic`, `ce:bold`, `ce:sup`, or `ce:inf` retain those elements, their attributes/IDs, and surrounding whitespace. Multiple formatting branches, unsupported elements, descriptive text inside wrappers, comments, or CDATA are preserved unchanged and reported for manual numbering review. Formatting names from another publisher require explicit support rather than guessing their semantics.
+
 Run `node --test tests/*.test.mjs`, `npm run lint`, and `npm run build`. The regression suite covers profile processing, malformed input, unresolved targets, source preservation, diff line numbering, clipboard rejection, and storage quota failures.
 
 The diff compares the last processed input with its output. Later edits to input or label settings mark that result stale. Clear cancels queued processing, and CSV export includes reference failures and citation issues.

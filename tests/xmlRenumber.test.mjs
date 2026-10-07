@@ -158,3 +158,31 @@ test('skipped reference targets are preserved in grouped citations', () => {
 test('comments in internal subsets do not corrupt tag boundaries', () => {
     assert.equal(run('<!DOCTYPE article SYSTEM "art570.dtd" [<!-- ] --> <!ENTITY sample "text">]>' + bib('B', '9')).processed, 1);
 });
+
+test('citation formatting and nested IDs survive renumbering', () => {
+    const citation = '<ce:cross-ref refid="B">\n  <ce:italic id="style1"><ce:bold>9</ce:bold></ce:italic>\n</ce:cross-ref>';
+    const link = cite('style1', 'linked text');
+    const result = run(bib('B', '9') + citation + link);
+    assert.equal(result.output, bib('B', '[1]') + citation.replace('>9<', '>[1]<') + link);
+    assert.equal(result.issues.length, 0);
+    assert.equal(run(result.output).output, result.output);
+});
+
+test('external brackets normalize without deleting citation formatting', () => {
+    const citation = '<ce:cross-ref refid="B"><ce:sup id="s1">9</ce:sup></ce:cross-ref>';
+    assert.equal(run(bib('B', '9') + '[' + citation + ']').output, bib('B', '[1]') + citation.replace('>9<', '>[1]<'));
+});
+
+test('ambiguous or unsupported citation markup remains unchanged and flagged', () => {
+    for (const content of ['<ce:italic id="i1">9</ce:italic>,<ce:bold>10</ce:bold>', '<unknown id="u1">9</unknown>', '<ce:italic>see 9</ce:italic>', '<ce:italic><!-- note -->9</ce:italic>', '<!-- note -->9', '<![CDATA[9]]>']) {
+        const citation = '<ce:cross-ref refid="B">' + content + '</ce:cross-ref>';
+        const result = run(bib('B', '9') + citation);
+        assert.equal(result.output, bib('B', '[1]') + citation);
+        assert.ok(result.issues.some(issue => /Complex citation markup/.test(issue.message)));
+    }
+});
+
+test('grouped numeric citation can keep a formatting wrapper', () => {
+    const citation = '<ce:cross-refs refid="A B"><ce:bold id="b1">9,10</ce:bold></ce:cross-refs>';
+    assert.equal(run(bib('A', '9') + bib('B', '10') + citation).output, bib('A', '[1]') + bib('B', '[2]') + citation.replace('>9,10<', '>[1,2]<'));
+});
