@@ -10,7 +10,8 @@ import LoadingOverlay from '../components/LoadingOverlay';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 import useLocalStorage from '../hooks/useLocalStorage';
 import useSessionStorage from '../hooks/useSessionStorage';
-import { ELSEVIER_PROFILE, parseRenumberProfile, renumberWithProfile, RenumberProfile, RenumberIssue } from '../utils/xmlRenumberProfile';
+import { useAuth } from '../contexts/AuthContext';
+import { ELSEVIER_PROFILE, parseRenumberProfile, accountRenumberProfile, renumberWithProfile, RenumberProfile, RenumberIssue } from '../utils/xmlRenumberProfile';
 
 interface ReferenceChange {
     id: string;
@@ -23,6 +24,7 @@ interface ReferenceChange {
 }
 
 const XmlRenumber: React.FC = () => {
+    const { isAdmin, user } = useAuth();
     const location = useLocation();
     const navigate = useNavigate();
     const [input, setInput] = useSessionStorage<string>('xml_renumber_input', '');
@@ -30,14 +32,20 @@ const XmlRenumber: React.FC = () => {
     const [lastProcessedInput, setLastProcessedInput] = useSessionStorage<string>('xml_renumber_last_processed_input', '');
     const [prefix, setPrefix] = useSessionStorage('xml_renumber_prefix', '[');
     const [suffix, setSuffix] = useSessionStorage('xml_renumber_suffix', ']');
-    const [storedProfile, setActiveProfile] = useSessionStorage<RenumberProfile>('xml_renumber_profile', ELSEVIER_PROFILE);
-    const activeProfile = React.useMemo(() => {
-        try { return parseRenumberProfile(JSON.stringify(storedProfile)); }
-        catch { return ELSEVIER_PROFILE; }
-    }, [storedProfile]);
+    const [retainCitationFormatting, setRetainCitationFormatting] = useSessionStorage('xml_renumber_retain_citation_formatting', true);
+    const [retainLabelFormatting, setRetainLabelFormatting] = useSessionStorage('xml_renumber_retain_label_formatting', true);
+    const [fixDuplicateCitationIds, setFixDuplicateCitationIds] = useSessionStorage('xml_renumber_fix_duplicate_citation_ids', false);
+    const [accountProfiles, setAccountProfiles] = useSessionStorage<Record<string, RenumberProfile>>('xml_renumber_account_profiles', {});
+    const activeProfile = React.useMemo(() => accountRenumberProfile(isAdmin, user?.id, accountProfiles), [isAdmin, user?.id, accountProfiles]);
+    const setActiveProfile = (profile: RenumberProfile) => {
+        if (!isAdmin || !user?.id) return;
+        const userId = user.id;
+        setAccountProfiles(previous => ({ ...previous, [userId]: profile }));
+    };
+    const [workspaceOwner, setWorkspaceOwner] = useSessionStorage('xml_renumber_workspace_owner', '');
     const [profileIssues, setProfileIssues] = useSessionStorage<RenumberIssue[]>('xml_renumber_profile_issues', []);
     const [processedSettings, setProcessedSettings] = useSessionStorage('xml_renumber_processed_settings', '');
-    const currentSettings = JSON.stringify({ prefix, suffix, activeProfile });
+    const currentSettings = JSON.stringify({ prefix, suffix, activeProfile, retainCitationFormatting, retainLabelFormatting, fixDuplicateCitationIds });
     const processingRef = useRef(false);
     const operationRef = useRef(0);
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -89,6 +97,16 @@ const XmlRenumber: React.FC = () => {
         setToast({ msg: message, type: 'success' });
     };
 
+    useEffect(() => {
+        const owner = `${user?.id || 'signed-out'}:${isAdmin ? 'admin' : 'user'}`;
+        if (workspaceOwner !== owner) {
+            loadInput('', 'Workspace reset for the current account.');
+            setWorkspaceOwner(owner);
+        }
+        // The old profile has no account owner and must not be reused.
+        try { sessionStorage.removeItem('xml_renumber_profile'); } catch {}
+    }, [user?.id, isAdmin, workspaceOwner]);
+
     const handleLoadFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         event.target.value = '';
@@ -109,6 +127,7 @@ const XmlRenumber: React.FC = () => {
     };
 
     const handleLoadProfile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        if (!isAdmin || !user?.id) return;
         const file = event.target.files?.[0];
         event.target.value = '';
         if (!file) return;
@@ -381,7 +400,7 @@ const XmlRenumber: React.FC = () => {
         timerRef.current = setTimeout(() => {
             if (operation !== operationRef.current) return;
             try {
-                const result = renumberWithProfile(input, activeProfile, prefix, suffix);
+                const result = renumberWithProfile(input, activeProfile, prefix, suffix, retainCitationFormatting, retainLabelFormatting, fixDuplicateCitationIds);
                 const renumberedText = result.output;
                 const changes = result.changes;
                 const bibMatchCount = result.processed;
@@ -620,7 +639,7 @@ const XmlRenumber: React.FC = () => {
                 <p className="text-lg text-slate-500 max-w-2xl mx-auto">Standardize citations and automatically update cross-references.</p>
             </div>
 
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 mb-4 space-y-2">
+            {isAdmin && <div className="bg-white border border-slate-200 rounded-2xl p-4 mb-4 space-y-2">
                 <div className="flex flex-wrap items-center gap-3">
                     <span className="font-bold text-slate-700">XML profile: {activeProfile.name}</span>
                     <input ref={profileInputRef} type="file" accept=".json,application/json" onChange={handleLoadProfile} className="hidden" aria-label="Choose XML renumbering profile" />
@@ -631,7 +650,7 @@ const XmlRenumber: React.FC = () => {
                     <a href="/profiles/custom-example.xml" download className="text-sm text-indigo-600">Download Custom Sample XML</a>
                 </div>
                 <p className="text-xs text-slate-500">Source: {activeProfile.source}. These checks cover reference labels and citation targets; they do not validate the complete DTD. Import a reviewed profile for another publisher or DTD version.</p>
-            </div>
+            </div>}
             {profileIssues.length > 0 && (
                 <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4">
                     <h2 className="font-bold text-amber-900">Profile checks: {profileIssues.length} issues</h2>
@@ -661,6 +680,27 @@ const XmlRenumber: React.FC = () => {
                         Preview: <span className="bg-slate-100 px-2 py-1 rounded text-indigo-600 font-mono font-bold border border-slate-200">{prefix}1{suffix}</span>
                     </div>
                 </div>
+                <label className="flex flex-col gap-1 text-sm text-slate-700">
+                    <span className="flex items-center gap-2">
+                        <input type="checkbox" role="switch" checked={retainLabelFormatting} disabled={isLoading} onChange={event => setRetainLabelFormatting(event.target.checked)} className="rounded text-indigo-600" />
+                        Retain label formatting
+                    </span>
+                    <span className="text-xs text-slate-500">Keep supported formatting inside bibliography labels. Prefix and suffix apply to the number.</span>
+                </label>
+                <label className="flex flex-col gap-1 text-sm text-slate-700">
+                    <span className="flex items-center gap-2">
+                        <input type="checkbox" role="switch" checked={retainCitationFormatting} disabled={isLoading} onChange={event => setRetainCitationFormatting(event.target.checked)} className="rounded text-indigo-600" />
+                        Retain citation formatting
+                    </span>
+                    <span className="text-xs text-slate-500">Off removes supported numeric formatting. Linked IDs and complex markup are protected and flagged.</span>
+                </label>
+                <label className="flex flex-col gap-1 text-sm text-slate-700">
+                    <span className="flex items-center gap-2">
+                        <input type="checkbox" role="switch" checked={fixDuplicateCitationIds} disabled={isLoading} onChange={event => setFixDuplicateCitationIds(event.target.checked)} className="rounded text-indigo-600" />
+                        Automatically fix duplicate citation IDs
+                    </span>
+                    <span className="text-xs text-slate-500">Assign unique IDs to duplicate bibliography citations and report repairs. Linked duplicate IDs require manual review.</span>
+                </label>
                 <button 
                     onClick={renumber} 
                     disabled={isLoading}
@@ -839,6 +879,16 @@ const XmlRenumber: React.FC = () => {
 
                             {activeTab === 'report' && (
                                 <div className="bg-white h-full flex flex-col">
+                                    {profileIssues.some(issue => issue.message.startsWith('Empty bibliography citation')) && (
+                                        <div className="p-4 border-b border-amber-200 bg-amber-50 text-sm text-amber-900">
+                                            <p className="font-bold">Empty citations — check author corrections</p>
+                                            <ul className="list-disc pl-5 mt-2 space-y-1">
+                                                {profileIssues.filter(issue => issue.message.startsWith('Empty bibliography citation')).map((issue, index) => (
+                                                    <li key={index}><b>{issue.target}</b>: {issue.message}</li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
                                     <div className="p-4 border-b border-slate-200 bg-slate-50 space-y-3">
                                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                                             <div className="flex gap-4 text-sm">

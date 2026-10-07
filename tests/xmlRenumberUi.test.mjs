@@ -60,9 +60,9 @@ test('Clear cancels delayed processing and repeated keyboard processing is ignor
     let callback, timerCleared = false, output = '', called = 0;
     const names = [...new Set([...code.matchAll(/\b(set[A-Z]\w*)\(/g)].map(m => m[1]))];
     const setters = names.map(name => name === 'setTimeout' ? fn => { callback = fn; return 1; } : name === 'setOutput' ? value => { output = value; } : () => {});
-    const actions = new Function(...names, 'clearTimeout', 'processingRef', 'operationRef', 'timerRef', 'input', 'activeProfile', 'prefix', 'suffix', 'currentSettings', 'renumberWithProfile', 'sessionStorage', code)(
+    const actions = new Function(...names, 'clearTimeout', 'processingRef', 'operationRef', 'timerRef', 'input', 'activeProfile', 'prefix', 'suffix', 'currentSettings', 'renumberWithProfile', 'sessionStorage', 'retainCitationFormatting', 'retainLabelFormatting', 'fixDuplicateCitationIds', code)(
         ...setters, () => { timerCleared = true; }, { current: false }, { current: 0 }, { current: null }, '<xml/>', {}, '[', ']', '{}',
-        () => { called++; throw new Error('Must not run after clear'); }, { removeItem() {} });
+        () => { called++; throw new Error('Must not run after clear'); }, { removeItem() {} }, true, true, false);
     actions.renumber();
     const firstCallback = callback;
     actions.renumber();
