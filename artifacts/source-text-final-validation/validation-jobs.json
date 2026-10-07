@@ -1,0 +1,167 @@
+[
+  {
+    "name": "baseline",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\baseline.xml",
+    "expected": "pass"
+  },
+  {
+    "name": "existing-missing-id-after-id-step",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\existing-missing-id-after-id-step.xml",
+    "expected": "pass"
+  },
+  {
+    "name": "multiple-reference-children-after-id-step",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\multiple-reference-children-after-id-step.xml",
+    "expected": "pass"
+  },
+  {
+    "name": "multiple-reference-existing-second-source-after-id-step",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\multiple-reference-existing-second-source-after-id-step.xml",
+    "expected": "pass"
+  },
+  {
+    "name": "missing-all-ids-after-id-step",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\missing-all-ids-after-id-step.xml",
+    "expected": "pass"
+  },
+  {
+    "name": "other-ref-missing-id-after-id-step",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\other-ref-missing-id-after-id-step.xml",
+    "expected": "pass"
+  },
+  {
+    "name": "trailing-note-after-id-step",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\trailing-note-after-id-step.xml",
+    "expected": "pass"
+  },
+  {
+    "name": "numeric-entity-control-after-id-step",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\numeric-entity-control-after-id-step.xml",
+    "expected": "pass"
+  },
+  {
+    "name": "special-character-control-after-id-step",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\special-character-control-after-id-step.xml",
+    "expected": "pass"
+  },
+  {
+    "name": "inline-space-after-id-step",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\inline-space-after-id-step.xml",
+    "expected": "pass"
+  },
+  {
+    "name": "inline-formatting-control-after-id-step",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\inline-formatting-control-after-id-step.xml",
+    "expected": "pass"
+  },
+  {
+    "name": "cdata-existing-source-after-id-step",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\cdata-existing-source-after-id-step.xml",
+    "expected": "pass"
+  },
+  {
+    "name": "cdata-title-comment-after-id-step",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\cdata-title-comment-after-id-step.xml",
+    "expected": "pass"
+  },
+  {
+    "name": "comma-url-after-id-step",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\comma-url-after-id-step.xml",
+    "expected": "pass"
+  },
+  {
+    "name": "paired-et-al-after-id-step",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\paired-et-al-after-id-step.xml",
+    "expected": "pass"
+  },
+  {
+    "name": "paired-ellipsis-after-id-step",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\paired-ellipsis-after-id-step.xml",
+    "expected": "pass"
+  },
+  {
+    "name": "local-math-namespace-after-id-step",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\local-math-namespace-after-id-step.xml",
+    "expected": "pass"
+  },
+  {
+    "name": "doi-migration-loses-metadata-after-id-step",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\doi-migration-loses-metadata-after-id-step.xml",
+    "expected": "pass"
+  },
+  {
+    "name": "doi-migration-comment-accept-after-id-step",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\doi-migration-comment-accept-after-id-step.xml",
+    "expected": "pass"
+  },
+  {
+    "name": "doi-migration-comment-retain-after-id-step",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\doi-migration-comment-retain-after-id-step.xml",
+    "expected": "pass"
+  },
+  {
+    "name": "doi-migration-same-doi-after-id-step",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\doi-migration-same-doi-after-id-step.xml",
+    "expected": "pass"
+  },
+  {
+    "name": "doi-migration-link-metadata-after-id-step",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\doi-migration-link-metadata-after-id-step.xml",
+    "expected": "pass"
+  },
+  {
+    "name": "doi-migration-descriptive-label-after-id-step",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\doi-migration-descriptive-label-after-id-step.xml",
+    "expected": "pass"
+  },
+  {
+    "name": "doi-migration-duplicate-doi-after-id-step",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\doi-migration-duplicate-doi-after-id-step.xml",
+    "expected": "pass"
+  },
+  {
+    "name": "doi-migration-percent-suffix-after-id-step",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\doi-migration-percent-suffix-after-id-step.xml",
+    "expected": "pass"
+  },
+  {
+    "name": "doi-display-punctuation-after-id-step",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\doi-display-punctuation-after-id-step.xml",
+    "expected": "pass"
+  },
+  {
+    "name": "url-query-control-after-id-step",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\url-query-control-after-id-step.xml",
+    "expected": "pass"
+  },
+  {
+    "name": "existing-missing-id-raw",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\existing-missing-id-raw.xml",
+    "expected": "review"
+  },
+  {
+    "name": "missing-all-ids-raw",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\missing-all-ids-raw.xml",
+    "expected": "review"
+  },
+  {
+    "name": "duplicate-source-id-raw",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\duplicate-source-id-raw.xml",
+    "expected": "review"
+  },
+  {
+    "name": "duplicate-structured-id-raw",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\duplicate-structured-id-raw.xml",
+    "expected": "review"
+  },
+  {
+    "name": "misplaced-existing-source-raw",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\misplaced-existing-source-raw.xml",
+    "expected": "review"
+  },
+  {
+    "name": "existing-empty-raw",
+    "file": "C:\\Users\\Kevin\\AppData\\Local\\Temp\\source-text-final-s3vqlexu\\existing-empty-raw.xml",
+    "expected": "review"
+  }
+]

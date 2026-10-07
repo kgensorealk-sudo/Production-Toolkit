@@ -1,0 +1,1791 @@
+[
+  {
+    "name": "existing-empty",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se10\"/></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se10\"/></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "EMPTY SOURCE: Existing source-text has no text. Preserved for review.",
+        "type": "source-text"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "warning",
+        "msg": "EMPTY SOURCE: Existing source-text has no text. Preserved for review.",
+        "type": "source-text"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "No automatic changes applied. Review the reported warnings. DTD and VTool validation have not been performed by this repair step.",
+        "type": "warn"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": "se10",
+        "text": ""
+      }
+    ]
+  },
+  {
+    "name": "existing-whitespace-no-id",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text> </ce:source-text></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text> </ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:source-text> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "EMPTY SOURCE: Existing source-text has no text. Preserved for review.",
+        "type": "source-text"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:source-text> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "warning",
+        "msg": "EMPTY SOURCE: Existing source-text has no text. Preserved for review.",
+        "type": "source-text"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "No automatic changes applied. Review the reported warnings. DTD and VTool validation have not been performed by this repair step.",
+        "type": "warn"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": null,
+        "text": " "
+      }
+    ]
+  },
+  {
+    "name": "existing-missing-id",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text>Original supplied text.</ce:source-text></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text>Original supplied text.</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:source-text> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:source-text> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "No automatic changes applied. Review the reported warnings. DTD and VTool validation have not been performed by this repair step.",
+        "type": "warn"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": null,
+        "text": "Original supplied text."
+      }
+    ]
+  },
+  {
+    "name": "duplicate-source-id",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se10\">First.</ce:source-text></ce:bib-reference><ce:bib-reference id=\"bb15\"><ce:label>1</ce:label><sb:reference id=\"rf15\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se10\">Second.</ce:source-text></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se10\">First.</ce:source-text></ce:bib-reference><ce:bib-reference id=\"bb15\"><ce:label>1</ce:label><sb:reference id=\"rf15\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se10\">Second.</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "DUPLICATE ID: se10 is used more than once. Preserved for the ID tool to resolve.",
+        "type": "id-fix"
+      },
+      {
+        "id": "bb15",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "DUPLICATE ID: se10 is used more than once. Preserved for the ID tool to resolve.",
+        "type": "id-fix"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "warning",
+        "msg": "DUPLICATE ID: se10 is used more than once. Preserved for the ID tool to resolve.",
+        "type": "id-fix"
+      },
+      {
+        "id": "bb15",
+        "label": "1",
+        "title": "Book",
+        "status": "warning",
+        "msg": "DUPLICATE ID: se10 is used more than once. Preserved for the ID tool to resolve.",
+        "type": "id-fix"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 2 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "No automatic changes applied. Review the reported warnings. DTD and VTool validation have not been performed by this repair step.",
+        "type": "warn"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": "se10",
+        "text": "First."
+      },
+      {
+        "id": "se10",
+        "text": "Second."
+      }
+    ]
+  },
+  {
+    "name": "multiple-reference-children",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><sb:reference id=\"rf15\"><sb:host><sb:book><sb:title><sb:maintitle>Book B</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text>Book, (2025).</ce:source-text><sb:reference id=\"rf15\"><sb:host><sb:book><sb:title><sb:maintitle>Book B</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text>Book B, (2025).</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated source-text without an ID. Run the ID tool before final validation.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated source-text without an ID. Run the ID tool before final validation.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:source-text> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:source-text> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "fixed",
+        "msg": "SOURCE: Missing source-text for this structured reference. It will be generated without an ID; use the ID tool afterward.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "fixed",
+        "msg": "SOURCE: Missing source-text for this structured reference. It will be generated without an ID; use the ID tool afterward.",
+        "type": "source-text"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "2 automatic corrections applied. Review the reported warnings. Run the ID tool for missing IDs, then validate with DTD and VTool.",
+        "type": "warn"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": null,
+        "text": "Book, (2025)."
+      },
+      {
+        "id": null,
+        "text": "Book B, (2025)."
+      }
+    ]
+  },
+  {
+    "name": "multiple-reference-existing-second-source",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><sb:reference id=\"rf15\"><sb:host><sb:book><sb:title><sb:maintitle>Book B</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se20\">Supplied Book B text.</ce:source-text></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text>Book, (2025).</ce:source-text><sb:reference id=\"rf15\"><sb:host><sb:book><sb:title><sb:maintitle>Book B</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se20\">Supplied Book B text.</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated source-text without an ID. Run the ID tool before final validation.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:source-text> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "fixed",
+        "msg": "SOURCE: Missing source-text for this structured reference. It will be generated without an ID; use the ID tool afterward.",
+        "type": "source-text"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "1 automatic correction applied. Review the reported warnings. Run the ID tool for missing IDs, then validate with DTD and VTool.",
+        "type": "warn"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": null,
+        "text": "Book, (2025)."
+      },
+      {
+        "id": "se20",
+        "text": "Supplied Book B text."
+      }
+    ]
+  },
+  {
+    "name": "missing-all-ids",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference><ce:label>1</ce:label><sb:reference><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host><sb:host><sb:e-host><ce:inter-ref xlink:href=\"https://example.org\">Site</ce:inter-ref></sb:e-host></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference><ce:label>1</ce:label><sb:reference><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host><sb:host><sb:e-host><ce:inter-ref xlink:href=\"https://example.org\">Site</ce:inter-ref></sb:e-host></sb:host></sb:reference><ce:source-text>Book, (2025). Site (https://example.org).</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "REF_1",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated source-text without an ID. Run the ID tool before final validation.",
+        "type": "source-text"
+      },
+      {
+        "id": "REF_1",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:bib-reference> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      },
+      {
+        "id": "REF_1",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "MISSING ID: <sb:reference> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      },
+      {
+        "id": "REF_1",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:inter-ref> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      },
+      {
+        "id": "REF_1",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:source-text> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "REF_1",
+        "label": "1",
+        "title": "Book",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:bib-reference> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      },
+      {
+        "id": "REF_1",
+        "label": "1",
+        "title": "Book",
+        "status": "warning",
+        "msg": "MISSING ID: <sb:reference> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      },
+      {
+        "id": "REF_1",
+        "label": "1",
+        "title": "Book",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:inter-ref> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      },
+      {
+        "id": "REF_1",
+        "label": "1",
+        "title": "Book",
+        "status": "fixed",
+        "msg": "SOURCE: Missing source-text for this structured reference. It will be generated without an ID; use the ID tool afterward.",
+        "type": "source-text"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "1 automatic correction applied. Review the reported warnings. Run the ID tool for missing IDs, then validate with DTD and VTool.",
+        "type": "warn"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": null,
+        "text": "Book, (2025). Site (https://example.org)."
+      }
+    ]
+  },
+  {
+    "name": "other-ref-missing-id",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><ce:other-ref><ce:textref>Original other reference.</ce:textref></ce:other-ref></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><ce:other-ref><ce:textref>Original other reference.</ce:textref></ce:other-ref></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:other-ref> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:other-ref> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "No automatic changes applied. Review the reported warnings. DTD and VTool validation have not been performed by this repair step.",
+        "type": "warn"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": []
+  },
+  {
+    "name": "duplicate-structured-id",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se10\">First.</ce:source-text></ce:bib-reference><ce:bib-reference id=\"bb15\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se20\">Second.</ce:source-text></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se10\">First.</ce:source-text></ce:bib-reference><ce:bib-reference id=\"bb15\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se20\">Second.</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "DUPLICATE ID: rf5 is used more than once. Preserved for the ID tool to resolve.",
+        "type": "id-fix"
+      },
+      {
+        "id": "bb15",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "DUPLICATE ID: rf5 is used more than once. Preserved for the ID tool to resolve.",
+        "type": "id-fix"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "warning",
+        "msg": "DUPLICATE ID: rf5 is used more than once. Preserved for the ID tool to resolve.",
+        "type": "id-fix"
+      },
+      {
+        "id": "bb15",
+        "label": "1",
+        "title": "Book",
+        "status": "warning",
+        "msg": "DUPLICATE ID: rf5 is used more than once. Preserved for the ID tool to resolve.",
+        "type": "id-fix"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 2 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "No automatic changes applied. Review the reported warnings. DTD and VTool validation have not been performed by this repair step.",
+        "type": "warn"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": "se10",
+        "text": "First."
+      },
+      {
+        "id": "se20",
+        "text": "Second."
+      }
+    ]
+  },
+  {
+    "name": "misplaced-existing-source",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><ce:source-text id=\"se10\">Supplied text.</ce:source-text><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><ce:source-text id=\"se10\">Supplied text.</ce:source-text><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "SOURCE ASSOCIATION: Source-text does not immediately follow a structured reference or other-ref. Preserved for review.",
+        "type": "source-text"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "warning",
+        "msg": "SOURCE ASSOCIATION: Source-text does not immediately follow a structured reference or other-ref. Preserved for review.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "warning",
+        "msg": "SOURCE: Generation deferred because existing source-text has an ambiguous association. Review its placement first.",
+        "type": "source-text"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "No automatic changes applied. Review the reported warnings. DTD and VTool validation have not been performed by this repair step.",
+        "type": "warn"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": "se10",
+        "text": "Supplied text."
+      }
+    ]
+  },
+  {
+    "name": "trailing-note",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:note><ce:simple-para id=\"sp30\">Reference note.</ce:simple-para></ce:note></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text>Book, (2025).</ce:source-text><ce:note><ce:simple-para id=\"sp30\">Reference note.</ce:simple-para></ce:note></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated source-text without an ID. Run the ID tool before final validation.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:source-text> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "fixed",
+        "msg": "SOURCE: Missing source-text for this structured reference. It will be generated without an ID; use the ID tool afterward.",
+        "type": "source-text"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "1 automatic correction applied. Review the reported warnings. Run the ID tool for missing IDs, then validate with DTD and VTool.",
+        "type": "warn"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": null,
+        "text": "Book, (2025)."
+      }
+    ]
+  },
+  {
+    "name": "named-entity",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:title><sb:maintitle>An &alpha; title</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:title><sb:maintitle>An &alpha; title</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "warning",
+        "msg": "Reference could not be parsed in isolation; original XML retained. Check malformed markup, namespace declarations, and declared entities before repairing.",
+        "type": "retain"
+      }
+    ],
+    "scannerAudit": [],
+    "toast": [
+      {
+        "msg": "Scanner Error in Reference 1: Malformed block detected.",
+        "type": "error"
+      },
+      {
+        "msg": "No automatic changes applied. Review the reported warnings. DTD and VTool validation have not been performed by this repair step.",
+        "type": "warn"
+      }
+    ],
+    "wellFormed": false,
+    "sourceTexts": []
+  },
+  {
+    "name": "numeric-entity-control",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:title><sb:maintitle>An &#x3B1; title</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:title><sb:maintitle>An α title</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text>An α title. Book, (2025).</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated source-text without an ID. Run the ID tool before final validation.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:source-text> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "An α title",
+        "status": "fixed",
+        "msg": "SOURCE: Missing source-text for this structured reference. It will be generated without an ID; use the ID tool afterward.",
+        "type": "source-text"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "1 automatic correction applied. Review the reported warnings. Run the ID tool for missing IDs, then validate with DTD and VTool.",
+        "type": "warn"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": null,
+        "text": "An α title. Book, (2025)."
+      }
+    ]
+  },
+  {
+    "name": "special-character-control",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:title><sb:maintitle>A &amp; B &lt; C</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:title><sb:maintitle>A &amp; B &lt; C</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text>A &amp; B &lt; C. Book, (2025).</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated source-text without an ID. Run the ID tool before final validation.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:source-text> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "A & B < C",
+        "status": "fixed",
+        "msg": "SOURCE: Missing source-text for this structured reference. It will be generated without an ID; use the ID tool afterward.",
+        "type": "source-text"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "1 automatic correction applied. Review the reported warnings. Run the ID tool for missing IDs, then validate with DTD and VTool.",
+        "type": "warn"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": null,
+        "text": "A & B < C. Book, (2025)."
+      }
+    ]
+  },
+  {
+    "name": "inline-space",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:title><sb:maintitle>High<ce:hsp sp=\"1.0\"/>quality evidence</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:title><sb:maintitle>High<ce:hsp sp=\"1.0\"/>quality evidence</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text>High quality evidence. Book, (2025).</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated source-text without an ID. Run the ID tool before final validation.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:source-text> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Highquality evidence",
+        "status": "fixed",
+        "msg": "SOURCE: Missing source-text for this structured reference. It will be generated without an ID; use the ID tool afterward.",
+        "type": "source-text"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "1 automatic correction applied. Review the reported warnings. Run the ID tool for missing IDs, then validate with DTD and VTool.",
+        "type": "warn"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": null,
+        "text": "High quality evidence. Book, (2025)."
+      }
+    ]
+  },
+  {
+    "name": "inline-formatting-control",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:title><sb:maintitle>High <ce:italic>quality</ce:italic> evidence</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:title><sb:maintitle>High <ce:italic>quality</ce:italic> evidence</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text>High quality evidence. Book, (2025).</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated source-text without an ID. Run the ID tool before final validation.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:source-text> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "High quality evidence",
+        "status": "fixed",
+        "msg": "SOURCE: Missing source-text for this structured reference. It will be generated without an ID; use the ID tool afterward.",
+        "type": "source-text"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "1 automatic correction applied. Review the reported warnings. Run the ID tool for missing IDs, then validate with DTD and VTool.",
+        "type": "warn"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": null,
+        "text": "High quality evidence. Book, (2025)."
+      }
+    ]
+  },
+  {
+    "name": "cdata-existing-source",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se10\"><![CDATA[Literal <token></token> text]]></ce:source-text></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se10\"><![CDATA[Literal <token></token> text]]></ce:source-text></ce:bib-reference></root>",
+    "audit": [],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "skip",
+        "msg": "No issues detected by the bibliography scanner. DTD and VTool validation are still required."
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "No automatic changes applied. DTD and VTool validation have not been performed by this repair step.",
+        "type": "info"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": "se10",
+        "text": "Literal <token></token> text"
+      }
+    ]
+  },
+  {
+    "name": "cdata-title-comment",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:title><sb:maintitle><![CDATA[Literal <token></token> text]]></sb:maintitle></sb:title></sb:contribution><sb:comment><!-- literal <empty></empty> --><![CDATA[Comment <word></word> text]]></sb:comment><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:title><sb:maintitle><![CDATA[Literal <token></token> text]]></sb:maintitle></sb:title></sb:contribution><sb:comment><!-- literal <empty></empty> --><![CDATA[Comment <word></word> text]]></sb:comment><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text>Literal &lt;token&gt;&lt;/token&gt; text. Comment &lt;word&gt;&lt;/word&gt; text. Book, (2025).</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated source-text without an ID. Run the ID tool before final validation.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:source-text> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Literal <token></token> text",
+        "status": "fixed",
+        "msg": "SOURCE: Missing source-text for this structured reference. It will be generated without an ID; use the ID tool afterward.",
+        "type": "source-text"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "1 automatic correction applied. Review the reported warnings. Run the ID tool for missing IDs, then validate with DTD and VTool.",
+        "type": "warn"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": null,
+        "text": "Literal <token></token> text. Comment <word></word> text. Book, (2025)."
+      }
+    ]
+  },
+  {
+    "name": "comma-url",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:e-host><ce:inter-ref id=\"ir20\" xlink:href=\"https://example.org/a,,b\">https://example.org/a,,b</ce:inter-ref></sb:e-host></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:e-host><ce:inter-ref id=\"ir20\" xlink:href=\"https://example.org/a,,b\">https://example.org/a,,b</ce:inter-ref></sb:e-host></sb:host></sb:reference><ce:source-text>https://example.org/a,,b.</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated source-text without an ID. Run the ID tool before final validation.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:source-text> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "fixed",
+        "msg": "SOURCE: Missing source-text for this structured reference. It will be generated without an ID; use the ID tool afterward.",
+        "type": "source-text"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "1 automatic correction applied. Review the reported warnings. Run the ID tool for missing IDs, then validate with DTD and VTool.",
+        "type": "warn"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": null,
+        "text": "https://example.org/a,,b."
+      }
+    ]
+  },
+  {
+    "name": "paired-et-al",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author><sb:et-al></sb:et-al></sb:authors></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author><sb:et-al></sb:et-al></sb:authors></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text>Smith, et al., (2025). Book.</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated source-text without an ID. Run the ID tool before final validation.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:source-text> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "fixed",
+        "msg": "SOURCE: Missing source-text for this structured reference. It will be generated without an ID; use the ID tool afterward.",
+        "type": "source-text"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "1 automatic correction applied. Review the reported warnings. Run the ID tool for missing IDs, then validate with DTD and VTool.",
+        "type": "warn"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": null,
+        "text": "Smith, et al., (2025). Book."
+      }
+    ]
+  },
+  {
+    "name": "paired-ellipsis",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author><sb:ellipsis></sb:ellipsis><sb:author><ce:surname>Jones</ce:surname></sb:author></sb:authors></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author><sb:ellipsis></sb:ellipsis><sb:author><ce:surname>Jones</ce:surname></sb:author></sb:authors></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text>Smith, … Jones, (2025). Book.</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated source-text without an ID. Run the ID tool before final validation.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:source-text> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "fixed",
+        "msg": "SOURCE: Missing source-text for this structured reference. It will be generated without an ID; use the ID tool afterward.",
+        "type": "source-text"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "1 automatic correction applied. Review the reported warnings. Run the ID tool for missing IDs, then validate with DTD and VTool.",
+        "type": "warn"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": null,
+        "text": "Smith, … Jones, (2025). Book."
+      }
+    ]
+  },
+  {
+    "name": "local-math-namespace",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:title><sb:maintitle>Test <mml:math xmlns:mml=\"http://www.w3.org/1998/Math/MathML\" altimg=\"gr1\"><mml:mi>x</mml:mi></mml:math> title</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:title><sb:maintitle>Test <mml:math xmlns:mml=\"http://www.w3.org/1998/Math/MathML\" altimg=\"gr1\"><mml:mi>x</mml:mi></mml:math> title</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text>Test x title. Book, (2025).</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated source-text without an ID. Run the ID tool before final validation.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:source-text> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Test x title",
+        "status": "fixed",
+        "msg": "SOURCE: Missing source-text for this structured reference. It will be generated without an ID; use the ID tool afterward.",
+        "type": "source-text"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "1 automatic correction applied. Review the reported warnings. Run the ID tool for missing IDs, then validate with DTD and VTool.",
+        "type": "warn"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": null,
+        "text": "Test x title. Book, (2025)."
+      }
+    ]
+  },
+  {
+    "name": "doi-migration-loses-metadata",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host><sb:host><sb:e-host><ce:inter-ref id=\"ir20\" xlink:href=\"https://doi.org/10.1234/abc\">https://doi.org/10.1234/abc</ce:inter-ref><sb:version>Version 2.1</sb:version><sb:date>2020</sb:date><sb:date-accessed day=\"5\" month=\"10\" year=\"2025\"/></sb:e-host></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host><sb:host><sb:e-host><ce:inter-ref id=\"ir20\" xlink:href=\"https://doi.org/10.1234/abc\">https://doi.org/10.1234/abc</ce:inter-ref><sb:version>Version 2.1</sb:version><sb:date>2020</sb:date><sb:date-accessed day=\"5\" month=\"10\" year=\"2025\"/></sb:e-host></sb:host></sb:reference><ce:source-text>Book, (2025). (2020), Version 2.1, https://doi.org/10.1234/abc (Accessed: 5 Oct 2025).</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "warning",
+        "doi": "10.1234/abc",
+        "type": "doi",
+        "requiresConfirmation": false,
+        "msg": "RETAINED DOI HOST: The electronic host contains additional fields or attributes that must be preserved."
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated source-text without an ID. Run the ID tool before final validation.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:source-text> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "fixed",
+        "msg": "SOURCE: Missing source-text for this structured reference. It will be generated without an ID; use the ID tool afterward.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "doi": "10.1234/abc",
+        "status": "warning",
+        "type": "doi",
+        "msg": "RETAIN DOI HOST: The electronic host contains additional fields or attributes that must be preserved. Original host will be retained.",
+        "requiresConfirmation": false
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "1 automatic correction applied. Review the reported warnings. Run the ID tool for missing IDs, then validate with DTD and VTool.",
+        "type": "warn"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": null,
+        "text": "Book, (2025). (2020), Version 2.1, https://doi.org/10.1234/abc (Accessed: 5 Oct 2025)."
+      }
+    ]
+  },
+  {
+    "name": "doi-migration-comment-accept",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host><sb:comment>Available at</sb:comment><sb:host><sb:e-host><ce:inter-ref id=\"ir20\" xlink:href=\"https://doi.org/10.1234/abc\">https://doi.org/10.1234/abc</ce:inter-ref></sb:e-host></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book><ce:doi>10.1234/abc</ce:doi></sb:host><sb:comment>Available at</sb:comment></sb:reference><ce:source-text>Book, (2025), https://doi.org/10.1234/abc. Available at.</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "doi": "10.1234/abc",
+        "type": "doi",
+        "requiresConfirmation": true,
+        "msg": "REPAIRED: Migrated the complete DOI (10.1234/abc) from a DOI-only host; comments remain in position."
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated source-text without an ID. Run the ID tool before final validation.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:source-text> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "fixed",
+        "msg": "SOURCE: Missing source-text for this structured reference. It will be generated without an ID; use the ID tool afterward.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "doi": "10.1234/abc",
+        "status": "fixed",
+        "type": "doi",
+        "msg": "CONFIRMATION REQUIRED: Review DOI migration (10.1234/abc) while retaining comments, or retain the original structure.",
+        "requiresConfirmation": true
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "2 automatic corrections applied. Review the reported warnings. Run the ID tool for missing IDs, then validate with DTD and VTool.",
+        "type": "warn"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": null,
+        "text": "Book, (2025), https://doi.org/10.1234/abc. Available at."
+      }
+    ]
+  },
+  {
+    "name": "doi-migration-comment-retain",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host><sb:comment>Available at</sb:comment><sb:host><sb:e-host><ce:inter-ref id=\"ir20\" xlink:href=\"https://doi.org/10.1234/abc\">https://doi.org/10.1234/abc</ce:inter-ref></sb:e-host></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host><sb:comment>Available at</sb:comment><sb:host><sb:e-host><ce:inter-ref id=\"ir20\" xlink:href=\"https://doi.org/10.1234/abc\">https://doi.org/10.1234/abc</ce:inter-ref></sb:e-host></sb:host></sb:reference><ce:source-text>Book, (2025). Available at. https://doi.org/10.1234/abc.</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "skip",
+        "doi": "10.1234/abc",
+        "type": "doi",
+        "requiresConfirmation": true,
+        "msg": "RETAINED: Original DOI host preserved per user decision."
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated source-text without an ID. Run the ID tool before final validation.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:source-text> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "fixed",
+        "msg": "SOURCE: Missing source-text for this structured reference. It will be generated without an ID; use the ID tool afterward.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "doi": "10.1234/abc",
+        "status": "fixed",
+        "type": "doi",
+        "msg": "CONFIRMATION REQUIRED: Review DOI migration (10.1234/abc) while retaining comments, or retain the original structure.",
+        "requiresConfirmation": true
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "1 automatic correction applied. Review the reported warnings. Run the ID tool for missing IDs, then validate with DTD and VTool.",
+        "type": "warn"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": null,
+        "text": "Book, (2025). Available at. https://doi.org/10.1234/abc."
+      }
+    ]
+  },
+  {
+    "name": "doi-migration-same-doi",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book><ce:doi>10.1234/abc</ce:doi></sb:host><sb:host><sb:e-host><ce:inter-ref id=\"ir20\" xlink:href=\"https://doi.org/10.1234/abc\">https://doi.org/10.1234/abc</ce:inter-ref></sb:e-host></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book><ce:doi>10.1234/abc</ce:doi></sb:host></sb:reference><ce:source-text>Book, (2025), https://doi.org/10.1234/abc.</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "doi": "10.1234/abc",
+        "type": "doi",
+        "requiresConfirmation": false,
+        "msg": "REPAIRED: Removed the duplicate DOI-only host; the existing target DOI was retained."
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated source-text without an ID. Run the ID tool before final validation.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:source-text> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "fixed",
+        "msg": "SOURCE: Missing source-text for this structured reference. It will be generated without an ID; use the ID tool afterward.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "doi": "10.1234/abc",
+        "status": "fixed",
+        "type": "doi",
+        "msg": "DIRECT DOI CAPTURE: Migrate the DOI-only link (10.1234/abc) without removing other reference data.",
+        "requiresConfirmation": false
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "2 automatic corrections applied. Review the reported warnings. Run the ID tool for missing IDs, then validate with DTD and VTool.",
+        "type": "warn"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": null,
+        "text": "Book, (2025), https://doi.org/10.1234/abc."
+      }
+    ]
+  },
+  {
+    "name": "doi-migration-link-metadata",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host><sb:host><sb:e-host><ce:inter-ref id=\"ir20\" versiondate=\"2025-10-07\" xlink:href=\"https://doi.org/10.1234/abc\">https://doi.org/10.1234/abc</ce:inter-ref></sb:e-host></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host><sb:host><sb:e-host><ce:inter-ref id=\"ir20\" versiondate=\"2025-10-07\" xlink:href=\"https://doi.org/10.1234/abc\">https://doi.org/10.1234/abc</ce:inter-ref></sb:e-host></sb:host></sb:reference><ce:source-text>Book, (2025). https://doi.org/10.1234/abc.</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "warning",
+        "doi": "10.1234/abc",
+        "type": "doi",
+        "requiresConfirmation": false,
+        "msg": "RETAINED DOI HOST: The electronic host contains additional fields or attributes that must be preserved."
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated source-text without an ID. Run the ID tool before final validation.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:source-text> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "fixed",
+        "msg": "SOURCE: Missing source-text for this structured reference. It will be generated without an ID; use the ID tool afterward.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "doi": "10.1234/abc",
+        "status": "warning",
+        "type": "doi",
+        "msg": "RETAIN DOI HOST: The electronic host contains additional fields or attributes that must be preserved. Original host will be retained.",
+        "requiresConfirmation": false
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "1 automatic correction applied. Review the reported warnings. Run the ID tool for missing IDs, then validate with DTD and VTool.",
+        "type": "warn"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": null,
+        "text": "Book, (2025). https://doi.org/10.1234/abc."
+      }
+    ]
+  },
+  {
+    "name": "doi-migration-descriptive-label",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host><sb:host><sb:e-host><ce:inter-ref id=\"ir20\" xlink:href=\"https://doi.org/10.1234/abc\">Publisher website</ce:inter-ref></sb:e-host></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host><sb:host><sb:e-host><ce:inter-ref id=\"ir20\" xlink:href=\"https://doi.org/10.1234/abc\">Publisher website</ce:inter-ref></sb:e-host></sb:host></sb:reference><ce:source-text>Book, (2025). Publisher website (https://doi.org/10.1234/abc).</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "warning",
+        "doi": "10.1234/abc",
+        "type": "doi",
+        "requiresConfirmation": false,
+        "msg": "RETAINED DOI HOST: The link label or target contains additional or conflicting information."
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated source-text without an ID. Run the ID tool before final validation.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:source-text> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "fixed",
+        "msg": "SOURCE: Missing source-text for this structured reference. It will be generated without an ID; use the ID tool afterward.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "doi": "10.1234/abc",
+        "status": "warning",
+        "type": "doi",
+        "msg": "RETAIN DOI HOST: The link label or target contains additional or conflicting information. Original host will be retained.",
+        "requiresConfirmation": false
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "1 automatic correction applied. Review the reported warnings. Run the ID tool for missing IDs, then validate with DTD and VTool.",
+        "type": "warn"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": null,
+        "text": "Book, (2025). Publisher website (https://doi.org/10.1234/abc)."
+      }
+    ]
+  },
+  {
+    "name": "doi-migration-duplicate-doi",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book><ce:doi>10.1234/other</ce:doi></sb:host><sb:host><sb:e-host><ce:inter-ref id=\"ir20\" xlink:href=\"https://doi.org/10.1234/abc\">https://doi.org/10.1234/abc</ce:inter-ref></sb:e-host></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book><ce:doi>10.1234/other</ce:doi></sb:host><sb:host><sb:e-host><ce:inter-ref id=\"ir20\" xlink:href=\"https://doi.org/10.1234/abc\">https://doi.org/10.1234/abc</ce:inter-ref></sb:e-host></sb:host></sb:reference><ce:source-text>Book, (2025), https://doi.org/10.1234/other. https://doi.org/10.1234/abc.</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "warning",
+        "doi": "10.1234/abc",
+        "type": "doi",
+        "requiresConfirmation": false,
+        "msg": "RETAINED DOI HOST: The target host already contains a different DOI."
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated source-text without an ID. Run the ID tool before final validation.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:source-text> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "fixed",
+        "msg": "SOURCE: Missing source-text for this structured reference. It will be generated without an ID; use the ID tool afterward.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "doi": "10.1234/abc",
+        "status": "warning",
+        "type": "doi",
+        "msg": "RETAIN DOI HOST: The target host already contains a different DOI. Original host will be retained.",
+        "requiresConfirmation": false
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "1 automatic correction applied. Review the reported warnings. Run the ID tool for missing IDs, then validate with DTD and VTool.",
+        "type": "warn"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": null,
+        "text": "Book, (2025), https://doi.org/10.1234/other. https://doi.org/10.1234/abc."
+      }
+    ]
+  },
+  {
+    "name": "doi-migration-percent-suffix",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host><sb:host><sb:e-host><ce:inter-ref id=\"ir20\" xlink:href=\"https://doi.org/10.1234/a%28b%29\">https://doi.org/10.1234/a%28b%29</ce:inter-ref></sb:e-host></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book><ce:doi>10.1234/a%28b%29</ce:doi></sb:host></sb:reference><ce:source-text>Book, (2025), https://doi.org/10.1234/a%28b%29.</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "doi": "10.1234/a%28b%29",
+        "type": "doi",
+        "requiresConfirmation": false,
+        "msg": "REPAIRED: Migrated the complete DOI (10.1234/a%28b%29) from a DOI-only host; comments remain in position."
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated source-text without an ID. Run the ID tool before final validation.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:source-text> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "fixed",
+        "msg": "SOURCE: Missing source-text for this structured reference. It will be generated without an ID; use the ID tool afterward.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "doi": "10.1234/a%28b%29",
+        "status": "fixed",
+        "type": "doi",
+        "msg": "DIRECT DOI CAPTURE: Migrate the DOI-only link (10.1234/a%28b%29) without removing other reference data.",
+        "requiresConfirmation": false
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "2 automatic corrections applied. Review the reported warnings. Run the ID tool for missing IDs, then validate with DTD and VTool.",
+        "type": "warn"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": null,
+        "text": "Book, (2025), https://doi.org/10.1234/a%28b%29."
+      }
+    ]
+  },
+  {
+    "name": "doi-display-punctuation",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:e-host><ce:inter-ref id=\"ir20\" xlink:href=\"https://doi.org/10.1234/abc\">https://doi.org/10.1234/abc.</ce:inter-ref></sb:e-host></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:e-host><ce:inter-ref id=\"ir20\" xlink:href=\"https://doi.org/10.1234/abc\">https://doi.org/10.1234/abc.</ce:inter-ref></sb:e-host></sb:host></sb:reference><ce:source-text>https://doi.org/10.1234/abc.</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "warning",
+        "doi": "10.1234/abc",
+        "type": "doi",
+        "requiresConfirmation": false,
+        "msg": "RETAINED DOI HOST: The link label or target contains additional or conflicting information."
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated source-text without an ID. Run the ID tool before final validation.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:source-text> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "fixed",
+        "msg": "SOURCE: Missing source-text for this structured reference. It will be generated without an ID; use the ID tool afterward.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "doi": "10.1234/abc",
+        "status": "warning",
+        "type": "doi",
+        "msg": "RETAIN DOI HOST: The link label or target contains additional or conflicting information. Original host will be retained.",
+        "requiresConfirmation": false
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "1 automatic correction applied. Review the reported warnings. Run the ID tool for missing IDs, then validate with DTD and VTool.",
+        "type": "warn"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": null,
+        "text": "https://doi.org/10.1234/abc."
+      }
+    ]
+  },
+  {
+    "name": "url-query-control",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:e-host><ce:inter-ref id=\"ir20\" xlink:href=\"https://example.org/?a=1&amp;b=2\">https://example.org/?a=1&amp;b=2</ce:inter-ref></sb:e-host></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:e-host><ce:inter-ref id=\"ir20\" xlink:href=\"https://example.org/?a=1&amp;b=2\">https://example.org/?a=1&amp;b=2</ce:inter-ref></sb:e-host></sb:host></sb:reference><ce:source-text>https://example.org/?a=1&amp;b=2.</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated source-text without an ID. Run the ID tool before final validation.",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "msg": "MISSING ID: <ce:source-text> has no ID. Left unassigned; use the ID tool before final validation.",
+        "type": "id-fix"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "fixed",
+        "msg": "SOURCE: Missing source-text for this structured reference. It will be generated without an ID; use the ID tool afterward.",
+        "type": "source-text"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "1 automatic correction applied. Review the reported warnings. Run the ID tool for missing IDs, then validate with DTD and VTool.",
+        "type": "warn"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": null,
+        "text": "https://example.org/?a=1&b=2."
+      }
+    ]
+  }
+]

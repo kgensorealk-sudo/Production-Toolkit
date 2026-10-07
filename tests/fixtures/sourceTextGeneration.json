@@ -1,0 +1,728 @@
+[
+  {
+    "name": "translated-title",
+    "reference": {
+      "tag": "sb:reference",
+      "content": [
+        {
+          "tag": "sb:contribution",
+          "content": [
+            {
+              "tag": "sb:title",
+              "content": [
+                {
+                  "tag": "sb:maintitle",
+                  "content": "Original",
+                  "attrs": {}
+                },
+                {
+                  "tag": "sb:subtitle",
+                  "content": "Original subtitle",
+                  "attrs": {}
+                }
+              ],
+              "attrs": {}
+            },
+            {
+              "tag": "sb:translated-title",
+              "content": [
+                {
+                  "tag": "sb:maintitle",
+                  "content": "Translation",
+                  "attrs": {}
+                },
+                {
+                  "tag": "sb:subtitle",
+                  "content": "Translated subtitle",
+                  "attrs": {}
+                }
+              ],
+              "attrs": {}
+            }
+          ],
+          "attrs": {}
+        },
+        {
+          "tag": "sb:host",
+          "content": [
+            {
+              "tag": "sb:book",
+              "content": [
+                {
+                  "tag": "sb:date",
+                  "content": "2025",
+                  "attrs": {}
+                }
+              ],
+              "attrs": {}
+            }
+          ],
+          "attrs": {}
+        }
+      ],
+      "attrs": {}
+    },
+    "expected": "Original: Original subtitle [Translation: Translated subtitle]. (2025)."
+  },
+  {
+    "name": "translation-only",
+    "reference": {
+      "tag": "sb:reference",
+      "content": [
+        {
+          "tag": "sb:contribution",
+          "content": [
+            {
+              "tag": "sb:translated-title",
+              "content": [
+                {
+                  "tag": "sb:maintitle",
+                  "content": "Translation",
+                  "attrs": {}
+                },
+                {
+                  "tag": "sb:subtitle",
+                  "content": "Translated subtitle",
+                  "attrs": {}
+                }
+              ],
+              "attrs": {}
+            }
+          ],
+          "attrs": {}
+        },
+        {
+          "tag": "sb:host",
+          "content": [
+            {
+              "tag": "sb:book",
+              "content": [
+                {
+                  "tag": "sb:date",
+                  "content": "2025",
+                  "attrs": {}
+                }
+              ],
+              "attrs": {}
+            }
+          ],
+          "attrs": {}
+        }
+      ],
+      "attrs": {}
+    },
+    "expected": "Translation: Translated subtitle. (2025)."
+  },
+  {
+    "name": "conference",
+    "reference": {
+      "tag": "sb:reference",
+      "content": [
+        {
+          "tag": "sb:host",
+          "content": [
+            {
+              "tag": "sb:edited-book",
+              "content": [
+                {
+                  "tag": "sb:title",
+                  "content": [
+                    {
+                      "tag": "sb:maintitle",
+                      "content": "Proceedings",
+                      "attrs": {}
+                    }
+                  ],
+                  "attrs": {}
+                },
+                {
+                  "tag": "sb:conference",
+                  "content": "Conference on Testing, London",
+                  "attrs": {}
+                },
+                {
+                  "tag": "sb:date",
+                  "content": "2025",
+                  "attrs": {}
+                }
+              ],
+              "attrs": {}
+            }
+          ],
+          "attrs": {}
+        }
+      ],
+      "attrs": {}
+    },
+    "expected": "Proceedings. Conference on Testing, London, (2025)."
+  },
+  {
+    "name": "multiple-publication-dates",
+    "reference": {
+      "tag": "sb:reference",
+      "content": [
+        {
+          "tag": "sb:host",
+          "content": [
+            {
+              "tag": "sb:book",
+              "content": [
+                {
+                  "tag": "sb:title",
+                  "content": [
+                    {
+                      "tag": "sb:maintitle",
+                      "content": "Book",
+                      "attrs": {}
+                    }
+                  ],
+                  "attrs": {}
+                },
+                {
+                  "tag": "sb:date",
+                  "content": "2001",
+                  "attrs": {}
+                },
+                {
+                  "tag": "sb:date",
+                  "content": "2025",
+                  "attrs": {}
+                }
+              ],
+              "attrs": {}
+            }
+          ],
+          "attrs": {}
+        }
+      ],
+      "attrs": {}
+    },
+    "expected": "Book, (2001, 2025)."
+  },
+  {
+    "name": "multiple-access-dates",
+    "reference": {
+      "tag": "sb:reference",
+      "content": [
+        {
+          "tag": "sb:host",
+          "content": [
+            {
+              "tag": "sb:e-host",
+              "content": [
+                {
+                  "tag": "ce:inter-ref",
+                  "content": "Website",
+                  "attrs": {
+                    "id": "ir1",
+                    "xlink:href": "https://example.org"
+                  }
+                },
+                {
+                  "tag": "sb:date-accessed",
+                  "content": [],
+                  "attrs": {
+                    "day": "1",
+                    "month": "9",
+                    "year": "2025"
+                  }
+                },
+                {
+                  "tag": "sb:date-accessed",
+                  "content": [],
+                  "attrs": {
+                    "day": "5",
+                    "month": "10",
+                    "year": "2025"
+                  }
+                }
+              ],
+              "attrs": {}
+            }
+          ],
+          "attrs": {}
+        }
+      ],
+      "attrs": {}
+    },
+    "expected": "Website (https://example.org) (Accessed: 1 Sep 2025) (Accessed: 5 Oct 2025)."
+  },
+  {
+    "name": "version",
+    "reference": {
+      "tag": "sb:reference",
+      "content": [
+        {
+          "tag": "sb:host",
+          "content": [
+            {
+              "tag": "sb:e-host",
+              "content": [
+                {
+                  "tag": "ce:inter-ref",
+                  "content": "Website",
+                  "attrs": {
+                    "id": "ir1",
+                    "xlink:href": "https://example.org"
+                  }
+                },
+                {
+                  "tag": "sb:version",
+                  "content": "Version 2.1",
+                  "attrs": {}
+                },
+                {
+                  "tag": "sb:date",
+                  "content": "2025",
+                  "attrs": {}
+                }
+              ],
+              "attrs": {}
+            }
+          ],
+          "attrs": {}
+        }
+      ],
+      "attrs": {}
+    },
+    "expected": "(2025), Version 2.1, Website (https://example.org)."
+  },
+  {
+    "name": "identifiers",
+    "reference": {
+      "tag": "sb:reference",
+      "content": [
+        {
+          "tag": "sb:host",
+          "content": [
+            {
+              "tag": "sb:book",
+              "content": [
+                {
+                  "tag": "sb:title",
+                  "content": [
+                    {
+                      "tag": "sb:maintitle",
+                      "content": "Book",
+                      "attrs": {}
+                    }
+                  ],
+                  "attrs": {}
+                },
+                {
+                  "tag": "sb:book-series",
+                  "content": [
+                    {
+                      "tag": "sb:series",
+                      "content": [
+                        {
+                          "tag": "sb:title",
+                          "content": [
+                            {
+                              "tag": "sb:maintitle",
+                              "content": "Series",
+                              "attrs": {}
+                            }
+                          ],
+                          "attrs": {}
+                        },
+                        {
+                          "tag": "sb:issn",
+                          "content": "0378-5955",
+                          "attrs": {}
+                        }
+                      ],
+                      "attrs": {}
+                    }
+                  ],
+                  "attrs": {}
+                },
+                {
+                  "tag": "sb:date",
+                  "content": "2025",
+                  "attrs": {}
+                },
+                {
+                  "tag": "sb:publisher",
+                  "content": [
+                    {
+                      "tag": "sb:name",
+                      "content": "Press",
+                      "attrs": {}
+                    },
+                    {
+                      "tag": "sb:location",
+                      "content": "London",
+                      "attrs": {}
+                    }
+                  ],
+                  "attrs": {}
+                },
+                {
+                  "tag": "sb:isbn",
+                  "content": "978-0-306-40615-7",
+                  "attrs": {}
+                }
+              ],
+              "attrs": {}
+            }
+          ],
+          "attrs": {}
+        }
+      ],
+      "attrs": {}
+    },
+    "expected": "Book, (2025), Press, London, 978-0-306-40615-7. Series, 0378-5955."
+  },
+  {
+    "name": "pages-and-article-number",
+    "reference": {
+      "tag": "sb:reference",
+      "content": [
+        {
+          "tag": "sb:host",
+          "content": [
+            {
+              "tag": "sb:issue",
+              "content": [
+                {
+                  "tag": "sb:series",
+                  "content": [
+                    {
+                      "tag": "sb:title",
+                      "content": [
+                        {
+                          "tag": "sb:maintitle",
+                          "content": "Journal",
+                          "attrs": {}
+                        }
+                      ],
+                      "attrs": {}
+                    },
+                    {
+                      "tag": "sb:volume-nr",
+                      "content": "4",
+                      "attrs": {}
+                    }
+                  ],
+                  "attrs": {}
+                },
+                {
+                  "tag": "sb:date",
+                  "content": "2025",
+                  "attrs": {}
+                }
+              ],
+              "attrs": {}
+            },
+            {
+              "tag": "sb:pages",
+              "content": [
+                {
+                  "tag": "sb:first-page",
+                  "content": "10",
+                  "attrs": {}
+                },
+                {
+                  "tag": "sb:last-page",
+                  "content": "20",
+                  "attrs": {}
+                }
+              ],
+              "attrs": {}
+            },
+            {
+              "tag": "sb:article-number",
+              "content": "e123",
+              "attrs": {}
+            }
+          ],
+          "attrs": {}
+        }
+      ],
+      "attrs": {}
+    },
+    "expected": "Journal, 4, (2025) 10\u201320, e123.",
+    "expectedVtoolErrors": [
+      "STR507"
+    ]
+  },
+  {
+    "name": "author-alt-name",
+    "reference": {
+      "tag": "sb:reference",
+      "content": [
+        {
+          "tag": "sb:contribution",
+          "content": [
+            {
+              "tag": "sb:authors",
+              "content": [
+                {
+                  "tag": "sb:author",
+                  "content": [
+                    {
+                      "tag": "ce:given-name",
+                      "content": "A.",
+                      "attrs": {}
+                    },
+                    {
+                      "tag": "ce:surname",
+                      "content": "Smith",
+                      "attrs": {}
+                    },
+                    {
+                      "tag": "ce:alt-name",
+                      "content": "Alternative Name",
+                      "attrs": {}
+                    }
+                  ],
+                  "attrs": {}
+                }
+              ],
+              "attrs": {}
+            },
+            {
+              "tag": "sb:title",
+              "content": [
+                {
+                  "tag": "sb:maintitle",
+                  "content": "Article",
+                  "attrs": {}
+                }
+              ],
+              "attrs": {}
+            }
+          ],
+          "attrs": {}
+        },
+        {
+          "tag": "sb:host",
+          "content": [
+            {
+              "tag": "sb:book",
+              "content": [
+                {
+                  "tag": "sb:date",
+                  "content": "2025",
+                  "attrs": {}
+                }
+              ],
+              "attrs": {}
+            }
+          ],
+          "attrs": {}
+        }
+      ],
+      "attrs": {}
+    },
+    "expected": "A. Smith (Alternative Name), (2025). Article."
+  },
+  {
+    "name": "title-question",
+    "reference": {
+      "tag": "sb:reference",
+      "content": [
+        {
+          "tag": "sb:contribution",
+          "content": [
+            {
+              "tag": "sb:title",
+              "content": [
+                {
+                  "tag": "sb:maintitle",
+                  "content": "Does this work?",
+                  "attrs": {}
+                }
+              ],
+              "attrs": {}
+            }
+          ],
+          "attrs": {}
+        },
+        {
+          "tag": "sb:host",
+          "content": [
+            {
+              "tag": "sb:book",
+              "content": [
+                {
+                  "tag": "sb:date",
+                  "content": "2025",
+                  "attrs": {}
+                }
+              ],
+              "attrs": {}
+            }
+          ],
+          "attrs": {}
+        }
+      ],
+      "attrs": {}
+    },
+    "expected": "Does this work? (2025)."
+  },
+  {
+    "name": "editor-alt-name",
+    "reference": {
+      "tag": "sb:reference",
+      "content": [
+        {
+          "tag": "sb:host",
+          "content": [
+            {
+              "tag": "sb:edited-book",
+              "content": [
+                {
+                  "tag": "sb:editors",
+                  "content": [
+                    {
+                      "tag": "sb:editor",
+                      "content": [
+                        {
+                          "tag": "ce:given-name",
+                          "content": "A.",
+                          "attrs": {}
+                        },
+                        {
+                          "tag": "ce:surname",
+                          "content": "Smith",
+                          "attrs": {}
+                        },
+                        {
+                          "tag": "ce:alt-name",
+                          "content": "Alternative Name",
+                          "attrs": {}
+                        }
+                      ],
+                      "attrs": {}
+                    }
+                  ],
+                  "attrs": {}
+                },
+                {
+                  "tag": "sb:title",
+                  "content": [
+                    {
+                      "tag": "sb:maintitle",
+                      "content": "Book",
+                      "attrs": {}
+                    }
+                  ],
+                  "attrs": {}
+                },
+                {
+                  "tag": "sb:date",
+                  "content": "2025",
+                  "attrs": {}
+                }
+              ],
+              "attrs": {}
+            }
+          ],
+          "attrs": {}
+        }
+      ],
+      "attrs": {}
+    },
+    "expected": "A. Smith (Alternative Name) (Ed.), Book, (2025)."
+  },
+  {
+    "name": "title-exclamation",
+    "reference": {
+      "tag": "sb:reference",
+      "content": [
+        {
+          "tag": "sb:contribution",
+          "content": [
+            {
+              "tag": "sb:title",
+              "content": [
+                {
+                  "tag": "sb:maintitle",
+                  "content": "It works!",
+                  "attrs": {}
+                }
+              ],
+              "attrs": {}
+            }
+          ],
+          "attrs": {}
+        },
+        {
+          "tag": "sb:host",
+          "content": [
+            {
+              "tag": "sb:book",
+              "content": [
+                {
+                  "tag": "sb:date",
+                  "content": "2025",
+                  "attrs": {}
+                }
+              ],
+              "attrs": {}
+            }
+          ],
+          "attrs": {}
+        }
+      ],
+      "attrs": {}
+    },
+    "expected": "It works! (2025)."
+  },
+  {
+    "name": "article-number-only",
+    "reference": {
+      "tag": "sb:reference",
+      "content": [
+        {
+          "tag": "sb:host",
+          "content": [
+            {
+              "tag": "sb:issue",
+              "content": [
+                {
+                  "tag": "sb:series",
+                  "content": [
+                    {
+                      "tag": "sb:title",
+                      "content": [
+                        {
+                          "tag": "sb:maintitle",
+                          "content": "Journal",
+                          "attrs": {}
+                        }
+                      ],
+                      "attrs": {}
+                    },
+                    {
+                      "tag": "sb:volume-nr",
+                      "content": "4",
+                      "attrs": {}
+                    }
+                  ],
+                  "attrs": {}
+                },
+                {
+                  "tag": "sb:date",
+                  "content": "2025",
+                  "attrs": {}
+                }
+              ],
+              "attrs": {}
+            },
+            {
+              "tag": "sb:article-number",
+              "content": "e123",
+              "attrs": {}
+            }
+          ],
+          "attrs": {}
+        }
+      ],
+      "attrs": {}
+    },
+    "expected": "Journal, 4, (2025) e123."
+  }
+]

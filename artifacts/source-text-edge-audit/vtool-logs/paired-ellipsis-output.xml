@@ -1,0 +1,13 @@
+<?xml version='1.0' encoding='utf-8'?>
+<?xml-stylesheet type="text/xsl" href="ViewLog.xsl"?><LogReport xmlns:vt="http://www.elsevier.com/xml/apps/qc/v" filename="C:\Users\Kevin\AppData\Local\Temp\source-text-edge-native-j956r5fu\paired-ellipsis-output.xml"><Log filename="C:\Users\Kevin\AppData\Local\Temp\source-text-edge-native-j956r5fu\paired-ellipsis-output.xml"><time>Vtool:5.98.2 run at Wed Oct 07 23:04:04 CST 2026</time>
+<command-line-options>-Xmx512m -file "C:\Users\Kevin\AppData\Local\Temp\source-text-edge-native-j956r5fu\paired-ellipsis-output.xml" -forcecheck -log "C:\Users\Kevin\AppData\Local\Temp\source-text-edge-native-j956r5fu\jobs\paired-ellipsis-output\vtool-report" -nofp</command-line-options>
+<results><message id="parser" type="error" position="1:57597"><![CDATA[Error: The element type "sb:ellipsis" must be terminated by the matching end-tag "</sb:ellipsis>".]]></message>
+<message type="error" position="unknown">Not able to validate: org.xml.sax.SAXParseException; systemId: file:/C:/Users/Kevin/AppData/Local/Temp/source-text-edge-native-j956r5fu/paired-ellipsis-output.xml; lineNumber: 1; columnNumber: 57597; The element type "sb:ellipsis" must be terminated by the matching end-tag "&lt;/sb:ellipsis>".</message>
+<message id="Exception" type="error">The element type "sb:ellipsis" must be terminated by the matching end-tag "&lt;/sb:ellipsis>".</message>
+<total-errors>3</total-errors>
+<total-warnings>0</total-warnings>
+<total-skipped-checks>0</total-skipped-checks>
+</results>
+<time>Vtool:5.98.2 run at Wed Oct 07 23:04:05 CST 2026</time>
+</Log>
+</LogReport>

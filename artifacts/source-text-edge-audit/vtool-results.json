@@ -1,0 +1,961 @@
+[
+  {
+    "name": "baseline",
+    "total-errors": 0,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "existing-empty-input",
+    "total-errors": 1,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "EMC501",
+        "severity": "error",
+        "message": "Element 'ce:source-text' may not have empty content."
+      },
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "existing-empty-output",
+    "total-errors": 1,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "EMC501",
+        "severity": "error",
+        "message": "Element 'ce:source-text' may not have empty content."
+      },
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "existing-whitespace-no-id-input",
+    "total-errors": 3,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "CED506a",
+        "severity": "error",
+        "message": "Element 'ce:source-text' begins or ends with a space (\"\u2026 \u2026\")."
+      },
+      {
+        "id": "CED506a",
+        "severity": "error",
+        "message": "Element 'ce:source-text' begins or ends with a space (\"\u2026 \u2026\")."
+      },
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      },
+      {
+        "id": "parser",
+        "severity": "error",
+        "message": "Error: Attribute \"id\" is required and must be specified for element type \"source-text\"."
+      }
+    ]
+  },
+  {
+    "name": "existing-whitespace-no-id-output",
+    "total-errors": 0,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "existing-missing-id-input",
+    "total-errors": 1,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      },
+      {
+        "id": "parser",
+        "severity": "error",
+        "message": "Error: Attribute \"id\" is required and must be specified for element type \"source-text\"."
+      }
+    ]
+  },
+  {
+    "name": "existing-missing-id-output",
+    "total-errors": 0,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "duplicate-source-id-input",
+    "total-errors": 2,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "IDS503a",
+        "severity": "error",
+        "message": "All bibliographic references within 'ce:bibliography' must be referred to."
+      },
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      },
+      {
+        "id": "parser",
+        "severity": "error",
+        "message": "Error: Attribute value \"se990015\" of type ID must be unique within the document."
+      }
+    ]
+  },
+  {
+    "name": "duplicate-source-id-output",
+    "total-errors": 2,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "IDS503a",
+        "severity": "error",
+        "message": "All bibliographic references within 'ce:bibliography' must be referred to."
+      },
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      },
+      {
+        "id": "parser",
+        "severity": "error",
+        "message": "Error: Attribute value \"se990015\" of type ID must be unique within the document."
+      }
+    ]
+  },
+  {
+    "name": "multiple-reference-children-input",
+    "total-errors": 1,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "MSC543",
+        "severity": "error",
+        "message": "Every 'sb:reference' in a bibliographic reference must contain its source text."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "multiple-reference-children-output",
+    "total-errors": 0,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "trailing-note-input",
+    "total-errors": 1,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "MSC543",
+        "severity": "error",
+        "message": "Every 'sb:reference' in a bibliographic reference must contain its source text."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "trailing-note-output",
+    "total-errors": 1,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      },
+      {
+        "id": "parser",
+        "severity": "error",
+        "message": "Error: The content of element type \"ce:bib-reference\" must match \"(ce:label,(ce:note|(((sb:reference|ce:other-ref),ce:source-text?)+,ce:note?)))\"."
+      }
+    ]
+  },
+  {
+    "name": "named-entity-input",
+    "total-errors": 2,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "MSC543",
+        "severity": "error",
+        "message": "Every 'sb:reference' in a bibliographic reference must contain its source text."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      },
+      {
+        "id": "XML510",
+        "severity": "error",
+        "message": "Named entities and numerical Unicode entities are not allowed."
+      }
+    ]
+  },
+  {
+    "name": "named-entity-output",
+    "total-errors": 2,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "MSC543",
+        "severity": "error",
+        "message": "Every 'sb:reference' in a bibliographic reference must contain its source text."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      },
+      {
+        "id": "XML510",
+        "severity": "error",
+        "message": "Named entities and numerical Unicode entities are not allowed."
+      }
+    ]
+  },
+  {
+    "name": "numeric-entity-control-input",
+    "total-errors": 2,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "MSC543",
+        "severity": "error",
+        "message": "Every 'sb:reference' in a bibliographic reference must contain its source text."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      },
+      {
+        "id": "XML510",
+        "severity": "error",
+        "message": "Named entities and numerical Unicode entities are not allowed."
+      }
+    ]
+  },
+  {
+    "name": "numeric-entity-control-output",
+    "total-errors": 0,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "special-character-control-input",
+    "total-errors": 1,
+    "total-warnings": 3,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "MSC543",
+        "severity": "error",
+        "message": "Every 'sb:reference' in a bibliographic reference must contain its source text."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      },
+      {
+        "id": "TTS502",
+        "severity": "warning",
+        "message": "Title element 'sb:maintitle' is written in upper-case letters: \"A & B < C\"."
+      }
+    ]
+  },
+  {
+    "name": "special-character-control-output",
+    "total-errors": 0,
+    "total-warnings": 3,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      },
+      {
+        "id": "TTS502",
+        "severity": "warning",
+        "message": "Title element 'sb:maintitle' is written in upper-case letters: \"A & B < C\"."
+      }
+    ]
+  },
+  {
+    "name": "inline-space-input",
+    "total-errors": 1,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "MSC543",
+        "severity": "error",
+        "message": "Every 'sb:reference' in a bibliographic reference must contain its source text."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "inline-space-output",
+    "total-errors": 0,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "inline-formatting-control-input",
+    "total-errors": 1,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "MSC543",
+        "severity": "error",
+        "message": "Every 'sb:reference' in a bibliographic reference must contain its source text."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "inline-formatting-control-output",
+    "total-errors": 0,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "cdata-existing-source-input",
+    "total-errors": 0,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "cdata-existing-source-output",
+    "total-errors": 1,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      },
+      {
+        "id": "XML503c",
+        "severity": "error",
+        "message": "Multiple whitespace characters (TAB, LF, space) may only appear at the beginning of a line."
+      }
+    ]
+  },
+  {
+    "name": "comma-url-input",
+    "total-errors": 1,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "MSC543",
+        "severity": "error",
+        "message": "Every 'sb:reference' in a bibliographic reference must contain its source text."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "comma-url-output",
+    "total-errors": 0,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "paired-et-al-input",
+    "total-errors": 1,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "MSC543",
+        "severity": "error",
+        "message": "Every 'sb:reference' in a bibliographic reference must contain its source text."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "paired-et-al-output",
+    "total-errors": 3,
+    "total-warnings": 0,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": null,
+        "severity": "error",
+        "message": "Not able to validate: org.xml.sax.SAXParseException; systemId: file:/C:/Users/Kevin/AppData/Local/Temp/source-text-edge-native-j956r5fu/paired-et-al-output.xml; lineNumber: 1; columnNumber: 57541; The element type \"sb:et-al\" must be terminated by the matching end-tag \"</sb:et-al>\"."
+      },
+      {
+        "id": "parser",
+        "severity": "error",
+        "message": "Error: The element type \"sb:et-al\" must be terminated by the matching end-tag \"</sb:et-al>\"."
+      },
+      {
+        "id": "Exception",
+        "severity": "error",
+        "message": "The element type \"sb:et-al\" must be terminated by the matching end-tag \"</sb:et-al>\"."
+      }
+    ]
+  },
+  {
+    "name": "paired-ellipsis-input",
+    "total-errors": 1,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "MSC543",
+        "severity": "error",
+        "message": "Every 'sb:reference' in a bibliographic reference must contain its source text."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "paired-ellipsis-output",
+    "total-errors": 3,
+    "total-warnings": 0,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "parser",
+        "severity": "error",
+        "message": "Error: The element type \"sb:ellipsis\" must be terminated by the matching end-tag \"</sb:ellipsis>\"."
+      },
+      {
+        "id": null,
+        "severity": "error",
+        "message": "Not able to validate: org.xml.sax.SAXParseException; systemId: file:/C:/Users/Kevin/AppData/Local/Temp/source-text-edge-native-j956r5fu/paired-ellipsis-output.xml; lineNumber: 1; columnNumber: 57597; The element type \"sb:ellipsis\" must be terminated by the matching end-tag \"</sb:ellipsis>\"."
+      },
+      {
+        "id": "Exception",
+        "severity": "error",
+        "message": "The element type \"sb:ellipsis\" must be terminated by the matching end-tag \"</sb:ellipsis>\"."
+      }
+    ]
+  },
+  {
+    "name": "local-math-namespace-input",
+    "total-errors": 1,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "MSC543",
+        "severity": "error",
+        "message": "Every 'sb:reference' in a bibliographic reference must contain its source text."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "local-math-namespace-output",
+    "total-errors": 0,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "doi-migration-loses-metadata-input",
+    "total-errors": 1,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "MSC543",
+        "severity": "error",
+        "message": "Every 'sb:reference' in a bibliographic reference must contain its source text."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "doi-migration-loses-metadata-output",
+    "total-errors": 0,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "doi-migration-duplicate-doi-input",
+    "total-errors": 1,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "MSC543",
+        "severity": "error",
+        "message": "Every 'sb:reference' in a bibliographic reference must contain its source text."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "doi-migration-duplicate-doi-output",
+    "total-errors": 1,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      },
+      {
+        "id": "parser",
+        "severity": "error",
+        "message": "Error: The content of element type \"sb:host\" must match \"((((sb:issue|sb:book|sb:edited-book),sb:pages?)|sb:e-host),sb:article-number?,ce:doi?)\"."
+      }
+    ]
+  },
+  {
+    "name": "doi-migration-percent-suffix-input",
+    "total-errors": 1,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "MSC543",
+        "severity": "error",
+        "message": "Every 'sb:reference' in a bibliographic reference must contain its source text."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "doi-migration-percent-suffix-output",
+    "total-errors": 0,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "doi-display-punctuation-input",
+    "total-errors": 1,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "MSC543",
+        "severity": "error",
+        "message": "Every 'sb:reference' in a bibliographic reference must contain its source text."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "doi-display-punctuation-output",
+    "total-errors": 0,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "url-query-control-input",
+    "total-errors": 1,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "MSC543",
+        "severity": "error",
+        "message": "Every 'sb:reference' in a bibliographic reference must contain its source text."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "url-query-control-output",
+    "total-errors": 0,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  }
+]

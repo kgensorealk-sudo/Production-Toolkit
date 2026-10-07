@@ -1,0 +1,242 @@
+[
+  {
+    "name": "baseline",
+    "total-errors": 0,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "type": "warning",
+        "position": "1:55942",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "type": "warning",
+        "position": "1:52019",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "trailing-note",
+    "total-errors": 0,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "type": "warning",
+        "position": "1:55942",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "type": "warning",
+        "position": "1:52019",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "paired-et-al",
+    "total-errors": 0,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "type": "warning",
+        "position": "1:55942",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "type": "warning",
+        "position": "1:52019",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "paired-ellipsis",
+    "total-errors": 0,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "type": "warning",
+        "position": "1:55942",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "type": "warning",
+        "position": "1:52019",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "doi-migration-loses-metadata",
+    "total-errors": 0,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "type": "warning",
+        "position": "1:55942",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "type": "warning",
+        "position": "1:52019",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "doi-migration-duplicate-doi",
+    "total-errors": 0,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "type": "warning",
+        "position": "1:55942",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "type": "warning",
+        "position": "1:52019",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "doi-migration-percent-suffix",
+    "total-errors": 0,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "type": "warning",
+        "position": "1:55942",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "type": "warning",
+        "position": "1:52019",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "doi-migration-same-doi",
+    "total-errors": 0,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "type": "warning",
+        "position": "1:55942",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "type": "warning",
+        "position": "1:52019",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "doi-migration-link-metadata",
+    "total-errors": 0,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "type": "warning",
+        "position": "1:55942",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "type": "warning",
+        "position": "1:52019",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "doi-migration-descriptive-label",
+    "total-errors": 0,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "type": "warning",
+        "position": "1:55942",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "type": "warning",
+        "position": "1:52019",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "doi-migration-comment-accept",
+    "total-errors": 0,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "type": "warning",
+        "position": "1:55942",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "type": "warning",
+        "position": "1:52019",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "doi-migration-comment-retain",
+    "total-errors": 0,
+    "total-warnings": 2,
+    "total-skipped-checks": 0,
+    "messages": [
+      {
+        "id": "MSC529",
+        "type": "warning",
+        "position": "1:55942",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "id": "ROL517",
+        "type": "warning",
+        "position": "1:52019",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  }
+]

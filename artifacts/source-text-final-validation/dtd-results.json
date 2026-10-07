@@ -1,0 +1,212 @@
+[
+  {
+    "name": "baseline",
+    "expected": "pass",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "existing-missing-id-after-id-step",
+    "expected": "pass",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "multiple-reference-children-after-id-step",
+    "expected": "pass",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "multiple-reference-existing-second-source-after-id-step",
+    "expected": "pass",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "missing-all-ids-after-id-step",
+    "expected": "pass",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "other-ref-missing-id-after-id-step",
+    "expected": "pass",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "trailing-note-after-id-step",
+    "expected": "pass",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "numeric-entity-control-after-id-step",
+    "expected": "pass",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "special-character-control-after-id-step",
+    "expected": "pass",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "inline-space-after-id-step",
+    "expected": "pass",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "inline-formatting-control-after-id-step",
+    "expected": "pass",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "cdata-existing-source-after-id-step",
+    "expected": "pass",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "cdata-title-comment-after-id-step",
+    "expected": "pass",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "comma-url-after-id-step",
+    "expected": "pass",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "paired-et-al-after-id-step",
+    "expected": "pass",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "paired-ellipsis-after-id-step",
+    "expected": "pass",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "local-math-namespace-after-id-step",
+    "expected": "pass",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "doi-migration-loses-metadata-after-id-step",
+    "expected": "pass",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "doi-migration-comment-accept-after-id-step",
+    "expected": "pass",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "doi-migration-comment-retain-after-id-step",
+    "expected": "pass",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "doi-migration-same-doi-after-id-step",
+    "expected": "pass",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "doi-migration-link-metadata-after-id-step",
+    "expected": "pass",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "doi-migration-descriptive-label-after-id-step",
+    "expected": "pass",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "doi-migration-duplicate-doi-after-id-step",
+    "expected": "pass",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "doi-migration-percent-suffix-after-id-step",
+    "expected": "pass",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "doi-display-punctuation-after-id-step",
+    "expected": "pass",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "url-query-control-after-id-step",
+    "expected": "pass",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "existing-missing-id-raw",
+    "expected": "review",
+    "passed": false,
+    "issues": [
+      "The required attribute 'id' is missing."
+    ]
+  },
+  {
+    "name": "missing-all-ids-raw",
+    "expected": "review",
+    "passed": false,
+    "issues": [
+      "The required attribute 'id' is missing.",
+      "The required attribute 'id' is missing.",
+      "Reference to undeclared ID is 'bb0005'."
+    ]
+  },
+  {
+    "name": "duplicate-source-id-raw",
+    "expected": "review",
+    "passed": false,
+    "issues": [
+      "'zz990010' is already used as an ID."
+    ]
+  },
+  {
+    "name": "duplicate-structured-id-raw",
+    "expected": "review",
+    "passed": false,
+    "issues": [
+      "'zz990005' is already used as an ID."
+    ]
+  },
+  {
+    "name": "misplaced-existing-source-raw",
+    "expected": "review",
+    "passed": false,
+    "issues": [
+      "The element 'bib-reference' in namespace 'ce' has invalid child element 'source-text' in namespace 'ce'. List of possible elements expected: 'ce:note sb:reference ce:other-ref'."
+    ]
+  },
+  {
+    "name": "existing-empty-raw",
+    "expected": "review",
+    "passed": true,
+    "issues": []
+  }
+]

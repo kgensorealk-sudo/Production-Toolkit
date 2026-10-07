@@ -44,6 +44,7 @@ import {
 } from 'lucide-react';
 import Toast from '../components/Toast';
 import Switch from '../components/Switch';
+import VtoolValidationPanel from '../components/VtoolValidationPanel';
 import { SmartSuggestion, ToolId } from '../types';
 
 interface AuditItem {
@@ -62,7 +63,6 @@ const StructuralNodeArchitect: React.FC = () => {
     const navigate = useNavigate();
     const [input, setInput] = useState('');
     const [output, setOutput] = useState('');
-    const [startId, setStartId] = useState(4000);
     const [fixContributionLangtype, setFixContributionLangtype] = useState<boolean>(true);
     const [autoAcceptRepairs, setAutoAcceptRepairs] = useState<boolean>(false);
     const [refDecisions, setRefDecisions] = useState<Record<string, 'accept' | 'retain'>>({});
@@ -73,7 +73,7 @@ const StructuralNodeArchitect: React.FC = () => {
     const [isProcessing, setIsProcessing] = useState(false);
     const [step, setStep] = useState<'input' | 'analyzing' | 'completed'>('input');
     const [suggestions, setSuggestions] = useState<SmartSuggestion[]>([]);
-    const [activeTab, setActiveTab] = useState<'input' | 'analysis' | 'result'>('input');
+    const [activeTab, setActiveTab] = useState<'input' | 'analysis' | 'result' | 'validation'>('input');
     const [resultMode, setResultMode] = useState<'full' | 'refs'>('full');
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'|'info'} | null>(null);
     const [currentChangeIndex, setCurrentChangeIndex] = useState(-1);
@@ -94,84 +94,225 @@ const StructuralNodeArchitect: React.FC = () => {
     const diffContainerRef = useRef<HTMLDivElement>(null);
     const wasWrappedRef = useRef<boolean>(false);
 
-    const NS_DECLS = `xmlns:ce="http://www.elsevier.com/xml/common/dtd" xmlns:sb="http://www.elsevier.com/xml/common/structbib/dtd" xmlns:xlink="http://www.w3.org/1999/xlink"`;
+    const NS_DECLS = `xmlns:ce="http://www.elsevier.com/xml/common/dtd" xmlns:sb="http://www.elsevier.com/xml/common/struct-bib/dtd" xmlns:xlink="http://www.w3.org/1999/xlink"`;
 
-    const generateSourceText = (sbRef: Element): string => {
+    const directLabels = (ref: Element): Element[] => Array.from(ref.children).filter(child => child.tagName === 'ce:label');
+
+    const associatedSourceText = (reference: Element): Element | null => {
+        const next = reference.nextElementSibling;
+        return next?.tagName === 'ce:source-text' ? next : null;
+    };
+
+    const hasUnassociatedSourceText = (ref: Element): boolean => Array.from(ref.children).some(node =>
+        node.tagName === 'ce:source-text' && (!node.previousElementSibling || !['sb:reference', 'ce:reference', 'ce:other-ref'].includes(node.previousElementSibling.tagName)));
+
+    const findDuplicateIds = (xml: string): Set<string> => {
+        const markup = xml.replace(/<!\[CDATA\[[\s\S]*?\]\]>|<!--[\s\S]*?-->|<\?[\s\S]*?\?>/g, '');
+        const used = new Set<string>();
+        const duplicates = new Set<string>();
+        for (const tag of markup.matchAll(/<[A-Za-z_][\w:.-]*(?:[^<>"']|"[^"]*"|'[^']*')*>/g)) {
+            for (const attribute of tag[0].matchAll(/\s([A-Za-z_][\w:.-]*)\s*=\s*("[^"]*"|'[^']*')/g)) {
+                if (attribute[1] !== 'id') continue;
+                const value = attribute[2].slice(1, -1);
+                if (!value) continue;
+                if (used.has(value)) duplicates.add(value);
+                used.add(value);
+            }
+        }
+        return duplicates;
+    };
+
+    const removeInjectedNamespaces = (original: string, serialized: string): string => {
+        // Only remove wrapper bindings synthesized on element tags; keep original/local bindings and literal text.
+        const tokens = /<!\[CDATA\[[\s\S]*?\]\]>|<!--[\s\S]*?-->|<\?[\s\S]*?\?>|<[A-Za-z_][\w:.-]*(?:[^<>"']|"[^"]*"|'[^']*')*>/g;
+        const supplied = new Set<string>();
+        const bindings = /\sxmlns:(ce|sb|xlink)\s*=\s*("[^"]*"|'[^']*')/g;
+        for (const token of original.matchAll(tokens)) {
+            if (/^<[!?]/.test(token[0])) continue;
+            for (const attr of token[0].matchAll(bindings)) supplied.add(attr[1] + ':' + attr[2].slice(1, -1));
+        }
+        return serialized.replace(tokens, token => /^<[!?]/.test(token) ? token : token.replace(bindings, (attribute, prefix, quoted) =>
+            supplied.has(prefix + ':' + quoted.slice(1, -1)) ? attribute : ''));
+    };
+
+    const auditReferenceFields = (ref: Element, duplicates: Set<string>, id: string, label: string, title = ''): AuditItem[] => {
+        const items: AuditItem[] = [];
+        const requiredIds = new Set(['ce:bib-reference', 'sb:reference', 'ce:reference', 'ce:other-ref', 'ce:inter-ref', 'ce:source-text']);
+        for (const node of [ref, ...Array.from(ref.getElementsByTagName('*'))]) {
+            const value = node.getAttribute('id');
+            const warn = (msg: string, type: AuditItem['type'] = 'id-fix') => items.push({ id, label, title, status: 'warning', msg, type });
+            if (requiredIds.has(node.tagName) && !value?.trim()) {
+                warn(`MISSING ID: <${node.tagName}> has no ID. Left unassigned; use the ID tool before final validation.`);
+            } else if (value && duplicates.has(value)) {
+                warn(`DUPLICATE ID: ${value} is used more than once. Preserved for the ID tool to resolve.`);
+            }
+            if (value && ((node.tagName === 'ce:other-ref' && !value.startsWith('or')) || (['sb:reference', 'ce:inter-ref'].includes(node.tagName) && value.startsWith('or')))) {
+                warn(`ID PREFIX: <${node.tagName}> has an unexpected ID (${value}). Preserved for the ID tool.`);
+            }
+            if (node.tagName === 'ce:source-text') {
+                if (!node.textContent?.trim()) warn('EMPTY SOURCE: Existing source-text has no text. Preserved for review.', 'source-text');
+                if (node.children.length) warn('SOURCE MARKUP: Source-text must contain plain text; existing child elements require review.', 'source-text');
+                if (!node.previousElementSibling || !['sb:reference', 'ce:reference', 'ce:other-ref'].includes(node.previousElementSibling.tagName)) {
+                    warn('SOURCE ASSOCIATION: Source-text does not immediately follow a structured reference or other-ref. Preserved for review.', 'source-text');
+                }
+            }
+        }
+        return items;
+    };
+
+    const generateSourceText = (sbRef: Element, seenDois: Set<string> = new Set()): string => {
+        if (sbRef.getElementsByTagName('ce:hsp').length || sbRef.getElementsByTagName('ce:vsp').length) {
+            sbRef = sbRef.cloneNode(true) as Element;
+            for (const space of [...Array.from(sbRef.getElementsByTagName('ce:hsp')), ...Array.from(sbRef.getElementsByTagName('ce:vsp'))]) {
+                const amount = space.getAttribute('sp');
+                const gap = amount !== null && Number(amount) === 0 ? '' : ' ';
+                space.parentNode?.replaceChild(space.ownerDocument.createTextNode(gap), space);
+            }
+        }
         if (sbRef.tagName.includes('other-ref')) {
             let text = sbRef.textContent?.trim() || "";
             if (text && !text.endsWith(".")) text += ".";
             return text;
         }
 
+        // Preserve the ordered author sequence, including groups and omission markers.
         const authors: string[] = [];
-        
-        // 1. Authors
-        const authorNodes = Array.from(sbRef.getElementsByTagName("sb:author")).concat(Array.from(sbRef.getElementsByTagName("ce:author")));
-        authorNodes.forEach(author => {
-            const given = author.getElementsByTagName("ce:given-name")[0]?.textContent || author.getElementsByTagName("sb:given-name")[0]?.textContent || "";
-            const surname = author.getElementsByTagName("ce:surname")[0]?.textContent || author.getElementsByTagName("sb:surname")[0]?.textContent || "";
-            if (given || surname) {
-                authors.push(`${given} ${surname}`.trim());
-            } else {
-                const indexed = author.getElementsByTagName("ce:indexed-name")[0]?.textContent || author.getElementsByTagName("sb:indexed-name")[0]?.textContent;
-                if (indexed) authors.push(indexed.trim());
-            }
+        const authorGroups = Array.from(sbRef.getElementsByTagName("sb:authors"));
+        authorGroups.forEach(group => {
+            Array.from(group.children).forEach(node => {
+                if (node.tagName === "sb:author") {
+                    const given = node.getElementsByTagName("ce:given-name")[0]?.textContent?.trim() || "";
+                    const surname = node.getElementsByTagName("ce:surname")[0]?.textContent?.trim() || "";
+                    const suffix = node.getElementsByTagName("ce:suffix")[0]?.textContent?.trim() || "";
+                    const alternatives = Array.from(node.children).filter(child => child.tagName === "ce:alt-name").map(child => child.textContent?.trim()).filter(Boolean);
+                    const primaryName = [given, surname, suffix].filter(Boolean).join(" ");
+                    const name = primaryName + (alternatives.length ? ` (${alternatives.join("; ")})` : "");
+                    if (name) authors.push(name);
+                } else if (node.tagName === "sb:collaboration") {
+                    const name = node.textContent?.trim();
+                    if (name) authors.push(name);
+                } else if (node.tagName === "sb:et-al") {
+                    authors.push("et al.");
+                } else if (node.tagName === "sb:ellipsis") {
+                    authors.push("…");
+                }
+            });
         });
 
-        // Check for et-al tag inside authors or reference
-        const hasEtAl = sbRef.getElementsByTagName("sb:et-al").length > 0 || sbRef.getElementsByTagName("ce:et-al").length > 0;
-
-        // 2. Collaboration
-        const collaborations = Array.from(sbRef.getElementsByTagName("ce:collaboration")).concat(Array.from(sbRef.getElementsByTagName("sb:collaboration")));
-        collaborations.forEach(collab => {
-            const text = collab.textContent?.trim();
-            if (text) authors.push(text);
-        });
+        const titleText = (main: Element | undefined): string => {
+            if (!main) return "";
+            const titleContainer = main.parentElement;
+            const subtitle = titleContainer && (titleContainer.tagName === "sb:title" || titleContainer.tagName === "sb:translated-title" || titleContainer.tagName === "ce:title")
+                ? Array.from(titleContainer.children).find(node => node.tagName === "sb:subtitle" || node.tagName === "ce:subtitle")?.textContent?.trim() || ""
+                : "";
+            const mainText = main.textContent?.trim() || "";
+            const ownTitle = subtitle ? mainText + (mainText ? (/[：:?!.,;]$/.test(mainText) ? " " : ": ") : "") + subtitle : mainText;
+            const translation = titleContainer?.tagName === "sb:title"
+                ? Array.from(titleContainer.parentElement?.children || []).find(node => node.tagName === "sb:translated-title") : undefined;
+            const translatedText = translation ? titleText(Array.from(translation.children).find(node => node.tagName === "sb:maintitle")) : "";
+            return ownTitle + (translatedText ? ` [${translatedText}]` : "");
+        };
 
         // 3. Title (check contribution first)
         let title = "";
         const contribution = sbRef.getElementsByTagName("sb:contribution")[0] || sbRef.getElementsByTagName("ce:contribution")[0];
         if (contribution) {
-            title = contribution.getElementsByTagName("sb:maintitle")[0]?.textContent || contribution.getElementsByTagName("ce:maintitle")[0]?.textContent || "";
+            title = titleText(contribution.getElementsByTagName("sb:maintitle")[0] || contribution.getElementsByTagName("ce:maintitle")[0]);
         }
         if (!title) {
-            title = sbRef.getElementsByTagName("sb:maintitle")[0]?.textContent || sbRef.getElementsByTagName("ce:maintitle")[0]?.textContent || "";
+            // A host title is the journal/book container, not the contribution title.
+            const standaloneTitle = Array.from(sbRef.getElementsByTagName("sb:maintitle"))
+                .concat(Array.from(sbRef.getElementsByTagName("ce:maintitle")))
+                .find(node => {
+                    let parent = node.parentElement;
+                    while (parent && parent !== sbRef) {
+                        if (parent.tagName === "sb:host" || parent.tagName === "ce:host") return false;
+                        parent = parent.parentElement;
+                    }
+                    return true;
+                });
+            title = titleText(standaloneTitle);
         }
         
+        // Comments separate reference sections; render those sections in their XML order.
+        const sections = Array.from(sbRef.children);
+        const separateHosts = sections.filter(node => node.tagName === "sb:host");
+        if (separateHosts.length > 1 || (sections.some(node => node.tagName === "sb:comment") && sections.some(node => node.tagName !== "sb:comment"))) {
+            return sections.map(section => {
+                const sectionOnly = sbRef.cloneNode(false) as Element;
+                sectionOnly.appendChild(section.cloneNode(true));
+                return generateSourceText(sectionOnly, seenDois);
+            }).filter(Boolean).join(" ");
+        }
+
+        const directChild = (node: Element, tag: string) => Array.from(node.children).find(child => child.tagName === tag);
+        const formatEditors = (group: Element | undefined): string => {
+            if (!group) return "";
+            const parts: string[] = [];
+            let count = 0;
+            let omitted = false;
+            Array.from(group.children).forEach(node => {
+                if (node.tagName === "sb:editor") {
+                    const primaryName = ["ce:given-name", "ce:surname", "ce:suffix"]
+                        .map(tag => directChild(node, tag)?.textContent?.trim()).filter(Boolean).join(" ");
+                    const alternatives = Array.from(node.children).filter(child => child.tagName === "ce:alt-name").map(child => child.textContent?.trim()).filter(Boolean);
+                    const name = primaryName + (alternatives.length ? ` (${alternatives.join("; ")})` : "");
+                    if (name) { parts.push(name); count++; }
+                } else if (node.tagName === "sb:et-al" || node.tagName === "sb:ellipsis") {
+                    parts.push(node.tagName === "sb:et-al" ? "et al." : "…");
+                    omitted = true;
+                }
+            });
+            const names = parts.reduce((text, part, index) => text + (index ? (parts[index - 1] === "…" ? " " : ", ") : "") + part, "");
+            return names ? `${names} (${count > 1 || omitted ? "Eds." : "Ed."})` : "";
+        };
+        const containerTitle = (node: Element): string => {
+            const titleNode = directChild(node, "sb:title") || directChild(node, "sb:translated-title");
+            return titleText(titleNode ? directChild(titleNode, "sb:maintitle") : directChild(node, "sb:maintitle"));
+        };
+
         // 4. Host (Journal/Book info) - check all sb:host elements
         const hostNodes = Array.from(sbRef.getElementsByTagName("sb:host")).concat(Array.from(sbRef.getElementsByTagName("ce:host")));
         let journal = "";
         let year = "";
+        let journalIdentifier = "";
         let volume = "";
         let issue = "";
         let pages = "";
         let articleNum = "";
-        let editors: string[] = [];
+        let editors = "";
+        const bookSeriesTexts: string[] = [];
 
         hostNodes.forEach(host => {
-            // Journal Title
-            if (!journal) {
-                const mainTitles = Array.from(host.getElementsByTagName("sb:maintitle")).concat(Array.from(host.getElementsByTagName("ce:maintitle")));
-                if (mainTitles.length > 0) {
-                    journal = mainTitles[0].textContent || "";
-                } else {
-                    const seriesTitle = host.getElementsByTagName("sb:title")[0]?.textContent || host.getElementsByTagName("ce:title")[0]?.textContent;
-                    if (seriesTitle) journal = seriesTitle;
-                }
+            const body = Array.from(host.children).find(node => ["sb:issue", "sb:book", "sb:edited-book", "sb:e-host"].includes(node.tagName)) || host;
+            const series = directChild(body, "sb:series");
+            const bookSeries = directChild(body, "sb:book-series");
+            const ownTitle = containerTitle(body);
+            // Issue titles and journal titles are distinct; retain both.
+            const conference = directChild(body, "sb:conference")?.textContent?.trim() || "";
+            journal = [ownTitle, conference, series ? containerTitle(series) : ""].filter(Boolean).join(". ");
+            journalIdentifier = series ? directChild(series, "sb:issn")?.textContent?.trim() || "" : "";
+            editors = formatEditors(directChild(body, "sb:editors"));
+            if (bookSeries) {
+                const seriesNode = directChild(bookSeries, "sb:series");
+                const seriesEditors = formatEditors(directChild(bookSeries, "sb:editors"));
+                const seriesTitle = seriesNode ? containerTitle(seriesNode) : "";
+                const seriesVolume = seriesNode ? directChild(seriesNode, "sb:volume-nr")?.textContent?.trim() || "" : "";
+                const seriesIdentifier = seriesNode ? directChild(seriesNode, "sb:issn")?.textContent?.trim() || "" : "";
+                const seriesDetails = [seriesTitle, seriesVolume, seriesIdentifier].filter(Boolean).join(", ");
+                const seriesText = [seriesEditors, seriesDetails].filter(Boolean).join(", ");
+                if (seriesText) bookSeriesTexts.push(seriesText);
             }
-            
+
             // Date / Year
             if (!year) {
-                const dateNode = host.getElementsByTagName("sb:date")[0] || host.getElementsByTagName("ce:date")[0];
-                if (dateNode) year = dateNode.textContent || "";
+                year = Array.from(body.children).filter(node => node.tagName === "sb:date" || node.tagName === "ce:date")
+                    .map(node => node.textContent?.trim()).filter(Boolean).join(", ");
             }
             
-            // Volume
-            if (!volume) {
-                const volNode = host.getElementsByTagName("sb:volume-nr")[0] || host.getElementsByTagName("ce:volume-nr")[0];
-                if (volNode) volume = volNode.textContent || "";
-            }
-            
+            // A book-series volume stays with its series, not the book title.
+            if (!volume) volume = (series ? directChild(series, "sb:volume-nr") : directChild(body, "sb:volume-nr"))?.textContent || "";
+
             // Issue
             if (!issue) {
                 const issueNode = host.getElementsByTagName("sb:issue-nr")[0] || host.getElementsByTagName("ce:issue-nr")[0];
@@ -185,20 +326,20 @@ const StructuralNodeArchitect: React.FC = () => {
                 const lastPage = host.getElementsByTagName("sb:last-page")[0]?.textContent?.trim() || host.getElementsByTagName("ce:last-page")[0]?.textContent?.trim() || "";
 
                 if (firstPage && lastPage) {
-                    pages = `${firstPage}–${lastPage}`;
+                    pages = firstPage === lastPage ? firstPage : `${firstPage}–${lastPage}`;
                 } else if (pagesNode) {
                     // Check if pagesNode contains nested first-page/last-page
                     const innerFirst = pagesNode.getElementsByTagName("sb:first-page")[0]?.textContent?.trim() || pagesNode.getElementsByTagName("ce:first-page")[0]?.textContent?.trim() || "";
                     const innerLast = pagesNode.getElementsByTagName("sb:last-page")[0]?.textContent?.trim() || pagesNode.getElementsByTagName("ce:last-page")[0]?.textContent?.trim() || "";
                     if (innerFirst && innerLast) {
-                        pages = `${innerFirst}–${innerLast}`;
+                        pages = innerFirst === innerLast ? innerFirst : `${innerFirst}–${innerLast}`;
                     } else if (innerFirst) {
                         pages = innerFirst;
                     } else {
                         let rawPages = pagesNode.textContent?.trim() || "";
                         // If pages has raw consecutive numbers without dash or hyphen (e.g. 123-321 or split), ensure standard en-dash
                         if (/^(\d+)[-\u2010\u2011\u2012\u2013\u2014\u2015\s]+(\d+)$/.test(rawPages)) {
-                            rawPages = rawPages.replace(/^(\d+)[-\u2010\u2011\u2012\u2013\u2014\u2015\s]+(\d+)$/, '$1–$2');
+                            rawPages = rawPages.replace(/^(\d+)[-\u2010\u2011\u2012\u2013\u2014\u2015\s]+(\d+)$/, (_, first, last) => first === last ? first : `${first}–${last}`);
                         }
                         pages = rawPages;
                     }
@@ -213,13 +354,7 @@ const StructuralNodeArchitect: React.FC = () => {
                 if (artNode) articleNum = artNode.textContent || "";
             }
 
-            // Editors
-            const editorNodes = Array.from(host.getElementsByTagName("sb:editor")).concat(Array.from(host.getElementsByTagName("ce:editor")));
-            editorNodes.forEach(ed => {
-                const given = ed.getElementsByTagName("ce:given-name")[0]?.textContent || ed.getElementsByTagName("sb:given-name")[0]?.textContent || "";
-                const surname = ed.getElementsByTagName("ce:surname")[0]?.textContent || ed.getElementsByTagName("sb:surname")[0]?.textContent || "";
-                if (given || surname) editors.push(`${given} ${surname}`.trim());
-            });
+
         });
 
         // Fallback for date directly under sbRef
@@ -231,33 +366,26 @@ const StructuralNodeArchitect: React.FC = () => {
         let sourceText = "";
 
         // 1. Authors & Year / Title & Year
-        let authorsStr = authors.join(", ");
-        if (hasEtAl) {
-            authorsStr = authorsStr ? `${authorsStr}, et al.` : "et al.";
-        }
+        const authorsStr = authors.reduce((text, author, index) =>
+            text + (index ? (authors[index - 1] === "…" ? " " : ", ") : "") + author, "");
         if (authorsStr) {
             if (year) {
                 sourceText += `${authorsStr}, (${year}).`;
             } else {
-                sourceText += `${authorsStr}.`;
+                sourceText += authorsStr.endsWith(".") ? authorsStr : `${authorsStr}.`;
             }
             if (title) {
                 let cleanTitle = title.trim().replace(/[\s,.]*$/, '');
-                sourceText += (sourceText ? " " : "") + `${cleanTitle}.`;
+                sourceText += (sourceText ? " " : "") + cleanTitle + (/[.!?]$/.test(cleanTitle) ? "" : ".");
             }
         } else if (title) {
             // When NO authors, start with Title followed by period
             let cleanTitle = title.trim().replace(/[\s,.]*$/, '');
-            sourceText += `${cleanTitle}.`;
-        } else if (year) {
-            sourceText += `(${year}).`;
+            sourceText += cleanTitle + (/[.!?]$/.test(cleanTitle) ? "" : ".");
         }
         
-        // 2. Editors
-        if (editors.length > 0) {
-            const edLabel = editors.length > 1 ? "Eds." : "Ed.";
-            sourceText += (sourceText ? " " : "") + `In: ${editors.join(", ")} (${edLabel}),`;
-        }
+        // Editor groups retain their names and markers without inventing an "In:" relationship.
+        if (editors) sourceText += (sourceText ? " " : "") + `${editors},`;
 
         // 3. Host (Journal/Book)
         let volIssuePagesPart = "";
@@ -284,7 +412,7 @@ const StructuralNodeArchitect: React.FC = () => {
             }
         }
 
-        const pageOrArt = pages || articleNum;
+        const pageOrArt = [pages, articleNum].filter(Boolean).join(", ");
         if (pageOrArt) {
             if (volIssuePagesPart) {
                 volIssuePagesPart += ` ${pageOrArt}`;
@@ -293,44 +421,88 @@ const StructuralNodeArchitect: React.FC = () => {
             }
         }
 
+        if (journalIdentifier) volIssuePagesPart += (volIssuePagesPart ? ", " : "") + journalIdentifier;
         if (volIssuePagesPart) {
             sourceText += (sourceText ? " " : "") + volIssuePagesPart;
         }
 
-        // 4. DOI
-        const doiNode = sbRef.getElementsByTagName("ce:doi")[0] || sbRef.getElementsByTagName("sb:doi")[0];
-        const doi = doiNode?.textContent?.trim();
-        if (doi) {
-            const cleanDoi = doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i, '').replace(/^doi:/i, '');
-            if (sourceText && !sourceText.endsWith(",") && !sourceText.endsWith(".")) {
-                sourceText += ",";
-            }
-            sourceText += (sourceText ? " " : "") + `https://doi.org/${cleanDoi}`;
+        // Preserve edition and publisher details present in the structured reference.
+        const editions = Array.from(sbRef.getElementsByTagName("sb:edition"))
+            .concat(Array.from(sbRef.getElementsByTagName("ce:edition")))
+            .map(node => node.textContent?.trim()).filter(Boolean);
+        const publishers = Array.from(sbRef.getElementsByTagName("sb:publisher"))
+            .concat(Array.from(sbRef.getElementsByTagName("ce:publisher")))
+            .map(node => {
+                const name = node.getElementsByTagName("ce:name")[0]?.textContent?.trim()
+                    || node.getElementsByTagName("sb:name")[0]?.textContent?.trim() || "";
+                const location = node.getElementsByTagName("ce:location")[0]?.textContent?.trim()
+                    || node.getElementsByTagName("sb:location")[0]?.textContent?.trim() || "";
+                return [name, location].filter(Boolean).join(", ") || node.textContent?.trim() || "";
+            }).filter(Boolean);
+        const versions = Array.from(sbRef.getElementsByTagName("sb:version")).map(node => node.textContent?.trim()).filter(Boolean);
+        const isbns = Array.from(sbRef.getElementsByTagName("sb:isbn")).map(node => node.textContent?.trim()).filter(Boolean);
+        const publicationDetails = [...editions, ...versions, ...publishers, ...isbns].join(", ");
+        if (publicationDetails) {
+            if (sourceText && !/[.,:]$/.test(sourceText)) sourceText += ",";
+            sourceText += (sourceText ? " " : "") + publicationDetails;
         }
+
+        // Normalize DOI presentation without modifying the structured reference.
+        const cleanDoi = (value: string): string => value.trim()
+            .replace(/^doi\s*:\s*/i, "")
+            .replace(/^https?:\/\/(?:dx\.)?doi\.org\/\s*/i, "").trim();
+        const doiKey = (value: string): string => {
+            const clean = cleanDoi(value);
+            return /^10\.\d{4,9}\/\S+$/i.test(clean) ? clean.toLowerCase() : "";
+        };
+        const emitDoi = (value: string): string => {
+            const key = doiKey(value);
+            if (key && seenDois.has(key)) return "";
+            if (key) seenDois.add(key);
+            const clean = cleanDoi(value);
+            return clean ? `https://doi.org/${clean}` : "";
+        };
+        const doiNodes = Array.from(sbRef.getElementsByTagName("ce:doi"))
+            .concat(Array.from(sbRef.getElementsByTagName("sb:doi")));
+        doiNodes.forEach(node => {
+            const rendered = emitDoi(node.textContent || "");
+            if (!rendered) return;
+            if (sourceText && !sourceText.endsWith(",") && !sourceText.endsWith(".")) sourceText += ",";
+            sourceText += (sourceText ? " " : "") + rendered;
+        });
 
         // 5. Comments (e.g. <sb:comment>Available at</sb:comment>, <sb:comment>in press</sb:comment>)
         const commentNodes = Array.from(sbRef.getElementsByTagName("sb:comment")).concat(Array.from(sbRef.getElementsByTagName("ce:comment")));
-        const comments: string[] = [];
-        commentNodes.forEach(c => {
-            const txt = c.textContent?.trim();
-            if (txt && !comments.includes(txt)) {
-                comments.push(txt);
-            }
+        const comments = commentNodes.map(node => {
+            // Render embedded links in place once, retaining surrounding comment text.
+            const render = (part: Node): string => {
+                if (part.nodeType === 8 || part.nodeType === 7) return '';
+                if (part.nodeType === 1 && (part as Element).tagName === "ce:inter-ref") {
+                    const link = part as Element;
+                    const label = link.textContent?.trim() || "";
+                    const href = link.getAttribute("xlink:href")?.trim() || "";
+                    if (doiKey(href) && cleanDoi(label) === cleanDoi(href) + '.') {
+                        const target = emitDoi(href);
+                        return target ? target + '.' : '';
+                    }
+                    const labelKey = doiKey(label);
+                    const hrefKey = doiKey(href);
+                    const renderedLabel = labelKey ? emitDoi(label) : label;
+                    const renderedHref = hrefKey ? emitDoi(href) : href;
+                    if (href === label || (labelKey && labelKey === hrefKey)) return renderedLabel || renderedHref;
+                    return renderedHref ? (renderedLabel ? `${renderedLabel} (${renderedHref})` : renderedHref) : renderedLabel;
+                }
+                return part.childNodes?.length ? Array.from(part.childNodes).map(render).join("") : part.textContent || "";
+            };
+            return render(node).trim();
+        }).filter(Boolean);
+        comments.forEach(comment => {
+            if (sourceText && !/[.,:!?]$/.test(sourceText)) sourceText += ".";
+            sourceText += (sourceText ? " " : "") + comment;
         });
 
-        if (comments.length > 0) {
-            comments.forEach(cm => {
-                if (sourceText && !sourceText.endsWith(".") && !sourceText.endsWith(",") && !sourceText.endsWith(":")) {
-                    sourceText += ".";
-                }
-                sourceText += (sourceText ? " " : "") + cm;
-            });
-        }
-
         // 6. Inter-refs (URLs) and Date Accessed
-        const dateAccessedNode = sbRef.getElementsByTagName("sb:date-accessed")[0];
-        let dateAccessedStr = "";
-        if (dateAccessedNode) {
+        let dateAccessedStr = Array.from(sbRef.getElementsByTagName("sb:date-accessed")).map(dateAccessedNode => {
             const day = dateAccessedNode.getAttribute("day");
             const month = dateAccessedNode.getAttribute("month");
             const yearVal = dateAccessedNode.getAttribute("year");
@@ -341,14 +513,33 @@ const StructuralNodeArchitect: React.FC = () => {
                 if (mIdx >= 0 && mIdx < 12) monthStr = monthNames[mIdx];
             }
             const fullDate = [day, monthStr, yearVal].filter(Boolean).join(" ");
-            if (fullDate) dateAccessedStr = `(Accessed: ${fullDate})`;
-        }
+            return fullDate ? `(Accessed: ${fullDate})` : "";
+        }).filter(Boolean).join(" ");
 
         const interRefs = Array.from(sbRef.getElementsByTagName("ce:inter-ref")).concat(Array.from(sbRef.getElementsByTagName("sb:inter-ref")));
         interRefs.forEach(ir => {
-            const urlText = ir.textContent?.trim();
-            if (urlText && (urlText.startsWith("http") || urlText.includes("www."))) {
-                let urlPart = urlText;
+            let parent = ir.parentElement;
+            while (parent && parent !== sbRef) {
+                if (parent.tagName === "sb:comment" || parent.tagName === "ce:comment") return;
+                parent = parent.parentElement;
+            }
+            const urlText = ir.textContent?.trim() || "";
+            const href = ir.getAttribute("xlink:href")?.trim() || "";
+            const isUrl = (text: string) => /^(?:https?:\/\/|www\.)/i.test(text);
+            if (isUrl(urlText) || isUrl(href) || doiKey(urlText) || doiKey(href)) {
+                const textKey = doiKey(urlText);
+                const hrefKey = doiKey(href);
+                const displayPeriod = !!hrefKey && cleanDoi(urlText) === cleanDoi(href) + '.';
+                const renderedText = displayPeriod ? emitDoi(href) : textKey ? emitDoi(urlText) : urlText;
+                const renderedHref = displayPeriod ? '' : hrefKey ? emitDoi(href) : href;
+                const sameTarget = displayPeriod || href === urlText || (textKey && textKey === hrefKey);
+                let urlPart = sameTarget
+                    ? (renderedText || renderedHref) + (displayPeriod && renderedText ? '.' : '')
+                    : renderedHref && (isUrl(href) || hrefKey)
+                        ? (renderedText ? `${renderedText} (${renderedHref})` : renderedHref)
+                        : renderedText;
+                // A duplicate DOI may still have a distinct supplied label to retain.
+                if (!urlPart) return;
                 if (dateAccessedStr) {
                     urlPart += ` ${dateAccessedStr}`;
                     dateAccessedStr = ""; // Only append to the first URL found
@@ -367,9 +558,74 @@ const StructuralNodeArchitect: React.FC = () => {
             sourceText += (sourceText ? " " : "") + dateAccessedStr;
         }
         
-        let result = sourceText.trim().replace(/,\s*,/g, ',').replace(/\s+/g, ' ');
-        if (result && !result.endsWith(".")) result += ".";
+        // Series editors, title and volume remain a separate unit from book details.
+        bookSeriesTexts.forEach(seriesText => {
+            if (sourceText && !/[.!?]$/.test(sourceText)) sourceText += ".";
+            sourceText += (sourceText ? " " : "") + seriesText;
+        });
+
+        let result = sourceText.trim().replace(/\s+/g, ' ');
+        if (result && !/[.!?]$/.test(result)) result += ".";
         return result;
+    };
+
+    const getDoiMigrationPlan = (reference: Element) => {
+        const normalize = (value: string): string => value.trim()
+            .replace(/^doi\s*:\s*/i, "")
+            .replace(/^https?:\/\/(?:dx\.)?doi\.org\/\s*/i, "").trim();
+        const extract = (value: string): string => {
+            const doi = normalize(value);
+            return /^10\.\d{4,9}\/\S+$/i.test(doi) ? doi : "";
+        };
+        const hosts = Array.from(reference.children).filter(node => node.tagName === "sb:host");
+        for (const sourceHost of hosts) {
+            const electronic = Array.from(sourceHost.children).find(node => node.tagName === "sb:e-host");
+            const link = electronic && Array.from(electronic.children).find(node => node.tagName === "ce:inter-ref");
+            if (!electronic || !link) continue;
+            const href = link.getAttribute("xlink:href")?.trim() || "";
+            const label = link.textContent?.trim() || "";
+            const hrefDoi = extract(href);
+            const labelDoi = extract(label);
+            const doi = hrefDoi || labelDoi;
+            if (!doi) continue;
+            const targets = hosts.filter(host => host !== sourceHost && Array.from(host.children)
+                .some(node => ["sb:issue", "sb:book", "sb:edited-book"].includes(node.tagName)));
+            const targetHost = targets.length === 1 ? targets[0] : null;
+            const existingDoi = targetHost && Array.from(targetHost.children).find(node => node.tagName === "ce:doi");
+            let reason = "";
+            if (!targetHost) reason = targets.length > 1 ? "Multiple target hosts make DOI placement ambiguous." : "No target host is available for DOI migration.";
+            const hasDataAttributes = (node: Element) => Array.from(node.attributes).some(attribute => !attribute.name.startsWith("xmlns"));
+            const hasOtherContent = (node: Element, child: Element) => Array.from(node.childNodes)
+                .some(part => part !== child && (part.nodeType !== 3 || !!part.textContent?.trim()));
+            const hasLinkMetadata = Array.from(link.attributes).some(attribute =>
+                !["id", "xlink:href", "xlink:type"].includes(attribute.name) && !attribute.name.startsWith("xmlns"));
+            if (sourceHost.children.length !== 1 || electronic.children.length !== 1 || hasDataAttributes(sourceHost) || hasDataAttributes(electronic)
+                || hasOtherContent(sourceHost, electronic) || hasOtherContent(electronic, link) || hasLinkMetadata) {
+                reason = "The electronic host contains additional fields or attributes that must be preserved.";
+            }
+            if ((href && !hrefDoi) || (label && !labelDoi) || (hrefDoi && labelDoi && hrefDoi.toLowerCase() !== labelDoi.toLowerCase())) {
+                reason = "The link label or target contains additional or conflicting information.";
+            }
+            if (existingDoi && normalize(existingDoi.textContent || "").toLowerCase() !== doi.toLowerCase()) {
+                reason = "The target host already contains a different DOI.";
+            }
+            return { doi, sourceHost, targetHost, existingDoi, reason };
+        }
+        return null;
+    };
+
+    const restoreEmptyMarkerForms = (original: string, repaired: string): string => {
+        // Match the complete empty element; leave CDATA and comments untouched.
+        const pattern = /<!\[CDATA\[[\s\S]*?\]\]>|<!--[\s\S]*?-->|<(sb:et-al|sb:ellipsis|ce:ellipsis)\b[^>]*?(?:\/\s*>|>\s*<\/\1\s*>)/g;
+        const forms = new Map<string, string[]>();
+        original.replace(pattern, (match, tag) => {
+            if (tag) {
+                const list = forms.get(tag) || [];
+                list.push(match); forms.set(tag, list);
+            }
+            return match;
+        });
+        return repaired.replace(pattern, (match, tag) => tag ? forms.get(tag)?.shift() || match : match);
     };
 
     const fixGivenName = (name: string): string => {
@@ -402,11 +658,13 @@ const StructuralNodeArchitect: React.FC = () => {
     };
 
     const pruneEmptyElements = (element: Element) => {
+        if (element.tagName === 'ce:source-text') return;
         const children = Array.from(element.children);
         children.forEach(child => pruneEmptyElements(child));
 
         const tagName = element.tagName.toLowerCase();
         if (
+            tagName === 'ce:source-text' || tagName === 'ce:hsp' || tagName === 'ce:vsp' || tagName === 'ce:label' ||
             tagName === 'sb:et-al' || 
             tagName === 'ce:et-al' || 
             tagName === 'sb:ellipsis' || 
@@ -428,7 +686,11 @@ const StructuralNodeArchitect: React.FC = () => {
     };
 
     const sanitizeXmlTags = (xmlStr: string): string => {
-        let result = xmlStr;
+        const protectedData: string[] = [];
+        let result = xmlStr.replace(/<!\[CDATA\[[\s\S]*?\]\]>|<!--[\s\S]*?-->|<\?[\s\S]*?\?>/g, value => {
+            protectedData.push(value);
+            return `\uE000${protectedData.length - 1}\uE001`;
+        });
         let prev;
         
         do {
@@ -436,6 +698,7 @@ const StructuralNodeArchitect: React.FC = () => {
             result = result.replace(/<([a-z0-9_:-]+)(?:\s+[^>]*)?>\s*<\/\1>/gi, (match, tag) => {
                 const ltag = tag.toLowerCase();
                 if (
+                    ltag === 'ce:source-text' || ltag === 'ce:hsp' || ltag === 'ce:vsp' || ltag === 'ce:label' ||
                     ltag === 'sb:et-al' || 
                     ltag === 'ce:et-al' || 
                     ltag === 'sb:ellipsis' || 
@@ -451,6 +714,7 @@ const StructuralNodeArchitect: React.FC = () => {
             result = result.replace(/<([a-z0-9_:-]+)(?:\s+[^>]*)?\/>/gi, (match, tag) => {
                 const ltag = tag.toLowerCase();
                 if (
+                    ltag === 'ce:source-text' || ltag === 'ce:hsp' || ltag === 'ce:vsp' || ltag === 'ce:label' ||
                     ltag === 'sb:et-al' || 
                     ltag === 'ce:et-al' || 
                     ltag === 'sb:ellipsis' || 
@@ -479,7 +743,7 @@ const StructuralNodeArchitect: React.FC = () => {
             return match;
         });
 
-        return result;
+        return result.replace(/\uE000(\d+)\uE001/g, (_, index) => protectedData[Number(index)]);
     };
 
     const analyzeXml = () => {
@@ -496,17 +760,7 @@ const StructuralNodeArchitect: React.FC = () => {
             const trimmedInput = input.trim();
             
             // ID Awareness: Pre-scan for all existing IDs to detect duplicates
-            const allUsedIds = new Set<string>();
-            const duplicates = new Set<string>();
-            const idRegex = /\bid=["']([^"']+)["']/g;
-            let m;
-            while ((m = idRegex.exec(trimmedInput)) !== null) {
-                const idValue = m[1];
-                if (allUsedIds.has(idValue)) {
-                    duplicates.add(idValue);
-                }
-                allUsedIds.add(idValue);
-            }
+            const duplicates = findDuplicateIds(trimmedInput);
 
             // Scanner Protocol: Extract bib-reference blocks via Regex to avoid parsing unrelated XML parts
             const bibRegex = /<ce:bib-reference\b[^>]*>([\s\S]*?)<\/ce:bib-reference>/g;
@@ -517,26 +771,6 @@ const StructuralNodeArchitect: React.FC = () => {
                 setIsProcessing(false);
                 return;
             }
-
-            let idCounter = startId;
-            
-            // Helper to get next unique ID
-            const getNextId = (prefix: string) => {
-                // Ensure idCounter is a multiple of 5 as per user requirement (ir4006 was incorrect, ir4005/4010 expected)
-                if (idCounter % 5 !== 0) {
-                    idCounter += (5 - (idCounter % 5));
-                }
-                
-                let candidate = `${prefix}${idCounter}`;
-                while (allUsedIds.has(candidate)) {
-                    idCounter += 5;
-                    candidate = `${prefix}${idCounter}`;
-                }
-                allUsedIds.add(candidate);
-                const result = candidate;
-                idCounter += 5;
-                return result;
-            };
 
             matches.forEach((match, index) => {
                 const fullBlock = match[0];
@@ -550,12 +784,12 @@ const StructuralNodeArchitect: React.FC = () => {
                 const ref = fragmentDoc.getElementsByTagName("ce:bib-reference")[0];
                 const refId = ref.getAttribute("id") || `REF_${index + 1}`;
                 
-                const labelNode = ref.getElementsByTagName("ce:label")[0];
+                const labelNode = directLabels(ref)[0];
                 const refLabel = labelNode?.textContent?.trim() || '';
                 const titleNode = ref.getElementsByTagName("sb:maintitle")[0] || ref.getElementsByTagName("ce:maintitle")[0] || ref.getElementsByTagName("sb:title")[0];
                 const refTitle = titleNode?.textContent?.trim() || '';
 
-                const labels = Array.from(ref.getElementsByTagName("ce:label"));
+                const labels = directLabels(ref);
                 if (labels.length > 1) {
                     currentAudit.push({ 
                         id: refId, 
@@ -567,167 +801,33 @@ const StructuralNodeArchitect: React.FC = () => {
                     });
                 }
 
-                // Duplicate ID Warning
-                if (duplicates.has(refId)) {
-                    currentAudit.push({ 
-                        id: refId, 
-                        label: refLabel,
-                        title: refTitle,
-                        status: 'warning', 
-                        msg: `DUPLICATE ID: This ID is used multiple times in the document.`,
-                        type: 'id-fix'
+                currentAudit.push(...auditReferenceFields(ref, duplicates, refId, refLabel, refTitle));
+                const references = Array.from(ref.children).filter(node => ["sb:reference", "ce:reference", "ce:other-ref"].includes(node.tagName));
+                if (!references.length) {
+                    currentAudit.push({ id: refId, label: refLabel, title: refTitle, status: 'warning', msg: 'MISSING: Structured reference or other-ref not found.' });
+                }
+                references.forEach(sbRef => {
+                    if (!associatedSourceText(sbRef) && sbRef.tagName !== 'ce:other-ref') {
+                        currentAudit.push({ id: refId, label: refLabel, title: refTitle, status: hasUnassociatedSourceText(ref) ? 'warning' : 'fixed', msg: hasUnassociatedSourceText(ref)
+                            ? 'SOURCE: Generation deferred because existing source-text has an ambiguous association. Review its placement first.'
+                            : 'SOURCE: Missing source-text for this structured reference. It will be generated without an ID; use the ID tool afterward.', type: 'source-text' });
+                    }
+                const migration = getDoiMigrationPlan(sbRef);
+                if (migration) {
+                    const hasInterveningComment = sbRef.getElementsByTagName("sb:comment").length > 0;
+                    currentAudit.push({
+                        id: refId, label: refLabel, title: refTitle, doi: migration.doi,
+                        status: migration.reason ? 'warning' : 'fixed', type: 'doi',
+                        msg: migration.reason
+                            ? `RETAIN DOI HOST: ${migration.reason} Original host will be retained.`
+                            : hasInterveningComment
+                                ? `CONFIRMATION REQUIRED: Review DOI migration (${migration.doi}) while retaining comments, or retain the original structure.`
+                                : `DIRECT DOI CAPTURE: Migrate the DOI-only link (${migration.doi}) without removing other reference data.`,
+                        requiresConfirmation: !migration.reason && hasInterveningComment
                     });
                 }
 
-                const sbRef = ref.getElementsByTagName("sb:reference")[0] || ref.getElementsByTagName("ce:reference")[0] || ref.getElementsByTagName("ce:other-ref")[0];
-                
-                if (!sbRef) {
-                    currentAudit.push({ id: refId, label: refLabel, title: refTitle, status: 'skip', msg: 'MISSING: <sb:reference> or <ce:other-ref> not found.' });
-                    return;
-                }
-
-                // ID and Source Text Audit
-                const sbId = sbRef.getAttribute("id") || "";
-                
-                if (duplicates.has(sbId) && sbId) {
-                    currentAudit.push({ 
-                        id: refId, 
-                        label: refLabel,
-                        title: refTitle,
-                        status: 'fixed', 
-                        msg: `DUPLICATE ID: Sub-element ID collision (${sbId}). Regeneration required.`,
-                        type: 'id-fix'
-                    });
-                }
-
-                if (sbRef.tagName.includes('other-ref')) {
-                    if (!sbId || !sbId.startsWith("or")) {
-                        currentAudit.push({ 
-                            id: refId, 
-                            label: refLabel,
-                            title: refTitle,
-                            status: 'fixed', 
-                            msg: `ID: Incorrect prefix for other-ref (${sbId || 'missing'} -> unique OR ID)`, 
-                            type: 'id-fix' 
-                        });
-                    }
-                } else if (sbId.startsWith("or")) {
-                    currentAudit.push({ 
-                        id: refId, 
-                        label: refLabel,
-                        title: refTitle,
-                        status: 'fixed', 
-                        msg: `ID: Incorrect prefix detected (${sbId} -> unique RF ID)`, 
-                        type: 'id-fix' 
-                    });
-                }
-
-                // Inter-ref ID Audit
-                const interRefs = Array.from(ref.getElementsByTagName("ce:inter-ref")).concat(Array.from(ref.getElementsByTagName("sb:inter-ref")));
-                const urls = interRefs.map(ir => ir.textContent?.trim()).filter(u => u && (u.startsWith("http") || u.includes("www.")));
-
-                // Inter-ref ID Audit
-                interRefs.forEach(ir => {
-                    const irId = ir.getAttribute("id") || "";
-                    if (duplicates.has(irId) && irId) {
-                        currentAudit.push({ 
-                            id: refId, 
-                            label: refLabel,
-                            title: refTitle,
-                            status: 'fixed', 
-                            msg: `DUPLICATE ID: Inter-ref collision (${irId}).`,
-                            type: 'ir-fix' 
-                        });
-                    }
-                    if (!irId || irId.startsWith("or")) {
-                        currentAudit.push({ 
-                            id: refId, 
-                            label: refLabel,
-                            title: refTitle,
-                            status: 'fixed', 
-                            msg: `INTER-REF: Incorrect ID detected (${irId || 'missing'} -> unique IR ID)`, 
-                            type: 'ir-fix' 
-                        });
-                    }
                 });
-
-                const sourceText = ref.getElementsByTagName("ce:source-text")[0];
-                if (!sourceText && !sbRef.tagName.includes('other-ref')) {
-                    currentAudit.push({ 
-                        id: refId, 
-                        label: refLabel,
-                        title: refTitle,
-                        status: 'fixed', 
-                        msg: `SOURCE: Missing <ce:source-text> element. (unique SE ID)`, 
-                        type: 'source-text' 
-                    });
-                }
-
-                const hosts = Array.from(sbRef.getElementsByTagName("sb:host"));
-                let doi: string | null = null;
-                let badHost: Element | null = null;
-                let targetHost: Element | null = null;
-
-                for (let host of hosts) {
-                    const content = host.innerHTML;
-                    const doiMatch = content.match(/10\.\d{4,9}\/[-._;()/:A-Z0-9]+/i);
-                    
-                    if (doiMatch && (host.getElementsByTagName("sb:e-host").length > 0 || host.textContent?.includes('doi.org') || host.getElementsByTagName("ce:inter-ref").length > 0)) {
-                        doi = doiMatch[0];
-                        badHost = host;
-                        break;
-                    }
-                }
-
-                if (doi && badHost) {
-                    targetHost = hosts.find(h => h !== badHost && (
-                        h.getElementsByTagName("sb:issue").length > 0 || 
-                        h.getElementsByTagName("sb:pages").length > 0 ||
-                        h.getElementsByTagName("sb:article-number").length > 0 ||
-                        h.getElementsByTagName("sb:series").length > 0 ||
-                        h.getElementsByTagName("sb:title").length > 0
-                    )) || null;
-
-                    const comments = Array.from(sbRef.getElementsByTagName("sb:comment"));
-                    const hasInterveningComment = comments.length > 0;
-                    
-                    if (targetHost) {
-                        if (hasInterveningComment) {
-                            currentAudit.push({ 
-                                id: refId, 
-                                label: refLabel,
-                                title: refTitle,
-                                status: 'fixed', 
-                                doi, 
-                                msg: `CONFIRMATION REQUIRED: Intervening <sb:comment> detected before DOI host. Review to confirm migration to <ce:doi>${doi}</ce:doi> while retaining comment in position, or retain original structure.`, 
-                                type: 'doi',
-                                requiresConfirmation: true
-                            });
-                        } else {
-                            currentAudit.push({ 
-                                id: refId, 
-                                label: refLabel,
-                                title: refTitle,
-                                status: 'fixed', 
-                                doi, 
-                                msg: `DIRECT DOI CAPTURE: Directly migrated <ce:inter-ref> to <ce:doi>${doi}</ce:doi> in primary host.`, 
-                                type: 'doi',
-                                requiresConfirmation: false
-                            });
-                        }
-                    } else {
-                        currentAudit.push({ 
-                            id: refId, 
-                            label: refLabel,
-                            title: refTitle,
-                            status: 'warning', 
-                            doi, 
-                            msg: 'WARNING: Target host missing for DOI migration.', 
-                            type: 'doi',
-                            requiresConfirmation: false
-                        });
-                    }
-                }
 
                 // Name Spacing and Initials Audit
                 const givenNames = Array.from(ref.getElementsByTagName("ce:given-name"));
@@ -815,7 +915,7 @@ const StructuralNodeArchitect: React.FC = () => {
                 // If no issues were detected for this reference, mark as valid
                 const issuesForRef = currentAudit.filter(a => a.id === refId && a.status !== 'skip');
                 if (issuesForRef.length === 0) {
-                    currentAudit.push({ id: refId, label: refLabel, title: refTitle, status: 'skip', msg: 'VALID: No structural issues detected.' });
+                    currentAudit.push({ id: refId, label: refLabel, title: refTitle, status: 'skip', msg: 'No issues detected by the bibliography scanner. DTD and VTool validation are still required.' });
                 }
             });
 
@@ -874,39 +974,8 @@ const StructuralNodeArchitect: React.FC = () => {
             const finalAudit: AuditItem[] = [];
             const trimmedInput = input.trim();
 
-            // ID Awareness: Pre-scan for all used IDs to maintain uniqueness
-            const allUsedIds = new Set<string>();
-            const duplicatesFoundInInput = new Set<string>();
-            const idRegex = /\bid=["']([^"']+)["']/g;
-            let m;
-            while ((m = idRegex.exec(trimmedInput)) !== null) {
-                const idValue = m[1];
-                if (allUsedIds.has(idValue)) {
-                    duplicatesFoundInInput.add(idValue);
-                }
-                allUsedIds.add(idValue);
-            }
-
-            let idCounter = startId;
+            const duplicatesFoundInInput = findDuplicateIds(trimmedInput);
             let refIndex = 0;
-
-            // Helper to get next unique ID
-            const getNextId = (prefix: string) => {
-                // Ensure idCounter is a multiple of 5 as per user requirement
-                if (idCounter % 5 !== 0) {
-                    idCounter += (5 - (idCounter % 5));
-                }
-
-                let candidate = `${prefix}${idCounter}`;
-                while (allUsedIds.has(candidate)) {
-                    idCounter += 5;
-                    candidate = `${prefix}${idCounter}`;
-                }
-                allUsedIds.add(candidate);
-                const result = candidate;
-                idCounter += 5;
-                return result;
-            };
 
             const bibRegex = /<ce:bib-reference\b[^>]*>([\s\S]*?)<\/ce:bib-reference>/g;
             
@@ -925,9 +994,14 @@ const StructuralNodeArchitect: React.FC = () => {
                 const wrappedBlock = `<root ${NS_DECLS} xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:sa="http://www.elsevier.com/xml/common/struct-aff/dtd">${preCleanedBlock}</root>`;
                 const fragmentDoc = parser.parseFromString(wrappedBlock, "text/xml");
                 const ref = fragmentDoc.getElementsByTagName("ce:bib-reference")[0];
+                if (fragmentDoc.getElementsByTagName('parsererror').length || !ref) {
+                    refIndex++;
+                    finalAudit.push({ id: refId, label: refLabel, status: 'warning', msg: 'Reference could not be parsed in isolation; original XML retained. Check malformed markup, namespace declarations, and declared entities before repairing.', type: 'retain' });
+                    return fullBlock;
+                }
                 
                 // Clean duplicate labels
-                const labels = Array.from(ref.getElementsByTagName("ce:label"));
+                const labels = directLabels(ref);
                 if (labels.length > 1) {
                     for (let i = 1; i < labels.length; i++) {
                         labels[i].remove();
@@ -935,67 +1009,10 @@ const StructuralNodeArchitect: React.FC = () => {
                     finalAudit.push({ id: refId, label: refLabel, status: 'fixed', msg: 'REPAIRED: Removed duplicate <ce:label> tag.', type: 'empty-element' });
                 }
 
-                const sbRef = ref.getElementsByTagName("sb:reference")[0] || ref.getElementsByTagName("ce:reference")[0] || ref.getElementsByTagName("ce:other-ref")[0];
-                
-                if (sbRef) {
-                    let currentSbId = sbRef.getAttribute("id") || "";
-                    let needsIdFix = false;
-
-                    // Check for duplicate or malformed prefix
-                    if (duplicatesFoundInInput.has(currentSbId)) {
-                        needsIdFix = true;
-                    }
-
-                    if (sbRef.tagName.includes('other-ref')) {
-                        if (!currentSbId || !currentSbId.startsWith("or")) {
-                            needsIdFix = true;
-                        }
-                        if (needsIdFix) {
-                            const newId = getNextId('or');
-                            sbRef.setAttribute("id", newId);
-                            finalAudit.push({ id: refId, label: refLabel, status: 'fixed', msg: `REPAIRED: other-ref ID corrected/duplicated and fixed to ${newId}.`, type: 'id-fix' });
-                        }
-                    } else {
-                        if (currentSbId.startsWith("or") || !currentSbId || needsIdFix) {
-                            const newId = getNextId('rf');
-                            sbRef.setAttribute("id", newId);
-                            finalAudit.push({ id: refId, label: refLabel, status: 'fixed', msg: `REPAIRED: ID prefix/duplicate corrected to ${newId}.`, type: 'id-fix' });
-                        }
-                    }
-
-                    // Inter-ref ID Repair
-                    const interRefs = Array.from(ref.getElementsByTagName("ce:inter-ref")).concat(Array.from(ref.getElementsByTagName("sb:inter-ref")));
-                    
-                    interRefs.forEach(ir => {
-                        const irId = ir.getAttribute("id") || "";
-                        if (!irId || irId.startsWith("or") || duplicatesFoundInInput.has(irId)) {
-                            const newIrId = getNextId('ir');
-                            ir.setAttribute("id", newIrId);
-                            finalAudit.push({ id: refId, label: refLabel, status: 'fixed', msg: `REPAIRED: Inter-ref ID corrected/duplicated to ${newIrId}.`, type: 'ir-fix' });
-                        }
-                    });
-
-                    let sourceText = ref.getElementsByTagName("ce:source-text")[0];
-                    if (!sourceText && !sbRef.tagName.includes('other-ref')) {
-                        sourceText = fragmentDoc.createElement("ce:source-text");
-                        const stPrefix = trimmedInput.match(/\bid=["']srct\d+["']/i) ? 'srct' : 'se';
-                        const newSeId = getNextId(stPrefix);
-                        sourceText.setAttribute("id", newSeId);
-                        sourceText.textContent = generateSourceText(sbRef);
-                        ref.appendChild(sourceText);
-                        finalAudit.push({ id: refId, label: refLabel, status: 'fixed', msg: `REPAIRED: Generated missing <ce:source-text> (${newSeId}).`, type: 'source-text' });
-                    } else if (sourceText) {
-                        // Keep source-text content strictly as is; only assign an ID if completely missing
-                        if (!sourceText.getAttribute("id")) {
-                            const stPrefix = trimmedInput.match(/\bid=["']srct\d+["']/i) ? 'srct' : 'se';
-                            const newSeId = getNextId(stPrefix);
-                            sourceText.setAttribute("id", newSeId);
-                            finalAudit.push({ id: refId, label: refLabel, status: 'fixed', msg: `REPAIRED: Assigned ID to <ce:source-text> (${newSeId}).`, type: 'source-text' });
-                        }
-                    }
-
+                const references = Array.from(ref.children).filter(node => ["sb:reference", "ce:reference", "ce:other-ref"].includes(node.tagName));
+                references.forEach(sbRef => {
                     // Name Repair
-                    const givenNames = Array.from(ref.getElementsByTagName("ce:given-name"));
+                    const givenNames = Array.from(sbRef.getElementsByTagName("ce:given-name"));
                     let nameRepaired = false;
                     givenNames.forEach(gn => {
                         const original = gn.textContent || '';
@@ -1009,72 +1026,36 @@ const StructuralNodeArchitect: React.FC = () => {
                         finalAudit.push({ id: refId, label: refLabel, status: 'fixed', msg: 'REPAIRED: Initials standardized.', type: 'name' });
                     }
 
-                    // DOI Migration
-                    const hosts = Array.from(sbRef.getElementsByTagName("sb:host"));
-                    let doi: string | null = null;
-                    let badHost: Element | null = null;
-                    let targetHost: Element | null = null;
-
-                    for (let host of hosts) {
-                        const content = host.innerHTML;
-                        const doiMatch = content.match(/10\.\d{4,9}\/[-._;()/:A-Z0-9]+/i);
-                        if (doiMatch && (host.getElementsByTagName("sb:e-host").length > 0 || host.textContent?.includes('doi.org') || host.getElementsByTagName("ce:inter-ref").length > 0)) {
-                            doi = doiMatch[0];
-                            badHost = host;
-                            break;
-                        }
-                    }
-
-                    if (doi && badHost) {
-                        const comments = Array.from(sbRef.getElementsByTagName("sb:comment"));
-                        const hasInterveningComment = comments.length > 0;
-                        const shouldSkip = hasInterveningComment && skipDoiConversion;
-
-                        if (!shouldSkip) {
-                            targetHost = hosts.find(h => h !== badHost && (
-                                h.getElementsByTagName("sb:issue").length > 0 || 
-                                h.getElementsByTagName("sb:pages").length > 0 ||
-                                h.getElementsByTagName("sb:article-number").length > 0 ||
-                                h.getElementsByTagName("sb:series").length > 0 ||
-                                h.getElementsByTagName("sb:title").length > 0
-                            )) || null;
-                            
-                            if (targetHost) {
-                                badHost.parentNode?.removeChild(badHost);
+                    // Migrate only a DOI-only electronic host when no supplied data can be lost.
+                    const migration = getDoiMigrationPlan(sbRef);
+                    if (migration) {
+                        const hasInterveningComment = sbRef.getElementsByTagName("sb:comment").length > 0;
+                        if (migration.reason || skipDoiConversion) {
+                            finalAudit.push({
+                                id: refId, label: refLabel, status: migration.reason ? 'warning' : 'skip',
+                                doi: migration.doi, type: 'doi', requiresConfirmation: hasInterveningComment && !migration.reason,
+                                msg: migration.reason ? `RETAINED DOI HOST: ${migration.reason}` : 'RETAINED: Original DOI host preserved per user decision.'
+                            });
+                        } else if (migration.targetHost) {
+                            if (!migration.existingDoi) {
                                 const doiElem = fragmentDoc.createElement("ce:doi");
-                                doiElem.textContent = doi;
-                                targetHost.appendChild(doiElem);
-
-                                // Commented text is retained in its current position per user specification
-
-                                finalAudit.push({ 
-                                    id: refId, 
-                                    label: refLabel, 
-                                    status: 'fixed', 
-                                    doi, 
-                                    msg: hasInterveningComment 
-                                        ? `REPAIRED: DOI migrated to <ce:doi>${doi}</ce:doi> while retaining comment in position.` 
-                                        : `DIRECT CAPTURE: DOI migrated to <ce:doi>${doi}</ce:doi>.`, 
-                                    type: 'doi',
-                                    requiresConfirmation: hasInterveningComment
-                                });
+                                doiElem.textContent = migration.doi;
+                                migration.targetHost.appendChild(doiElem);
                             }
-                        } else {
-                            finalAudit.push({ 
-                                id: refId, 
-                                label: refLabel, 
-                                status: 'skip', 
-                                doi, 
-                                msg: 'RETAINED: Preserved DOI inter-ref and comment in original structure per user decision.', 
-                                type: 'doi',
-                                requiresConfirmation: true
+                            migration.sourceHost.remove();
+                            finalAudit.push({
+                                id: refId, label: refLabel, status: 'fixed', doi: migration.doi, type: 'doi',
+                                requiresConfirmation: hasInterveningComment,
+                                msg: migration.existingDoi
+                                    ? 'REPAIRED: Removed the duplicate DOI-only host; the existing target DOI was retained.'
+                                    : `REPAIRED: Migrated the complete DOI (${migration.doi}) from a DOI-only host; comments remain in position.`
                             });
                         }
                     }
 
                     // sb:contribution langtype="iso" Repair
                     if (fixContributionLangtype) {
-                        const contributions = Array.from(ref.getElementsByTagName("*")).filter(el => 
+                        const contributions = Array.from(sbRef.getElementsByTagName("*")).filter(el =>
                             el.localName.toLowerCase().endsWith("contribution") || el.tagName.toLowerCase().endsWith("contribution")
                         );
                         let contribFixed = false;
@@ -1096,15 +1077,31 @@ const StructuralNodeArchitect: React.FC = () => {
                             finalAudit.push({ id: refId, label: refLabel, status: 'fixed', msg: 'REPAIRED: Inserted langtype="iso" attribute to <sb:contribution>.', type: 'contribution-langtype' });
                         }
                     }
-                }
+
+                    // Generate source text for this reference only, preserving existing source text.
+                    let sourceText = associatedSourceText(sbRef);
+                    if (!sourceText && !sbRef.tagName.includes('other-ref') && !hasUnassociatedSourceText(ref)) {
+                        const generatedText = generateSourceText(sbRef);
+                        if (generatedText.trim()) {
+                            sourceText = fragmentDoc.createElement("ce:source-text");
+                            sourceText.textContent = generatedText;
+                            // Source text belongs immediately after its structured reference, before notes.
+                            ref.insertBefore(sourceText, sbRef.nextSibling);
+                            finalAudit.push({ id: refId, label: refLabel, status: 'fixed', msg: 'REPAIRED: Generated source-text without an ID. Run the ID tool before final validation.', type: 'source-text' });
+                        } else {
+                            finalAudit.push({ id: refId, label: refLabel, status: 'warning', msg: 'Source text could not be generated from the supported reference fields. No empty element was created; review this reference.', type: 'source-text' });
+                        }
+                    }
+
+                });
+                finalAudit.push(...auditReferenceFields(ref, duplicatesFoundInInput, refId, refLabel));
 
                 // Prune empty DOM elements from ref
                 pruneEmptyElements(ref);
 
                 refIndex++;
                 let serialized = serializer.serializeToString(ref);
-                // Strip redundant namespace declarations injected by the serializer
-                serialized = serialized.replace(/\sxmlns(?::[a-z0-9]+)?=['"][^'"]*['"]/gi, '');
+                serialized = removeInjectedNamespaces(fullBlock, serialized);
                 serialized = sanitizeXmlTags(serialized);
 
                 // Audit report for empty/orphaned tag deletion
@@ -1125,24 +1122,7 @@ const StructuralNodeArchitect: React.FC = () => {
                 xmlOutput = repairedMatches ? repairedMatches.join('\n\n') : "";
             }
 
-            // Restore original form of <sb:et-al /> and <sb:ellipsis /> tags
-            const originalEtAls = input.match(/<sb:et-al[^>]*?\/?>/gi) || [];
-            let etAlIndex = 0;
-            xmlOutput = xmlOutput.replace(/<sb:et-al(?:\s*><\/sb:et-al>|[^>]*?\/?>)/gi, (match) => {
-                return originalEtAls[etAlIndex++] || '<sb:et-al/>';
-            });
-
-            const originalEllipses = input.match(/<sb:ellipsis[^>]*?\/?>/gi) || [];
-            let ellipsisIndex = 0;
-            xmlOutput = xmlOutput.replace(/<sb:ellipsis(?:\s*><\/sb:ellipsis>|[^>]*?\/?>)/gi, (match) => {
-                return originalEllipses[ellipsisIndex++] || '<sb:ellipsis/>';
-            });
-
-            const originalCeEllipses = input.match(/<ce:ellipsis[^>]*?\/?>/gi) || [];
-            let ceEllipsisIndex = 0;
-            xmlOutput = xmlOutput.replace(/<ce:ellipsis(?:\s*><\/ce:ellipsis>|[^>]*?\/?>)/gi, (match) => {
-                return originalCeEllipses[ceEllipsisIndex++] || '<ce:ellipsis/>';
-            });
+            xmlOutput = restoreEmptyMarkerForms(input, xmlOutput);
 
             setOutput(xmlOutput);
             setAuditData(finalAudit);
@@ -1241,16 +1221,17 @@ const StructuralNodeArchitect: React.FC = () => {
 
             const fixedItems = finalAudit.filter(a => a.status === 'fixed');
             const isModified = fixedItems.length > 0 || (input.trim() !== xmlOutput.trim());
+            const reviewRequired = finalAudit.some(a => a.status === 'warning');
             if (isModified) {
                 const count = fixedItems.length > 0 ? fixedItems.length : 1;
                 setToast({ 
-                    msg: `Modification Detected: ${count} automatic structural correction${count > 1 ? 's' : ''} applied across XML tags, links, and schemas.`, 
-                    type: 'success' 
+                    msg: `${count} automatic correction${count > 1 ? 's' : ''} applied.${reviewRequired ? ' Review the reported warnings.' : ''} Run the ID tool for missing IDs, then validate with DTD and VTool.`,
+                    type: reviewRequired ? 'warn' : 'success'
                 });
             } else {
                 setToast({ 
-                    msg: 'XML schema verified: All references conform to standard DTD with no modifications needed.', 
-                    type: 'info' 
+                    msg: `No automatic changes applied.${reviewRequired ? ' Review the reported warnings.' : ''} DTD and VTool validation have not been performed by this repair step.`,
+                    type: reviewRequired ? 'warn' : 'info'
                 });
             }
         } catch (err: any) {
@@ -1701,9 +1682,9 @@ const StructuralNodeArchitect: React.FC = () => {
                 </header>
 
                 {/* Main Workspace */}
-                <main className="flex-grow flex flex-col gap-6 overflow-hidden">
+                <main className="flex-grow min-h-0 flex flex-col gap-6 overflow-hidden">
                     {/* Tab Navigation */}
-                    <nav className="flex items-center gap-1 bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200/60 w-fit">
+                    <nav className="flex flex-wrap shrink-0 items-center gap-1 bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200/60 w-fit">
                         <button
                             onClick={() => setActiveTab('input')}
                             className={`flex items-center gap-2.5 px-6 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${activeTab === 'input' ? 'bg-indigo-50 text-indigo-600 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
@@ -1744,9 +1725,19 @@ const StructuralNodeArchitect: React.FC = () => {
                                 )
                             )}
                         </button>
+                        <button
+                            onClick={() => setActiveTab('validation')}
+                            className={`flex items-center gap-2.5 px-6 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${activeTab === 'validation' ? 'bg-indigo-50 text-indigo-600 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
+                        >
+                            <ShieldCheck className="w-4 h-4" />
+                            Production Validation
+                        </button>
                     </nav>
 
-                    <div className="flex-grow grid grid-cols-1 xl:grid-cols-12 gap-6 overflow-hidden">
+                    <div className="flex-grow min-h-0 overflow-auto" style={{ display: activeTab === 'validation' ? undefined : 'none' }}>
+                        <VtoolValidationPanel input={input} output={output} />
+                    </div>
+                    <div className={`flex-grow min-h-0 grid-cols-1 xl:grid-cols-12 gap-6 overflow-hidden ${activeTab === 'validation' ? 'hidden' : 'grid'}`}>
                         {/* Left Sidebar: Stats & Actions */}
                         <aside className="xl:col-span-3 flex flex-col gap-6 overflow-y-auto custom-scrollbar pr-2">
                             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/60 flex flex-col gap-6">
@@ -1817,24 +1808,7 @@ const StructuralNodeArchitect: React.FC = () => {
                                     </div>
                                 </div>
 
-                                <div className="pt-6 border-t border-slate-100">
-                                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">ID Configuration</h3>
-                                    <div className="flex flex-col gap-3">
-                                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">Starting ID Number</label>
-                                            <div className="flex items-center gap-2">
-                                                <Database className="w-4 h-4 text-indigo-500" />
-                                                <input 
-                                                    type="number" 
-                                                    value={startId}
-                                                    onChange={(e) => setStartId(parseInt(e.target.value) || 0)}
-                                                    className="bg-transparent border-none focus:ring-0 text-sm font-bold text-slate-700 w-full"
-                                                    placeholder="4000"
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
+                                <p className="pt-6 text-xs text-slate-500">IDs are preserved. Use the ID tool to assign missing IDs before final validation.</p>
 
                                 <div className="pt-6 border-t border-slate-100">
                                     <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Repair Protocols</h3>
@@ -1895,7 +1869,7 @@ const StructuralNodeArchitect: React.FC = () => {
                                     Architect Mode
                                 </h4>
                                 <p className="text-xs text-indigo-100 leading-relaxed">
-                                    The protocol is currently optimized for standard Journal XML DTD schemas. All repairs are validated in-engine.
+                                        Repairs use selected Elsevier reference rules. Run local VTool validation on the complete article to check DTD and production requirements.
                                 </p>
                             </div>
 
@@ -2213,7 +2187,7 @@ const StructuralNodeArchitect: React.FC = () => {
                                                             </div>
                                                             <div className="pt-2 border-t border-teal-200/60 flex items-center gap-1.5 text-[11px] text-teal-700 font-bold">
                                                                 <CheckCircle className="w-3.5 h-3.5 text-teal-600" />
-                                                                <span>No confirmation needed — fully compliant with Journal DTD</span>
+                                                                <span>Applied automatically; validate the completed article with DTD and VTool afterward.</span>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -2570,7 +2544,7 @@ const StructuralNodeArchitect: React.FC = () => {
                                                                             </div>
                                                                         ))
                                                                     ) : (
-                                                                        <p className="text-xs text-slate-400 font-medium">All structural nodes conform to standard DTD standards.</p>
+                                                                        <p className="text-xs text-slate-400 font-medium">No issues found by this scanner. DTD and VTool validation are still required.</p>
                                                                     )}
                                                                 </div>
 
@@ -2736,7 +2710,7 @@ const StructuralNodeArchitect: React.FC = () => {
                                                                 </span>
                                                             </div>
                                                             <p className="text-[11px] text-slate-600 font-medium mt-0.5">
-                                                                Automated repair protocol corrected tags, links, and schemas to conform with standard DTD specifications.
+                                                                Bibliography repairs applied. Review warnings, assign missing IDs with the ID tool, then validate with DTD and VTool.
                                                             </p>
                                                         </div>
                                                     </div>
@@ -2842,7 +2816,7 @@ const StructuralNodeArchitect: React.FC = () => {
                                                 <div className="flex items-center gap-2">
                                                     <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                                                     <span className="text-xs font-bold text-emerald-900">No XML Modifications Required</span>
-                                                    <span className="text-[11px] text-emerald-700/80 font-medium">— All input references already conform to standard DTD specifications.</span>
+                                                    <span className="text-[11px] text-emerald-700/80 font-medium">— Review any warnings; DTD and VTool validation are still required.</span>
                                                 </div>
                                             </div>
                                         )}

@@ -1,0 +1,12 @@
+<?xml version='1.0' encoding='utf-8'?>
+<?xml-stylesheet type="text/xsl" href="ViewLog.xsl"?><LogReport xmlns:vt="http://www.elsevier.com/xml/apps/qc/v" filename="C:\Users\Kevin\AppData\Local\Temp\source-text-repair-c1ri5qek\doi-migration-comment-retain.xml"><Log filename="C:\Users\Kevin\AppData\Local\Temp\source-text-repair-c1ri5qek\doi-migration-comment-retain.xml"><time>Vtool:5.98.2 run at Wed Oct 07 23:28:47 CST 2026</time>
+<command-line-options>-Xmx512m -file "C:\Users\Kevin\AppData\Local\Temp\source-text-repair-c1ri5qek\doi-migration-comment-retain.xml" -forcecheck -log "C:\Users\Kevin\AppData\Local\Temp\source-text-repair-c1ri5qek\job-doi-migration-comment-retain\report" -nofp</command-line-options>
+<results><message id="MSC529" type="warning" position="1:55942">Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id').</message>
+<message id="ROL517" type="warning" position="1:52019">Either the role attribute is missing or the role value is inappropriate.</message>
+<total-errors>0</total-errors>
+<total-warnings>2</total-warnings>
+<total-skipped-checks>0</total-skipped-checks>
+</results>
+<time>Vtool:5.98.2 run at Wed Oct 07 23:28:49 CST 2026</time>
+</Log>
+</LogReport>

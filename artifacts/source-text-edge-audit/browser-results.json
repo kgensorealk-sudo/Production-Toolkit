@@ -1,0 +1,888 @@
+[
+  {
+    "name": "existing-empty",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se10\"/></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se10\"/></ce:bib-reference></root>",
+    "audit": [],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "skip",
+        "msg": "VALID: No structural issues detected."
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "XML schema verified: All references conform to standard DTD with no modifications needed.",
+        "type": "info"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": "se10",
+        "text": ""
+      }
+    ]
+  },
+  {
+    "name": "existing-whitespace-no-id",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text> </ce:source-text></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se4000\">Book, (2025).</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated missing <ce:source-text> (se4000).",
+        "type": "source-text"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "skip",
+        "msg": "VALID: No structural issues detected."
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "Modification Detected: 1 automatic structural correction applied across XML tags, links, and schemas.",
+        "type": "success"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": "se4000",
+        "text": "Book, (2025)."
+      }
+    ]
+  },
+  {
+    "name": "existing-missing-id",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text>Original supplied text.</ce:source-text></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se4000\">Original supplied text.</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Assigned ID to <ce:source-text> (se4000).",
+        "type": "source-text"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "skip",
+        "msg": "VALID: No structural issues detected."
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "Modification Detected: 1 automatic structural correction applied across XML tags, links, and schemas.",
+        "type": "success"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": "se4000",
+        "text": "Original supplied text."
+      }
+    ]
+  },
+  {
+    "name": "duplicate-source-id",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se10\">First.</ce:source-text></ce:bib-reference><ce:bib-reference id=\"bb15\"><ce:label>1</ce:label><sb:reference id=\"rf15\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se10\">Second.</ce:source-text></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se10\">First.</ce:source-text></ce:bib-reference><ce:bib-reference id=\"bb15\"><ce:label>1</ce:label><sb:reference id=\"rf15\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se10\">Second.</ce:source-text></ce:bib-reference></root>",
+    "audit": [],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "skip",
+        "msg": "VALID: No structural issues detected."
+      },
+      {
+        "id": "bb15",
+        "label": "1",
+        "title": "Book",
+        "status": "skip",
+        "msg": "VALID: No structural issues detected."
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 2 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "XML schema verified: All references conform to standard DTD with no modifications needed.",
+        "type": "info"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": "se10",
+        "text": "First."
+      },
+      {
+        "id": "se10",
+        "text": "Second."
+      }
+    ]
+  },
+  {
+    "name": "multiple-reference-children",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><sb:reference id=\"rf15\"><sb:host><sb:book><sb:title><sb:maintitle>Book B</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><sb:reference id=\"rf15\"><sb:host><sb:book><sb:title><sb:maintitle>Book B</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se4000\">Book, (2025).</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated missing <ce:source-text> (se4000).",
+        "type": "source-text"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "fixed",
+        "msg": "SOURCE: Missing <ce:source-text> element. (unique SE ID)",
+        "type": "source-text"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "Modification Detected: 1 automatic structural correction applied across XML tags, links, and schemas.",
+        "type": "success"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": "se4000",
+        "text": "Book, (2025)."
+      }
+    ]
+  },
+  {
+    "name": "trailing-note",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:note><ce:simple-para id=\"sp30\">Reference note.</ce:simple-para></ce:note></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:note><ce:simple-para id=\"sp30\">Reference note.</ce:simple-para></ce:note><ce:source-text id=\"se4000\">Book, (2025).</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated missing <ce:source-text> (se4000).",
+        "type": "source-text"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "fixed",
+        "msg": "SOURCE: Missing <ce:source-text> element. (unique SE ID)",
+        "type": "source-text"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "Modification Detected: 1 automatic structural correction applied across XML tags, links, and schemas.",
+        "type": "success"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": "se4000",
+        "text": "Book, (2025)."
+      }
+    ]
+  },
+  {
+    "name": "named-entity",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:title><sb:maintitle>An &alpha; title</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:title><sb:maintitle>An &alpha; title</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "warning",
+        "msg": "Reference could not be parsed in isolation; original XML retained. Check malformed markup, namespace declarations, and declared entities before repairing.",
+        "type": "retain"
+      }
+    ],
+    "scannerAudit": [],
+    "toast": [
+      {
+        "msg": "Scanner Error in Reference 1: Malformed block detected.",
+        "type": "error"
+      },
+      {
+        "msg": "XML schema verified: All references conform to standard DTD with no modifications needed.",
+        "type": "info"
+      }
+    ],
+    "wellFormed": false,
+    "sourceTexts": []
+  },
+  {
+    "name": "numeric-entity-control",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:title><sb:maintitle>An &#x3B1; title</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:title><sb:maintitle>An α title</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se4000\">An α title. Book, (2025).</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated missing <ce:source-text> (se4000).",
+        "type": "source-text"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "An α title",
+        "status": "fixed",
+        "msg": "SOURCE: Missing <ce:source-text> element. (unique SE ID)",
+        "type": "source-text"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "Modification Detected: 1 automatic structural correction applied across XML tags, links, and schemas.",
+        "type": "success"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": "se4000",
+        "text": "An α title. Book, (2025)."
+      }
+    ]
+  },
+  {
+    "name": "special-character-control",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:title><sb:maintitle>A &amp; B &lt; C</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:title><sb:maintitle>A &amp; B &lt; C</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se4000\">A &amp; B &lt; C. Book, (2025).</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated missing <ce:source-text> (se4000).",
+        "type": "source-text"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "A & B < C",
+        "status": "fixed",
+        "msg": "SOURCE: Missing <ce:source-text> element. (unique SE ID)",
+        "type": "source-text"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "Modification Detected: 1 automatic structural correction applied across XML tags, links, and schemas.",
+        "type": "success"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": "se4000",
+        "text": "A & B < C. Book, (2025)."
+      }
+    ]
+  },
+  {
+    "name": "inline-space",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:title><sb:maintitle>High<ce:hsp sp=\"1.0\"/>quality evidence</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:title><sb:maintitle>High<ce:hsp sp=\"1.0\"/>quality evidence</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se4000\">Highquality evidence. Book, (2025).</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated missing <ce:source-text> (se4000).",
+        "type": "source-text"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Highquality evidence",
+        "status": "fixed",
+        "msg": "SOURCE: Missing <ce:source-text> element. (unique SE ID)",
+        "type": "source-text"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "Modification Detected: 1 automatic structural correction applied across XML tags, links, and schemas.",
+        "type": "success"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": "se4000",
+        "text": "Highquality evidence. Book, (2025)."
+      }
+    ]
+  },
+  {
+    "name": "inline-formatting-control",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:title><sb:maintitle>High <ce:italic>quality</ce:italic> evidence</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:title><sb:maintitle>High <ce:italic>quality</ce:italic> evidence</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se4000\">High quality evidence. Book, (2025).</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated missing <ce:source-text> (se4000).",
+        "type": "source-text"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "High quality evidence",
+        "status": "fixed",
+        "msg": "SOURCE: Missing <ce:source-text> element. (unique SE ID)",
+        "type": "source-text"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "Modification Detected: 1 automatic structural correction applied across XML tags, links, and schemas.",
+        "type": "success"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": "se4000",
+        "text": "High quality evidence. Book, (2025)."
+      }
+    ]
+  },
+  {
+    "name": "cdata-existing-source",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se10\"><![CDATA[Literal <token></token> text]]></ce:source-text></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se10\"><![CDATA[Literal  text]]></ce:source-text></ce:bib-reference></root>",
+    "audit": [],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "skip",
+        "msg": "VALID: No structural issues detected."
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "Modification Detected: 1 automatic structural correction applied across XML tags, links, and schemas.",
+        "type": "success"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": "se10",
+        "text": "Literal  text"
+      }
+    ]
+  },
+  {
+    "name": "comma-url",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:e-host><ce:inter-ref id=\"ir20\" xlink:href=\"https://example.org/a,,b\">https://example.org/a,,b</ce:inter-ref></sb:e-host></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:e-host><ce:inter-ref id=\"ir20\" xlink:href=\"https://example.org/a,,b\">https://example.org/a,,b</ce:inter-ref></sb:e-host></sb:host></sb:reference><ce:source-text id=\"se4000\">https://example.org/a,b.</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated missing <ce:source-text> (se4000).",
+        "type": "source-text"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "fixed",
+        "msg": "SOURCE: Missing <ce:source-text> element. (unique SE ID)",
+        "type": "source-text"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "Modification Detected: 1 automatic structural correction applied across XML tags, links, and schemas.",
+        "type": "success"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": "se4000",
+        "text": "https://example.org/a,b."
+      }
+    ]
+  },
+  {
+    "name": "paired-et-al",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author><sb:et-al></sb:et-al></sb:authors></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author><sb:et-al></sb:authors></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se4000\">Smith, et al., (2025). Book.</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated missing <ce:source-text> (se4000).",
+        "type": "source-text"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "fixed",
+        "msg": "SOURCE: Missing <ce:source-text> element. (unique SE ID)",
+        "type": "source-text"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "Modification Detected: 1 automatic structural correction applied across XML tags, links, and schemas.",
+        "type": "success"
+      }
+    ],
+    "wellFormed": false,
+    "sourceTexts": []
+  },
+  {
+    "name": "paired-ellipsis",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author><sb:ellipsis></sb:ellipsis><sb:author><ce:surname>Jones</ce:surname></sb:author></sb:authors></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author><sb:ellipsis><sb:author><ce:surname>Jones</ce:surname></sb:author></sb:authors></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se4000\">Smith, … Jones, (2025). Book.</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated missing <ce:source-text> (se4000).",
+        "type": "source-text"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "fixed",
+        "msg": "SOURCE: Missing <ce:source-text> element. (unique SE ID)",
+        "type": "source-text"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "Modification Detected: 1 automatic structural correction applied across XML tags, links, and schemas.",
+        "type": "success"
+      }
+    ],
+    "wellFormed": false,
+    "sourceTexts": []
+  },
+  {
+    "name": "local-math-namespace",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:title><sb:maintitle>Test <mml:math xmlns:mml=\"http://www.w3.org/1998/Math/MathML\" altimg=\"gr1\"><mml:mi>x</mml:mi></mml:math> title</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:title><sb:maintitle>Test <mml:math altimg=\"gr1\"><mml:mi>x</mml:mi></mml:math> title</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se4000\">Test x title. Book, (2025).</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated missing <ce:source-text> (se4000).",
+        "type": "source-text"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Test x title",
+        "status": "fixed",
+        "msg": "SOURCE: Missing <ce:source-text> element. (unique SE ID)",
+        "type": "source-text"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "Modification Detected: 1 automatic structural correction applied across XML tags, links, and schemas.",
+        "type": "success"
+      }
+    ],
+    "wellFormed": false,
+    "sourceTexts": [
+      {
+        "id": "se4000",
+        "text": "Test x title. Book, (2025)."
+      }
+    ]
+  },
+  {
+    "name": "doi-migration-loses-metadata",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host><sb:host><sb:e-host><ce:inter-ref id=\"ir20\" xlink:href=\"https://doi.org/10.1234/abc\">https://doi.org/10.1234/abc</ce:inter-ref><sb:version>Version 2.1</sb:version><sb:date>2020</sb:date><sb:date-accessed day=\"5\" month=\"10\" year=\"2025\"/></sb:e-host></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book><ce:doi>10.1234/abc</ce:doi></sb:host></sb:reference><ce:source-text id=\"se4000\">Book, (2025), https://doi.org/10.1234/abc.</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "doi": "10.1234/abc",
+        "msg": "DIRECT CAPTURE: DOI migrated to <ce:doi>10.1234/abc</ce:doi>.",
+        "type": "doi",
+        "requiresConfirmation": false
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated missing <ce:source-text> (se4000).",
+        "type": "source-text"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "fixed",
+        "msg": "SOURCE: Missing <ce:source-text> element. (unique SE ID)",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "fixed",
+        "doi": "10.1234/abc",
+        "msg": "DIRECT DOI CAPTURE: Directly migrated <ce:inter-ref> to <ce:doi>10.1234/abc</ce:doi> in primary host.",
+        "type": "doi",
+        "requiresConfirmation": false
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "Modification Detected: 2 automatic structural corrections applied across XML tags, links, and schemas.",
+        "type": "success"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": "se4000",
+        "text": "Book, (2025), https://doi.org/10.1234/abc."
+      }
+    ]
+  },
+  {
+    "name": "doi-migration-duplicate-doi",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book><ce:doi>10.1234/other</ce:doi></sb:host><sb:host><sb:e-host><ce:inter-ref id=\"ir20\" xlink:href=\"https://doi.org/10.1234/abc\">https://doi.org/10.1234/abc</ce:inter-ref></sb:e-host></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book><ce:doi>10.1234/other</ce:doi><ce:doi>10.1234/abc</ce:doi></sb:host></sb:reference><ce:source-text id=\"se4000\">Book, (2025), https://doi.org/10.1234/other, https://doi.org/10.1234/abc.</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "doi": "10.1234/abc",
+        "msg": "DIRECT CAPTURE: DOI migrated to <ce:doi>10.1234/abc</ce:doi>.",
+        "type": "doi",
+        "requiresConfirmation": false
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated missing <ce:source-text> (se4000).",
+        "type": "source-text"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "fixed",
+        "msg": "SOURCE: Missing <ce:source-text> element. (unique SE ID)",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "fixed",
+        "doi": "10.1234/abc",
+        "msg": "DIRECT DOI CAPTURE: Directly migrated <ce:inter-ref> to <ce:doi>10.1234/abc</ce:doi> in primary host.",
+        "type": "doi",
+        "requiresConfirmation": false
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "Modification Detected: 2 automatic structural corrections applied across XML tags, links, and schemas.",
+        "type": "success"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": "se4000",
+        "text": "Book, (2025), https://doi.org/10.1234/other, https://doi.org/10.1234/abc."
+      }
+    ]
+  },
+  {
+    "name": "doi-migration-percent-suffix",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book></sb:host><sb:host><sb:e-host><ce:inter-ref id=\"ir20\" xlink:href=\"https://doi.org/10.1234/a%28b%29\">https://doi.org/10.1234/a%28b%29</ce:inter-ref></sb:e-host></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2025</sb:date></sb:book><ce:doi>10.1234/a</ce:doi></sb:host></sb:reference><ce:source-text id=\"se4000\">Book, (2025), https://doi.org/10.1234/a.</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "doi": "10.1234/a",
+        "msg": "DIRECT CAPTURE: DOI migrated to <ce:doi>10.1234/a</ce:doi>.",
+        "type": "doi",
+        "requiresConfirmation": false
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated missing <ce:source-text> (se4000).",
+        "type": "source-text"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "fixed",
+        "msg": "SOURCE: Missing <ce:source-text> element. (unique SE ID)",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "Book",
+        "status": "fixed",
+        "doi": "10.1234/a",
+        "msg": "DIRECT DOI CAPTURE: Directly migrated <ce:inter-ref> to <ce:doi>10.1234/a</ce:doi> in primary host.",
+        "type": "doi",
+        "requiresConfirmation": false
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "Modification Detected: 2 automatic structural corrections applied across XML tags, links, and schemas.",
+        "type": "success"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": "se4000",
+        "text": "Book, (2025), https://doi.org/10.1234/a."
+      }
+    ]
+  },
+  {
+    "name": "doi-display-punctuation",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:e-host><ce:inter-ref id=\"ir20\" xlink:href=\"https://doi.org/10.1234/abc\">https://doi.org/10.1234/abc.</ce:inter-ref></sb:e-host></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:e-host><ce:inter-ref id=\"ir20\" xlink:href=\"https://doi.org/10.1234/abc\">https://doi.org/10.1234/abc.</ce:inter-ref></sb:e-host></sb:host></sb:reference><ce:source-text id=\"se4000\">https://doi.org/10.1234/abc. (https://doi.org/10.1234/abc).</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated missing <ce:source-text> (se4000).",
+        "type": "source-text"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "fixed",
+        "msg": "SOURCE: Missing <ce:source-text> element. (unique SE ID)",
+        "type": "source-text"
+      },
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "warning",
+        "doi": "10.1234/abc",
+        "msg": "WARNING: Target host missing for DOI migration.",
+        "type": "doi",
+        "requiresConfirmation": false
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "Modification Detected: 1 automatic structural correction applied across XML tags, links, and schemas.",
+        "type": "success"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": "se4000",
+        "text": "https://doi.org/10.1234/abc. (https://doi.org/10.1234/abc)."
+      }
+    ]
+  },
+  {
+    "name": "url-query-control",
+    "input": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:e-host><ce:inter-ref id=\"ir20\" xlink:href=\"https://example.org/?a=1&amp;b=2\">https://example.org/?a=1&amp;b=2</ce:inter-ref></sb:e-host></sb:host></sb:reference></ce:bib-reference></root>",
+    "output": "<root xmlns:ce=\"http://www.elsevier.com/xml/common/dtd\" xmlns:sb=\"http://www.elsevier.com/xml/common/struct-bib/dtd\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><ce:bib-reference id=\"bb5\"><ce:label>1</ce:label><sb:reference id=\"rf5\"><sb:host><sb:e-host><ce:inter-ref id=\"ir20\" xlink:href=\"https://example.org/?a=1&amp;b=2\">https://example.org/?a=1&amp;b=2</ce:inter-ref></sb:e-host></sb:host></sb:reference><ce:source-text id=\"se4000\">https://example.org/?a=1&amp;b=2.</ce:source-text></ce:bib-reference></root>",
+    "audit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "status": "fixed",
+        "msg": "REPAIRED: Generated missing <ce:source-text> (se4000).",
+        "type": "source-text"
+      }
+    ],
+    "scannerAudit": [
+      {
+        "id": "bb5",
+        "label": "1",
+        "title": "",
+        "status": "fixed",
+        "msg": "SOURCE: Missing <ce:source-text> element. (unique SE ID)",
+        "type": "source-text"
+      }
+    ],
+    "toast": [
+      {
+        "msg": "Scanner complete. Identified 1 bibliography blocks.",
+        "type": "success"
+      },
+      {
+        "msg": "Modification Detected: 1 automatic structural correction applied across XML tags, links, and schemas.",
+        "type": "success"
+      }
+    ],
+    "wellFormed": true,
+    "sourceTexts": [
+      {
+        "id": "se4000",
+        "text": "https://example.org/?a=1&b=2."
+      }
+    ]
+  }
+]

@@ -1,0 +1,62 @@
+[
+  {
+    "name": "baseline",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "doi-migration-comment-accept",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "doi-migration-comment-retain",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "doi-migration-descriptive-label",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "doi-migration-duplicate-doi",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "doi-migration-link-metadata",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "doi-migration-loses-metadata",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "doi-migration-percent-suffix",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "doi-migration-same-doi",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "paired-ellipsis",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "paired-et-al",
+    "passed": true,
+    "issues": []
+  },
+  {
+    "name": "trailing-note",
+    "passed": true,
+    "issues": []
+  }
+]

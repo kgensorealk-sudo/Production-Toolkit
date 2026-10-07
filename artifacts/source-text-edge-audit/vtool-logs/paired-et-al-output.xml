@@ -1,0 +1,13 @@
+<?xml version='1.0' encoding='utf-8'?>
+<?xml-stylesheet type="text/xsl" href="ViewLog.xsl"?><LogReport xmlns:vt="http://www.elsevier.com/xml/apps/qc/v" filename="C:\Users\Kevin\AppData\Local\Temp\source-text-edge-native-j956r5fu\paired-et-al-output.xml"><Log filename="C:\Users\Kevin\AppData\Local\Temp\source-text-edge-native-j956r5fu\paired-et-al-output.xml"><time>Vtool:5.98.2 run at Wed Oct 07 23:03:58 CST 2026</time>
+<command-line-options>-Xmx512m -file "C:\Users\Kevin\AppData\Local\Temp\source-text-edge-native-j956r5fu\paired-et-al-output.xml" -forcecheck -log "C:\Users\Kevin\AppData\Local\Temp\source-text-edge-native-j956r5fu\jobs\paired-et-al-output\vtool-report" -nofp</command-line-options>
+<results><message type="error" position="unknown">Not able to validate: org.xml.sax.SAXParseException; systemId: file:/C:/Users/Kevin/AppData/Local/Temp/source-text-edge-native-j956r5fu/paired-et-al-output.xml; lineNumber: 1; columnNumber: 57541; The element type "sb:et-al" must be terminated by the matching end-tag "&lt;/sb:et-al>".</message>
+<message id="parser" type="error" position="1:57541"><![CDATA[Error: The element type "sb:et-al" must be terminated by the matching end-tag "</sb:et-al>".]]></message>
+<message id="Exception" type="error">The element type "sb:et-al" must be terminated by the matching end-tag "&lt;/sb:et-al>".</message>
+<total-errors>3</total-errors>
+<total-warnings>0</total-warnings>
+<total-skipped-checks>0</total-skipped-checks>
+</results>
+<time>Vtool:5.98.2 run at Wed Oct 07 23:03:59 CST 2026</time>
+</Log>
+</LogReport>

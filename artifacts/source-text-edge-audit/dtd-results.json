@@ -1,0 +1,217 @@
+[
+  {
+    "name": "baseline",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "existing-empty-input",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "existing-empty-output",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "existing-whitespace-no-id-input",
+    "valid": false,
+    "error": "Exception calling \"Read\" with \"0\" argument(s): \"The required attribute 'id' is missing.\""
+  },
+  {
+    "name": "existing-whitespace-no-id-output",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "existing-missing-id-input",
+    "valid": false,
+    "error": "Exception calling \"Read\" with \"0\" argument(s): \"The required attribute 'id' is missing.\""
+  },
+  {
+    "name": "existing-missing-id-output",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "duplicate-source-id-input",
+    "valid": false,
+    "error": "Exception calling \"Read\" with \"0\" argument(s): \"The 'id' attribute has an invalid value according to its data type.\""
+  },
+  {
+    "name": "duplicate-source-id-output",
+    "valid": false,
+    "error": "Exception calling \"Read\" with \"0\" argument(s): \"The 'id' attribute has an invalid value according to its data type.\""
+  },
+  {
+    "name": "multiple-reference-children-input",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "multiple-reference-children-output",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "trailing-note-input",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "trailing-note-output",
+    "valid": false,
+    "error": "Exception calling \"Read\" with \"0\" argument(s): \"The element 'bib-reference' in namespace 'ce' has invalid child element 'source-text' in namespace 'ce'.\""
+  },
+  {
+    "name": "named-entity-input",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "named-entity-output",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "numeric-entity-control-input",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "numeric-entity-control-output",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "special-character-control-input",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "special-character-control-output",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "inline-space-input",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "inline-space-output",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "inline-formatting-control-input",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "inline-formatting-control-output",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "cdata-existing-source-input",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "cdata-existing-source-output",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "comma-url-input",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "comma-url-output",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "paired-et-al-input",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "paired-et-al-output",
+    "valid": false,
+    "error": "Exception calling \"Read\" with \"0\" argument(s): \"The 'sb:et-al' start tag on line 1 position 57530 does not match the end tag of 'sb:authors'. Line 1, position 57541.\""
+  },
+  {
+    "name": "paired-ellipsis-input",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "paired-ellipsis-output",
+    "valid": false,
+    "error": "Exception calling \"Read\" with \"0\" argument(s): \"The element 'sb:ellipsis' cannot contain child element 'sb:author' because the parent element's content model is empty.\""
+  },
+  {
+    "name": "local-math-namespace-input",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "local-math-namespace-output",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "doi-migration-loses-metadata-input",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "doi-migration-loses-metadata-output",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "doi-migration-duplicate-doi-input",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "doi-migration-duplicate-doi-output",
+    "valid": false,
+    "error": "Exception calling \"Read\" with \"0\" argument(s): \"The element 'host' in namespace 'sb' has invalid child element 'doi' in namespace 'ce'.\""
+  },
+  {
+    "name": "doi-migration-percent-suffix-input",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "doi-migration-percent-suffix-output",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "doi-display-punctuation-input",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "doi-display-punctuation-output",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "url-query-control-input",
+    "valid": true,
+    "error": ""
+  },
+  {
+    "name": "url-query-control-output",
+    "valid": true,
+    "error": ""
+  }
+]
