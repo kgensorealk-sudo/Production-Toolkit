@@ -13,7 +13,7 @@ assert.equal(Object.keys(declarations).length,names.size);
 const compiled=ts.transpileModule(Object.values(declarations).join('\n'),{compilerOptions:{target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.React}}).outputText;
 function engine(input,state={},options={}){
     const noop=()=>{};
-    const args={...idExports, prefixOverrides:{},auditResults:state.results||[],inputKeyRef:state.inputKeyRef??={current:input},operationRef:state.operationRef??={current:0},input,setTimeout:fn=>fn(),setToast:t=>(state.toasts??=[]).push(t),setIsLoading:value=>state.loading=value,setSuggestions:s=>state.suggestions=typeof s==='function'?s(state.suggestions||[]):s,setAuditResults:r=>state.results=r,setQaReport:r=>state.qaReport=r,setDiffElements:value=>state.diffElements=value,setStep:noop,setOutput:o=>state.output=o,generateDiff:(a,b)=>state.diff=[a,b],React:{createElement:()=>({})},Hash:noop,LinkIcon:noop,Trash2:noop,Eraser:noop,RefreshCw:noop,Box:noop,...options};
+    const args={...idExports, prefixOverrides:{},auditResults:state.results||[],inputKeyRef:state.inputKeyRef??={current:input},operationRef:state.operationRef??={current:0},input,setTimeout:fn=>fn(),setToast:t=>(state.toasts??=[]).push(t),setIsLoading:value=>state.loading=value,setSuggestions:s=>state.suggestions=typeof s==='function'?s(state.suggestions||[]):s,setAuditResults:r=>state.results=r,setQaReport:r=>state.qaReport=r,setDiffElements:value=>state.diffElements=value,setStep:noop,setActiveTab:noop,setOutput:o=>state.output=o,generateDiff:(a,b)=>state.diff=[a,b],React:{createElement:()=>({})},Hash:noop,LinkIcon:noop,Trash2:noop,Eraser:noop,RefreshCw:noop,Box:noop,...options};
     return new Function(...Object.keys(args),compiled+'\nreturn {invalidateGeneratedResult,runAudit,executeFix};')(...Object.values(args));
 }
 const valid='<ce:bib-reference id="bb0005"><ce:other-ref id="or0005"><ce:textref id="tr0005"><ce:given-name>A B</ce:given-name> text</ce:textref></ce:other-ref></ce:bib-reference>';
@@ -134,7 +134,7 @@ console.log('QA report before/after evidence and recommendation cases passed.');
 
 assert.ok(idExports.createIdQaReport('<ce:para id="p0005"/><ce:cross-ref id="cf0005" xlink:href="#p0005"/>').issues.some(issue=>issue.kind==='missing-refid'));
 state={};api=engine(brokenAfter,state);api.runAudit();assert.equal(state.qaReport.issues.length,0);api.executeFix();assert.equal(state.qaReport.issues[0].target,'bad');assert.equal(state.qaReport.changes[0].after,'bb3000');
-assert.ok(source.includes("if (sug.id === 'citation-linker')"));assert.ok(source.includes("document.getElementById('id-qa-report')"));
+assert.ok(source.includes("if (sug.id === 'citation-linker')"));
 
 const timers=[];state={};api=engine(changed,state,{setTimeout:fn=>timers.push(fn)});
 api.runAudit();api.invalidateGeneratedResult();state.inputKeyRef.current='other XML';state.inputKeyRef.current=changed;api.runAudit();
