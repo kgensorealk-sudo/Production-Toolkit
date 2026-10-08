@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { diffLines, diffWordsWithSpace, Change } from 'diff';
 import { ChevronUp, ChevronDown, GitCompare, Lightbulb, ArrowRight, Link as LinkIcon, Eraser, Hash, Trash2, RefreshCw, Box } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -22,7 +22,7 @@ const IdAuditor: React.FC = () => {
     const operationRef = useRef(0);
     inputKeyRef.current = inputKey;
     const invalidateGeneratedResult = () => { operationRef.current++; setIsLoading(false); setOutput(''); setDiffElements(null); setSuggestions([]); setQaReport(null); };
-    useEffect(() => { invalidateGeneratedResult(); }, [inputKey]);
+    useLayoutEffect(() => { invalidateGeneratedResult(); }, [inputKey]);
     const [auditResults, setAuditResults] = useState<AuditItem[]>([]);
     const [suggestions, setSuggestions] = useState<SmartSuggestion[]>([]);
     const [step, setStep] = useState<'input' | 'audit' | 'result'>('input');
@@ -416,7 +416,7 @@ const IdAuditor: React.FC = () => {
                                 <p className="font-semibold">Recommended action: {issue.action}</p>
                             </article>)}
                             {qaReport.issues.length > 50 && <div className="flex gap-3 items-center"><button disabled={qaIssuesPage===0} onClick={()=>setQaIssuesPage(page=>page-1)}>Previous link issues</button><span>Page {qaIssuesPage+1} of {Math.ceil(qaReport.issues.length/50)}</span><button disabled={(qaIssuesPage+1)*50>=qaReport.issues.length} onClick={()=>setQaIssuesPage(page=>page+1)}>Next link issues</button></div>}
-                            {!qaReport.issues.some(issue => issue.kind === 'ambiguous-target') && <button onClick={() => navigate('/citationLinker', {state:{transferredXml:step === 'result' ? output : input,sourceTool:'ID Prefix Auditor'}})} className="px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold">Open Citation Linker Pro with this XML</button>}
+                            {!qaReport.issues.some(issue => issue.kind === 'ambiguous-target') && <button onClick={() => navigate('/citationLinker', {state:{transferredXml:step === 'result' ? output : input,sourceTool:'ID Prefix Auditor',idChanges:step === 'result' ? qaReport.changes : []}})} className="px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold">Open Citation Linker Pro with this XML</button>}
                         </>}
                     </div>
                 </section>

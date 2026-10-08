@@ -1,0 +1,50 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';import ts from 'typescript';
+import {api,xml,e} from './id-auditor-final-verification.mjs';
+const editApi={};new Function('exports','require',ts.transpileModule(fs.readFileSync('utils/citationLinkerEdits.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText)(editApi,n=>n.includes('idAuditor')?e:xml);
+let count=0;
+async function check(input,expect,options={}){const state={};api(input,state,options).runAnalysis();await api(input,state,options).executeLink();expect(state);count++;return state;}
+const ref=(id,label)=>`<ce:bib-reference id="${id}"><ce:label>${label}</ce:label></ce:bib-reference>`;
+const one=ref('bb0005','[1]');
+await check(one+ref('bb0010','[1]')+'<ce:cross-ref id="cf0005">[1]</ce:cross-ref>',s=>{assert.equal(s.rows[0].status,'failed');assert.ok(!s.output.includes('refid='));});
+for(const text of ['[1,99]','[1–3]','[3–1]','[1–1000000]'])await check(one+ref('bb0010','[2]')+`<ce:cross-refs id="cf0005">${text}</ce:cross-refs>`,s=>{assert.equal(s.rows[0].status,'failed',text);assert.ok(!s.output.includes('refid='));});
+await check(one+ref('bb0010','[2]')+'<ce:cross-refs id="cf0005">[1,2,1–2]</ce:cross-refs>',s=>assert.ok(s.output.includes('refid="bb0005 bb0010"')));
+await check(ref('bb0005','Smith et al., 2020')+ref('bb0010','Smith et al., 2020')+'<ce:cross-ref id="cf0005">Smith et al., 2020</ce:cross-ref>',s=>assert.equal(s.rows[0].status,'failed'));
+await check(ref('bb0005','Smith et al., 2020a')+ref('bb0010','Smith et al., 2020b')+'<ce:cross-ref id="cf0005">Smith et al., 2020a</ce:cross-ref>',s=>assert.ok(s.output.includes('refid="bb0005"')));
+await check(ref('bb0005','Smith et al., 2020')+ref('bb0010','Jones et al., 2021')+'<ce:cross-ref id="cf0005">Smith, 2020; Jones, 2021</ce:cross-ref>',s=>assert.ok(xml.scanReferenceXml(s.output).nodes.some(n=>n.name==='ce:cross-refs'&&n.attributes.id==='cf0005'&&n.attributes.refid==='bb0005 bb0010')));
+await check(one.replace('id="bb0005"',"id = 'bb0005'")+'<ce:cross-ref id="cf0005">&#91;1&#93;</ce:cross-ref>',s=>assert.ok(s.output.includes('refid="bb0005"')));
+const commented='<!-- '+one+'<ce:cross-ref>[1]</ce:cross-ref> -->';await check(commented+ref('bb0010','[1]')+'<ce:cross-ref id="cf0005">[1]</ce:cross-ref>',s=>{assert.equal(s.rows.length,1);assert.ok(s.output.startsWith(commented));assert.ok(s.output.includes('refid="bb0010"'));});
+await check('<article><body>'+one+'</body><ce:bibliography>'+ref('bb0010','[1]')+'</ce:bibliography><ce:cross-ref id="cf0005">[1]</ce:cross-ref></article>',s=>assert.ok(s.output.includes('refid="bb0010"')));
+for(const [tag,label,text,id] of [['figure','Fig. 1','Figure 1','f0005'],['table','Table 1','Table 1','t0005'],['footnote','1','Note 1','fn0005'],['section','1 Introduction','Section 1','s0005']]){
+ const title=tag==='section'?'section-title':'label';await check(`<ce:${tag} id="${id}"><ce:${title}>${label}</ce:${title}></ce:${tag}><ce:cross-ref id="cf0005" refid="gone">${text}</ce:cross-ref>`,s=>assert.ok(s.output.includes(`refid="${id}"`)),{});
+}
+await check('<ce:figure id="f0005"><ce:label>Fig. 1</ce:label></ce:figure><ce:figure id="f0010"><ce:label>Fig. 1</ce:label></ce:figure><ce:cross-ref id="cf0005">Fig. 1</ce:cross-ref>',s=>assert.equal(s.rows[0].status,'failed'));
+await check('<ce:figure id="f0005"><ce:label>Fig. 1</ce:label></ce:figure><ce:inter-ref id="ir0005" xlink:href="#gone">Fig. 1</ce:inter-ref>',s=>{assert.equal(s.rows[0].status,'failed');assert.ok(s.output.includes('xlink:href="#gone"'));assert.ok(s.rows[0].reason.includes('VTOOL'));});
+await check('<ce:inter-ref xlink:href="https://example.org/#cf3000">External</ce:inter-ref>',s=>{assert.ok(s.output.includes('id="ir3000"'));assert.ok(s.output.includes('https://example.org/#cf3000'));assert.ok(!s.output.includes('refid='));},{targetMissingId:true});
+await check('<ce:cross-ref id="cf9995" refid="cf3000">Reserved</ce:cross-ref><ce:cross-ref/><ce:intra-ref/><ce:inter-ref xlink:href="https://example.org">External</ce:inter-ref>',s=>{assert.ok(s.output.includes('id="cf3005"'));assert.ok(s.output.includes('id="ia3000"'));assert.ok(s.output.includes('id="ir3000"'));assert.ok(!s.output.includes('cf10000'));},{targetMissingId:true});
+const nested=one+'<ce:cross-ref id="cf0005" role="a  b"> [<ce:bold>1</ce:bold>] </ce:cross-ref>';await check(nested,s=>{assert.ok(s.output.includes('role="a  b"'));assert.ok(s.output.includes('> [<ce:bold>1</ce:bold>] </ce:cross-ref>'));});
+await check('<ce:intra-ref id="ia0005" xlink:href="pii:S1385894725131082/s0005">Section</ce:intra-ref>',s=>{assert.equal(s.rows,undefined);assert.ok(!s.output.includes('refid='));});
+const wrap='<ce:cross-ref id="cf9995"/><ce:cross-ref/>';await check(wrap,s=>assert.ok(s.output.includes('id="cf0005"')),{targetMissingId:true,cfStart:9995});
+await check('<ce:cross-ref id="cf0005"/><ce:cross-ref id="cf0005"/><ce:cross-ref refid="cf0005"/>',s=>{assert.equal(s.output,'');assert.ok(s.toasts.at(-1).msg.includes('Linked duplicate'));},{targetDuplicateId:true});
+let state={};const timers=[];api(one+'<ce:cross-ref/>',state,{setTimeout:f=>timers.push(f)}).runAnalysis();state.analysisKeyRef.current='changed';timers[0]();assert.equal(state.rows,undefined);count++;
+const hosts='<sb:reference><sb:host><sb:issue/></sb:host><sb:host><sb:e-host><ce:inter-ref xlink:href="https://doi.org/10.1234/abc&amp;x">DOI</ce:inter-ref></sb:e-host></sb:host></sb:reference>';
+const doiInput='<ce:bib-reference id="bb0005"><ce:label>[1]</ce:label>'+hosts+'</ce:bib-reference>';
+assert.ok(editApi.cleanupCitationDois(doiInput).output.includes('<ce:doi>10.1234/abc&amp;x</ce:doi>'));count++;
+for(const input of ['<!-- '+doiInput+' -->',doiInput.replace('<sb:issue/>','<ce:doi>10.1234/other</ce:doi>'),doiInput.replace('</sb:e-host>','<ce:textref>Keep</ce:textref></sb:e-host>'),doiInput.replace('<ce:inter-ref xlink:', '<ce:inter-ref id="ir0005" xlink:')+'<ce:cross-ref refid="ir0005"/>']){assert.equal(editApi.cleanupCitationDois(input).output,input);count++;}
+await check('<ce:figure id="f3000"><ce:label>Fig. 1</ce:label></ce:figure><ce:float-anchor refid="old-figure"/>',s=>{assert.equal(s.rows[0].status,'resolved');assert.ok(s.output.includes('refid="f3000"'));},{repairHistory:[{before:'old-figure',after:'f3000',tag:'ce:figure'}]});
+await check('<ce:figure id="f3000"><ce:label>Fig. 1</ce:label></ce:figure><ce:float-anchor refid="old-figure"/>',s=>{assert.equal(s.rows[0].status,'failed');assert.ok(s.output.includes('refid="old-figure"'));});
+await check('<ce:figure id="f3000"/><ce:figure id="f3005"/><ce:float-anchor refid="old-figure"/>',s=>assert.equal(s.rows[0].status,'failed'),{repairHistory:[{before:'old-figure',after:'f3000',tag:'ce:figure'},{before:'old-figure',after:'f3005',tag:'ce:figure'}]});
+await check(one+'<ce:footnote id="fn0005"><ce:label>1</ce:label></ce:footnote><ce:cross-ref id="cf0005">[1]</ce:cross-ref>',s=>assert.equal(s.rows[0].status,'failed'));
+await check(one+'<ce:footnote id="fn0005"><ce:label>1</ce:label></ce:footnote><ce:cross-ref id="cf0005">1</ce:cross-ref>',s=>assert.equal(s.rows[0].status,'failed'));
+const exhausted=Array.from({length:1999},(_,i)=>'<ce:cross-ref id="cf'+String((i+1)*5).padStart(4,'0')+'"/>').join('')+'<ce:cross-ref/>';
+await check(exhausted,s=>{assert.equal(s.output,'');assert.ok(s.toasts.at(-1).msg.includes('No available cf ID'));},{targetMissingId:true});
+await check('<ce:cross-ref/>',s=>{assert.equal(s.output,'');assert.ok(s.toasts.at(-1).msg.includes('ID start'));},{targetMissingId:true,cfStart:9999});
+await check(ref('bb0005','Smith and Jones, 2020')+'<ce:cross-ref id="cf0005">Smith and Brown, 2020</ce:cross-ref>',s=>assert.equal(s.rows[0].status,'failed'));
+assert.equal(editApi.cleanupCitationDois(doiInput.replace('abc&amp;x','abc?download=1')).output,doiInput.replace('abc&amp;x','abc?download=1'));count++;
+await check(ref('bb0005','<![CDATA[[1]]]>')+'<ce:cross-ref id="cf0005"><![CDATA[[1]]]></ce:cross-ref>',s=>assert.ok(s.output.includes('refid="bb0005"')));
+await check(ref('bb0005','[1]<!-- ignored > 99 -->')+'<ce:cross-ref id="cf0005">[1]<!-- preserved > --> </ce:cross-ref>',s=>{assert.ok(s.output.includes('refid="bb0005"'));assert.ok(s.output.includes('<!-- preserved > -->'));});
+await check(ref('bb0005','[2020]')+ref('bb0010','[2021]')+'<ce:cross-refs id="cf0005">[2020,2021]</ce:cross-refs>',s=>assert.ok(s.output.includes('refid="bb0005 bb0010"')));
+await check('<ce:figure id="f3000"/><ce:float-anchor refid="(missing)"/>',s=>assert.equal(s.rows[0].status,'failed'),{repairHistory:[{before:'(missing)',after:'f3000',tag:'ce:figure'}]});
+await check('<ce:bibliography>'+one+ref('bb0010','[2]')+'</ce:bibliography><ce:cross-ref id="cf0005">[99]</ce:cross-ref>',s=>assert.ok(!s.suggestions.some(item=>item.id==='uncited-cleaner')));
+await check('<ce:bibliography>'+one+ref('bb0010','[2]')+'</ce:bibliography><ce:cross-ref id="cf0005">[1]</ce:cross-ref>',s=>assert.ok(s.suggestions.some(item=>item.id==='uncited-cleaner')));
+console.log(count+' additional Citation Linker safety cases passed.');

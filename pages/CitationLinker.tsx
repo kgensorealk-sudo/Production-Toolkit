@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { diffLines, Change, diffWordsWithSpace } from 'diff';
 import Toast from '../components/Toast';
@@ -6,11 +6,17 @@ import LoadingOverlay from '../components/LoadingOverlay';
 import Switch from '../components/Switch';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 import { scanReferenceXml } from '../utils/referenceUpdaterXml';
+import { applyCitationLinks, cleanupCitationDois } from '../utils/citationLinkerEdits';
+import { analyzeIdLinks } from '../utils/idAuditorEngine';
 import { ChevronUp, ChevronDown, GitCompare, Lightbulb, ArrowRight, Link as LinkIcon, Eraser, Hash, Trash2, RefreshCw, Box } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SmartSuggestion, ToolId } from '../types';
 
 interface ResolutionItem {
+    start: number;
+    existingHref: string;
+    linkAttribute: 'refid' | 'xlink:href';
+    reason: string;
     id: string;
     originalTag: string;
     originalAttrs: string;
@@ -62,8 +68,17 @@ const CitationLinker: React.FC = () => {
     const [doiCount, setDoiCount] = useState(0);
     const [affectedDoiLabels, setAffectedDoiLabels] = useState<string[]>([]);
 
+    const [importedEvidence,setImportedEvidence]=useState<{xml:string;changes:Array<{before:string;after:string;tag:string}>}>({xml:'',changes:[]});
+    const repairHistory=input===importedEvidence.xml?importedEvidence.changes:[];
+    const analysisKey=JSON.stringify([input,targetMissingRefid,targetMissingId,targetDuplicateId,cleanDoi,cfStart]);
+    const analysisKeyRef=useRef(analysisKey),operationRef=useRef(0);
+    analysisKeyRef.current=analysisKey;
+    const clearGenerated=()=>{operationRef.current++;setOutput('');setResolutions([]);setSuggestions([]);setDiffElements(null);setIsLoading(false);setDoiCount(0);setAffectedDoiLabels([]);setStep('input');};
+    useLayoutEffect(()=>{clearGenerated();},[analysisKey]);
+
     useEffect(() => {
         if (location.state?.transferredXml) {
+            setImportedEvidence({xml:location.state.transferredXml,changes:Array.isArray(location.state.idChanges)?location.state.idChanges.filter((change:any)=>change&&typeof change.before==='string'&&typeof change.after==='string'&&typeof change.tag==='string'):[]});
             setInput(location.state.transferredXml);
             setToast({ 
                 msg: `Data successfully imported from ${location.state.sourceTool || 'previous tool'}.`, 
@@ -144,7 +159,7 @@ const CitationLinker: React.FC = () => {
         const clean = normalizeCitation(text);
         // Filter out common connectors, years, and short initials to get the actual first surname
         const parts = clean.split(/\s+/)
-            .map(p => p.replace(/^[^\w]+|[^\w]+$/g, ''))
+            .map(p => p.replace(/^[^\p{L}\p{N}\p{M}]+|[^\p{L}\p{N}\p{M}]+$/gu, ''))
             .filter(p => 
                 p && 
                 !['and', 'et', 'al'].includes(p) && 
@@ -333,57 +348,43 @@ const CitationLinker: React.FC = () => {
     }, [currentChangeIndex, diffElements]);
 
     const runAnalysis = () => {
+        const snapshot=analysisKeyRef.current,operation=++operationRef.current;
         if (!input.trim()) { setToast({ msg: "Please paste XML source.", type: "warn" }); return; }
         setIsLoading(true);
         setProcessLabel('Mapping Bibliography Nodes...');
 
         setTimeout(() => {
+            if(operation!==operationRef.current||snapshot!==analysisKeyRef.current)return;
             try {
                 const structure = scanReferenceXml(input, {allowDuplicateIds:true});
-                const nodesByStart = new Map(structure.nodes.map(node => [node.start, node]));
                 const duplicateLabels = new Set<string>();
-                const labelMap = new Map<string, string>(); 
+                const labelMap = new Map<string, string>();
+                const bibliographyNumbers=new Map<string,string>(),duplicateBibliographyNumbers=new Set<string>();
                 const nameDateIndex: BibIndex[] = []; 
 
-                const bibRegex = /<(?:ce:)?bib-reference\b[^>]*?id="([^"]+)"[^>]*>([\s\S]*?)<\/(?:ce:)?bib-reference>/gi;
-                let bibMatch;
-                while ((bibMatch = bibRegex.exec(input)) !== null) {
-                    const id = bibMatch[1];
-                    const content = bibMatch[2];
-                    const labelMatch = content.match(/<(?:ce:)?label>(.*?)<\/(?:ce:)?label>/i);
-                    
-                    if (labelMatch) {
-                        const labelText = labelMatch[1].replace(/<[^>]+>/g, '').replace(/[\[\]]/g, '').trim();
-                        if (/^\d+$/.test(labelText)) {
-                            if (labelMap.has(labelText) && labelMap.get(labelText) !== id) duplicateLabels.add(labelText);
-                            labelMap.set(labelText, id);
-                        } else {
-                            const firstName = extractFirstName(labelText);
-                            const years = extractYears(labelText);
-                            
-                            years.forEach(y => {
-                                nameDateIndex.push({
-                                    id,
-                                    normalized: normalizeCitation(labelText),
-                                    firstName,
-                                    year: y
-                                });
-                            });
-                        }
-                    }
+                const addLabel = (label:string,id:string) => {
+                    const key=normalizeCitation(label);
+                    if(labelMap.has(key)&&labelMap.get(key)!==id)duplicateLabels.add(key);
+                    labelMap.set(key,id);
+                };
+                const childLabel = (node:typeof structure.nodes[number],name='ce:label') => {
+                    const child=structure.nodes.find(child=>child.name===name&&child.start>=node.openEnd&&child.end<=node.closeStart&&!structure.nodes.some(parent=>parent!==node&&parent.start>=node.openEnd&&parent.start<child.start&&parent.end>=child.end));
+                    return child?structure.textContent(child).trim():'';
+                };
+                for(const node of structure.references){
+                    const id=node.attributes.id;if(!id)continue;
+                    const labelText=childLabel(node).replace(/[\[\]]/g,'').trim();
+                    if(/^\d+$/.test(labelText)){if(bibliographyNumbers.has(labelText)&&bibliographyNumbers.get(labelText)!==id)duplicateBibliographyNumbers.add(labelText);bibliographyNumbers.set(labelText,id);addLabel(labelText,id);}
+                    else for(const year of extractYears(labelText))nameDateIndex.push({id,normalized:normalizeCitation(labelText),firstName:extractFirstName(labelText),year});
                 }
-
-                // Scan for floats (figures, tables, schemes, boxes, etc.)
-                const floatRegex = /<(?:ce:)?(figure|table|display-formula|textbox|scheme|box)\b[^>]*?id="([^"]+)"[^>]*>([\s\S]*?)<\/(?:ce:)?\1>/gi;
-                let floatMatch;
-                while ((floatMatch = floatRegex.exec(input)) !== null) {
-                    const id = floatMatch[2];
-                    const content = floatMatch[3];
-                    const labelMatch = content.match(/<(?:ce:)?label>(.*?)<\/(?:ce:)?label>/i);
-                    if (labelMatch) {
-                        const labelText = labelMatch[1].replace(/<[^>]+>/g, '').trim();
-                        labelMap.set(normalizeCitation(labelText), id);
-                    }
+                // Object labels share the same collision checks as bibliography labels.
+                for(const node of structure.nodes.filter(node=>['ce:figure','ce:table','ce:display-formula','ce:textbox','ce:footnote','ce:section'].includes(node.name))){
+                    const id=node.attributes.id;if(!id)continue;
+                    const label=childLabel(node)||(node.name==='ce:section'?childLabel(node,'ce:section-title'):'');
+                    if(!label)continue;addLabel(label,id);
+                    const kind=({'ce:figure':'figure','ce:table':'table','ce:display-formula':'equation','ce:textbox':'box','ce:footnote':'note','ce:section':'section'} as Record<string,string>)[node.name];
+                    const number=label.match(/(?:^|\s)(\d+(?:\.\d+)*)(?:$|[.\s])/);
+                    if(number){addLabel(kind+' '+number[1],id);if(kind==='figure')addLabel('Fig. '+number[1],id);if(kind==='equation')addLabel('Eq. '+number[1],id);}
                 }
 
                 const orphans: ResolutionItem[] = [];
@@ -395,83 +396,75 @@ const CitationLinker: React.FC = () => {
                     if (id) idCounts.set(id, (idCounts.get(id) || 0) + 1);
                 }
 
-                let foundDoiLabels: string[] = [];
-                if (cleanDoi) {
-                    const bibRefRegex = /<(?:ce:)?bib-reference\b[^>]*?id="([^"]+)"[^>]*>([\s\S]*?)<\/(?:ce:)?bib-reference>/gi;
-                    let bibMatch;
-                    const doiPattern = /<sb:host>[\s\S]*?<\/sb:host>\s*<sb:host>\s*<sb:e-host>\s*<ce:inter-ref\b[^>]*xlink:href="https?:\/\/doi\.org\/[^"]+"[^>]*>[\s\S]*?<\/ce:inter-ref>\s*<\/sb:e-host>\s*<\/sb:host>/i;
-                    
-                    while ((bibMatch = bibRefRegex.exec(input)) !== null) {
-                        const content = bibMatch[2];
-                        if (doiPattern.test(content)) {
-                            const labelMatch = content.match(/<(?:ce:)?label>(.*?)<\/(?:ce:)?label>/i);
-                            const labelText = labelMatch ? labelMatch[1].replace(/<[^>]+>/g, '').replace(/[\[\]]/g, '').trim() : 'Unknown Ref';
-                            foundDoiLabels.push(labelText);
-                        }
-                    }
-                }
+                const foundDoiLabels=cleanDoi?cleanupCitationDois(input).labels:[];
                 setDoiCount(foundDoiLabels.length);
                 setAffectedDoiLabels(foundDoiLabels);
 
-                const tagRegex = /<(ce:)?(cross-refs?|intra-refs?|inter-refs?)\b([^>]*)>([\s\S]*?)<\/\1\2>/gi;
-                let tagMatch;
-                while ((tagMatch = tagRegex.exec(input)) !== null) {
-                    const fullTag = tagMatch[0];
-                    const prefix = tagMatch[1] || '';
-                    const baseTag = tagMatch[2];
-                    const attrs = tagMatch[3];
-                    const text = tagMatch[4].trim();
-                    const originalIsPlural = baseTag.endsWith('s');
-
-                    const parsedNode = nodesByStart.get(tagMatch.index);
+                for(const parsedNode of structure.nodes.filter(node=>/^ce:(cross-refs?|intra-refs?|inter-refs?|float-anchor)$/.test(node.name))){
+                    const fullTag=input.slice(parsedNode.start,parsedNode.end);
+                    const baseTag=parsedNode.name.slice(3);
+                    const attrs=input.slice(parsedNode.start+1+parsedNode.name.length,parsedNode.openEnd-1).replace(/\/$/,'');
+                    const text=input.slice(parsedNode.openEnd,parsedNode.closeStart).trim();
+                    const originalIsPlural=baseTag.endsWith('s');
                     const existingId = parsedNode?.attributes.id || '';
                     const existingRefid = parsedNode?.attributes.refid || '';
-                    const missingId = !existingId;
-                    const brokenRefid = !!existingRefid && existingRefid.split(/\s+/).filter(Boolean).some(id => idCounts.get(id) !== 1);
-                    const ambiguousRefid = !!existingRefid && existingRefid.split(/\s+/).filter(Boolean).some(id => (idCounts.get(id) || 0) > 1);
-                    const missingRefid = !existingRefid || (targetMissingRefid && brokenRefid);
+                    const existingHref=parsedNode.attributes['xlink:href']||'';
+                    const isInterRef=baseTag.includes('inter-ref')||baseTag.includes('intra-ref');
+                    const localHref=isInterRef&&existingHref.startsWith('#');
+                    let hrefTarget=existingHref.slice(1);try{hrefTarget=decodeURIComponent(hrefTarget);}catch{}
+                    const hrefBroken=localHref&&idCounts.get(hrefTarget)!==1;
+                    const missingId = !existingId && baseTag!=='float-anchor';
+                    const brokenRefid = hrefBroken || !!existingRefid && existingRefid.split(/\s+/).filter(Boolean).some(id => idCounts.get(id) !== 1);
+                    const ambiguousRefid = (localHref&&(idCounts.get(hrefTarget)||0)>1) || !!existingRefid && existingRefid.split(/\s+/).filter(Boolean).some(id => (idCounts.get(id) || 0) > 1);
+                    const missingRefid = isInterRef ? localHref : !existingRefid || (targetMissingRefid && brokenRefid);
                     const isDuplicate = !!existingId && (idCounts.get(existingId) || 0) > 1;
 
-                    const isInterRef = baseTag.toLowerCase().includes('inter-ref');
                     const isDoiLink = isInterRef && text.includes('doi.org/');
 
-                    const shouldProcess = ((targetMissingRefid && missingRefid && !isInterRef) || (targetMissingId && missingId) || (targetDuplicateId && isDuplicate)) && !isDoiLink;
+                    const shouldProcess = ((targetMissingRefid && missingRefid && (!isInterRef || localHref)) || (targetMissingId && missingId) || (targetDuplicateId && isDuplicate)) && !isDoiLink;
                     if (!shouldProcess) continue;
 
                     let mappedIds: string[] = existingRefid ? existingRefid.split(/\s+/).filter(Boolean) : [];
                     let status: 'resolved' | 'failed' | 'ignored' = 'failed';
 
-                    if (missingRefid && !isInterRef) {
+                    let incomplete=false, ambiguous=ambiguousRefid;
+                    if (missingRefid && (!isInterRef || localHref)) {
                         const detectedIds = new Set<string>();
-                        const normWhole = normalizeCitation(text);
+                        const readableText=structure.textContent(parsedNode);
+                        const normWhole = normalizeCitation(readableText);
                         const wholeMatches = nameDateIndex.filter(b => b.normalized === normWhole);
                         
                         if (wholeMatches.length > 0) {
+                            if(new Set(wholeMatches.map(m=>m.id)).size!==1)ambiguous=true;
                             wholeMatches.forEach(m => detectedIds.add(m.id));
                         } else {
-                            const isNumeric = /^\s*\[?\s*\d+/.test(text) && !/\b(18|19|20)\d{2}\b/.test(text);
-                            const parts = isNumeric ? text.split(/[,;]|\band\b/i) : text.split(/;/);
+                            const isNumeric = /^\s*\[?\s*\d+(?:\s*(?:[,;–—-]|\band\b)\s*\d+)*\s*\]?\s*$/.test(readableText);
+                            const bibliographyContext=existingRefid.split(/\s+/).some(id=>/^bb\d{4}$/.test(id));
+                            const numericLabels=bibliographyContext?bibliographyNumbers:labelMap;
+                            const numericDuplicates=bibliographyContext?duplicateBibliographyNumbers:duplicateLabels;
+                            const parts = isNumeric ? readableText.split(/[,;]|\band\b/i) : readableText.split(/;/);
 
                             parts.forEach(part => {
                                 // Resolve entities like &amp; before processing
                                 const resolvedPart = part.replace(/&amp;/g, 'and').replace(/&/g, 'and');
                                 const trimmed = resolvedPart.replace(/[\[\]]/g, '').trim();
+                                let partMatched=false;
                                 if (!trimmed) return;
 
                                 if (/[\-–—]/.test(trimmed) && /^\d+[\-–—]\d+$/.test(trimmed)) {
                                     const rangeParts = trimmed.split(/[\-–—]/);
                                     const start = parseInt(rangeParts[0].replace(/\D/g, ''));
                                     const end = parseInt(rangeParts[1].replace(/\D/g, ''));
-                                    if (!isNaN(start) && !isNaN(end)) {
+                                    if (!isNaN(start) && !isNaN(end) && start<=end && end-start<10000) {
                                         for (let n = start; n <= end; n++) {
-                                            const id = labelMap.get(n.toString());
-                                            if (id) detectedIds.add(id);
+                                            const id = numericLabels.get(n.toString());
+                                            if (id&&!numericDuplicates.has(normalizeCitation(n.toString()))){detectedIds.add(id);partMatched=true;}else incomplete=true;
                                         }
-                                    }
+                                    } else incomplete=true;
                                 } 
                                 else if (/^\d+$/.test(trimmed)) {
-                                    const id = labelMap.get(trimmed);
-                                    if (id) detectedIds.add(id);
+                                    const id = numericLabels.get(normalizeCitation(trimmed));
+                                    if (id&&!numericDuplicates.has(normalizeCitation(trimmed))){detectedIds.add(id);partMatched=true;}else incomplete=true;
                                 }
                                 else {
                                     const normOrphan = normalizeCitation(trimmed);
@@ -479,41 +472,59 @@ const CitationLinker: React.FC = () => {
                                     // Check labelMap for direct matches (floats or specific labels)
                                     const directMatchId = labelMap.get(normOrphan);
                                     if (directMatchId) {
+                                        partMatched=true;
+                                        if(duplicateLabels.has(normOrphan))ambiguous=true;
                                         detectedIds.add(directMatchId);
                                     } else {
                                         const orphanFirstName = extractFirstName(trimmed);
                                         const orphanYears = extractYears(trimmed);
+                                        const authorWords=(value:string)=>normalizeCitation(value).replace(/\b(?:18|19|20)\d{2}[a-z]?\b/gi,'').match(/[\p{L}\p{M}]+/gu)?.filter(word=>word.length>1&&word!=='and')||[];
+                                        const citedAuthors=authorWords(trimmed);
 
                                         const bibMatchesWhole = nameDateIndex.filter(b => b.normalized === normOrphan);
                                         if (bibMatchesWhole.length > 0) {
+                                            partMatched=true;
+                                            if(new Set(bibMatchesWhole.map(m=>m.id)).size!==1)ambiguous=true;
                                             bibMatchesWhole.forEach(m => detectedIds.add(m.id));
                                         } else if (orphanFirstName && orphanYears.length > 0) {
                                             orphanYears.forEach(year => {
                                                 const matches = nameDateIndex.filter(b => 
                                                     b.firstName === orphanFirstName && 
-                                                    b.year === year
+                                                    b.year === year && citedAuthors.every(word=>authorWords(b.normalized).includes(word))
                                                 );
+                                                if(matches.length!==1)ambiguous=true;else partMatched=true;
                                                 matches.forEach(m => detectedIds.add(m.id));
                                             });
                                         }
                                     }
                                 }
+                                if(!partMatched)incomplete=true;
                             });
                         }
                         mappedIds = Array.from(detectedIds);
                     }
 
-                    // A broken existing link requires an unambiguous candidate, never a last-wins label.
-                    if (targetMissingRefid && brokenRefid && (ambiguousRefid || mappedIds.some(id => idCounts.get(id) !== 1) ||
-                        mappedIds.some(id => [...duplicateLabels].some(label => labelMap.get(label) === id)) ||
-                        (!/^\s*\[?\s*\d+/.test(text) && mappedIds.length > 1))) mappedIds = [];
+                    if(targetMissingRefid&&missingRefid&&(incomplete||ambiguous||mappedIds.some(id=>idCounts.get(id)!==1)||(localHref&&mappedIds.length!==1)))mappedIds=[];
+                    if(targetMissingRefid&&missingRefid&&!ambiguousRefid&&existingRefid){
+                        const replacements=existingRefid.split(/\s+/).filter(Boolean).map(oldId=>{
+                            if(idCounts.get(oldId)===1)return oldId;
+                            const changes=repairHistory.filter(change=>change.before===oldId&&change.before!=='(missing)'&&change.after&&change.after!=='(missing)');
+                            if(changes.length!==1)return '';
+                            const change=changes[0];
+                            return idCounts.get(change.after)===1&&structure.nodes.some(node=>node.name===change.tag&&node.attributes.id===change.after)?change.after:'';
+                        });
+                        if(replacements.length&&replacements.every(Boolean)){mappedIds=[...new Set(replacements)];incomplete=false;ambiguous=false;}
+                    }
+                    if(localHref)mappedIds=[]; // Installed VTOOL rejects bare fragments on URI link elements; do not emit an invalid repair.
                     const targetIsPlural = mappedIds.length > 1;
 
-                    if ((!isInterRef && missingRefid && mappedIds.length > 0) || !missingRefid || (isInterRef && !missingId)) {
+                    if (((!isInterRef || localHref) && missingRefid && mappedIds.length > 0) || !missingRefid || (isInterRef && !localHref)) {
                         status = 'resolved';
                     }
 
                     orphans.push({
+                        start:parsedNode.start,existingHref,linkAttribute:localHref?'xlink:href':'refid',
+                        reason:localHref?'Bare fragment URI requires link-type review. Installed VTOOL rejects it on this element; use a same-document ce:cross-ref with refid after verifying the intended target.':baseTag==='float-anchor'&&mappedIds.length?'Replacement supported by the ID Prefix Auditor change history; review before applying.':ambiguous?'Multiple possible targets; review required.':incomplete?'At least one citation part has no unique target; the whole link is preserved.':mappedIds.length?'Matching unique target(s) found.':'No unique matching target found.',
                         id: `orphan_${orphans.length}`,
                         originalTag: fullTag,
                         originalAttrs: attrs,
@@ -542,7 +553,7 @@ const CitationLinker: React.FC = () => {
                 setStep('matrix');
                 setToast({ msg: `Detected ${orphans.length} candidates and ${foundDoiLabels.length} DOI cleanups.`, type: "info" });
             } catch (e) {
-                setToast({ msg: "Analysis failure.", type: "error" });
+                setToast({ msg: e instanceof Error ? e.message : "Analysis failure.", type: "error" });
             } finally {
                 setIsLoading(false);
             }
@@ -550,81 +561,15 @@ const CitationLinker: React.FC = () => {
     };
 
     const executeLink = async () => {
+        const snapshot=analysisKeyRef.current,operation=++operationRef.current;
         setIsLoading(true);
         setProcessLabel('Surgically Injecting Attributes...');
 
         setTimeout(() => {
             try {
-                let cfCounter = cfStart;
-                // Robust detection of existing cf IDs in the entire document (id, refid, or text)
-                // We strictly match 1-4 digit IDs to avoid "self-infection" from long numbers in DOIs or other text
-                const allExistingCf = input.match(/\bcf(\d{1,4})\b/g);
-                if (allExistingCf) {
-                    const maxExisting = allExistingCf.reduce((m, c) => {
-                        const numMatch = c.match(/\d+/);
-                        const num = numMatch ? parseInt(numMatch[0]) : NaN;
-                        return isNaN(num) ? m : Math.max(m, num);
-                    }, 0);
-                    // Ensure we start at least 5 units above the max existing, rounded to next 5
-                    // But cap it at 9995 to keep it within 4 digits if possible
-                    const nextVal = (Math.floor(maxExisting / 5) + 1) * 5;
-                    cfCounter = Math.max(cfCounter, nextVal);
-                }
+                let result=applyCitationLinks(input,resolutions,{targetMissingId,targetDuplicateId,targetMissingRefid,cfStart});
 
-                let result = input;
-                const activeResolutions = resolutions; 
-
-                activeResolutions.forEach(res => {
-                    let targetId = res.existingId;
-                    if ((targetMissingId && res.missingId) || (targetDuplicateId && res.isDuplicate)) {
-                        targetId = `cf${cfCounter.toString().padStart(4, '0')}`;
-                        cfCounter += 5;
-                    }
-
-                    let targetRefid = res.existingRefid;
-                    if (targetMissingRefid && res.missingRefid && res.status === 'resolved') {
-                        targetRefid = res.mappedIds.join(' ');
-                    }
-
-                    // Clean original attributes of id and refid to avoid duplicates
-                    let cleanAttrs = res.originalAttrs
-                        .replace(/\bid\s*=\s*(["'])[\s\S]*?\1/g, '')
-                        .replace(/\brefid\s*=\s*(["'])[\s\S]*?\1/g, '')
-                        .replace(/\s+/g, ' ')
-                        .trim();
-
-                    const idAttr = targetId ? ` id="${targetId}"` : '';
-                    const refidAttr = targetRefid ? ` refid="${targetRefid}"` : '';
-                    const otherAttrs = cleanAttrs ? ` ${cleanAttrs}` : '';
-                    
-                    // Maintain original tag prefix and base name if possible, but adjust pluralization if needed
-                    const tagMatch = res.originalTag.match(/^<((?:ce:)?)(cross-refs?|intra-refs?|inter-refs?)/i);
-                    const prefix = tagMatch ? tagMatch[1] : 'ce:';
-                    const baseName = tagMatch ? tagMatch[2].replace(/s$/, '') : 'cross-ref';
-                    const isPluralTag = res.mappedIds.length > 1 || res.originalIsPlural || res.targetIsPlural;
-                    const tagName = isPluralTag ? `${prefix}${baseName}s` : `${prefix}${baseName}`;
-                    const contentToUse = (res.formattedText && res.mappedIds.length > 1) ? res.formattedText : res.textContent;
-                    
-                    const origTagNameMatch = res.originalTag.match(/^<([^\s>]+)/);
-                    const origTagName = origTagNameMatch ? origTagNameMatch[1] : '';
-
-                    // If nothing has changed for this tag (ID, refid, text content, and tag name are identical), do not touch it
-                    if (
-                        targetId === res.existingId &&
-                        targetRefid === res.existingRefid &&
-                        contentToUse === res.textContent &&
-                        origTagName.toLowerCase() === tagName.toLowerCase()
-                    ) {
-                        return;
-                    }
-
-                    const newTag = `<${tagName}${idAttr}${refidAttr}${otherAttrs}>${contentToUse}</${tagName}>`;
-                    result = result.replace(res.originalTag, newTag);
-                });
-
-                if (cleanDoi) {
-                    result = result.replace(/<sb:host>([\s\S]*?)<\/sb:host>\s*<sb:host>\s*<sb:e-host>\s*<ce:inter-ref\b[^>]*xlink:href="https?:\/\/doi\.org\/([^"]+)"[^>]*>[\s\S]*?<\/ce:inter-ref>\s*<\/sb:e-host>\s*<\/sb:host>/gi, '<sb:host>$1<ce:doi>$2</ce:doi></sb:host>');
-                }
+                if(cleanDoi)result=cleanupCitationDois(result).output;
 
                 setOutput(result);
                 generateDiff(input, result);
@@ -670,8 +615,9 @@ const CitationLinker: React.FC = () => {
                     });
                 }
 
-                // 4. Uncited Ref Cleaner
-                if (result.includes('<ce:bibliography')) {
+                // Withhold cleanup until citation targets have been reviewed.
+                const remainingLinks=analyzeIdLinks(result);
+                if (remainingLinks.uncitedCount && !remainingLinks.unlinkedCitations && !remainingLinks.brokenTargets && !remainingLinks.ambiguousTargets.length && !resolutions.some(row=>row.missingRefid&&row.status!=='resolved')) {
                     newSuggestions.push({
                         id: 'uncited-cleaner',
                         toolName: 'Uncited Ref Cleaner',
@@ -695,7 +641,7 @@ const CitationLinker: React.FC = () => {
                 }
 
                 // 6. Reference Structure Repair
-                if (result.includes('<ce:source-text') || !result.includes('<sb:reference')) {
+                if (result.includes('<ce:other-ref') || (result.includes('<ce:bib-reference') && !result.includes('<sb:reference'))) {
                     newSuggestions.push({
                         id: 'structural-architect',
                         toolName: 'Reference Structure Repair v3.2',
@@ -710,7 +656,8 @@ const CitationLinker: React.FC = () => {
                 setStep('result');
                 setToast({ msg: "Protocol successfully applied.", type: "success" });
             } catch (e) {
-                setToast({ msg: "Injection failed.", type: "error" });
+                setOutput(''); setDiffElements(null);
+                setToast({ msg: e instanceof Error ? e.message : "Injection failed.", type: "error" });
             } finally {
                 setIsLoading(false);
             }
@@ -719,7 +666,7 @@ const CitationLinker: React.FC = () => {
 
     useKeyboardShortcuts({
         onPrimary: step === 'input' ? runAnalysis : (step === 'matrix' ? executeLink : undefined),
-        onClear: () => { setInput(''); setResolutions([]); setStep('input'); }
+        onClear: () => { clearGenerated(); setInput(''); }
     }, [input, step, resolutions, targetMissingId, targetMissingRefid, cfStart]);
 
     return (
@@ -727,7 +674,7 @@ const CitationLinker: React.FC = () => {
             <div className="mb-10 text-center animate-fade-in relative">
                 <h1 className="text-3xl font-black text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase tracking-tighter">Citation Linker Pro</h1>
                 <p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic leading-relaxed">
-                    Automated resolution and ID enforcement for <code>ce:cross-ref</code> tags.
+                    Reviewed resolution and ID enforcement for <code>ce:cross-ref</code> and supported object links.
                 </p>
             </div>
 
@@ -735,7 +682,7 @@ const CitationLinker: React.FC = () => {
                 <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-200 flex flex-wrap items-center justify-center gap-12">
                     <Switch id="toggle-refid" label="Resolve Links" subLabel="Missing or unresolved refid" checked={targetMissingRefid} onChange={setTargetMissingRefid} color="indigo" tooltip="Scans citations with missing or unresolved refid targets and presents matching candidates for review." />
                     <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
-                    <Switch id="toggle-id" label="Enforce IDs" subLabel="Missing id (cfxxxx)" checked={targetMissingId} onChange={setTargetMissingId} color="blue" tooltip="Injects generated unique id='cfXXXX' attributes onto <ce:cross-ref> tags missing an element ID." />
+                    <Switch id="toggle-id" label="Enforce IDs" subLabel="Missing citation/link IDs" checked={targetMissingId} onChange={setTargetMissingId} color="blue" tooltip="Generates unique four-digit IDs with the configured prefix for each citation/link element." />
                     <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
                     <Switch id="toggle-dup" label="Fix Duplicates" subLabel="Re-assign duplicate IDs" checked={targetDuplicateId} onChange={setTargetDuplicateId} color="amber" tooltip="Detects duplicate id='...' attributes across <ce:cross-ref> elements and re-assigns unique IDs." />
                     <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
@@ -831,7 +778,7 @@ const CitationLinker: React.FC = () => {
                         <div className="px-10 py-6 border-b border-slate-200 bg-white flex justify-between items-center shadow-sm z-10">
                             <div className="flex flex-col">
                                 <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Resolution Matrix</h3>
-                                <p className="text-xs text-slate-500 font-bold mt-1 uppercase tracking-wider">{resolutions.length} nodes & {doiCount} DOI cleanups ready</p>
+                                <p className="text-xs text-slate-500 font-bold mt-1 uppercase tracking-wider">{resolutions.length} candidates · {resolutions.filter(row=>row.status==='resolved').length} ready · {doiCount} DOI cleanups</p>
                             </div>
                             <div className="flex gap-4">
                                 <button onClick={() => setStep('input')} className="px-6 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-slate-600 uppercase transition-all tracking-widest">Abort</button>
@@ -877,7 +824,7 @@ const CitationLinker: React.FC = () => {
                                         <h4 className="text-sm font-black text-indigo-900 uppercase tracking-widest mb-1">Citation Protocol: Linking & ID Enforcement</h4>
                                         <p className="text-xs text-indigo-700 font-medium leading-relaxed">
                                             The system will process <span className="font-black underline">{resolutions.filter(r => r.status === 'resolved').length}</span> citation nodes. 
-                                            This includes <span className="font-black">resolving missing refids</span> to match bibliography entries and <span className="font-black">injecting unique cfxxxx IDs</span> where required.
+                                            This includes <span className="font-black">resolving missing refids</span> to match bibliography entries and <span className="font-black">injecting unique IDs with the configured citation prefixes</span> where required.
                                         </p>
                                     </div>
                                     <div className="shrink-0">
@@ -906,17 +853,18 @@ const CitationLinker: React.FC = () => {
                                             <div className="flex gap-2">
                                                 {targetMissingId && res.missingId && <span className="text-[8px] font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 uppercase">Will Inject ID</span>}
                                                 {targetDuplicateId && res.isDuplicate && <span className="text-[8px] font-black text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100 uppercase">Duplicate ID: {res.existingId}</span>}
-                                                {targetMissingRefid && res.missingRefid && res.status === 'resolved' && !res.tagType.includes('inter-ref') && <span className="text-[8px] font-black text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 uppercase">Will Resolve Link</span>}
+                                                {targetMissingRefid && res.missingRefid && res.status === 'resolved' && (!res.tagType.includes('inter-ref') || res.linkAttribute === 'xlink:href') && <span className="text-[8px] font-black text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 uppercase">Will Resolve Link</span>}
                                             </div>
                                             <span className="text-[10px] font-mono text-slate-400 font-bold ml-auto">TXT: "{res.textContent}"</span>
                                         </div>
                                         <div className="text-[11px] font-mono text-slate-500 truncate bg-slate-50 p-2 rounded-lg border border-slate-100">
                                             {res.originalTag}
                                         </div>
+                                        <p className="text-xs mt-2 text-slate-600">{res.reason}</p>
                                     </div>
                                     <div className="shrink-0 flex flex-col items-end">
                                         <div className={`text-[9px] font-black uppercase tracking-widest mb-1 ${res.status === 'resolved' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                            {res.status === 'resolved' ? 'Protocol Ready' : 'Protocol failed: missing from list'}
+                                            {res.status === 'resolved' ? 'Protocol Ready' : 'Review required'}
                                         </div>
                                         {res.status === 'resolved' && res.mappedIds.length > 0 && (
                                             <div className="flex gap-1">
@@ -938,7 +886,7 @@ const CitationLinker: React.FC = () => {
                     <div className="flex flex-col h-full animate-fade-in overflow-hidden">
                         <div className="bg-slate-50/95 backdrop-blur-md px-10 py-5 border-b border-slate-200 flex justify-between items-center shrink-0 sticky top-0 z-30 shadow-xs">
                             <h3 className="font-black text-slate-900 text-xs uppercase tracking-widest flex items-center gap-2">
-                                Validated Protocol Stream
+                                Corrected Protocol Stream
                             </h3>
                             <div className="flex items-center gap-6">
                                 {totalChanges > 0 && (

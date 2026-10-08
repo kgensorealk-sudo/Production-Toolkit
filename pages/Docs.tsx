@@ -71,11 +71,11 @@ const Docs: React.FC = () => {
                             <h2 className="text-3xl font-extrabold text-slate-900 mb-6 uppercase tracking-tight">Citation Linker Pro</h2>
                             <div className="prose prose-slate max-w-none">
                                 <p className="text-slate-600 mb-4">
-                                    Surgically attaches <code>refid</code> and <code>id</code> attributes to orphaned <code>ce:cross-ref</code> and <code>ce:cross-refs</code> tags. 
+                                    Proposes unique targets for existing citation tags, including bibliography, figure, table, footnote and section links. Review each proposal before applying it. ID-change evidence from ID Prefix Auditor can resolve empty float anchors; editing the imported XML disables that evidence. Optional ID enforcement uses configured prefixes and four-digit numbering. URI links remain URI links; bare fragment URIs require link-type review.
                                 </p>
                                 <div className="bg-indigo-50 border-l-4 border-indigo-400 p-4 mb-6">
                                     <p className="text-sm text-indigo-800 font-medium">
-                                        <strong>Intelligent Parsing:</strong> The tool handles complex ranges within plural tags (e.g., [1–5, 8]) by automatically expanding them into a space-separated ID list.
+                                        <strong>Intelligent Parsing:</strong> Citation groups and ranges (e.g., [1–5, 8]) are linked only when every part has a unique target. Duplicate labels, ambiguous author-year matches, conflicting author names and incomplete groups remain unresolved for review. Citation text and unrelated attributes are preserved.
                                     </p>
                                 </div>
                             </div>

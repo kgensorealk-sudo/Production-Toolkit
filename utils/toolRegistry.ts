@@ -35,13 +35,13 @@ export const TOOL_REGISTRY: ToolInfo[] = [
         name: 'Citation Linker Pro',
         route: '/citationLinker',
         category: 'Citations & References',
-        shortDesc: 'Automatically scans orphan or unlinked in-text citations and connects them to bibliography IDs.',
+        shortDesc: 'Reviews missing or unresolved targets in existing citation tags and proposes unique bibliography or object links.',
         scenarios: [
-            'In-text citations exist as plain text (e.g. "(Smith et al., 2020)" or "[14-16]") without <ce:cross-ref> tags.',
+            'Existing citation tags contain author-year labels or numeric groups with missing targets.',
             'Cross-reference tags are missing refid attributes or have invalid broken links.',
             'Need to automatically map author-year or numeric citations to their target <ce:bib-reference id="...">.'
         ],
-        howToUse: 'Paste your manuscript body and reference list, click "Scan & Link Citations", review detected matches, and export the linked XML with generated <ce:cross-ref> tags.',
+        howToUse: 'Paste the full XML, click "Scan Source for Protocols", review unique target proposals and unresolved cases, then apply protocols and inspect the diff. Use the ID Prefix Auditor handoff to retain ID-change evidence.',
         keywords: ['link citations', 'orphan citations', 'cross-ref', 'unlinked', 'author-year linking', 'missing refid']
     },
     {
