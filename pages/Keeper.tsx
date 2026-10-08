@@ -4,6 +4,7 @@ import KeeperSandbox from '../components/KeeperSandbox';
 import { KeeperAvatar } from '../components/KeeperAvatar';
 
 const tasks = [
+    { title: 'Tag a reference', description: 'Draft reference XML from the citation you provide, without inventing data or IDs.', icon: BookOpen, prompt: 'Tag this reference as structured Journal CE/SB XML within the Keeper sandbox. Preserve the original in plain-text ce:source-text and do not generate IDs: ' },
     { title: 'Draft a JM query', description: 'Prepare an editorial query from your correction notes.', icon: FileText, prompt: 'Query to JM: ' },
     { title: 'Explore XML guidance', description: 'Ask about tags, references, and editorial conventions.', icon: BookOpen, prompt: 'Explain the XML structure for ' },
     { title: 'Review a snippet', description: 'Work through XML or editorial text pasted into this sandbox.', icon: Compass, prompt: 'Review this snippet within the Keeper sandbox: ' },
