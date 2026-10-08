@@ -536,15 +536,15 @@ const IdAuditor: React.FC = () => {
                                 filteredResults.slice(auditPage * 50, (auditPage + 1) * 50).map((res, idx) => (
                                     <div 
                                         key={idx} 
-                                        className={`p-6 bg-white border-2 rounded-[2rem] flex items-center gap-8 transition-all hover:shadow-lg ${res.status === 'invalid' ? 'border-rose-200 bg-rose-50/20 shadow-sm' : 'border-slate-100'}`}
+                                        className={`p-6 bg-white border-2 rounded-[2rem] flex items-center gap-8 transition-all hover:shadow-lg ${res.needsPrefix && !res.isDuplicate ? 'border-sky-200 bg-sky-50/30' : res.status === 'invalid' ? 'border-rose-200 bg-rose-50/20 shadow-sm' : 'border-slate-100'}`}
                                     >
-                                        <div className={`w-3 h-3 rounded-full shrink-0 ${res.status === 'invalid' ? 'bg-rose-500 animate-pulse' : 'bg-emerald-500'}`}></div>
+                                        <div className={`w-3 h-3 rounded-full shrink-0 ${res.needsPrefix && !res.isDuplicate ? 'bg-sky-500' : res.status === 'invalid' ? 'bg-rose-500 animate-pulse' : 'bg-emerald-500'}`}></div>
                                         <div className="min-w-0 flex-grow">
                                             <div className="flex flex-wrap items-center gap-2 mb-2">
                                                 <span className={`text-[10px] font-mono font-black px-2 py-1 rounded-lg border uppercase tracking-widest ${res.status === 'invalid' && !res.id.toLowerCase().startsWith(res.expectedPrefix) ? 'bg-rose-100 text-rose-700 border-rose-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
                                                     {res.originalId}
                                                 </span>
-                                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 py-1 bg-slate-50 rounded border border-slate-100">
+                                                <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded border ${res.needsPrefix ? 'text-sky-700 bg-sky-50 border-sky-200' : 'text-slate-400 bg-slate-50 border-slate-100'}`}>
                                                     Tag: {res.tagName} · {res.prefixSource === 'editor' ? 'Editor rule' : res.prefixSource === 'workflow' ? 'Workflow rule' : res.prefixSource === 'observed' ? 'Observed convention' : res.prefixSource === 'custom' ? 'Custom prefix' : 'Unconfigured'}
                                                 </span>
                                                 {res.isDuplicate && (
@@ -559,14 +559,14 @@ const IdAuditor: React.FC = () => {
                                                 )}
                                             </div>
                                             <p className="text-[11px] text-slate-500 italic truncate pr-8 leading-relaxed font-serif">{res.preview}</p>
-                                            {res.reason && <p className="text-xs text-rose-600 mt-2">{res.reason}</p>}
+                                            {res.reason && <p className={`text-xs mt-2 ${res.needsPrefix && !res.isDuplicate ? 'text-sky-700' : 'text-rose-600'}`}>{res.reason}</p>}
                                             {res.needsPrefix && <label className="block text-xs mt-2">Prefix for {res.tagName}: <input aria-label={`Prefix for ${res.tagName}`} className="border rounded px-2 py-1" value={prefixOverrides[res.tagName] || ''} onChange={e => setPrefixOverrides(previous => ({...previous, [res.tagName]: e.target.value}))} placeholder="Lowercase letters" /></label>}
                                         </div>
                                         <div className="shrink-0 flex flex-col items-end">
-                                            <div className={`text-[9px] font-black uppercase tracking-widest mb-1 ${res.status === 'invalid' ? 'text-rose-600' : 'text-emerald-600'}`}>
-                                                {res.status === 'invalid' ? 'Correction Required' : 'Protocol Compliant'}
+                                            <div className={`text-[9px] font-black uppercase tracking-widest mb-1 ${res.needsPrefix && !res.isDuplicate ? 'text-sky-700' : res.status === 'invalid' ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                                {res.needsPrefix && !res.isDuplicate ? 'Skipped — prefix not configured' : res.status === 'invalid' ? 'Correction Required' : 'Protocol Compliant'}
                                             </div>
-                                            {res.status === 'invalid' && (
+                                            {res.status === 'invalid' && !res.needsPrefix && (
                                                 <div className="text-[10px] font-bold text-slate-400 text-right">
                                                     Expected: <span className="text-indigo-600 font-black">{res.expectedPrefix}####</span>
                                                 </div>
