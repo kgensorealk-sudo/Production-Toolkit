@@ -1,17 +1,15 @@
 import React, { useState } from 'react';
 import { ArrowRight, ArrowUpRight, LayoutDashboard, FlaskConical, Compass, FileText, BookOpen } from 'lucide-react';
-import { useNavigate } from 'react-router';
-import AIAssistantBubble from '../components/AIAssistantBubble';
+import KeeperSandbox from '../components/KeeperSandbox';
 import { KeeperAvatar } from '../components/KeeperAvatar';
 
 const tasks = [
     { title: 'Draft a JM query', description: 'Prepare an editorial query from your correction notes.', icon: FileText, prompt: 'Query to JM: ' },
     { title: 'Explore XML guidance', description: 'Ask about tags, references, and editorial conventions.', icon: BookOpen, prompt: 'Explain the XML structure for ' },
-    { title: 'Find the right tool', description: 'Describe your task and explore a suitable workflow.', icon: Compass, prompt: 'Which Production Toolkit tool should I use to ' },
+    { title: 'Review a snippet', description: 'Work through XML or editorial text pasted into this sandbox.', icon: Compass, prompt: 'Review this snippet within the Keeper sandbox: ' },
 ];
 
 export default function Keeper() {
-    const navigate = useNavigate();
     const [view, setView] = useState<'dashboard' | 'sandbox'>('dashboard');
     const [request, setRequest] = useState<{ text: string; id: number }>();
     return <div className="max-w-7xl mx-auto w-full px-4 py-8 flex flex-col lg:flex-row gap-8">
@@ -19,9 +17,8 @@ export default function Keeper() {
             <div className="flex items-center gap-3 mb-8"><KeeperAvatar size="lg" showBadge={false} /><div><h1 className="text-xl font-bold text-slate-900">Keeper</h1><p className="text-xs text-slate-500">Editorial workspace</p></div></div>
             <nav className="flex lg:flex-col gap-2">
                 {(['dashboard', 'sandbox'] as const).map(item => <button key={item} onClick={() => setView(item)} aria-current={view === item ? 'page' : undefined} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-left ${view === item ? 'bg-indigo-100 text-indigo-800' : 'text-slate-600 hover:bg-white'}`}>{item === 'dashboard' ? <LayoutDashboard size={18} /> : <FlaskConical size={18} />}{item === 'dashboard' ? 'Overview' : 'Sandbox'}</button>)}
-                <button onClick={() => navigate('/dashboard')} className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-slate-600 hover:bg-white text-left"><Compass size={18} />Tool directory<ArrowUpRight size={14} /></button>
             </nav>
-            <p className="hidden lg:block mt-8 border-t border-slate-200 pt-5 text-xs leading-relaxed text-slate-500">A space for editorial questions, draft queries, and XML guidance.</p>
+            <p className="hidden lg:block mt-8 border-t border-slate-200 pt-5 text-xs leading-relaxed text-slate-500">Keeper works only with content you provide here. Other tools and their inputs remain outside this sandbox.</p>
         </aside>
         <main className="flex-1 min-w-0">
             {view === 'dashboard' && <>
@@ -37,11 +34,11 @@ export default function Keeper() {
                         <task.icon size={22} className="text-indigo-600 mb-5" /><h3 className="font-semibold text-slate-900 flex items-center justify-between gap-2">{task.title}<ArrowUpRight size={16} className="text-slate-400" /></h3><p className="text-sm text-slate-500 leading-relaxed mt-2">{task.description}</p>
                     </button>)}</div>
                 </section>
-                <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4"><div><h2 className="font-semibold text-slate-900">Ready to process your manuscript?</h2><p className="text-sm text-slate-500 mt-1">Open a dedicated XML tool for corrections and validation workflows.</p></div><button onClick={() => navigate('/dashboard')} className="inline-flex items-center gap-2 text-indigo-700 text-sm font-semibold shrink-0">Browse tools<ArrowRight size={16} /></button></section>
+                <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6"><h2 className="font-semibold text-slate-900">Your sandbox, your content</h2><p className="text-sm text-slate-500 mt-1">Drafts and suggestions stay here. Keeper cannot open, read, or change another tool's workspace.</p></section>
             </>}
             <div hidden={view !== 'sandbox'}>
                 <div className="mb-5"><h2 className="text-2xl font-bold text-slate-900">Editorial sandbox</h2><p className="text-sm text-slate-500 mt-1">Work through your questions and drafts with Keeper.</p></div>
-                <AIAssistantBubble promptRequest={request} />
+                <KeeperSandbox promptRequest={request} />
             </div>
         </main>
     </div>;
