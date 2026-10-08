@@ -25,7 +25,7 @@ state={};api=engine(changed,state);api.runAudit();api.executeFix();
 const stripIds=xml=>xml.replace(/\s+id="[^"]*"/g,'');
 assert.equal(stripIds(state.output),stripIds(changed));assert.ok(state.output.includes('refid="bad wrong"'));assert.ok(state.output.includes('xlink:href="#bad"'));
 assert.ok(state.output.includes('id="bb3000"'));assert.deepEqual(state.diff,[changed,state.output]);
-state={};api=engine('<ce:para>Plain text</ce:para>',state);api.runAudit();api.executeFix();assert.equal(state.output,'<ce:para>Plain text</ce:para>');
+state={};api=engine('<ce:para>Plain text</ce:para>',state);api.runAudit();api.executeFix();assert.equal(state.output,'<ce:para id="p3000">Plain text</ce:para>');
 state={};api=engine('<ce:para id="p0005">First</ce:para><ce:para id="p0005">Second</ce:para>',state);api.runAudit();assert.ok(state.results.every(r=>r.isDuplicate));api.executeFix();assert.equal(new Set([...state.output.matchAll(/id="([^"]+)"/g)].map(m=>m[1])).size,2);
 state={};api=engine('<ce:bib-reference id="bb0005"><ce:label>[1]</ce:label><ce:other-ref id="or0005">text</ce:other-ref><ce:source-text id="se0005">text</ce:source-text></ce:bib-reference><ce:label>[3]</ce:label><opt_DEL>old</opt_DEL><ce:cross-ref>[1]</ce:cross-ref><ce:table/><ce:para>text</ce:para>',state);api.runAudit();
 assert.deepEqual(state.suggestions.map(s=>s.id),['xml-renumber','other-ref','tag-cleaner','citation-linker','view-sync','structural-architect']);
@@ -35,7 +35,7 @@ for(const rule of idExports.ID_RULES){
  const prefix=rule.prefix||'custom'; const overrides={[rule.tag]:prefix};
  const absent=`<${rule.tag}>Text</${rule.tag}>`;
  const repaired=idExports.repairElementIds(absent,overrides);
- assert.equal(repaired.changed,rule.required?1:0,rule.tag);
+ assert.equal(repaired.changed,1,rule.tag);
  const valid=`<${rule.tag} id='${prefix}0005'>Text</${rule.tag}>`;
  assert.equal(idExports.repairElementIds(valid,overrides).output,valid);
  const invalid=`<${rule.tag} id = 'wrong'>Text</${rule.tag}>`;
@@ -55,7 +55,7 @@ const unconfiguredDuplicate='<custom id="x0005"/><custom id="x0005"/><ce:para id
 assert.equal(idExports.repairElementIds(unconfiguredDuplicate).output,unconfiguredDuplicate.replace('<ce:para id="bad"/>','<ce:para id="p3000"/>'));
 assert.throws(()=>idExports.repairElementIds(unconfiguredDuplicate+'<ce:cross-ref refid="x0005">1</ce:cross-ref>'),/Linked duplicate/);
 assert.equal(idExports.repairElementIds('<custom id="x0005"/>',{custom:'x'}).changed,0);
-assert.equal(idExports.repairElementIds('<!-- <ce:para id="bad"/> --><ce:para><![CDATA[<ce:para id="bad"/>]]></ce:para>').changed,0);
+assert.equal(idExports.repairElementIds('<!-- <ce:para id="bad"/> --><ce:para><![CDATA[<ce:para id="bad"/>]]></ce:para>').changed,1);
 assert.throws(()=>idExports.repairElementIds('<ce:para>'),/XML|close|Unclosed/i);
 assert.throws(()=>idExports.repairElementIds(Array.from({length:1999},(_,i)=>`<ce:para id="p${String((i+1)*5).padStart(4,'0')}"/>`).join('')+'<ce:para id="bad"/>'),/No available/);
 console.log(`${idExports.ID_RULES.length} registered rule cases and generation safeguards passed.`);
@@ -79,7 +79,7 @@ assert.equal(mixedFixed,mixed.replace('id="ir0005"','id="qr3005"').replace('id="
 assert.equal(idExports.repairElementIds(mixedFixed).changed,0);
 assert.equal(idExports.auditElementIds('<ce:inter-ref type="&#99;ode" id="qr0005"/>')[0].status,'valid');
 assert.equal(idExports.auditElementIds('<ce:inter-ref type="Code" id="ir0005"/>')[0].status,'valid');
-assert.equal(idExports.repairElementIds('<ce:inter-ref type="code"/>').changed,0);
+assert.equal(idExports.repairElementIds('<ce:inter-ref type="code"/>').changed,1);
 assert.equal(idExports.repairElementIds('<ce:alt-text id="al0005">Alt</ce:alt-text>').changed,0);
 assert.equal(idExports.auditElementIds('<ce:alt-text id="at0005"/>')[0].expectedPrefix,'al');
 assert.equal(idExports.auditElementIds('<ce:title id="ti0005"/>')[0].prefixSource,'observed');
@@ -142,3 +142,14 @@ assert.equal(state.loading,true);timers.shift()();assert.equal(state.results,und
 api.executeFix();api.invalidateGeneratedResult();api.runAudit();timers.shift()();assert.equal(state.output,'');assert.equal(state.qaReport,null);assert.equal(state.loading,true);timers.shift()();assert.equal(state.qaReport.stage,'audit');assert.equal(state.qaReport.changes.length,0);
 state.output='old output';state.qaReport={issues:['old']};state.suggestions=[{id:'old'}];api.invalidateGeneratedResult();assert.equal(state.output,'');assert.equal(state.qaReport,null);assert.deepEqual(state.suggestions,[]);
 console.log('Repeated input, superseded work, cancellation, and stale-result checks passed.');
+
+// Configured optional IDs are generated without changing content or citation targets.
+const captionInput='<ce:caption><ce:simple-para>Caption text</ce:simple-para></ce:caption><ce:dochead>Heading</ce:dochead><ce:cross-ref id="cf0005" refid="ca3000">Caption</ce:cross-ref>';
+const captionOutput=idExports.repairElementIds(captionInput).output;
+assert.ok(captionOutput.includes('<ce:caption id="ca3005">'));
+assert.ok(captionOutput.includes('<ce:dochead>Heading</ce:dochead>'));
+assert.ok(captionOutput.includes('refid="ca3000"'));
+assert.ok(idExports.auditElementIds(captionInput).some(row=>row.tagName==='ce:dochead'&&row.needsPrefix));
+assert.ok(idExports.createIdQaReport(captionInput,captionOutput).changes.some(change=>change.tag==='ce:caption'&&change.reason==='Generated a missing ID for a configured prefix.'));
+assert.equal(idExports.repairElementIds(captionOutput).changed,0);
+console.log('Configured missing caption IDs and unconfigured QA cases passed.');

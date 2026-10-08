@@ -60,14 +60,14 @@ export function auditElementIds(xml: string, overrides: PrefixOverrides = {}): I
     const targets = targetIds(structure.nodes);
     return structure.nodes.flatMap(node=>{
         const rule=registry.get(node.name), originalId=node.attributes.id||'';
-        // Optional absent IDs are not defects and do not cause generation.
-        if (!node.attributeRanges.id && !rule?.required) return [];
         const expectedPrefix=resolvePrefix(node.name, node.attributes, overrides);
+        // Configured tags receive missing IDs, including DTD-optional IDs. Known unconfigured tags remain visible for QA.
+        if (!node.attributeRanges.id && !rule && !expectedPrefix) return [];
         const needsPrefix=!/^[a-z]+$/.test(expectedPrefix);
         const isDuplicate=!!originalId && (counts.get(originalId)||0)>1;
         const needsReview = isDuplicate && targets.has(originalId);
         const isLengthViolation=!!originalId && !!expectedPrefix && originalId.startsWith(expectedPrefix) && !/^\d{4}$/.test(originalId.slice(expectedPrefix.length));
-        const reason=needsReview?'Linked duplicate ID: review the target in the original XML before correction.':needsPrefix?'Skipped during generation: no configured prefix. Other elements can still be corrected; set a prefix to include this element.':!originalId?(rule?.required?'Required ID is missing.':'ID is empty.'):isDuplicate?'Duplicate ID in the document.':!validId(originalId,expectedPrefix)?`Expected ${expectedPrefix} + four digits, 0005–9995 in steps of five.`:'';
+        const reason=needsReview?'Linked duplicate ID: review the target in the original XML before correction.':needsPrefix?'Skipped during generation: no configured prefix. Other elements can still be corrected; set a prefix to include this element.':!originalId?(node.attributeRanges.id?'ID is empty.':rule?.required?'Required ID is missing.':'Configured ID is missing.'):isDuplicate?'Duplicate ID in the document.':!validId(originalId,expectedPrefix)?`Expected ${expectedPrefix} + four digits, 0005–9995 in steps of five.`:'';
         return [{id:originalId||'[MISSING ID]',originalId,tagName:node.name,expectedPrefix,status:reason?'invalid' as const:'valid' as const,
             isLengthViolation,isDuplicate,prefixSource:Object.prototype.hasOwnProperty.call(overrides,node.name)?'custom':rule?.source||'unconfigured',needsReview,needsPrefix,reason,preview:structure.metadataXml.slice(node.openEnd,node.closeStart).replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,100),fullTag:xml.slice(node.start,node.openEnd)}];
     });
@@ -90,8 +90,7 @@ export function repairElementIds(xml: string, overrides: PrefixOverrides = {}): 
     };
     const edits: Array<{start:number;end:number;text:string}>=[];
     for(const node of structure.nodes) {
-        const rule=registry.get(node.name), oldId=node.attributes.id||'';
-        if(!node.attributeRanges.id&&!rule?.required)continue;
+        const oldId=node.attributes.id||'';
         const prefix=resolvePrefix(node.name, node.attributes, overrides);
         if(!/^[a-z]+$/.test(prefix))continue;
         if(validId(oldId,prefix)&&!retained.has(oldId)){retained.add(oldId);continue;}
@@ -141,7 +140,7 @@ export function createIdQaReport(original: string, output?: string): IdQaReport 
     const changes: IdQaReport['changes'] = [];
     if (output !== undefined) current.nodes.forEach((node,index) => {
         const old = before.nodes[index];
-        if (old && old.attributes.id !== node.attributes.id) changes.push({tag:node.name,line:line(node.start),before:old.attributes.id || '(missing)',after:node.attributes.id || '(missing)',reason:!old.attributeRanges.id?'Generated a required missing ID.':!old.attributes.id?'Corrected an empty ID attribute.':owners(before.nodes,old.attributes.id).length>1?'Repaired an unreferenced duplicate ID.':'Corrected the ID prefix or numbering.'});
+        if (old && old.attributes.id !== node.attributes.id) changes.push({tag:node.name,line:line(node.start),before:old.attributes.id || '(missing)',after:node.attributes.id || '(missing)',reason:!old.attributeRanges.id?(registry.get(node.name)?.required?'Generated a required missing ID.':'Generated a missing ID for a configured prefix.'):!old.attributes.id?'Corrected an empty ID attribute.':owners(before.nodes,old.attributes.id).length>1?'Repaired an unreferenced duplicate ID.':'Corrected the ID prefix or numbering.'});
     });
     const issues: IdQaIssue[] = [];
     for (const node of current.nodes) {

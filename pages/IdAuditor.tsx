@@ -312,7 +312,7 @@ const IdAuditor: React.FC = () => {
 
                 if (results.length === 0) {
                     setAuditResults([]);
-                    setToast({ msg: "No existing IDs or required missing IDs to audit.", type: "info" });
+                    setToast({ msg: "No configured elements or existing IDs to audit.", type: "info" });
                     setIsLoading(false);
                 } else {
                     results.sort((a, b) => {
@@ -394,32 +394,6 @@ const IdAuditor: React.FC = () => {
                 </p>
             </div>
 
-            {qaReport && (step === 'audit' || step === 'result') && (
-                <section id="id-qa-report" className="mb-6 p-6 bg-white border border-slate-200 rounded-2xl">
-                    <button aria-expanded={qaExpanded} onClick={() => setQaExpanded(value => !value)} className="font-bold text-lg text-slate-900">QA Report — {qaReport.changes.length} ID changes; {qaReport.issues.length} link issues</button>
-                    {qaExpanded && <div className="mt-4 space-y-4">
-                        <p className="text-sm text-slate-600">Review what happened and the affected targets before using another tool. Citation and link attributes remain unchanged.</p>
-                        {auditResults.some(row => row.needsPrefix) && <p role="status" className="text-sm text-amber-900 bg-amber-50 p-3 rounded-lg">{auditResults.filter(row => row.needsPrefix).length} element(s) have no configured prefix: {[...new Set(auditResults.filter(row => row.needsPrefix).map(row => row.tagName))].join(', ')}. Their IDs are preserved and required missing IDs remain missing. Generation continues for configured tags. Set an explicit prefix and re-audit to include these elements.</p>}
-                        {qaReport.changes.length > 0 && <div className="overflow-auto"><table className="w-full text-sm text-left"><thead><tr><th>Element / line</th><th>Before ID</th><th>After ID</th><th>Why changed</th></tr></thead><tbody>{qaReport.changes.slice(qaChangesPage * 50, (qaChangesPage + 1) * 50).map((change,index) => <tr key={index} className="border-t"><td className="p-2">{change.tag} / {change.line}</td><td className="p-2 font-mono">{change.before}</td><td className="p-2 font-mono">{change.after}</td><td className="p-2">{change.reason}</td></tr>)}</tbody></table>
-                            {qaReport.changes.length > 50 && <div className="flex gap-3 items-center p-2"><button disabled={qaChangesPage===0} onClick={()=>setQaChangesPage(page=>page-1)}>Previous ID changes</button><span>Page {qaChangesPage+1} of {Math.ceil(qaReport.changes.length/50)}</span><button disabled={(qaChangesPage+1)*50>=qaReport.changes.length} onClick={()=>setQaChangesPage(page=>page+1)}>Next ID changes</button></div>}
-                        </div>}
-                        {qaReport.issues.length === 0 ? <p className="text-sm text-emerald-700">No unresolved or ambiguous citation/local-link targets were found. Citation Linker Pro is not recommended by this check.</p> : <>
-                            <h3 className="font-semibold">Why link review is recommended</h3>
-                            {qaReport.issues.slice(qaIssuesPage * 50, (qaIssuesPage + 1) * 50).map((issue,index) => <article key={index} className="p-4 border border-amber-200 bg-amber-50 rounded-xl text-sm space-y-2">
-                                <p className="font-semibold">{issue.tag} · ID {issue.elementId} · line {issue.line} · target {issue.target}</p>
-                                <p>Context: {issue.text || '(empty element)'}</p>
-                                <p>Before: {issue.before} After: {issue.after}</p>
-                                <p>{issue.reason}</p>
-                                {issue.owners.map((owner,ownerIndex) => <p key={ownerIndex} className="font-mono break-words">Target evidence: {owner}</p>)}
-                                <p className="font-semibold">Recommended action: {issue.action}</p>
-                            </article>)}
-                            {qaReport.issues.length > 50 && <div className="flex gap-3 items-center"><button disabled={qaIssuesPage===0} onClick={()=>setQaIssuesPage(page=>page-1)}>Previous link issues</button><span>Page {qaIssuesPage+1} of {Math.ceil(qaReport.issues.length/50)}</span><button disabled={(qaIssuesPage+1)*50>=qaReport.issues.length} onClick={()=>setQaIssuesPage(page=>page+1)}>Next link issues</button></div>}
-                            {!qaReport.issues.some(issue => issue.kind === 'ambiguous-target') && <button onClick={() => navigate('/citationLinker', {state:{transferredXml:step === 'result' ? output : input,sourceTool:'ID Prefix Auditor'}})} className="px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold">Open Citation Linker Pro with this XML</button>}
-                        </>}
-                    </div>}
-                </section>
-            )}
-
             {/* Architectural Recommendations Section matching Citation Linker Pro */}
             {suggestions.length > 0 && (step === 'audit' || step === 'result') && (
                 <div className="mb-8 animate-in fade-in slide-in-from-top-4 duration-700">
@@ -488,7 +462,7 @@ const IdAuditor: React.FC = () => {
                                 value={input} 
                                 onChange={e => setInput(e.target.value)} 
                                 className="flex-grow p-12 font-mono text-[13px] border-0 focus:ring-0 resize-none bg-transparent leading-relaxed placeholder:text-slate-400 z-10" 
-                                placeholder="Paste XML to audit required missing IDs, duplicate IDs, prefixes and four-digit numbering. Only ID attributes will be changed."
+                                placeholder="Paste XML to generate missing IDs for configured tags and audit existing IDs, duplicates, prefixes and four-digit numbering. Only ID attributes will be changed."
                                 spellCheck={false}
                             />
                         </div>
@@ -650,6 +624,41 @@ const IdAuditor: React.FC = () => {
                     </div>
                 )}
             </div>
+
+            {qaReport && (step === 'audit' || step === 'result') && (
+                <section id="id-qa-report" className="mt-6 mb-6 p-6 bg-white border border-slate-200 rounded-2xl">
+                    <button aria-expanded={qaExpanded} onClick={() => setQaExpanded(value => !value)} className="font-bold text-lg text-slate-900">QA Report — {qaReport.changes.length} ID changes; {qaReport.issues.length} link issues</button>
+                    {qaExpanded && <div className="mt-4 space-y-4">
+                        <p className="text-sm text-slate-600">Review what happened and the affected targets before using another tool. Citation and link attributes remain unchanged.</p>
+                        {auditResults.some(row => row.needsPrefix) && <div className="bg-sky-50 border border-sky-200 p-4 rounded-lg text-sky-900 space-y-3">
+                            <h3 className="font-semibold">Unconfigured prefixes — skipped elements</h3>
+                            <p className="text-sm">These tags have no configured prefix. Existing IDs are preserved and missing IDs remain missing. IDs are generated for configured tags. Set a prefix and re-audit to include the skipped elements.</p>
+                            <div className="overflow-auto"><table className="w-full text-sm text-left"><thead><tr><th className="p-2">Tag</th><th className="p-2">Prefix</th><th className="p-2">Elements</th><th className="p-2">IDs left unchanged</th></tr></thead><tbody>
+                                {[...new Set(auditResults.filter(row => row.needsPrefix).map(row => row.tagName))].map(tag => {
+                                    const skipped = auditResults.filter(row => row.needsPrefix && row.tagName === tag);
+                                    return <tr key={tag} className="border-t border-sky-200"><td className="p-2 font-mono">{tag}</td><td className="p-2">Not configured</td><td className="p-2">{skipped.length}</td><td className="p-2 font-mono break-words">{[...new Set(skipped.map(row => row.originalId || '(missing)'))].join(', ')}</td></tr>;
+                                })}
+                            </tbody></table></div>
+                        </div>}
+                        {qaReport.changes.length > 0 && <div className="overflow-auto"><table className="w-full text-sm text-left"><thead><tr><th>Element / line</th><th>Before ID</th><th>After ID</th><th>Why changed</th></tr></thead><tbody>{qaReport.changes.slice(qaChangesPage * 50, (qaChangesPage + 1) * 50).map((change,index) => <tr key={index} className="border-t"><td className="p-2">{change.tag} / {change.line}</td><td className="p-2 font-mono">{change.before}</td><td className="p-2 font-mono">{change.after}</td><td className="p-2">{change.reason}</td></tr>)}</tbody></table>
+                            {qaReport.changes.length > 50 && <div className="flex gap-3 items-center p-2"><button disabled={qaChangesPage===0} onClick={()=>setQaChangesPage(page=>page-1)}>Previous ID changes</button><span>Page {qaChangesPage+1} of {Math.ceil(qaReport.changes.length/50)}</span><button disabled={(qaChangesPage+1)*50>=qaReport.changes.length} onClick={()=>setQaChangesPage(page=>page+1)}>Next ID changes</button></div>}
+                        </div>}
+                        {qaReport.issues.length === 0 ? <p className="text-sm text-emerald-700">No unresolved or ambiguous citation/local-link targets were found. Citation Linker Pro is not recommended by this check.</p> : <>
+                            <h3 className="font-semibold">Why link review is recommended</h3>
+                            {qaReport.issues.slice(qaIssuesPage * 50, (qaIssuesPage + 1) * 50).map((issue,index) => <article key={index} className="p-4 border border-amber-200 bg-amber-50 rounded-xl text-sm space-y-2">
+                                <p className="font-semibold">{issue.tag} · ID {issue.elementId} · line {issue.line} · target {issue.target}</p>
+                                <p>Context: {issue.text || '(empty element)'}</p>
+                                <p>Before: {issue.before} After: {issue.after}</p>
+                                <p>{issue.reason}</p>
+                                {issue.owners.map((owner,ownerIndex) => <p key={ownerIndex} className="font-mono break-words">Target evidence: {owner}</p>)}
+                                <p className="font-semibold">Recommended action: {issue.action}</p>
+                            </article>)}
+                            {qaReport.issues.length > 50 && <div className="flex gap-3 items-center"><button disabled={qaIssuesPage===0} onClick={()=>setQaIssuesPage(page=>page-1)}>Previous link issues</button><span>Page {qaIssuesPage+1} of {Math.ceil(qaReport.issues.length/50)}</span><button disabled={(qaIssuesPage+1)*50>=qaReport.issues.length} onClick={()=>setQaIssuesPage(page=>page+1)}>Next link issues</button></div>}
+                            {!qaReport.issues.some(issue => issue.kind === 'ambiguous-target') && <button onClick={() => navigate('/citationLinker', {state:{transferredXml:step === 'result' ? output : input,sourceTool:'ID Prefix Auditor'}})} className="px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold">Open Citation Linker Pro with this XML</button>}
+                        </>}
+                    </div>}
+                </section>
+            )}
 
             {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
         </div>

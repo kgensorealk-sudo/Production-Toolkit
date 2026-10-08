@@ -202,7 +202,7 @@ export const TOOL_REGISTRY: ToolInfo[] = [
         name: 'ID Prefix Auditor',
         route: '/idAuditor',
         category: 'Citations & References',
-        shortDesc: 'Audits existing IDs and generates required missing IDs, using configured prefixes and 0005 to 9995 in steps of five. Citation targets are handled by Citation Linker Pro.',
+        shortDesc: 'Audits existing IDs and generates missing IDs for configured tags, using configured prefixes and 0005 to 9995 in steps of five. Citation targets are handled by Citation Linker Pro.',
         scenarios: [
             'Reference IDs have inconsistent prefixes (e.g. mixture of "bib001", "b1", "ref1").',
             'Supported elements need their configured prefixes and four-digit ID suffixes.',
