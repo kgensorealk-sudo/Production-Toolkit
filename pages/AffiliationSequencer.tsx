@@ -73,6 +73,8 @@ interface AuthorRemapItem {
 }
 
 interface AffiliationRemapItem {
+    requiresReview?: boolean;
+    reviewReasons?: string[];
     text?: string;
     index: number;
     originalId: string;
@@ -331,7 +333,7 @@ const AffiliationSequencer: React.FC = () => {
  try {
   const result=sequenceAffiliations(input);
   setIssues(result.changes.filter(c=>c.isChanged).map(c=>({index:c.index,originalId:c.originalId,expectedId:c.newId,currentLabel:c.originalLabel,expectedLabel:c.newLabel,isIdWrong:c.originalId!==c.newId,isLabelWrong:c.originalLabel!==c.newLabel,type:'affiliation' as const})));
-  setReport(result.notices.map(text=>({text,isChanged:false})));
+  setReport(result.notices.map(text=>({text:'REVIEW: '+text,isChanged:false})));
   setToast({msg:'Structural audit complete. Review IDs, labels and target ownership before sequencing.',type:result.notices.length?'warn':'success'});
  } catch(error){setIssues([]);setOutput('');setLastProcessedInput('');setSyncLog(null);setReport([]);setToast({msg:error instanceof Error?error.message:'Unable to audit XML',type:'error'});}
 };
@@ -342,7 +344,7 @@ const AffiliationSequencer: React.FC = () => {
  setRollbackState({input,output,lastProcessedInput,report,syncLog,timestamp:new Date().toLocaleTimeString()});
  try {
   const result=sequenceAffiliations(input);
-  const auditLog:AuditLine[]=[{text:'STRUCTURAL AFFILIATION SEQUENCING — EXISTING TARGET OWNERSHIP PRESERVED',isChanged:false,isHeader:true},...result.changes.map(c=>({text:c.originalId+' → '+c.newId+'; label '+c.originalLabel+' → '+c.newLabel,isChanged:c.isChanged})),...result.linkChanges.filter(c=>c.isChanged).map(c=>({text:'Linked target '+c.oldRefId+' → '+c.newRefId,isChanged:true})),...result.notices.map(text=>({text:'REVIEW: '+text,isChanged:false})),{text:'Unlinked affiliations: '+(result.unlinkedAffiliations.join(', ')||'none'),isChanged:false},{text:'Structural checks passed. Validate the complete output with DTD and VTool.',isChanged:false}];
+  const auditLog:AuditLine[]=[{text:'STRUCTURAL AFFILIATION SEQUENCING — EXISTING TARGET OWNERSHIP PRESERVED',isChanged:false,isHeader:true},...result.changes.map(c=>({text:c.originalId+' → '+c.newId+'; label '+c.originalLabel+' → '+c.newLabel,isChanged:c.isChanged})),...result.linkChanges.filter(c=>c.isChanged).map(c=>({text:'Linked target '+c.oldRefId+' → '+c.newRefId,isChanged:true})),...result.notices.map(text=>({text:'REVIEW: '+text,isChanged:false})),{text:'Unlinked affiliations: '+(result.unlinkedAffiliations.join(', ')||'none'),isChanged:false},{text:'Sequencing safety checks completed. Resolve review notices and validate the complete output with DTD and VTool.',isChanged:false}];
   const session:SyncLogSession={timestamp:new Date().toLocaleTimeString(),totalAffiliations:result.changes.length,changedAffiliationsCount:result.changes.filter(c=>c.isChanged).length,totalAuthors:result.authors.length,remappedAuthorsCount:result.authors.filter(a=>a.isRemapped).length,totalCrossRefsUpdated:result.linkChanges.filter(c=>c.isChanged).length,authors:result.authors,affiliations:result.changes,unlinkedAffiliations:result.unlinkedAffiliations,redundantAffiliationGroups:result.redundantAffiliationGroups,rawAuditLog:auditLog};
   setOutput(result.outputXml);setLastProcessedInput(input);setReport(auditLog);setSyncLog(session);setIssues([]);setSuggestions(generateSuggestions(result.outputXml));setActiveTab(result.notices.length?'report':'diff');
   setToast({msg:result.changes.length+' affiliations processed; '+result.notices.length+' review notices.',type:result.notices.length?'warn':'success'});
@@ -408,7 +410,7 @@ const AffiliationSequencer: React.FC = () => {
                     aff.originalLabel,
                     aff.newLabel,
                     aff.affiliationId || '(none)',
-                    aff.isChanged ? 'MODIFIED' : 'PRESERVED'
+                    aff.requiresReview ? 'REVIEW REQUIRED' : aff.isChanged ? 'MODIFIED' : 'PRESERVED'
                 ]);
             });
         }

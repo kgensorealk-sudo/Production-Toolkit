@@ -7,6 +7,8 @@ const fragment=(v:string)=>{if(!v.startsWith('#'))return '';try{return decodeURI
 export function sequenceAffiliations(xml:string){
     const parsed=scanReferenceXml(xml),edits:Edit[]=[],notices:string[]=[];
     const within=(parent:ReferenceXmlNode)=>parsed.nodes.filter(n=>n.start>=parent.openEnd && n.end<=parent.closeStart);
+    const directChildren=(parent:ReferenceXmlNode)=>{const children=within(parent);return children.filter(n=>!children.some(other=>other!==n && n.start>=other.openEnd && n.end<=other.closeStart));};
+    const normalizedText=(text:string)=>text.normalize('NFC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
     const affiliations=parsed.nodes.filter(n=>n.name==='ce:affiliation');
     if(!affiliations.length)throw new Error('No affiliation elements found. No output generated.');
     if(affiliations.length>1999)throw new Error('Affiliation IDs would exceed the four-digit 9995 limit.');
@@ -14,7 +16,8 @@ export function sequenceAffiliations(xml:string){
     const unresolved=new Set<string>();
     for(const n of parsed.nodes){for(const id of (n.attributes.refid||'').split(/\s+/).filter(Boolean))if(!parsed.ids.has(id))unresolved.add(id);const id=fragment(n.attributes['xlink:href']||'');if(id && !parsed.ids.has(id))unresolved.add(id);}
     const changes=affiliations.map((n,i)=>{
-        const labels=within(n).filter(child=>child.name==='ce:label');
+        const children=directChildren(n);
+        const labels=children.filter(child=>child.name==='ce:label');
         if(labels.length>1)throw new Error('An affiliation contains multiple labels. Review it before sequencing.');
         const label=labels[0],newId=formatAffiliationId(i+1),newLabel=getAlphabetLabel(i);
         if(parsed.ids.has(newId) && !affIds.has(newId))throw new Error(`ID ${newId} belongs to another element. No changes applied.`);
@@ -29,7 +32,20 @@ export function sequenceAffiliations(xml:string){
             else if(/<!--|<\?/.test(xml.slice(label.openEnd,label.closeStart)))throw new Error('Affiliation label contains comments or instructions; review before sequencing.');
             else edits.push({start:label.openEnd,end:label.closeStart,value:newLabel});
         }else edits.push({start:n.openEnd,end:n.openEnd,value:`<ce:label>${newLabel}</ce:label>`});
-        return {node:n,index:i+1,originalId:n.attributes.id||'(none)',newId,originalLabel,newLabel,affiliationId:n.attributes['affiliation-id'],text:within(n).filter(child=>child.name==='ce:textfn').map(child=>parsed.textContent(child)).join(' '),isChanged:n.attributes.id!==newId || originalLabel!==newLabel};
+        const text=children.filter(child=>child.name==='ce:textfn').map(child=>parsed.textContent(child)).join(' ');
+        const display=' '+normalizedText(text)+' ';
+        const reviewReasons:string[]=[];
+        if(children.filter(child=>child.name==='ce:textfn').length!==1 || !normalizedText(text))reviewReasons.push('Missing, empty or repeated ce:textfn; review the displayed affiliation.');
+        for(const structured of children.filter(child=>child.name==='sa:affiliation')){
+            const fields=directChildren(structured);
+            if(!fields.length)reviewReasons.push('Empty sa:affiliation requires manual review.');
+            for(const field of fields){
+                const value=parsed.textContent(field),normalized=normalizedText(value);
+                if(!normalized || !display.includes(' '+normalized+' '))reviewReasons.push(`${field.name} "${value}" is empty or is not found in ce:textfn.`);
+            }
+        }
+        if(reviewReasons.length)notices.push(`Affiliation ${n.attributes.id||'(no ID)'} → ${newId}: ${reviewReasons.join(' ')} Both affiliation texts are preserved. Review and correct manually. Keeper support for this task is planned but is not available yet.`);
+        return {node:n,index:i+1,originalId:n.attributes.id||'(none)',newId,originalLabel,newLabel,affiliationId:n.attributes['affiliation-id'],text,requiresReview:reviewReasons.length>0,reviewReasons,isChanged:n.attributes.id!==newId || originalLabel!==newLabel};
     });
     const map=new Map(changes.filter(c=>c.originalId!=='(none)').map(c=>[c.originalId,c]));
     const linkChanges:Array<{node:ReferenceXmlNode;oldRefId:string;newRefId:string;label:string;originalLabel:string;requiresReview:boolean;isChanged:boolean;crossRefId?:string}>=[];

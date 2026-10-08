@@ -2,7 +2,7 @@ import React from 'react';
 
 type Link = { oldRefId: string; newRefId: string; originalLabel?: string; label: string; isChanged: boolean; requiresReview?: boolean; crossRefId?: string };
 type Author = { authorIndex: number; authorName: string; authorId?: string; links: Link[] };
-type Affiliation = { index: number; originalId: string; newId: string; originalLabel: string; newLabel: string; affiliationId?: string; text?: string; isChanged: boolean };
+type Affiliation = { index: number; originalId: string; newId: string; originalLabel: string; newLabel: string; affiliationId?: string; text?: string; isChanged: boolean; requiresReview?: boolean; reviewReasons?: string[] };
 type Props = { view: 'table' | 'rendered'; authors: Author[]; affiliations: Affiliation[] };
 const cell = 'px-3 py-3 border-b border-slate-100 align-top';
 const Status = ({ review, changed }: { review?: boolean; changed: boolean }) => <span className={`text-xs font-semibold ${review ? 'text-amber-800' : changed ? 'text-emerald-700' : 'text-slate-500'}`}>{review ? 'Review required' : changed ? 'Changed' : 'Unchanged'}</span>;
@@ -21,6 +21,7 @@ export default function AffiliationAuditViews({ view, authors, affiliations }: P
             <div className="border-t border-slate-200 mt-5 pt-4 space-y-4">{affiliations.map(aff => <div key={aff.index}>
                 <p className="text-sm leading-relaxed text-slate-800"><sup className="mr-2 font-semibold">{side === 'before' ? aff.originalLabel || '(no label)' : aff.newLabel}</sup>{aff.text || '(No affiliation text)'}</p>
                 <p className="text-xs font-mono text-slate-400 mt-1">{side === 'before' ? aff.originalId : aff.newId}</p>
+                {aff.requiresReview && <p className="text-xs text-amber-800 mt-1">Review required: {aff.reviewReasons?.join(' ')} Correct manually; Keeper support is not available yet.</p>}
             </div>)}</div>
         </div>)}</div>
     </section>;
@@ -29,7 +30,7 @@ export default function AffiliationAuditViews({ view, authors, affiliations }: P
         <section className="overflow-x-auto bg-white border border-slate-200 rounded-xl"><table className="w-full text-xs text-left">
             <caption className="text-left p-4 font-bold text-slate-800">Affiliation changes</caption>
             <thead className="bg-slate-50 text-slate-600"><tr>{['Affiliation text', 'ID before', 'ID after', 'Label before', 'Label after', 'affiliation-id (preserved)', 'Status'].map(name => <th scope="col" key={name} className={cell}>{name}</th>)}</tr></thead>
-            <tbody>{affiliations.map(aff => <tr key={aff.index}><td className={cell}>{aff.text || '(No text)'}</td><td className={cell}>{aff.originalId}</td><td className={cell}>{aff.newId}</td><td className={cell}>{aff.originalLabel || '(none)'}</td><td className={cell}>{aff.newLabel}</td><td className={cell}>{aff.affiliationId || '(none)'}</td><td className={cell}><Status changed={aff.isChanged} /></td></tr>)}</tbody>
+            <tbody>{affiliations.map(aff => <tr key={aff.index}><td className={cell}>{aff.text || '(No text)'}</td><td className={cell}>{aff.originalId}</td><td className={cell}>{aff.newId}</td><td className={cell}>{aff.originalLabel || '(none)'}</td><td className={cell}>{aff.newLabel}</td><td className={cell}>{aff.affiliationId || '(none)'}</td><td className={cell}><Status changed={aff.isChanged} review={aff.requiresReview} />{aff.requiresReview && <p className="mt-1 text-amber-800">{aff.reviewReasons?.join(' ')} Correct manually; Keeper support is not available yet.</p>}</td></tr>)}</tbody>
         </table></section>
         <section className="overflow-x-auto bg-white border border-slate-200 rounded-xl"><table className="w-full text-xs text-left">
             <caption className="text-left p-4 font-bold text-slate-800">Author citation changes</caption>
