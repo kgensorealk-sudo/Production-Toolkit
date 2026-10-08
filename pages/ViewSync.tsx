@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { diffLines, diffWordsWithSpace, diffChars, Change } from 'diff';
 import { ChevronUp, ChevronDown, GitCompare, Search, AlertCircle, AlertTriangle, CheckCircle, Lightbulb, ArrowRight, Link as LinkIcon, Eraser, Hash, Trash2, RefreshCw, Box, Maximize2, Minimize2, Sparkles, Copy, Check, ExternalLink, FileText } from 'lucide-react';
@@ -9,6 +9,8 @@ import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 import useLocalStorage from '../hooks/useLocalStorage';
+import {inspectViews, viewDifferences, synchronizeViews, repairViewOrphans} from '../utils/viewSyncEngine';
+import {scanReferenceXml} from '../utils/referenceUpdaterXml';
 
 interface DetectedRef {
     tagName: string;
@@ -59,8 +61,6 @@ const ViewSync: React.FC = () => {
     const [output, setOutput] = useLocalStorage<string>('view_sync_output', '');
     const [lastProcessedInput, setLastProcessedInput] = useLocalStorage<string>('view_sync_last_input', '');
     const [logs, setLogs] = useState<SyncLog[]>([]);
-    const [refModifications, setRefModifications] = useState<RefModification[]>([]);
-    const [copiedSnippetId, setCopiedSnippetId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [toast, setToast] = useState<{msg: string, type: 'success'|'warn'|'error'} | null>(null);
     const [suggestions, setSuggestions] = useState<SmartSuggestion[]>([]);
@@ -69,7 +69,7 @@ const ViewSync: React.FC = () => {
     const [orphans, setOrphans] = useState<{type: 'compact' | 'extended', id: string, text: string}[]>([]);
     
     // View State
-    const [activeTab, setActiveTab] = useState<'raw' | 'diff' | 'audit' | 'report' | 'mismatches' | 'orphans'>('raw');
+    const [activeTab, setActiveTab] = useState<'raw' | 'diff' | 'report' | 'mismatches' | 'orphans'>('raw');
     const [isExpandedView, setIsExpandedView] = useState(false);
     const [mismatches, setMismatches] = useState<{paraId: string, compactText: string, extendedText: string, index: number}[]>([]);
     const [selectedMismatches, setSelectedMismatches] = useState<Set<number>>(new Set());
@@ -237,964 +237,117 @@ const ViewSync: React.FC = () => {
         }
     }, [currentChangeIndex]);
 
-    const stripTags = (xml: string) => {
-        if (!xml) return '';
-        return xml.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+    const operationRef = useRef(0);
+    const scanSnapshotRef = useRef('');
+    const resetResults = () => {
+        setOutput(''); setLastProcessedInput(''); setLogs([]);
+        setSuggestions([]); setOrphans([]); setMismatches([]); setSelectedMismatches(new Set());
+        setDiffRows([]); setTotalChanges(0); setCurrentChangeIndex(0); setIsLoading(false);
+        scanSnapshotRef.current = '';
     };
+    useLayoutEffect(() => {
+        operationRef.current++;
+        resetResults();
+        return () => { operationRef.current++; };
+    }, [input, syncDirection, customStartId]);
 
-    /**
-     * Restores missing cross-references and e-components from target view into source content
-     * so that supplementary/extended links (like Fig. S1, Table S1, ec####) are never lost.
-     */
-    const restoreMissingLinks = (
-        sourceXml: string,
-        targetXml: string,
-        isExtendedTarget: boolean
-    ): { updatedXml: string; restoredCount: number; restoredRefIds: Set<string> } => {
-        const targetTagRegex = /<(ce:cross-refs?|e-component)\b([^>]*)>([\s\S]*?)<\/\1>/gi;
-        
-        interface TargetLinkItem {
-            tagName: string;
-            attrs: string;
-            refid?: string;
-            innerXml: string;
-            plainText: string;
-            fullTag: string;
-        }
-
-        const targetLinks: TargetLinkItem[] = [];
-        let tm;
-        while ((tm = targetTagRegex.exec(targetXml)) !== null) {
-            const tagName = tm[1];
-            const attrs = tm[2];
-            const innerXml = tm[3];
-            const plainText = stripTags(innerXml).trim();
-            const refidMatch = attrs.match(/\brefid="([^"]+)"/);
-            const refid = refidMatch ? refidMatch[1] : undefined;
-
-            // If syncing to compact view, skip e-components and ec\d+ links per DTD
-            if (!isExtendedTarget) {
-                if (tagName === 'e-component' || (refid && /^ec\d+/i.test(refid))) {
-                    continue;
-                }
-            }
-
-            if (plainText.length > 0) {
-                targetLinks.push({
-                    tagName,
-                    attrs,
-                    refid,
-                    innerXml,
-                    plainText,
-                    fullTag: tm[0]
-                });
-            }
-        }
-
-        if (targetLinks.length === 0) {
-            return { updatedXml: sourceXml, restoredCount: 0, restoredRefIds: new Set<string>() };
-        }
-
-        let updated = sourceXml;
-        let restoredCount = 0;
-        const restoredRefIds = new Set<string>();
-
-        // Token regex to split XML into protected cross-ref/e-component blocks, other XML tags, and plain text
-        const tokenRegex = /(<(?:ce:cross-refs?|e-component)\b[^>]*>[\s\S]*?<\/(?:ce:cross-refs?|e-component)>|<[^>]+>)/gi;
-
-        for (const link of targetLinks) {
-            const escaped = link.plainText
-                .trim()
-                .split(/\s+/)
-                .map(part => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-                .join('[\\s\\u00A0]+');
-
-            const startsWithWord = /^[a-zA-Z0-9]/.test(link.plainText.trim());
-            const endsWithDigit = /\d$/.test(link.plainText.trim());
-            const endsWithLetter = /[a-zA-Z]$/.test(link.plainText.trim());
-
-            const lookbehind = startsWithWord ? '(?<![a-zA-Z0-9])' : '';
-            const lookahead = endsWithDigit ? '(?!\d)' : (endsWithLetter ? '(?![a-zA-Z0-9])' : '');
-
-            const matchRegex = new RegExp(`${lookbehind}${escaped}${lookahead}`, 'i');
-
-            const parts = updated.split(tokenRegex);
-            let linkRestored = false;
-
-            for (let j = 0; j < parts.length; j++) {
-                // Even indices (0, 2, 4...) are plain text outside tags and outside existing cross-ref blocks
-                if (j % 2 === 0 && !linkRestored) {
-                    if (matchRegex.test(parts[j])) {
-                        parts[j] = parts[j].replace(matchRegex, (matched) => {
-                            linkRestored = true;
-                            const cleanAttrs = link.attrs ? ' ' + link.attrs.trim() : '';
-                            return `<${link.tagName}${cleanAttrs}>${matched}</${link.tagName}>`;
-                        });
-                    }
-                }
-            }
-
-            if (linkRestored) {
-                updated = parts.join('');
-                restoredCount++;
-                if (link.refid) {
-                    restoredRefIds.add(link.refid);
-                }
-            }
-        }
-
-        return { updatedXml: updated, restoredCount, restoredRefIds };
-    };
-
-    /**
-     * Automatically tags unlinked figure/table/supplementary/scheme citations with <ce:cross-ref>
-     * while strictly avoiding tags inside existing cross-refs or other protected XML tags.
-     */
-    const autoTagUnlinkedCitations = (
-        xml: string
-    ): { updatedXml: string; autoTaggedCount: number; taggedRefs: { text: string; fullSnippet: string }[] } => {
-        // Token regex splits XML into protected cross-ref/e-component blocks, other XML tags, and plain text
-        const tokenRegex = /(<(?:ce:cross-refs?|e-component)\b[^>]*>[\s\S]*?<\/(?:ce:cross-refs?|e-component)>|<[^>]+>)/gi;
-        const parts = xml.split(tokenRegex);
-        let autoTaggedCount = 0;
-        const taggedRefs: { text: string; fullSnippet: string }[] = [];
-
-        // Citation regex for Fig./Figure/Table/Scheme/Movie/Supplementary refs
-        // Matches e.g. "Fig. S1", "Fig. 1", "Fig. S1B" (captures "Fig. S1"), "Figure S2", "Table S1", etc.
-        const citationRegex = /\b((?:Fig(?:ure)?s?\.?|Tables?|Schemes?|Movies?|Videos?|Supplementary\s+(?:Fig(?:ure)?|Table|Data|Note|Movie|Video))\s*S?\d+)/gi;
-
-        for (let i = 0; i < parts.length; i++) {
-            // Even indices are plain text outside XML tags and existing cross-refs
-            if (i % 2 === 0 && parts[i]) {
-                if (citationRegex.test(parts[i])) {
-                    citationRegex.lastIndex = 0;
-                    parts[i] = parts[i].replace(citationRegex, (match) => {
-                        autoTaggedCount++;
-                        const cleanText = match.trim();
-                        taggedRefs.push({ text: cleanText, fullSnippet: `<ce:cross-ref>${cleanText}</ce:cross-ref>` });
-                        return `<ce:cross-ref>${cleanText}</ce:cross-ref>`;
-                    });
-                }
-            }
-        }
-
-        return {
-            updatedXml: parts.join(''),
-            autoTaggedCount,
-            taggedRefs
-        };
-    };
-
-    const getValidRanges = (text: string) => {
-        // Expanded to include all structural areas where views typically reside
-        const sectionsRegex = /<(ce:sections|ce:caption|ce:biographical-note|ce:abstract|ce:glossary|ce:figure|ce:table|ce:appendix|ce:acknowledgment|ce:bibliography)\b[^>]*>([\s\S]*?)<\/\1>/gi;
-        const appendicesRegex = /<ce:appendices\b[^>]*>([\s\S]*?)<\/ce:appendices>/g;
-        
-        const ranges: {start: number, end: number}[] = [];
-        let sectionMatch;
-        let foundAnyStructuralArea = false;
-
-        while ((sectionMatch = sectionsRegex.exec(text)) !== null) {
-            foundAnyStructuralArea = true;
-            const fullMatch = sectionMatch[0];
-            const tagName = sectionMatch[1];
-            const content = sectionMatch[2];
-            
-            const sectionStart = sectionMatch.index;
-            // Find the actual start of content by looking for the first '>' after the tag name
-            const openTagEndIndex = fullMatch.indexOf('>', fullMatch.indexOf(tagName));
-            const sectionContentStart = sectionStart + openTagEndIndex + 1;
-            const sectionContentEnd = sectionContentStart + content.length;
-            
-            // Find appendices within this section content
-            const appendices: {start: number, end: number}[] = [];
-            let appendixMatch;
-            while ((appendixMatch = appendicesRegex.exec(content)) !== null) {
-                const appStart = sectionContentStart + appendixMatch.index;
-                const appEnd = appStart + appendixMatch[0].length;
-                appendices.push({start: appStart, end: appEnd});
-            }
-            
-            // Split section range by appendices
-            let currentStart = sectionContentStart;
-            appendices.forEach(app => {
-                if (app.start > currentStart) {
-                    ranges.push({start: currentStart, end: app.start});
-                }
-                currentStart = app.end;
-            });
-            
-            if (currentStart < sectionContentEnd) {
-                ranges.push({start: currentStart, end: sectionContentEnd});
-            }
-        }
-
-        if (!foundAnyStructuralArea) {
-            // Fallback: If no recognized structural areas found, the whole document is valid minus appendices
-            let currentStart = 0;
-            const globalAppendices: {start: number, end: number}[] = [];
-            let appendixMatch;
-            while ((appendixMatch = appendicesRegex.exec(text)) !== null) {
-                globalAppendices.push({start: appendixMatch.index, end: appendixMatch.index + appendixMatch[0].length});
-            }
-
-            globalAppendices.forEach(app => {
-                if (app.start > currentStart) {
-                    ranges.push({start: currentStart, end: app.start});
-                }
-                currentStart = app.end;
-            });
-
-            if (currentStart < text.length) {
-                ranges.push({start: currentStart, end: text.length});
-            }
-        }
-
-        return ranges;
-    };
-
-    const renderMismatchDiff = (text1: string, text2: string, side: 'compact' | 'extended') => {
-        const diff = diffWordsWithSpace(text1, text2);
-        return diff.map((part, i) => {
-            if (side === 'compact') {
-                if (part.removed) return <span key={i} className="bg-rose-100 text-rose-900 px-0.5 rounded">{part.value}</span>;
-                if (part.added) return null;
-                return <span key={i}>{part.value}</span>;
-            } else {
-                if (part.added) return <span key={i} className="bg-emerald-100 text-emerald-900 px-0.5 rounded font-medium">{part.value}</span>;
-                if (part.removed) return null;
-                return <span key={i}>{part.value}</span>;
-            }
+    const renderMismatchDiff = (text1: string, text2: string, side: 'compact' | 'extended') =>
+        diffWordsWithSpace(text1,text2).map((part,i) => {
+            if ((side === 'compact' && part.added) || (side === 'extended' && part.removed)) return null;
+            return <span key={i} className={part.added ? 'bg-emerald-100 text-emerald-900' : part.removed ? 'bg-rose-100 text-rose-900' : ''}>{part.value}</span>;
         });
+
+    const reportError = (error: unknown) => {
+        resetResults();
+        setToast({msg: error instanceof Error ? error.message : 'Unable to process XML safely.',type:'error'});
     };
-
-    const getPairsAndOrphans = (xml: string) => {
-        const structuralAreas = getValidRanges(xml);
-        const pairs: {compact: any, extended: any}[] = [];
-        const orphans: {type: 'compact' | 'extended', id: string, text: string, match: any}[] = [];
-        
-        const allViewsRegex = /<ce:(para|simple-para)\b[^>]*?\bview\s*=\s*["'](compact|compact-standard|view|extended)["'][^>]*?>([\s\S]*?)<\/ce:(?:para|simple-para)>/gi;
-        const allMatches = [...xml.matchAll(allViewsRegex)];
-
-        const isCompact = (m: any) => m && (m[2] === 'compact' || m[2] === 'compact-standard' || m[2] === 'view');
-        const isExtended = (m: any) => m && m[2] === 'extended';
-
-        structuralAreas.forEach(range => {
-            const areaMatches = allMatches.filter(m => m.index! >= range.start && m.index! < range.end);
-            
-            for (let i = 0; i < areaMatches.length; i++) {
-                const current = areaMatches[i];
-                const next = areaMatches[i + 1];
-                
-                if (isCompact(current)) {
-                    if (next && isExtended(next)) {
-                        pairs.push({ compact: current, extended: next });
-                        i++; 
-                    } else {
-                        const idMatch = current[0].match(/\bid="([^"]+)"/);
-                        orphans.push({ 
-                            type: 'compact', 
-                            id: idMatch ? idMatch[1] : 'Unknown', 
-                            text: stripTags(current[3]),
-                            match: current
-                        });
-                    }
-                } else if (isExtended(current)) {
-                    if (next && isCompact(next)) {
-                        pairs.push({ compact: next, extended: current });
-                        i++;
-                    } else {
-                        const idMatch = current[0].match(/\bid="([^"]+)"/);
-                        orphans.push({ 
-                            type: 'extended', 
-                            id: idMatch ? idMatch[1] : 'Unknown', 
-                            text: stripTags(current[3]),
-                            match: current
-                        });
-                    }
-                }
-            }
-        });
-        
-        return { pairs, orphans };
-    };
-
-    const detectOrphans = (xml: string) => {
-        const { orphans } = getPairsAndOrphans(xml);
-        return orphans.map(o => ({ type: o.type, id: o.id, text: o.text }));
-    };
-
-    const fixOrphans = () => {
-        if (!input.trim()) return;
-        setIsLoading(true);
-        setTimeout(() => {
-            const xml = input;
-            const { orphans } = getPairsAndOrphans(xml);
-
-            if (orphans.length === 0) {
-                setIsLoading(false);
-                setToast({ msg: "No orphans to fix.", type: "success" });
-                return;
-            }
-
-            const allIds = new Set<string>();
-            const idMatches = xml.matchAll(/\bid="([^"]+)"/g);
-            for (const m of idMatches) {
-                allIds.add(m[1]);
-            }
-
-            const allViewsRegex = /<ce:(para|simple-para)\b[^>]*?\bview\s*=\s*["'](compact|compact-standard|view|extended)["'][^>]*?>([\s\S]*?)<\/ce:(?:para|simple-para)>/gi;
-            const matches = [...xml.matchAll(allViewsRegex)];
-            let maxIdNum = 4000;
-            matches.forEach(m => {
-                const idAttr = m[0].match(/\bid="[a-zA-Z]+(\d+)"/);
-                if (idAttr) {
-                    const num = parseInt(idAttr[1], 10);
-                    if (!isNaN(num) && num > maxIdNum) maxIdNum = num;
-                }
-            });
-
-            const configId = customStartId ? parseInt(customStartId, 10) : 0;
-            const idShift = configId || 3000;
-            let nextIdSeed = configId || Math.max(4000, Math.ceil((maxIdNum + 10) / 5) * 5);
-
-            const getUniqueId = (prefix: string, preferredNum: number): string => {
-                let num = preferredNum;
-                let candidate = `${prefix}${num.toString().padStart(4, '0')}`;
-                while (allIds.has(candidate)) {
-                    num = nextIdSeed;
-                    candidate = `${prefix}${num.toString().padStart(4, '0')}`;
-                    nextIdSeed += 5;
-                }
-                allIds.add(candidate);
-                return candidate;
-            };
-
-            const replacements: {start: number, end: number, replacement: string}[] = [];
-
-            orphans.forEach(orphan => {
-                const match = orphan.match;
-                const fullMatch = match[0];
-                const tagName = match[1];
-                const viewType = match[2];
-                const content = match[3];
-                const startIndex = match.index!;
-                
-                if (viewType === 'extended') {
-                    let newContent = content.replace(/<e-component\b[^>]*>([\s\S]*?)<\/e-component>/gi, '$1');
-                    newContent = newContent.replace(/<ce:cross-refs?\b[^>]*?\brefid=["']ec\d+["'][^>]*?>([\s\S]*?)<\/ce:cross-refs?>/gi, '$1');
-                    
-                    // Renumber internal IDs in newContent to avoid duplicates
-                    newContent = newContent.replace(/\bid="([a-zA-Z]+)(\d+)"/g, (m: string, prefix: string, numStr: string) => {
-                        const num = parseInt(numStr, 10);
-                        return `id="${getUniqueId(prefix, num + idShift)}"`;
-                    });
-
-                    const idMatch = fullMatch.match(/\bid="([a-zA-Z]+)(\d+)"/);
-                    let newId = '';
-                    if (idMatch) {
-                        const prefix = idMatch[1];
-                        const oldNum = parseInt(idMatch[2], 10);
-                        newId = getUniqueId(prefix, oldNum + idShift);
-                    } else {
-                        const standardPrefix = tagName === 'simple-para' ? 'sp' : 'p';
-                        newId = getUniqueId(standardPrefix, nextIdSeed);
-                    }
-
-                    const newBlock = `<ce:${tagName} view="compact-standard" id="${newId}">${newContent}</ce:${tagName}>`;
-                    replacements.push({
-                        start: startIndex + fullMatch.length,
-                        end: startIndex + fullMatch.length,
-                        replacement: `\n${newBlock}`
-                    });
-                } else {
-                    const idMatch = fullMatch.match(/\bid="([a-zA-Z]+)(\d+)"/);
-                    let newId = '';
-                    if (idMatch) {
-                        const prefix = idMatch[1];
-                        const oldNum = parseInt(idMatch[2], 10);
-                        newId = getUniqueId(prefix, Math.max(1, oldNum - idShift));
-                    } else {
-                        const standardPrefix = tagName === 'simple-para' ? 'sp' : 'p';
-                        newId = getUniqueId(standardPrefix, nextIdSeed);
-                    }
-
-                    // Renumber internal IDs in content
-                    const newContent = content.replace(/\bid="([a-zA-Z]+)(\d+)"/g, (m: string, prefix: string, numStr: string) => {
-                        const num = parseInt(numStr, 10);
-                        return `id="${getUniqueId(prefix, Math.max(1, num - idShift))}"`;
-                    });
-
-                    const newBlock = `<ce:${tagName} view="extended" id="${newId}">${newContent}</ce:${tagName}>`;
-
-                    replacements.push({
-                        start: startIndex,
-                        end: startIndex,
-                        replacement: `${newBlock}\n`
-                    });
-                }
-            });
-
-            replacements.sort((a, b) => b.start - a.start);
-            let finalOutput = xml;
-            replacements.forEach(rep => {
-                finalOutput = finalOutput.substring(0, rep.start) + rep.replacement + finalOutput.substring(rep.end);
-            });
-
-            setOutput(finalOutput);
-            setLastProcessedInput(xml);
-            generateDiff(xml, finalOutput);
-            setLogs([{
-                id: 1,
-                paraId: 'ORPHAN-FIX',
-                status: 'success',
-                message: `Automatically generated missing counterparts for ${orphans.length} orphans.`,
-                detectedRefs: []
-            }]);
-            setOrphans([]);
-            setActiveTab('diff');
-            setToast({ msg: `Fixed ${orphans.length} orphans!`, type: "success" });
-            setIsLoading(false);
-        }, 800);
-    };
-
     const scanForMismatches = () => {
-        if (!input.trim()) {
-            setToast({ msg: "Please paste XML content first.", type: "warn" });
-            return;
-        }
-
+        const operation=++operationRef.current;
         setIsLoading(true);
         setTimeout(() => {
-            const { pairs, orphans: foundOrphans } = getPairsAndOrphans(input);
-            setOrphans(foundOrphans.map(o => ({ type: o.type, id: o.id, text: o.text })));
-
-            const foundMismatches: {paraId: string, compactText: string, extendedText: string, index: number}[] = [];
-            
-            for (let i = 0; i < pairs.length; i++) {
-                const pair = pairs[i];
-                const compactContent = pair.compact[3] || '';
-                const extendedContent = pair.extended[3] || '';
-
-                const compactText = stripTags(compactContent);
-                const extendedText = stripTags(extendedContent);
-
-                if (compactText !== extendedText) {
-                    const idMatch = pair.compact[0].match(/\bid="([^"]+)"/);
-                    foundMismatches.push({
-                        paraId: idMatch ? idMatch[1] : `Pair ${i + 1}`,
-                        compactText,
-                        extendedText,
-                        index: i
-                    });
-                }
-            }
-
-            setMismatches(foundMismatches);
-            setSelectedMismatches(new Set(foundMismatches.map(m => m.index)));
-            setActiveTab(foundOrphans.length > 0 ? 'orphans' : 'mismatches');
-            setIsLoading(false);
-            
-            if (foundOrphans.length > 0) {
-                setToast({ msg: `Found ${foundOrphans.length} unpaired views! Please fix these before syncing.`, type: "error" });
-            } else if (foundMismatches.length === 0) {
-                setToast({ msg: "No mismatches found! All pairs are synchronized.", type: "success" });
-            } else {
-                setToast({ msg: `Found ${foundMismatches.length} unsynchronized paragraph pairs.`, type: "warn" });
-            }
-        }, 500);
+            if(operation!==operationRef.current)return;
+            try {
+                const result=viewDifferences(input);
+                scanSnapshotRef.current=input;
+                setMismatches(result.mismatches);
+                setSelectedMismatches(new Set(result.mismatches.map(m=>m.index)));
+                setOrphans(result.audit.orphans.map(n=>({type:n.attributes.view==='extended'?'extended':'compact',id:n.attributes.id || '(missing ID)',text:result.audit.textContent(n)})));
+                setLogs(result.audit.notices.map((n,i)=>({id:i+1,paraId:n.paraId,status:'warning',message:n.message,detectedRefs:[]})));
+                setActiveTab(result.audit.notices.length?'report':result.audit.orphans.length?'orphans':'mismatches');
+                setToast({msg:`${result.mismatches.length} content or link differences; ${result.audit.orphans.length} unpaired views; ${result.audit.notices.length} ambiguous groups.`,type:result.mismatches.length||result.audit.orphans.length||result.audit.notices.length?'warn':'success'});
+            } catch(error){reportError(error);} finally{setIsLoading(false);}
+        },500);
     };
-
     const toggleMismatchSelection = (index: number) => {
-        const next = new Set(selectedMismatches);
-        if (next.has(index)) next.delete(index);
-        else next.add(index);
+        const next=new Set(selectedMismatches);
+        if(next.has(index))next.delete(index);else next.add(index);
         setSelectedMismatches(next);
     };
-
-    const processSync = (specificIndices?: Set<number>) => {
-        if (!input.trim()) {
-            setToast({ msg: "Please paste XML content first.", type: "warn" });
-            return;
-        }
-
+    const processSync = (specificIndices?:Set<number>) => {
+        if(specificIndices && scanSnapshotRef.current!==input){reportError(new Error('Input changed since the scan. Scan again before synchronizing selected pairs.'));return;}
+        const operation=++operationRef.current;
         setIsLoading(true);
         setTimeout(() => {
-            const newLogs: SyncLog[] = [];
-            let logCounter = 1;
-            let nextIdNum = 4000;
-
-            const allIds = new Set<string>();
-            const idMatches = input.matchAll(/\bid="([^"]+)"/g);
-            for (const m of idMatches) {
-                allIds.add(m[1]);
-            }
-
-            if (customStartId && !isNaN(parseInt(customStartId))) {
-                nextIdNum = parseInt(customStartId);
-            } else {
-                // Determine Global Max ID to ensure uniqueness
-                const allIdRegex = /\bid="([a-zA-Z]+)(\d{1,4})"/g;
-                let maxIdNum = 0;
-                let m;
-                while ((m = allIdRegex.exec(input)) !== null) {
-                    const num = parseInt(m[2], 10);
-                    if (!isNaN(num) && num > maxIdNum) {
-                        maxIdNum = num;
-                    }
-                }
-                nextIdNum = Math.max(4000, Math.ceil((maxIdNum + 10) / 5) * 5);
-            }
-
-            const getUniqueId = (prefix: string): string => {
-                let candidate = `${prefix}${nextIdNum.toString().padStart(4, '0')}`;
-                while (allIds.has(candidate)) {
-                    nextIdNum += 5;
-                    candidate = `${prefix}${nextIdNum.toString().padStart(4, '0')}`;
-                }
-                allIds.add(candidate);
-                nextIdNum += 5;
-                return candidate;
-            };
-
-            // 2. Extract Paragraph Pairs
-            const { pairs, orphans: inputOrphans } = getPairsAndOrphans(input);
-            setOrphans(inputOrphans.map(o => ({ type: o.type, id: o.id, text: o.text })));
-
-            if (pairs.length === 0 && inputOrphans.length === 0) {
-                 setToast({ msg: "No synchronized pairs or orphans found.", type: "error" });
-                 setIsLoading(false);
-                 return;
-            }
-
-            if (inputOrphans.length > 0) {
-                newLogs.push({
-                    id: logCounter++,
-                    paraId: 'ORPHANS',
-                    status: 'error',
-                    message: `Critical: ${inputOrphans.length} unpaired view(s) detected. Compact-standard must be paired with Extended.`,
-                    detectedRefs: []
-                });
-            }
-            
-            // 3. Build Replacements
-            const replacements: {start: number, end: number, replacement: string}[] = [];
-            const newModifications: RefModification[] = [];
-            let modCounter = 1;
-
-            for (let i = 0; i < pairs.length; i++) {
-                // If specific indices are provided, only sync those
-                if (specificIndices && !specificIndices.has(i)) {
-                    continue;
-                }
-
-                const pair = pairs[i];
-                const compactMatch = pair.compact;
-                const extendedMatch = pair.extended;
-                
-                let sourceContent = '';
-                let targetContent = '';
-                let targetFullMatch = '';
-                let targetIndex = 0;
-
-                let targetView = '';
-                if (syncDirection === 'compact-to-extended') {
-                    sourceContent = compactMatch[3] || ''; 
-                    targetContent = extendedMatch[3] || ''; 
-                    targetFullMatch = extendedMatch[0] || '';
-                    targetIndex = extendedMatch.index || 0;
-                    targetView = 'extended';
-                } else {
-                    sourceContent = extendedMatch[3] || ''; 
-                    targetContent = compactMatch[3] || '';
-                    targetFullMatch = compactMatch[0] || '';
-                    targetIndex = compactMatch.index || 0;
-                    targetView = compactMatch[2] || ''; // compact-standard or compact or view
-                }
-                
-                const targetOpenTagMatch = targetFullMatch.match(/^<(ce:(?:para|simple-para))\b[^>]*>/);
-                
-                if (!targetOpenTagMatch) {
-                    newLogs.push({
-                        id: logCounter++,
-                        paraId: `Index ${i}`,
-                        status: 'error',
-                        message: "Could not parse opening tag.",
-                        detectedRefs: []
+            if(operation!==operationRef.current)return;
+            try {
+                const result=synchronizeViews(input,syncDirection,customStartId,specificIndices);
+                const newLogs:SyncLog[]=result.notices.map((n,i)=>({id:i+1,paraId:n.paraId,status:'warning',message:n.message,detectedRefs:[]}));
+                const modifications:RefModification[]=[];
+                for(const change of result.applied){
+                    const before=scanReferenceXml('<ce:para>'+change.before+'</ce:para>');
+                    const after=scanReferenceXml('<ce:para>'+change.after+'</ce:para>');
+                    const refs=(parsed:typeof before)=>parsed.nodes.filter(n=>['ce:cross-ref','ce:cross-refs','ce:inter-ref','ce:intra-ref','ce:float-anchor'].includes(n.name)).map(n=>({tagName:n.name,refid:n.attributes.refid || n.attributes['xlink:href'],text:parsed.textContent(n)}));
+                    const oldRefs=refs(before),newRefs=refs(after);
+                    newLogs.push({id:newLogs.length+1,paraId:change.paraId,status:'success',message:'Synchronized content with proven target ownership. Review the diff for removed or changed content.',detectedRefs:newRefs});
+                    const remainingNew=[...newRefs];
+                    const remainingOld=oldRefs.filter(old=>{
+                        const index=remainingNew.findIndex(next=>old.tagName===next.tagName && old.text===next.text && old.refid===next.refid);
+                        if(index<0)return true;
+                        remainingNew.splice(index,1);return false;
                     });
-                    continue;
-                }
-
-                const targetTagName = targetOpenTagMatch[1];
-                const targetOpenTag = targetOpenTagMatch[0];
-                const targetIdMatch = targetOpenTag.match(/\bid="([^"]+)"/);
-                const targetParaId = targetIdMatch ? targetIdMatch[1] : `Index ${i}`;
-
-                // --- ROBUST SYNCHRONIZATION STRATEGY ---
-                
-                // 0. Extract original references from target before sync to monitor changes
-                const targetOriginalRefs: { tagName: string; id?: string; refid?: string; text: string; fullSnippet: string }[] = [];
-                const tRefScanRegex = /<(ce:cross-refs?|e-component)\b([^>]*)>([\s\S]*?)<\/\1>/gi;
-                let tRefScanMatch;
-                while ((tRefScanMatch = tRefScanRegex.exec(targetContent)) !== null) {
-                    const tagName = tRefScanMatch[1];
-                    const attrs = tRefScanMatch[2];
-                    const text = stripTags(tRefScanMatch[3]).trim();
-                    const idMatch = attrs.match(/\bid="([^"]+)"/);
-                    const refidMatch = attrs.match(/\brefid="([^"]+)"/);
-                    targetOriginalRefs.push({
-                        tagName,
-                        id: idMatch ? idMatch[1] : undefined,
-                        refid: refidMatch ? refidMatch[1] : undefined,
-                        text,
-                        fullSnippet: tRefScanMatch[0]
-                    });
-                }
-
-                // 1. Pre-process source based on target view requirements
-                let processedSource = sourceContent || '';
-                let restoredCount = 0;
-                const restoredRefIds = new Set<string>();
-                
-                if (targetView !== 'extended') {
-                    // Strip e-component tags for non-extended views per DTD
-                    processedSource = processedSource.replace(/<e-component\b[^>]*>([\s\S]*?)<\/e-component>/gi, '$1');
-                    // Strip cross-ref tags pointing to supplementary files (ecXXXX) for non-extended views per DTD
-                    processedSource = processedSource.replace(/<ce:cross-refs?\b[^>]*?\brefid=["']ec\d+["'][^>]*?>([\s\S]*?)<\/ce:cross-refs?>/gi, '$1');
-                    
-                    // Also restore any standard target cross-refs if unlinked in source
-                    const restored = restoreMissingLinks(processedSource, targetContent, false);
-                    processedSource = restored.updatedXml;
-                    restoredCount += restored.restoredCount;
-                    restored.restoredRefIds.forEach(id => restoredRefIds.add(id));
-                } else {
-                    // When syncing TO extended view, restore ALL cross-references (Fig. S1, Table S1, ec####, figures, tables, etc.)
-                    // and e-components that existed in the extended target but are missing/unlinked in the source
-                    const restored = restoreMissingLinks(processedSource, targetContent, true);
-                    processedSource = restored.updatedXml;
-                    restoredCount += restored.restoredCount;
-                    restored.restoredRefIds.forEach(id => restoredRefIds.add(id));
-                }
-
-                // Auto-tag any unlinked citations (Fig. S1, Table S1, etc.) in source
-                const autoTagged = autoTagUnlinkedCitations(processedSource);
-                processedSource = autoTagged.updatedXml;
-
-                // 2. Map existing cf IDs from target to preserve them
-                const targetCfByRefId = new Map<string, string[]>();
-                const targetCfOrderedList: string[] = [];
-                const targetExistingIds = new Set<string>();
-                
-                const tIdMatches = targetFullMatch.matchAll(/\bid="([^"]+)"/g);
-                for (const tm of tIdMatches) {
-                    targetExistingIds.add(tm[1]);
-                }
-                
-                // Allow target existing IDs to be reused/preserved in the replacement block
-                targetExistingIds.forEach(id => allIds.delete(id));
-
-                const tOpenTagRegex = /<(ce:cross-refs?)\b([^>]*?)>/gi;
-                let tom;
-                while ((tom = tOpenTagRegex.exec(targetContent)) !== null) {
-                    const attrs = tom[2];
-                    const idMatch = attrs.match(/\bid="([^"]+)"/);
-                    const refidMatch = attrs.match(/\brefid="([^"]+)"/);
-                    if (idMatch) {
-                        const id = idMatch[1];
-                        targetCfOrderedList.push(id);
-                        if (refidMatch) {
-                            const refid = refidMatch[1];
-                            if (!targetCfByRefId.has(refid)) targetCfByRefId.set(refid, []);
-                            targetCfByRefId.get(refid)!.push(id);
-                        }
+                    const changes:{old?:typeof oldRefs[number];next?:typeof newRefs[number]}[]=[];
+                    for(const old of remainingOld){
+                        const matches=remainingNew.filter(next=>next.tagName===old.tagName && next.text===old.text);
+                        const uniqueOld=remainingOld.filter(other=>other.tagName===old.tagName && other.text===old.text).length===1;
+                        const next=uniqueOld && matches.length===1?matches[0]:undefined;
+                        if(next)remainingNew.splice(remainingNew.indexOf(next),1);
+                        changes.push({old,next});
+                    }
+                    changes.push(...remainingNew.map(next=>({next})));
+                    for(const {old,next} of changes){
+                        const supplementary=(id?:string)=>!!id && id.trim().split(/\s+/).every(token=>/^ec\d+$/.test(token));
+                        const intentional=(!next && supplementary(old?.refid)) || (!old && supplementary(next?.refid));
+                        const message=intentional?next?`Restored supplementary citation "${next.text}" with proven target ${next.refid}.`:`Converted supplementary citation "${old?.text}" to compact plain text.`:old && next?`Citation target changed: ${old.refid || '(none)'} -> ${next.refid || '(none)'}.`:next?`Added citation link: ${next.refid || '(none)'}.`:`Removed citation link: ${old?.refid || '(none)'}.`;
+                        modifications.push({id:'mod-'+modifications.length,paraId:change.paraId,type:'citation_changed',originalRefText:old?.text,newRefText:next?.text || '(removed)',originalRefId:old?.refid,newRefId:next?.refid,resultSnippet:next?`<${next.tagName} refid="${next.refid}">${next.text}</${next.tagName}>`:'(removed)',message,severity:intentional?'info':'warning'});
                     }
                 }
-
-                // 3. Synchronize IDs while prioritizing preservation of target IDs
-                let remappedCount = 0;
-                
-                // Track IDs used in this specific paragraph to avoid internal collisions
-                const usedInCurrentPara = new Set<string>();
-                if (targetParaId) {
-                    usedInCurrentPara.add(targetParaId);
-                    allIds.add(targetParaId);
-                }
-
-                let newContent = processedSource.replace(/<(ce:cross-refs?)\b([^>]*?)>([\s\S]*?)<\/ce:cross-refs?>/gi, (match, tagName, attrs, content) => {
-                    const refidMatch = attrs.match(/\brefid="([^"]+)"/);
-                    const refid = refidMatch ? refidMatch[1] : '';
-                    const sourceIdMatch = attrs.match(/\bid="([^"]+)"/);
-                    const sourceId = sourceIdMatch ? sourceIdMatch[1] : '';
-
-                    let preservedId: string | null = null;
-                    if (refid && targetCfByRefId.has(refid) && targetCfByRefId.get(refid)!.length > 0) {
-                        preservedId = targetCfByRefId.get(refid)!.shift()!;
-                    } else if (targetCfOrderedList.length > 0) {
-                        preservedId = targetCfOrderedList.shift()!;
-                    }
-
-                    let assignedId = '';
-                    if (preservedId && !usedInCurrentPara.has(preservedId)) {
-                        assignedId = preservedId;
-                    } else if (sourceId && !allIds.has(sourceId) && !usedInCurrentPara.has(sourceId)) {
-                        assignedId = sourceId;
-                    } else {
-                        // Standard XML DTD prefix for both ce:cross-ref and ce:cross-refs is ALWAYS 'cf' (NEVER 'cfs')
-                        assignedId = getUniqueId('cf');
-                    }
-
-                    usedInCurrentPara.add(assignedId);
-                    allIds.add(assignedId);
-                    remappedCount++;
-
-                    const cleanAttrs = attrs.replace(/\bid="[^"]*"/, '').trim();
-                    return `<${tagName} id="${assignedId}"${cleanAttrs ? ' ' + cleanAttrs : ''}>${content}</${tagName}>`;
-                });
-
-                // Renumber existing IDs for non-cross-refs (anchors, e-components)
-                newContent = newContent.replace(/\bid="([a-zA-Z]+)(\d+)"/g, (match, prefix, oldNum) => {
-                    const fullId = `${prefix}${oldNum}`;
-                    if (usedInCurrentPara.has(fullId)) return match; // Already handled/preserved
-                    
-                    if (allIds.has(fullId)) {
-                        const newId = getUniqueId(prefix);
-                        usedInCurrentPara.add(newId);
-                        allIds.add(newId);
-                        return `id="${newId}"`;
-                    }
-                    allIds.add(fullId);
-                    usedInCurrentPara.add(fullId);
-                    return match;
-                });
-
-                // Safety: Ensure required tags that might have lost IDs are re-anchored
-                newContent = newContent.replace(/<(ce:(?:anchor)|e-component)\b((?:(?!id=)[^>])*)>/g, (match, tagName, attrs) => {
-                    const prefix = tagName === 'ce:anchor' ? 'anc' : 'ec';
-                    const newId = getUniqueId(prefix);
-                    usedInCurrentPara.add(newId);
-                    allIds.add(newId);
-                    return `<${tagName} id="${newId}"${attrs}>`;
-                });
-
-                // 5. Scan for FINAL Cross-Refs and e-components for reporting
-                const detectedRefs: DetectedRef[] = [];
-                const crossRefRegex = /<(ce:cross-refs?|e-component)\b([^>]*)>([\s\S]*?)<\/\1>/g;
-                let crMatch;
-                while ((crMatch = crossRefRegex.exec(newContent)) !== null) {
-                    const tagName = crMatch[1];
-                    const attrs = crMatch[2];
-                    const text = crMatch[3];
-                    const refIdMatch = attrs.match(/refid="([^"]+)"/);
-                    const currentRefId = refIdMatch ? refIdMatch[1] : undefined;
-                    const cleanText = stripTags(text).trim();
-                    const isRestored = currentRefId ? restoredRefIds.has(currentRefId) : false;
-                    
-                    detectedRefs.push({
-                        tagName,
-                        refid: currentRefId,
-                        text: cleanText,
-                        isRestored: isRestored
-                    });
-                }
-
-                // 6. Compare target original refs with final detected refs to log modifications
-                const maxRefs = Math.max(targetOriginalRefs.length, detectedRefs.length);
-                for (let rIdx = 0; rIdx < maxRefs; rIdx++) {
-                    const orig = targetOriginalRefs[rIdx];
-                    const curr = detectedRefs[rIdx];
-
-                    if (orig && curr) {
-                        if (orig.text !== curr.text) {
-                            newModifications.push({
-                                id: `mod-${modCounter++}`,
-                                paraId: targetParaId,
-                                type: 'citation_changed',
-                                originalRefText: orig.text,
-                                newRefText: curr.text,
-                                originalRefId: orig.refid,
-                                targetSnippet: orig.fullSnippet,
-                                resultSnippet: `<${curr.tagName}${curr.refid ? ` refid="${curr.refid}"` : ''}>${curr.text}</${curr.tagName}>`,
-                                severity: 'warning',
-                                message: `Reference citation changed from "${orig.text}" (target) to "${curr.text}" (source synchronized & tagged)`
-                            });
-                        }
-                    } else if (!orig && curr) {
-                        newModifications.push({
-                            id: `mod-${modCounter++}`,
-                            paraId: targetParaId,
-                            type: curr.isRestored ? 'ref_restored' : 'auto_tagged',
-                            newRefText: curr.text,
-                            newRefId: curr.refid,
-                            resultSnippet: `<${curr.tagName}${curr.refid ? ` refid="${curr.refid}"` : ''}>${curr.text}</${curr.tagName}>`,
-                            severity: 'info',
-                            message: curr.isRestored 
-                                ? `Restored reference link for "${curr.text}"` 
-                                : `Auto-tagged citation <ce:cross-ref>${curr.text}</ce:cross-ref>`
-                        });
-                    }
-                }
-
-                const newBlock = `${targetOpenTag}${newContent}</${targetTagName}>`;
-                
-                // Diff Stats
-                const charDiff = diffChars(targetFullMatch, newBlock);
-                let addedChars = 0;
-                let removedChars = 0;
-                charDiff.forEach(part => {
-                    if (part.added) addedChars += part.value.length;
-                    if (part.removed) removedChars += part.value.length;
-                });
-
-                newLogs.push({
-                    id: logCounter++,
-                    paraId: targetParaId,
-                    status: 'success',
-                    stats: {
-                        remapped: remappedCount,
-                        restored: restoredCount,
-                        total: detectedRefs.length
-                    },
-                    diffStats: {
-                        added: addedChars,
-                        removed: removedChars
-                    },
-                    detectedRefs: detectedRefs
-                });
-
-                replacements.push({
-                    start: targetIndex,
-                    end: targetIndex + targetFullMatch.length,
-                    replacement: newBlock
-                });
-            }
-
-            // 6. Apply Replacements
-            replacements.sort((a, b) => b.start - a.start);
-            let finalOutput = input;
-            replacements.forEach(rep => {
-                finalOutput = finalOutput.substring(0, rep.start) + rep.replacement + finalOutput.substring(rep.end);
-            });
-
-            setOutput(finalOutput);
-            setLastProcessedInput(input);
-            setLogs(newLogs);
-            setRefModifications(newModifications);
-            generateDiff(input, finalOutput);
-            
-            // Detect Orphans for background check
-            const foundOrphans = detectOrphans(finalOutput);
-            setOrphans(foundOrphans);
-
-            // Background Scanner for Smart Suggestions
-            const newSuggestions: SmartSuggestion[] = [];
-            
-            // 0. Orphans Check
-            if (foundOrphans.length > 0) {
-                newSuggestions.push({
-                    id: 'orphans-detected',
-                    toolName: 'Orphan Detection',
-                    description: `Critical: ${foundOrphans.length} unpaired view(s) detected. Compact-standard views must always be paired with Extended views.`,
-                    path: '#', // Stays on same page but indicates issue
-                    icon: <AlertCircle className="w-4 h-4" />,
-                    condition: 'Unpaired views detected'
-                });
-            }
-
-            // 1. XML Normalizer (Renumber)
-            if (finalOutput.includes('<ce:bib-reference')) {
-                newSuggestions.push({
-                    id: 'xml-renumber',
-                    toolName: 'XML Normalizer',
-                    description: 'Bibliography detected. Use this to ensure all references are correctly numbered and cross-references are updated.',
-                    path: '/xmlRenumber',
-                    icon: <Hash className="w-4 h-4" />,
-                    condition: 'Bibliography detected'
-                });
-            }
-
-            // 2. Other-Refs Scanner
-            const otherRefCount = (finalOutput.match(/<ce:other-ref/g) || []).length;
-            if (otherRefCount > 0) {
-                newSuggestions.push({
-                    id: 'other-ref',
-                    toolName: 'Other-Ref Scanner',
-                    description: `It is found that the XML contains ${otherRefCount} other-ref(s). Please use the Other-Refs Scanner.`,
-                    path: '/otherRefScanner',
-                    icon: <LinkIcon className="w-4 h-4" />,
-                    condition: 'Other-refs detected'
-                });
-            }
-
-            // 3. XML Tag Cleaner
-            const tagMatches = finalOutput.match(/<(opt_DEL|opt_INS|opt_Comment)\b[^>]*>([\s\S]*?)<\/\1>/g) || [];
-            if (tagMatches.length > 0) {
-                newSuggestions.push({
-                    id: 'tag-cleaner',
-                    toolName: 'XML Tag Cleaner',
-                    description: `It is found that the XML contains ${tagMatches.length} editorial tag(s) (DEL/INS/Comment). Please use the XML Tag Cleaner.`,
-                    path: '/tagCleaner',
-                    icon: <Trash2 className="w-4 h-4" />,
-                    condition: 'Editorial tags detected'
-                });
-            }
-
-            // 4. Citation Linker Pro
-            const unlinkedCitations = (finalOutput.match(/<ce:cross-ref(?![^>]*\brefid=)[^>]*>/g) || []).length;
-            if (unlinkedCitations > 0) {
-                newSuggestions.push({
-                    id: 'citation-linker',
-                    toolName: 'Citation Linker Pro',
-                    description: `It is found that the XML result contains ${unlinkedCitations} unlinked Cross-ref(s). Please use the Citation Linker Pro.`,
-                    path: '/citationLinker',
-                    icon: <LinkIcon className="w-4 h-4" />,
-                    condition: 'Unlinked citations detected'
-                });
-            }
-
-            // 5. Uncited Ref Cleaner
-            if (finalOutput.includes('<ce:bibliography')) {
-                newSuggestions.push({
-                    id: 'uncited-cleaner',
-                    toolName: 'Uncited Ref Cleaner',
-                    description: 'Bibliography detected. Use this tool to identify and remove references that are not cited in the text.',
-                    path: '/uncitedCleaner',
-                    icon: <Eraser className="w-4 h-4" />,
-                    condition: 'Bibliography detected'
-                });
-            }
-
-            // 6. Reference Structure Repair
-            if (finalOutput.includes('<ce:source-text') || !finalOutput.includes('<sb:reference')) {
-                newSuggestions.push({
-                    id: 'structural-architect',
-                    toolName: 'Reference Structure Repair v3.2',
-                    description: 'Structural overhaul recommended. Use this to transform raw source text into valid structural bibliography nodes.',
-                    path: '/structuralArchitect',
-                    icon: <Box className="w-4 h-4" />,
-                    condition: 'Structural overhaul recommended'
-                });
-            }
-
-            setSuggestions(newSuggestions);
-            
-            const changedCount = newModifications.filter(m => m.type === 'citation_changed').length;
-            if (changedCount > 0) {
-                setActiveTab('audit');
-                const sampleChange = newModifications.find(m => m.type === 'citation_changed');
-                setToast({ 
-                    msg: `Synced ${pairs.length} pair(s). ⚠️ ${changedCount} reference citation changed (${sampleChange?.originalRefText} ➔ ${sampleChange?.newRefText})`, 
-                    type: "warn" 
-                });
-            } else if (newModifications.length > 0) {
-                setActiveTab('audit');
-                setToast({ msg: `Successfully synced ${pairs.length} paragraph pairs with ${newModifications.length} reference adjustments.`, type: "success" });
-            } else {
-                setActiveTab('report');
-                setToast({ msg: `Successfully synced ${pairs.length} paragraph pairs.`, type: "success" });
-            }
-            setIsLoading(false);
-
-        }, 800);
+                for(const modification of modifications)newLogs.push({id:newLogs.length+1,paraId:modification.paraId,status:modification.severity==='info'?'success':'warning',message:modification.message,detectedRefs:[]});
+                for(const n of result.audit.orphans)newLogs.push({id:newLogs.length+1,paraId:n.attributes.id || '(missing ID)',status:'warning',message:'Unpaired view preserved. Use orphan review before creating a counterpart.',detectedRefs:[]});
+                if(!newLogs.length)newLogs.push({id:1,paraId:'QA',status:result.audit.pairs.length?'success':'warning',message:result.audit.pairs.length?'No changes needed in verified pairs.':'No verified adjacent view pairs found. Review the source and scan again.',detectedRefs:[]});
+                setOutput(result.output);setLastProcessedInput(input);setLogs(newLogs);generateDiff(input,result.output);
+                const audit=inspectViews(result.output);
+                setOrphans(audit.orphans.map(n=>({type:n.attributes.view==='extended'?'extended':'compact',id:n.attributes.id || '(missing ID)',text:audit.textContent(n)})));
+                setSuggestions([]);setActiveTab(result.notices.length?'report':modifications.length?'report':'diff');
+                setToast({msg:`Updated ${result.applied.length} paragraphs; ${result.notices.length} groups preserved for review.`,type:result.notices.length?'warn':'success'});
+            }catch(error){reportError(error);}finally{setIsLoading(false);}
+        },800);
+    };
+    const fixOrphans = () => {
+        const operation=++operationRef.current;
+        setIsLoading(true);
+        setTimeout(() => {
+            if(operation!==operationRef.current)return;
+            try{
+                const result=repairViewOrphans(input,customStartId);
+                setOutput(result.output);setLastProcessedInput(input);generateDiff(input,result.output);
+                setLogs([{id:1,paraId:'ORPHAN REVIEW',status:result.notices.length?'warning':'success',message:`Created ${result.created} verified counterparts.`,detectedRefs:[]},...result.notices.map((n,i)=>({id:i+2,paraId:n.paraId,status:'warning' as const,message:n.message,detectedRefs:[]}))]);
+                setSuggestions([]);
+                const audit=inspectViews(result.output);
+                setOrphans(audit.orphans.map(n=>({type:n.attributes.view==='extended'?'extended':'compact',id:n.attributes.id || '(missing ID)',text:audit.textContent(n)})));
+                setActiveTab(result.notices.length?'report':'diff');
+                setToast({msg:`Created ${result.created} counterparts; ${result.notices.length} groups need review.`,type:result.notices.length?'warn':'success'});
+            }catch(error){reportError(error);}finally{setIsLoading(false);}
+        },800);
     };
 
     const copyOutput = () => {
@@ -1203,6 +356,8 @@ const ViewSync: React.FC = () => {
     };
 
     const clearAll = () => {
+        operationRef.current++;
+        resetResults();
         setInput('');
         setOutput('');
         setLastProcessedInput('');
@@ -1261,10 +416,10 @@ const ViewSync: React.FC = () => {
                              <div className="relative">
                                 <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 text-xs font-mono">#</span>
                                 <input 
-                                    type="number" 
+                                    type="text" inputMode="numeric" maxLength={4} aria-label="Starting ID number"
                                     value={customStartId}
                                     onChange={(e) => setCustomStartId(e.target.value)}
-                                    placeholder="Auto (4000)"
+                                    placeholder="Auto (3000)"
                                     className="pl-7 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-mono text-slate-700 w-36 outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all placeholder-slate-400"
                                 />
                              </div>
@@ -1360,49 +515,6 @@ const ViewSync: React.FC = () => {
                 
                 {/* Output Section */}
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col relative">
-                    {/* Persistent Change Notification Banner */}
-                    {refModifications.length > 0 && (
-                        <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 px-4 py-2.5 text-white flex items-center justify-between shadow-sm animate-fadeIn">
-                            <div className="flex items-center gap-2.5 min-w-0">
-                                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/20 text-white animate-pulse">
-                                    <Sparkles className="w-3.5 h-3.5" />
-                                </span>
-                                <div className="text-xs font-medium truncate">
-                                    <span className="font-bold">
-                                        {refModifications.filter(m => m.type === 'citation_changed').length > 0 
-                                            ? `⚠️ ${refModifications.filter(m => m.type === 'citation_changed').length} Reference Citation Change Detected:` 
-                                            : `⚡ ${refModifications.length} Reference Adjustment(s):`}
-                                    </span>{' '}
-                                    <span className="text-amber-100 font-mono text-[11px]">
-                                        {refModifications.map(m => m.originalRefText ? `${m.originalRefText} ➔ ${m.newRefText}` : m.newRefText).join(', ')}
-                                    </span>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                                <button
-                                    onClick={() => setActiveTab('audit')}
-                                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all ${
-                                        activeTab === 'audit' 
-                                            ? 'bg-white text-orange-700 shadow-sm' 
-                                            : 'bg-white/20 hover:bg-white/30 text-white'
-                                    }`}
-                                >
-                                    Review Audit Log
-                                </button>
-                                <button
-                                    onClick={() => setActiveTab('diff')}
-                                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all ${
-                                        activeTab === 'diff' 
-                                            ? 'bg-white text-orange-700 shadow-sm' 
-                                            : 'bg-white/20 hover:bg-white/30 text-white'
-                                    }`}
-                                >
-                                    Diff
-                                </button>
-                            </div>
-                        </div>
-                    )}
-
                     <div className="bg-slate-50 px-5 py-2 border-b border-slate-100 flex justify-between items-center">
                         <div className="flex items-center gap-2">
                             <label className="font-bold text-slate-700 text-sm flex items-center gap-2">
@@ -1448,7 +560,7 @@ const ViewSync: React.FC = () => {
                     </div>
 
                     <div className="bg-white px-2 pt-2 border-b border-slate-100 flex space-x-1 overflow-x-auto custom-scrollbar">
-                         {['raw', 'diff', 'audit', 'report', 'mismatches', 'orphans'].map((tab) => (
+                         {['raw', 'diff', 'report', 'mismatches', 'orphans'].map((tab) => (
                              <button 
                                 key={tab}
                                 onClick={() => setActiveTab(tab as any)} 
@@ -1458,21 +570,6 @@ const ViewSync: React.FC = () => {
                              >
                                 {tab === 'raw' && 'Raw XML'}
                                 {tab === 'diff' && 'Diff View'}
-                                {tab === 'audit' && (
-                                    <span className="flex items-center gap-1.5">
-                                        <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                                        Audit & Changes
-                                        {refModifications.length > 0 && (
-                                            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-                                                refModifications.some(m => m.type === 'citation_changed') 
-                                                    ? 'bg-amber-500 text-white animate-pulse' 
-                                                    : 'bg-slate-200 text-slate-700'
-                                            }`}>
-                                                {refModifications.length}
-                                            </span>
-                                        )}
-                                    </span>
-                                )}
                                 {tab === 'report' && `Log (${logs.length})`}
                                 {tab === 'mismatches' && `Mismatches (${mismatches.length})`}
                                 {tab === 'orphans' && `Orphans (${orphans.length})`}
@@ -1492,100 +589,6 @@ const ViewSync: React.FC = () => {
                                     placeholder="Synchronized XML will appear here..."
                                 />
                              </div>
-                         )}
-
-                         {activeTab === 'audit' && (
-                            <div className="h-full bg-white flex flex-col overflow-hidden">
-                                <div className="p-4 border-b border-slate-100 bg-amber-50/40 flex justify-between items-center">
-                                    <div className="flex items-center gap-2.5">
-                                        <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center text-amber-600">
-                                            <Sparkles className="w-4 h-4" />
-                                        </div>
-                                        <div>
-                                            <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">
-                                                Reference Modifications & Auto-Tag Audit Trail
-                                            </h4>
-                                            <p className="text-[11px] text-slate-500 font-medium">
-                                                Explicit change tracking for modified, auto-tagged, and restored cross-references.
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <button
-                                            onClick={() => navigate('/citationLinker', { state: { transferredXml: output, sourceTool: 'View Synchronizer' } })}
-                                            className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5"
-                                        >
-                                            <LinkIcon className="w-3.5 h-3.5" />
-                                            Citation Linker Pro
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div className="flex-grow overflow-auto custom-scrollbar p-4 space-y-4">
-                                    {refModifications.length > 0 ? (
-                                        <div className="grid gap-3.5">
-                                            {refModifications.map((mod) => (
-                                                <div 
-                                                    key={mod.id} 
-                                                    className={`border rounded-xl p-4 transition-all shadow-sm ${
-                                                        mod.type === 'citation_changed' 
-                                                            ? 'border-amber-300 bg-amber-50/20 ring-1 ring-amber-100' 
-                                                            : mod.type === 'auto_tagged'
-                                                            ? 'border-indigo-200 bg-indigo-50/20'
-                                                            : 'border-emerald-200 bg-emerald-50/20'
-                                                    }`}
-                                                >
-                                                    <div className="flex items-start justify-between gap-3 mb-2.5">
-                                                        <div className="flex items-center gap-2">
-                                                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${
-                                                                mod.type === 'citation_changed' 
-                                                                    ? 'bg-amber-500 text-white' 
-                                                                    : mod.type === 'auto_tagged'
-                                                                    ? 'bg-indigo-600 text-white'
-                                                                    : 'bg-emerald-600 text-white'
-                                                            }`}>
-                                                                {mod.type === 'citation_changed' && '⚠️ Citation Changed'}
-                                                                {mod.type === 'auto_tagged' && '⚡ Auto-Tagged Citation'}
-                                                                {mod.type === 'ref_restored' && '🔗 Reference Restored'}
-                                                            </span>
-                                                            <span className="font-mono text-xs font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-200 shadow-2xs">
-                                                                ID: {mod.paraId}
-                                                            </span>
-                                                        </div>
-                                                        <span className="text-[10px] font-mono text-slate-400">
-                                                            {mod.originalRefId ? `Target refid="${mod.originalRefId}"` : ''}
-                                                        </span>
-                                                    </div>
-
-                                                    <p className="text-xs text-slate-700 font-medium mb-3">
-                                                        {mod.message}
-                                                    </p>
-
-                                                    {/* Comparison view */}
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs font-mono">
-                                                        {mod.targetSnippet && (
-                                                            <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-100">
-                                                                <div className="text-[10px] font-bold text-rose-700 uppercase mb-1">Target View (Original)</div>
-                                                                <div className="text-rose-900 break-all">{mod.targetSnippet}</div>
-                                                            </div>
-                                                        )}
-                                                        <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-100">
-                                                            <div className="text-[10px] font-bold text-emerald-700 uppercase mb-1">Synchronized Output</div>
-                                                            <div className="text-emerald-900 break-all">{mod.resultSnippet}</div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60 py-16">
-                                            <CheckCircle size={44} strokeWidth={1.5} className="mb-3 text-emerald-500" />
-                                            <p className="text-sm font-semibold text-slate-700">No Reference Discrepancies</p>
-                                            <p className="text-xs mt-1 text-slate-500">All cross-references and links matched cleanly during synchronization.</p>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
                          )}
 
                          {activeTab === 'diff' && (
@@ -1682,7 +685,7 @@ const ViewSync: React.FC = () => {
                                     <div className="flex items-center gap-4">
                                         <div className="flex items-center gap-2">
                                             <input 
-                                                type="checkbox" 
+                                                type="checkbox" aria-label="Select all mismatched pairs"
                                                 checked={mismatches.length > 0 && selectedMismatches.size === mismatches.length}
                                                 onChange={(e) => {
                                                     if (e.target.checked) setSelectedMismatches(new Set(mismatches.map(m => m.index)));
@@ -1715,7 +718,7 @@ const ViewSync: React.FC = () => {
                                                 <div>
                                                     <h4 className="text-sm font-bold text-amber-900">Unsynchronized Pairs Detected</h4>
                                                     <p className="text-xs text-amber-700 mt-1">
-                                                        The following paragraphs have differing text content between their Compact and Extended views. Select which ones to synchronize.
+                                                        These pairs differ in text, formatting, or citation targets. XML is shown when the visible text matches. Extended views retain supplementary links; compact views show plain text. Ordinary links remain in both. File display blocks and ambiguous targets require review.
                                                     </p>
                                                 </div>
                                             </div>
@@ -1731,7 +734,9 @@ const ViewSync: React.FC = () => {
                                                                 <input 
                                                                     type="checkbox" 
                                                                     checked={selectedMismatches.has(m.index)}
-                                                                    onChange={() => {}} // Handled by div click
+                                                                    aria-label={`Select pair ${m.paraId}`}
+                                                                    onClick={(event) => event.stopPropagation()}
+                                                                    onChange={() => toggleMismatchSelection(m.index)}
                                                                     className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                                                                 />
                                                                 <span className={`text-xs font-bold font-mono ${selectedMismatches.has(m.index) ? 'text-indigo-700' : 'text-slate-700'}`}>ID: {m.paraId}</span>
@@ -1760,7 +765,7 @@ const ViewSync: React.FC = () => {
                                         <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60">
                                             <CheckCircle size={48} strokeWidth={1} className="mb-3 text-emerald-400" />
                                             <p className="text-sm font-medium uppercase tracking-widest">No mismatches found</p>
-                                            <p className="text-xs mt-2">All paragraph pairs are perfectly synchronized.</p>
+                                            <p className="text-xs mt-2">Scan the current source to compare verified adjacent pairs. Unpaired or ambiguous views require review.</p>
                                         </div>
                                     )}
                                 </div>
@@ -1781,12 +786,12 @@ const ViewSync: React.FC = () => {
                                             className="flex items-center gap-2 px-4 py-1.5 bg-rose-600 text-white rounded-lg text-xs font-bold hover:bg-rose-700 shadow-sm transition-all animate-pulse hover:animate-none"
                                         >
                                             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-                                            Generate All Missing Partners
+                                            Generate Safe Missing Partners
                                         </button>
                                     )}
                                     {orphans.length > 0 && (
                                         <span className="text-[10px] font-black text-rose-600 px-2 py-0.5 bg-rose-50 rounded-full border border-rose-100">
-                                            {orphans.length} Critical Issues
+                                            {orphans.length} Need Review
                                         </span>
                                     )}
                                 </div>
@@ -1795,7 +800,7 @@ const ViewSync: React.FC = () => {
                                         <div className="space-y-4">
                                             <div className="bg-rose-50 border border-rose-200 rounded-xl p-4">
                                                 <p className="text-xs text-rose-700">
-                                                    The following paragraphs are missing their counterparts. Every <b>compact-standard</b> view must be paired with an <b>extended</b> view.
+                                                    These paragraphs have no verified adjacent counterpart. Review their location before generating partners. Supplementary/display content is preserved for manual review.
                                                 </p>
                                             </div>
                                             <div className="grid gap-4 pb-8">

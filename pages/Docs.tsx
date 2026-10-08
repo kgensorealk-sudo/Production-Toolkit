@@ -193,8 +193,9 @@ const Docs: React.FC = () => {
                             <h2 className="text-3xl font-extrabold text-slate-900 mb-6 uppercase tracking-tight">View Synchronizer</h2>
                             <div className="prose prose-slate max-w-none">
                                 <p className="text-slate-600 mb-4">
-                                    Synchronizes content between multiple paragraph views (compact vs extended).
+                                    Synchronizes verified adjacent compact and extended paragraphs in the same container. Scanning compares text, formatting, and citation targets. Supplementary citations remain linked in extended views and appear as plain text in compact views. Existing extended links provide target evidence when copying compact text. Paragraphs without a view attribute remain untouched. File display blocks and ambiguous target evidence remain unchanged for review. Plain citations are preserved; Citation Linker Pro handles tagging and target resolution.
                                 </p>
+                                <p className="text-slate-600 mb-4">Copied elements receive configured ID prefixes, four-digit numbers from 0005 to 9995 in steps of five, and proven internal counterpart links. Orphan generation preserves attributes and skips ambiguous or supplementary views. Inspect the QA report and diff, then validate the complete XML with DTD and VTOOL.</p>
                             </div>
                         </section>
                     )}
