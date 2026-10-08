@@ -202,13 +202,13 @@ export const TOOL_REGISTRY: ToolInfo[] = [
         name: 'ID Prefix Auditor',
         route: '/idAuditor',
         category: 'Citations & References',
-        shortDesc: 'Audits and normalizes ID sequences in references and tables while maintaining internal document cross-links.',
+        shortDesc: 'Audits existing IDs and generates required missing IDs, using configured prefixes and 0005 to 9995 in steps of five. Citation targets are handled by Citation Linker Pro.',
         scenarios: [
             'Reference IDs have inconsistent prefixes (e.g. mixture of "bib001", "b1", "ref1").',
-            'Journal requires a strict prefix convention (e.g., "bib" or "b").',
-            'Auditing all element IDs and updating internal reference links synchronously.'
+            'Supported elements need their configured prefixes and four-digit ID suffixes.',
+            'Missing or duplicate element IDs need correction.'
         ],
-        howToUse: 'Paste XML, specify target prefix rule (e.g. "bib1, bib2..." or "b1, b2..."), click "Audit & Normalize", and export standardized XML.',
+        howToUse: 'Paste XML, run the ID audit, fix ID violations and inspect the before/after diff. Use Citation Linker Pro for citation targets after IDs change.',
         keywords: ['id auditor', 'prefix', 'bib prefix', 'normalize ids', 'inconsistent ids']
     },
     {

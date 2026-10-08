@@ -1,0 +1,549 @@
+{
+  "source": "Installed XML Correction Editor IDvaildation.xml; captured 2026-10-08",
+  "rules": [
+    {
+      "tag": "ce:abstract",
+      "prefix": "ab",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "ab"
+    },
+    {
+      "tag": "ce:abstract-sec",
+      "prefix": "as",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "as"
+    },
+    {
+      "tag": "ce:acknowledgment",
+      "prefix": "ac",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "ac"
+    },
+    {
+      "tag": "ce:affiliation",
+      "prefix": "af",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "af"
+    },
+    {
+      "tag": "ce:anchor",
+      "prefix": "an",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "ce:author",
+      "prefix": "au",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "au"
+    },
+    {
+      "tag": "ce:alt-title",
+      "prefix": "ati",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "ce:alt-subtitle",
+      "prefix": "ast",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "ce:bibliography",
+      "prefix": "bi",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "bi"
+    },
+    {
+      "tag": "ce:bibliography-sec",
+      "prefix": "bs",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "bs"
+    },
+    {
+      "tag": "ce:bib-reference",
+      "prefix": "bb",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "bb"
+    },
+    {
+      "tag": "ce:biography",
+      "prefix": "bg",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "ce:caption",
+      "prefix": "ca",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "ca"
+    },
+    {
+      "tag": "ce:collaboration",
+      "prefix": "co",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "ce:correspondence",
+      "prefix": "cr",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "cr"
+    },
+    {
+      "tag": "ce:def-list",
+      "prefix": "dl",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "ce:def-term",
+      "prefix": "dt",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "ce:displayed-quote",
+      "prefix": "dq",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "ce:e-component",
+      "prefix": "ec",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "ec"
+    },
+    {
+      "tag": "ce:enunciation",
+      "prefix": "en",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "ce:exam-answers",
+      "prefix": "ea",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "ce:exam-questions",
+      "prefix": "eq",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "ce:figure",
+      "prefix": "f",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "f"
+    },
+    {
+      "tag": "ce:footnote",
+      "prefix": "fn",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "ce:formula",
+      "prefix": "fo",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "ce:further-reading",
+      "prefix": "fr",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "ce:further-reading-sec",
+      "prefix": "fs",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "ce:glossary",
+      "prefix": "gl",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "ce:glossary-entry",
+      "prefix": "ge",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "ce:glossary-sec",
+      "prefix": "gs",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "ce:grant-sponsor",
+      "prefix": "gts",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "gts"
+    },
+    {
+      "tag": "ce:grant-number",
+      "prefix": "gtn",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "gtn"
+    },
+    {
+      "tag": "ce:inter-ref",
+      "prefix": "ir",
+      "attribute": "type",
+      "value": "code",
+      "isCoded": "false",
+      "current": "ir"
+    },
+    {
+      "tag": "ce:inter-refs",
+      "prefix": "ir",
+      "attribute": "type",
+      "value": "code",
+      "isCoded": "false",
+      "current": null
+    },
+    {
+      "tag": "ce:inter-ref",
+      "prefix": "qr",
+      "attribute": "type",
+      "value": "code",
+      "isCoded": "true",
+      "current": "ir"
+    },
+    {
+      "tag": "ce:inter-refs",
+      "prefix": "qr",
+      "attribute": "type",
+      "value": "code",
+      "isCoded": "true",
+      "current": null
+    },
+    {
+      "tag": "ce:inter-refs-text",
+      "prefix": "it",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "ce:intra-ref",
+      "prefix": "ia",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "ce:intra-refs",
+      "prefix": "ia",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "ce:intra-refs-text",
+      "prefix": "ix",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "ce:intro",
+      "prefix": "io",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "ce:keyword",
+      "prefix": "kw",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "kw"
+    },
+    {
+      "tag": "ce:keywords",
+      "prefix": "ks",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "ks"
+    },
+    {
+      "tag": "ce:link",
+      "prefix": "lk",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "lk"
+    },
+    {
+      "tag": "ce:list",
+      "prefix": "l",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "l"
+    },
+    {
+      "tag": "ce:list-item",
+      "prefix": "li",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "li"
+    },
+    {
+      "tag": "ce:nomenclature",
+      "prefix": "no",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "ce:note-para",
+      "prefix": "np",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "ce:other-ref",
+      "prefix": "or",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "or"
+    },
+    {
+      "tag": "ce:para",
+      "prefix": "p",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "p"
+    },
+    {
+      "tag": "ce:presented",
+      "prefix": "pr",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "ce:section",
+      "prefix": "s",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "s"
+    },
+    {
+      "tag": "ce:section-title",
+      "prefix": "st",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "st"
+    },
+    {
+      "tag": "ce:simple-para",
+      "prefix": "sp",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "sp"
+    },
+    {
+      "tag": "ce:stereochem",
+      "prefix": "sc",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "subchapter",
+      "prefix": "sc",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "ce:subtitle",
+      "prefix": "sti",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "ce:table",
+      "prefix": "t",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "t"
+    },
+    {
+      "tag": "ce:table-footnote",
+      "prefix": "tf",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "ce:text",
+      "prefix": "tx",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "tx"
+    },
+    {
+      "tag": "ce:textbox",
+      "prefix": "b",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "ce:textfn",
+      "prefix": "tn",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "tn"
+    },
+    {
+      "tag": "ce:textref",
+      "prefix": "tr",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "tr"
+    },
+    {
+      "tag": "sb:reference",
+      "prefix": "rf",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "rf"
+    },
+    {
+      "tag": "outline",
+      "prefix": "ou",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": null
+    },
+    {
+      "tag": "ce:cross-ref",
+      "prefix": "cf",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "cf"
+    },
+    {
+      "tag": "ce:cross-refs",
+      "prefix": "cf",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "cf"
+    },
+    {
+      "tag": "ce:alt-text",
+      "prefix": "at",
+      "attribute": null,
+      "value": null,
+      "isCoded": null,
+      "current": "al"
+    }
+  ]
+}

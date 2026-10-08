@@ -8,37 +8,22 @@ import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 
-interface AuditItem {
-    id: string;
-    originalId: string;
-    tagName: string;
-    expectedPrefix: string;
-    status: 'valid' | 'invalid';
-    isOtherRef: boolean;
-    hasNameSpacingViolation: boolean;
-    isLengthViolation: boolean;
-    isDuplicate: boolean;
-    preview: string;
-    fullTag: string;
-}
-
-const ID_CONFIG = [
-    { tag: 'ce:bib-reference', prefix: 'bb' },
-    { tag: 'sb:reference', prefix: 'rf' },
-    { tag: 'ce:source-text', prefix: 'se' },
-    { tag: 'ce:inter-ref', prefix: 'ir' },
-    { tag: 'ce:caption', prefix: 'ca' },
-    { tag: 'ce:cross-ref', prefix: 'cf' },
-    { tag: 'ce:cross-refs', prefix: 'cf' },
-    { tag: 'ce:para', prefix: 'p' },
-    { tag: 'ce:simple-para', prefix: 'sp' },
-    { tag: 'ce:other-ref', prefix: 'or' },
-    { tag: 'ce:textref', prefix: 'tr' }
-];
+import { ID_RULES, auditElementIds, repairElementIds, analyzeIdLinks, createIdQaReport, IdQaReport, IdAuditItem, PrefixOverrides } from '../utils/idAuditorEngine';
+type AuditItem = IdAuditItem;
+const ID_CONFIG = ID_RULES;
 
 const IdAuditor: React.FC = () => {
     const [input, setInput] = useState('');
+    const [prefixOverrides, setPrefixOverrides] = useState<PrefixOverrides>({});
     const [output, setOutput] = useState('');
+    const [qaReport, setQaReport] = useState<IdQaReport | null>(null);
+    const [qaExpanded, setQaExpanded] = useState(true);
+    const inputKey = JSON.stringify([input, prefixOverrides]);
+    const inputKeyRef = useRef(inputKey);
+    const operationRef = useRef(0);
+    inputKeyRef.current = inputKey;
+    const invalidateGeneratedResult = () => { operationRef.current++; setIsLoading(false); setOutput(''); setDiffElements(null); setSuggestions([]); setQaReport(null); };
+    useEffect(() => { invalidateGeneratedResult(); }, [inputKey]);
     const [auditResults, setAuditResults] = useState<AuditItem[]>([]);
     const [suggestions, setSuggestions] = useState<SmartSuggestion[]>([]);
     const [step, setStep] = useState<'input' | 'audit' | 'result'>('input');
@@ -52,9 +37,12 @@ const IdAuditor: React.FC = () => {
     const diffContainerRef = useRef<HTMLDivElement>(null);
 
     // Filter states for the audit view
-    const [filterOtherOnly, setFilterOtherOnly] = useState(false);
     const [filterInvalidOnly, setFilterInvalidOnly] = useState(false);
-    const [filterNameSpacingOnly, setFilterNameSpacingOnly] = useState(false);
+    const [auditPage, setAuditPage] = useState(0);
+    const [qaChangesPage, setQaChangesPage] = useState(0);
+    const [qaIssuesPage, setQaIssuesPage] = useState(0);
+    useEffect(() => setAuditPage(0), [auditResults, filterInvalidOnly]);
+    useEffect(() => { setQaChangesPage(0); setQaIssuesPage(0); }, [qaReport]);
 
     const escapeHtml = (unsafe: string) => unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -214,79 +202,14 @@ const IdAuditor: React.FC = () => {
             return;
         }
 
+        const snapshot = inputKeyRef.current;
+        const operation = ++operationRef.current;
         setIsLoading(true);
         setTimeout(() => {
+            if (operation !== operationRef.current || snapshot !== inputKeyRef.current) return;
             try {
-                const results: AuditItem[] = [];
-                const idMap = new Map<string, number>(); // Track ID occurrences
-                
-                ID_CONFIG.forEach(({ tag, prefix }) => {
-                    const tagRegex = new RegExp(`<${tag}\\b([^>]*?)>`, 'g');
-                    const strictIdRegex = new RegExp(`^${prefix}\\d{4}$`, 'i');
-                    let match;
-                    while ((match = tagRegex.exec(input)) !== null) {
-                        const fullOpeningTag = match[0];
-                        const attrs = match[1];
-                        const idMatch = attrs.match(/\bid="([^"]+)"/);
-                        const originalId = idMatch ? idMatch[1] : "";
-                        
-                        if (originalId) {
-                            // Track duplicates
-                            idMap.set(originalId, (idMap.get(originalId) || 0) + 1);
-                        }
-
-                        const elementEndIdx = input.indexOf(`</${tag}>`, match.index);
-                        const elementContent = elementEndIdx !== -1 
-                            ? input.substring(match.index, elementEndIdx + `</${tag}>`.length)
-                            : fullOpeningTag;
-
-                        const isValidId = originalId ? strictIdRegex.test(originalId) : false;
-                        const isPrefixValid = originalId ? originalId.toLowerCase().startsWith(prefix) : false;
-                        const isLengthViolation = isPrefixValid && !isValidId;
-
-                        const isOtherRef = elementContent.includes('<ce:other-ref');
-                        
-                        // Name Spacing Logic: Detect spaces between initials in <ce:given-name> or <sb:given-name>
-                        const nameSpacingRegex = /<(?:ce|sb):given-name\b[^>]*>(.*?)<\/(?:ce|sb):given-name>/gi;
-                        let hasNameSpacingViolation = false;
-                        let nameMatch;
-                        while ((nameMatch = nameSpacingRegex.exec(elementContent)) !== null) {
-                            const nameText = nameMatch[1];
-                            if (/\b[A-Z](?!\s*[\-–—\u2010-\u2015])(?![\-–—\u2010-\u2015a-zA-Z\u00C0-\u024F\.'’ʻ])/.test(nameText) || /\. +(?=[A-Z]\.)/.test(nameText)) {
-                                hasNameSpacingViolation = true;
-                                break;
-                            }
-                        }
-
-                        results.push({
-                            id: originalId || '[MISSING ID]',
-                            originalId: originalId,
-                            tagName: tag,
-                            expectedPrefix: prefix,
-                            status: 'valid', // Will update below
-                            isOtherRef,
-                            hasNameSpacingViolation,
-                            isLengthViolation,
-                            isDuplicate: false, // Will update below
-                            preview: elementContent.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 100) + '...',
-                            fullTag: fullOpeningTag
-                        });
-                    }
-                });
-
-                // Post-process for duplicates and final status
-                results.forEach(item => {
-                    if (item.originalId) {
-                        item.isDuplicate = (idMap.get(item.originalId) || 0) > 1;
-                    }
-                    const strictIdRegex = new RegExp(`^${item.expectedPrefix}\\d{4}$`, 'i');
-                    const isValidId = item.originalId ? strictIdRegex.test(item.originalId) : false;
-                    
-                    if (!item.originalId || !isValidId || item.hasNameSpacingViolation || item.isDuplicate) {
-                        item.status = 'invalid';
-                    }
-                });
-
+                const results = auditElementIds(input, prefixOverrides);
+                setQaReport(createIdQaReport(input));
                 // Smart Suggestions Logic (Background Scanner)
                 const newSuggestions: SmartSuggestion[] = [];
                 
@@ -340,34 +263,24 @@ const IdAuditor: React.FC = () => {
                     });
                 }
 
-                // 4. Citation Linker Pro
-                const unlinkedCitations = (input.match(/<ce:cross-ref(?![^>]*\brefid=)[^>]*>/g) || []).length;
-                if (unlinkedCitations > 0) {
+                // Recommendations use decoded structural targets, including IDREFS lists.
+                const links = analyzeIdLinks(input);
+                if (links.unlinkedCitations || links.brokenTargets || links.ambiguousTargets.length) {
                     newSuggestions.push({
-                        id: 'citation-linker',
-                        toolName: 'Citation Linker Pro',
-                        description: `It is found that the XML result contains ${unlinkedCitations} unlinked Cross-ref(s). Please use the Citation Linker Pro.`,
-                        path: '/citationLinker',
-                        icon: <LinkIcon className="w-4 h-4" />,
-                        condition: 'Unlinked citations detected'
+                        id: 'citation-linker', toolName: 'Citation Linker Pro',
+                        description: 'Citation or local link targets are missing, unresolved, or ambiguous. Review targets with Citation Linker Pro.',
+                        path: '/citationLinker', icon: <LinkIcon className="w-4 h-4" />,
+                        condition: 'Link targets need review'
                     });
                 }
-
-                // 5. Uncited Ref Cleaner
-                const bibRefIds = Array.from(input.matchAll(/<ce:bib-reference\b[^>]*?\bid="([^"]+)"/g)).map(m => m[1]);
-                if (bibRefIds.length > 0) {
-                    const crossRefIds = new Set(Array.from(input.matchAll(/\brefid="([^"]+)"/g)).map(m => m[1]));
-                    const uncited = bibRefIds.filter(id => !crossRefIds.has(id));
-                    if (uncited.length > 0) {
-                        newSuggestions.push({
-                            id: 'uncited-cleaner',
-                            toolName: 'Uncited Ref Cleaner',
-                            description: `It is found that the XML contains ${uncited.length} reference(s) that are not cited in the text. Please use the Uncited Ref Cleaner to identify and remove them.`,
-                            path: '/uncitedCleaner',
-                            icon: <Eraser className="w-4 h-4" />,
-                            condition: 'Uncited references detected'
-                        });
-                    }
+                // Resolve link uncertainty before recommending reference cleanup.
+                if (links.uncitedCount && !links.unlinkedCitations && !links.brokenTargets && !links.ambiguousTargets.length) {
+                    newSuggestions.push({
+                        id: 'uncited-cleaner', toolName: 'Uncited Ref Cleaner',
+                        description: `The XML contains ${links.uncitedCount} reference(s) without a citation target. Review them with Uncited Ref Cleaner.`,
+                        path: '/uncitedCleaner', icon: <Eraser className="w-4 h-4" />,
+                        condition: 'Uncited references detected'
+                    });
                 }
 
                 // 6. View Synchronizer
@@ -398,7 +311,8 @@ const IdAuditor: React.FC = () => {
                 setSuggestions(newSuggestions);
 
                 if (results.length === 0) {
-                    setToast({ msg: "No structural nodes detected for audit.", type: "warn" });
+                    setAuditResults([]);
+                    setToast({ msg: "No existing IDs or required missing IDs to audit.", type: "info" });
                     setIsLoading(false);
                 } else {
                     results.sort((a, b) => {
@@ -412,153 +326,63 @@ const IdAuditor: React.FC = () => {
                     const invalidCount = results.filter(r => r.status === 'invalid').length;
                     
                     if (invalidCount > 0) {
-                        setToast({ msg: `Found ${invalidCount} structural violations.`, type: "warn" });
+                        setToast({ msg: `Found ${invalidCount} ID violations.`, type: "warn" });
                     } else {
-                        setToast({ msg: "System checks passed. All protocols compliant.", type: "success" });
+                        setToast({ msg: "ID checks passed.", type: "success" });
                     }
                     setIsLoading(false);
                 }
             } catch (err) {
-                setToast({ msg: "Audit system failure.", type: "error" });
+                setAuditResults([]);
+                setQaReport(null);
+                setToast({ msg: err instanceof Error ? err.message : "Audit system failure.", type: "error" });
                 setIsLoading(false);
             }
         }, 600);
     };
 
     const executeFix = () => {
+        const snapshot = inputKeyRef.current;
+        const operation = ++operationRef.current;
         setIsLoading(true);
         setTimeout(() => {
+            if (operation !== operationRef.current || snapshot !== inputKeyRef.current) return;
             try {
-                let processedXml = input;
-                
-                // 1. Surgical Given-Name Spacing Fix (Shield <ce:author-group> from changes)
-                const authorGroupPlaceholders: string[] = [];
-                processedXml = processedXml.replace(/<ce:author-group\b[^>]*>[\s\S]*?<\/ce:author-group>/gi, (match) => {
-                    authorGroupPlaceholders.push(match);
-                    return `___AUTHOR_GROUP_PLACEHOLDER_${authorGroupPlaceholders.length - 1}___`;
-                });
-
-                processedXml = processedXml.replace(/(<(?:ce|sb):given-name\b[^>]*>)(.*?)(<\/(?:ce|sb):given-name>)/gi, (match, open, content, close) => {
-                    let fixed = content.replace(/\b([A-Z])(?!\s*[\-–—\u2010-\u2015])(?![\-–—\u2010-\u2015a-zA-Z\u00C0-\u024F\.'’ʻ])/g, '$1.');
-                    let prev;
-                    do {
-                        prev = fixed;
-                        fixed = fixed.replace(/([A-Z]\.)\s+([A-Z]\.)/g, '$1$2');
-                    } while (fixed !== prev);
-                    return `${open}${fixed}${close}`;
-                });
-
-                // Restore <ce:author-group> blocks unmodified
-                processedXml = processedXml.replace(/___AUTHOR_GROUP_PLACEHOLDER_(\d+)___/g, (_, index) => {
-                    return authorGroupPlaceholders[parseInt(index, 10)] || '';
-                });
-
-                // 2. ID Mapping & Replacement Logic
-                const mapping = new Map<string, string>();
-                const counters: Record<string, number> = { bb: 3000, rf: 3000, se: 3000, ir: 3000, ca: 3000, cf: 3000, or: 3000, tr: 3000, p: 3000, sp: 3000 };
-                const seenIdsInOriginal = new Set<string>();
-                
-                // First pass: Find ALL existing IDs in the document to avoid collisions
-                const allIdRegex = /\bid="([^"]+)"/g;
-                let idMatch;
-                while ((idMatch = allIdRegex.exec(input)) !== null) {
-                    const existingId = idMatch[1];
-                    seenIdsInOriginal.add(existingId);
-                    
-                    // Also update counters to be at least as high as existing valid sequences
-                    // LOGIC FIX: Only use 4-digit IDs to set the floor. 
-                    // Long IDs (like timestamps) should be ignored so they don't "poison" the counter.
-                    const prefixMatch = existingId.match(/^([a-z]{2})(\d{4})$/i);
-                    if (prefixMatch) {
-                        const pre = prefixMatch[1].toLowerCase();
-                        const num = parseInt(prefixMatch[2]);
-                        if (counters[pre] !== undefined) {
-                            // Align to the next multiple of 5 above the current numeric ID
-                            const nextMultiple = Math.ceil((num + 1) / 5) * 5;
-                            if (nextMultiple > counters[pre]) {
-                                counters[pre] = nextMultiple;
-                            }
-                        }
+                const {output: processedXml} = repairElementIds(input, prefixOverrides);
+                const links = analyzeIdLinks(processedXml);
+                setQaReport(createIdQaReport(input, processedXml));
+                // Refresh only link-related recommendations against the actual output.
+                setSuggestions(previous => {
+                    const updated = previous.filter(item => item.id !== 'citation-linker' && item.id !== 'uncited-cleaner');
+                    if (links.unlinkedCitations || links.brokenTargets || links.ambiguousTargets.length) {
+                        updated.push({id:'citation-linker', toolName:'Citation Linker Pro', description:'ID correction left citation or local link targets requiring review. Use Citation Linker Pro to resolve them.', path:'/citationLinker', icon:<LinkIcon className="w-4 h-4" />, condition:'Link targets need review'});
+                    } else if (links.uncitedCount) {
+                        updated.push({id:'uncited-cleaner', toolName:'Uncited Ref Cleaner', description:`The XML contains ${links.uncitedCount} reference(s) without a citation target. Review them with Uncited Ref Cleaner.`, path:'/uncitedCleaner', icon:<Eraser className="w-4 h-4" />, condition:'Uncited references detected'});
                     }
-                }
-
-                // Ensure counters start at least at 3000 if they are low (protocol standard)
-                Object.keys(counters).forEach(k => {
-                    if (counters[k] < 3000) counters[k] = 3000;
-                    // Double check alignment for the starting point
-                    if (counters[k] % 5 !== 0) counters[k] = Math.ceil(counters[k] / 5) * 5;
+                    return updated;
                 });
-
-                const seenIdsInOutput = new Set<string>();
-
-                // We iterate through each tag type and replace occurrences one by one
-                ID_CONFIG.forEach(({ tag, prefix }) => {
-                    const tagRegex = new RegExp(`<${tag}\\b([^>]*?)>`, 'g');
-                    processedXml = processedXml.replace(tagRegex, (match, attrs) => {
-                        const idMatch = attrs.match(/\bid="([^"]+)"/);
-                        const id = idMatch ? idMatch[1] : "";
-                        
-                        const strictIdRegex = new RegExp(`^${prefix}\\d{4}$`, 'i');
-                        const isInvalid = !id || !strictIdRegex.test(id);
-                        const isDuplicate = id && seenIdsInOutput.has(id);
-
-                        if (isInvalid || isDuplicate) {
-                            // Find next available ID
-                            let newId = '';
-                            do {
-                                const newIdNum = counters[prefix].toString().padStart(4, '0');
-                                newId = `${prefix}${newIdNum}`;
-                                counters[prefix] += 5;
-                            } while (seenIdsInOriginal.has(newId) || seenIdsInOutput.has(newId));
-
-                            if (id) mapping.set(id, newId);
-                            seenIdsInOutput.add(newId);
-                            
-                            if (idMatch) {
-                                // Replace existing ID
-                                const idAttrRegex = new RegExp(`\\bid="${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`);
-                                return match.replace(idAttrRegex, `id="${newId}"`);
-                            } else {
-                                // Add missing ID after tag name
-                                return `<${tag} id="${newId}"${attrs}>`;
-                            }
-                        } else {
-                            seenIdsInOutput.add(id);
-                            return match;
-                        }
-                    });
-                });
-
-                // 3. Remap cross-references (refid)
-                const refRegex = /\brefid="([^"]+)"/g;
-                processedXml = processedXml.replace(refRegex, (match, refidAttr) => {
-                    const ids = refidAttr.split(/\s+/).filter((id: string) => id.trim() !== '');
-                    const updatedIds = ids.map((id: string) => mapping.get(id) || id);
-                    return `refid="${updatedIds.join(' ')}"`;
-                });
-
                 setOutput(processedXml);
                 generateDiff(input, processedXml);
                 setStep('result');
-                setToast({ msg: "Protocols applied. IDs normalized to 4-digit sequences.", type: "success" });
+                setToast(links.unlinkedCitations || links.brokenTargets ? {msg:"IDs corrected. Some citation or local link targets require review with Citation Linker Pro.", type:"warn"} : {msg:"IDs corrected.", type:"success"});
                 setIsLoading(false);
             } catch (err) {
-                setToast({ msg: "Remapping process failed.", type: "error" });
+                setOutput('');
+                setDiffElements(null);
+                setToast({ msg: err instanceof Error ? err.message : "ID correction failed.", type: "error" });
                 setIsLoading(false);
             }
         }, 800);
     };
 
     const filteredResults = auditResults.filter(item => {
-        if (filterOtherOnly && !item.isOtherRef) return false;
         if (filterInvalidOnly && item.status === 'valid') return false;
-        if (filterNameSpacingOnly && !item.hasNameSpacingViolation) return false;
         return true;
     });
 
     useKeyboardShortcuts({
         onPrimary: step === 'input' ? runAudit : (step === 'audit' ? executeFix : undefined),
-        onClear: () => { setInput(''); setAuditResults([]); setStep('input'); }
+        onClear: () => { invalidateGeneratedResult(); setInput(''); setAuditResults([]); setStep('input'); }
     }, [input, auditResults, step]);
 
     return (
@@ -566,12 +390,37 @@ const IdAuditor: React.FC = () => {
             <div className={`text-center animate-fade-in ${step === 'result' ? 'mb-3' : 'mb-10'}`}>
                 <h1 className="text-3xl font-black text-slate-900 tracking-tight sm:text-4xl mb-2 uppercase tracking-tighter">ID Prefix Auditor</h1>
                 <p className="text-sm text-slate-500 max-w-2xl mx-auto font-light italic tracking-tight leading-relaxed">
-                    Protocol validation for bb, rf, se, ir, ca, cf, or, tr, and plural cross-refs. Enforcing strict 4-digit numeric suffixes and collapsed initials.
+                    Check and generate element IDs with the required prefixes and four-digit numbering. Review the QA Report for any citation targets affected by ID changes.
                 </p>
             </div>
 
+            {qaReport && (step === 'audit' || step === 'result') && (
+                <section id="id-qa-report" className="mb-6 p-6 bg-white border border-slate-200 rounded-2xl">
+                    <button aria-expanded={qaExpanded} onClick={() => setQaExpanded(value => !value)} className="font-bold text-lg text-slate-900">QA Report — {qaReport.changes.length} ID changes; {qaReport.issues.length} link issues</button>
+                    {qaExpanded && <div className="mt-4 space-y-4">
+                        <p className="text-sm text-slate-600">Review what happened and the affected targets before using another tool. Citation and link attributes remain unchanged.</p>
+                        {qaReport.changes.length > 0 && <div className="overflow-auto"><table className="w-full text-sm text-left"><thead><tr><th>Element / line</th><th>Before ID</th><th>After ID</th><th>Why changed</th></tr></thead><tbody>{qaReport.changes.slice(qaChangesPage * 50, (qaChangesPage + 1) * 50).map((change,index) => <tr key={index} className="border-t"><td className="p-2">{change.tag} / {change.line}</td><td className="p-2 font-mono">{change.before}</td><td className="p-2 font-mono">{change.after}</td><td className="p-2">{change.reason}</td></tr>)}</tbody></table>
+                            {qaReport.changes.length > 50 && <div className="flex gap-3 items-center p-2"><button disabled={qaChangesPage===0} onClick={()=>setQaChangesPage(page=>page-1)}>Previous ID changes</button><span>Page {qaChangesPage+1} of {Math.ceil(qaReport.changes.length/50)}</span><button disabled={(qaChangesPage+1)*50>=qaReport.changes.length} onClick={()=>setQaChangesPage(page=>page+1)}>Next ID changes</button></div>}
+                        </div>}
+                        {qaReport.issues.length === 0 ? <p className="text-sm text-emerald-700">No unresolved or ambiguous citation/local-link targets were found. Citation Linker Pro is not recommended by this check.</p> : <>
+                            <h3 className="font-semibold">Why link review is recommended</h3>
+                            {qaReport.issues.slice(qaIssuesPage * 50, (qaIssuesPage + 1) * 50).map((issue,index) => <article key={index} className="p-4 border border-amber-200 bg-amber-50 rounded-xl text-sm space-y-2">
+                                <p className="font-semibold">{issue.tag} · ID {issue.elementId} · line {issue.line} · target {issue.target}</p>
+                                <p>Context: {issue.text || '(empty element)'}</p>
+                                <p>Before: {issue.before} After: {issue.after}</p>
+                                <p>{issue.reason}</p>
+                                {issue.owners.map((owner,ownerIndex) => <p key={ownerIndex} className="font-mono break-words">Target evidence: {owner}</p>)}
+                                <p className="font-semibold">Recommended action: {issue.action}</p>
+                            </article>)}
+                            {qaReport.issues.length > 50 && <div className="flex gap-3 items-center"><button disabled={qaIssuesPage===0} onClick={()=>setQaIssuesPage(page=>page-1)}>Previous link issues</button><span>Page {qaIssuesPage+1} of {Math.ceil(qaReport.issues.length/50)}</span><button disabled={(qaIssuesPage+1)*50>=qaReport.issues.length} onClick={()=>setQaIssuesPage(page=>page+1)}>Next link issues</button></div>}
+                            {!qaReport.issues.some(issue => issue.kind === 'ambiguous-target') && <button onClick={() => navigate('/citationLinker', {state:{transferredXml:step === 'result' ? output : input,sourceTool:'ID Prefix Auditor'}})} className="px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold">Open Citation Linker Pro with this XML</button>}
+                        </>}
+                    </div>}
+                </section>
+            )}
+
             {/* Architectural Recommendations Section matching Citation Linker Pro */}
-            {suggestions.length > 0 && step === 'result' && (
+            {suggestions.length > 0 && (step === 'audit' || step === 'result') && (
                 <div className="mb-8 animate-in fade-in slide-in-from-top-4 duration-700">
                     <div className="p-6 bg-indigo-50/30 border-2 border-indigo-100 rounded-[2rem] border-dashed">
                         <div className="flex items-center gap-3 mb-4">
@@ -585,7 +434,12 @@ const IdAuditor: React.FC = () => {
                                 <button 
                                     key={sug.id}
                                     onClick={() => {
-                                        navigate(sug.path, { state: { transferredXml: output, sourceTool: 'ID Prefix Auditor' } });
+                                        if (sug.id === 'citation-linker') {
+                                            setQaExpanded(true);
+                                            document.getElementById('id-qa-report')?.scrollIntoView({behavior:'smooth',block:'start'});
+                                            return;
+                                        }
+                                        navigate(sug.path, { state: { transferredXml: step === 'result' ? output : input, sourceTool: 'ID Prefix Auditor' } });
                                     }}
                                     className="flex items-center gap-4 p-4 bg-white border border-indigo-100 rounded-2xl hover:border-indigo-300 hover:shadow-md transition-all group text-left shadow-sm"
                                 >
@@ -593,7 +447,7 @@ const IdAuditor: React.FC = () => {
                                         {sug.icon}
                                     </div>
                                     <div className="flex-grow">
-                                        <div className="text-[10px] font-black text-indigo-900 uppercase tracking-widest mb-0.5">{sug.toolName}</div>
+                                        <div className="text-[10px] font-black text-indigo-900 uppercase tracking-widest mb-0.5">{sug.id === 'citation-linker' ? 'Review QA Report for Citation Linker Pro' : sug.toolName}</div>
                                         <div className="text-[9px] text-indigo-500 font-medium leading-tight">{sug.description}</div>
                                     </div>
                                     <ArrowRight className="w-4 h-4 text-indigo-300 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
@@ -613,14 +467,14 @@ const IdAuditor: React.FC = () => {
                             <div className="flex items-center gap-6">
                                 <label className="font-black text-slate-800 text-[10px] uppercase tracking-[0.2em]">Protocols</label>
                                 <div className="flex gap-2">
-                                    {ID_CONFIG.reduce((acc, c) => {
+                                    {ID_CONFIG.filter(c => c.prefix).reduce((acc, c) => {
                                         if (!acc.find(item => item.prefix === c.prefix)) {
                                             acc.push(c);
                                         }
                                         return acc;
                                     }, [] as typeof ID_CONFIG).map(c => (
-                                        <span key={c.prefix} className="px-2 py-1 bg-white border border-slate-200 rounded text-[9px] font-bold text-slate-50 shadow-sm uppercase">
-                                            <span className="text-slate-500">{c.tag.split(':')[1]}:</span> <span className="text-indigo-600 font-black">{c.prefix}####</span>
+                                        <span key={c.tag} className="px-2 py-1 bg-white border border-slate-200 rounded text-[9px] font-bold text-slate-50 shadow-sm uppercase">
+                                            <span className="text-slate-500">{c.tag.split(':').pop()}:</span> <span className="text-indigo-600 font-black">{c.prefix}####{c.codedPrefix ? ` / ${c.codedPrefix}#### (code)` : ''}</span>
                                         </span>
                                     ))}
                                 </div>
@@ -633,7 +487,7 @@ const IdAuditor: React.FC = () => {
                                 value={input} 
                                 onChange={e => setInput(e.target.value)} 
                                 className="flex-grow p-12 font-mono text-[13px] border-0 focus:ring-0 resize-none bg-transparent leading-relaxed placeholder:text-slate-400 z-10" 
-                                placeholder="Paste the full XML article source here. Violations in ID prefixes, length, and spaced initials will be reported. Plural cross-refs are now audited..."
+                                placeholder="Paste XML to audit required missing IDs, duplicate IDs, prefixes and four-digit numbering. Only ID attributes will be changed."
                                 spellCheck={false}
                             />
                         </div>
@@ -654,10 +508,6 @@ const IdAuditor: React.FC = () => {
                                     <p className={`text-[10px] font-bold uppercase tracking-widest ${auditResults.some(r => r.status === 'invalid') ? 'text-rose-500 animate-pulse' : 'text-emerald-500'}`}>
                                         {auditResults.filter(r => r.status === 'invalid').length} Non-Compliant Nodes
                                     </p>
-                                    <div className="h-3 w-px bg-slate-200"></div>
-                                    <p className="text-[10px] text-amber-600 font-bold uppercase tracking-widest">
-                                        {auditResults.filter(r => r.isOtherRef).length} Other-Refs
-                                    </p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-4 shrink-0 ml-4">
@@ -668,30 +518,21 @@ const IdAuditor: React.FC = () => {
                                     >
                                         Violations
                                     </button>
-                                    <button 
-                                        onClick={() => setFilterNameSpacingOnly(!filterNameSpacingOnly)} 
-                                        className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all ${filterNameSpacingOnly ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                                    >
-                                        Names
-                                    </button>
-                                    <button 
-                                        onClick={() => setFilterOtherOnly(!filterOtherOnly)} 
-                                        className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all ${filterOtherOnly ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                                    >
-                                        Other-Refs
-                                    </button>
                                 </div>
                                 <button onClick={() => setStep('input')} className="px-6 py-2 rounded-xl text-xs font-black text-slate-400 hover:text-slate-600 uppercase transition-all tracking-widest">Return</button>
-                                <button onClick={executeFix} disabled={!auditResults.some(r => r.status === 'invalid')} className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-black py-4 px-12 rounded-2xl shadow-xl active:scale-95 transition-all uppercase text-xs tracking-widest">
+                                <button onClick={runAudit} className="text-xs font-bold text-indigo-600">Re-audit IDs</button>
+                                <button onClick={executeFix} disabled={!auditResults.some(r => r.status === 'invalid') || auditResults.some(r => r.needsReview)} className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-black py-4 px-12 rounded-2xl shadow-xl active:scale-95 transition-all uppercase text-xs tracking-widest">
                                     Fix All Violations
                                 </button>
                             </div>
                         </div>
                         <div className="flex-grow overflow-auto p-10 space-y-4 custom-scrollbar">
+                            {auditResults.some(r => r.needsReview) && <p role="alert" className="p-4 rounded-xl bg-amber-50 text-amber-900 text-sm">Linked duplicate IDs require review in the original XML. Automatic correction is blocked. Resolve which elements and citations belong together, then re-audit.</p>}
+                            {filteredResults.length > 50 && <div className="flex gap-4 items-center text-sm"><button disabled={auditPage===0} onClick={()=>setAuditPage(page=>page-1)}>Previous audit page</button><span>Page {auditPage+1} of {Math.ceil(filteredResults.length/50)} ({filteredResults.length} elements)</span><button disabled={(auditPage+1)*50>=filteredResults.length} onClick={()=>setAuditPage(page=>page+1)}>Next audit page</button></div>}
                             {filteredResults.length === 0 ? (
                                 <div className="h-full flex items-center justify-center text-slate-300 italic uppercase tracking-widest text-sm text-center">No items matching current matrix filters</div>
                             ) : (
-                                filteredResults.map((res, idx) => (
+                                filteredResults.slice(auditPage * 50, (auditPage + 1) * 50).map((res, idx) => (
                                     <div 
                                         key={idx} 
                                         className={`p-6 bg-white border-2 rounded-[2rem] flex items-center gap-8 transition-all hover:shadow-lg ${res.status === 'invalid' ? 'border-rose-200 bg-rose-50/20 shadow-sm' : 'border-slate-100'}`}
@@ -703,7 +544,7 @@ const IdAuditor: React.FC = () => {
                                                     {res.originalId}
                                                 </span>
                                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 py-1 bg-slate-50 rounded border border-slate-100">
-                                                    Tag: {res.tagName}
+                                                    Tag: {res.tagName} · {res.prefixSource === 'editor' ? 'Editor rule' : res.prefixSource === 'workflow' ? 'Workflow rule' : res.prefixSource === 'observed' ? 'Observed convention' : res.prefixSource === 'custom' ? 'Custom prefix' : 'Unconfigured'}
                                                 </span>
                                                 {res.isDuplicate && (
                                                     <span className="text-[9px] font-black uppercase bg-rose-600 text-white px-2 py-1 rounded border border-rose-700 shadow-sm">
@@ -715,18 +556,10 @@ const IdAuditor: React.FC = () => {
                                                         ID Length Violation
                                                     </span>
                                                 )}
-                                                {res.isOtherRef && (
-                                                    <span className="text-[9px] font-black uppercase bg-amber-100 text-amber-700 px-2 py-1 rounded border border-amber-200 shadow-sm">
-                                                        Other-Ref
-                                                    </span>
-                                                )}
-                                                {res.hasNameSpacingViolation && (
-                                                    <span className="text-[9px] font-black uppercase bg-indigo-100 text-indigo-700 px-2 py-1 rounded border border-indigo-200 shadow-sm">
-                                                        Initials Violation
-                                                    </span>
-                                                )}
                                             </div>
                                             <p className="text-[11px] text-slate-500 italic truncate pr-8 leading-relaxed font-serif">{res.preview}</p>
+                                            {res.reason && <p className="text-xs text-rose-600 mt-2">{res.reason}</p>}
+                                            {res.needsPrefix && <label className="block text-xs mt-2">Prefix for {res.tagName}: <input aria-label={`Prefix for ${res.tagName}`} className="border rounded px-2 py-1" value={prefixOverrides[res.tagName] || ''} onChange={e => setPrefixOverrides(previous => ({...previous, [res.tagName]: e.target.value}))} placeholder="Lowercase letters" /></label>}
                                         </div>
                                         <div className="shrink-0 flex flex-col items-end">
                                             <div className={`text-[9px] font-black uppercase tracking-widest mb-1 ${res.status === 'invalid' ? 'text-rose-600' : 'text-emerald-600'}`}>

@@ -493,7 +493,7 @@ Production Toolkit Pro includes a full suite of 18 established editorial modules
 * **[Open Reference Structure Repair](#/structuralArchitect)** — Audits malformed XML, fixes author initials/periods, repairs incomplete tags, and ensures standard compliance.
 * **[Open Uncited Ref Cleaner](#/uncitedCleaner)** — Audits references that have no matching in-text callouts and performs clean removal.
 * **[Open Bibliography Extractor](#/refExtractor)** — Extracts clean plain-text reference lists from XML for MS Word proofing.
-* **[Open ID Prefix Auditor](#/idAuditor)** — Audits and normalizes ID sequences in references and tables while maintaining internal document cross-links.
+* **[Open ID Prefix Auditor](#/idAuditor)** — Audits and generates element IDs. Use Citation Linker Pro to update citation targets after changing IDs.
 * **[Open Reference Updater](#/referenceGen)** — Merges corrected external reference records into existing XML bibliographies while preserving ID integrity.
 * **[Open Other-Ref Scanner](#/otherRefScanner)** — Isolates unstructured \`<ce:other-ref>\` nodes for external catalog lookup or manual markup.
 
@@ -580,7 +580,7 @@ Production Toolkit Pro includes a full suite of 18 established editorial modules
     id: 'id-prefix-tool',
     weight: 4,
     match: ({ lower }) => lower.includes('prefix') || lower.includes('id auditor') || lower.includes('bib00') || lower.includes('b1'),
-    respond: () => `Use **[Open ID Prefix Auditor](#/idAuditor)** to audit and normalize ID prefixes across reference lists and internal document links.`,
+    respond: () => `Use **[Open ID Prefix Auditor](#/idAuditor)** to audit and generate element IDs. Citation Linker Pro handles citation targets.`,
   },
   {
     id: 'bibliography-extractor-tool',

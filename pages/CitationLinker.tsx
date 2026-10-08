@@ -5,6 +5,7 @@ import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import Switch from '../components/Switch';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
+import { scanReferenceXml } from '../utils/referenceUpdaterXml';
 import { ChevronUp, ChevronDown, GitCompare, Lightbulb, ArrowRight, Link as LinkIcon, Eraser, Hash, Trash2, RefreshCw, Box } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SmartSuggestion, ToolId } from '../types';
@@ -22,6 +23,7 @@ interface ResolutionItem {
     mappedIds: string[];
     originalIsPlural: boolean;
     targetIsPlural: boolean;
+    brokenRefid: boolean;
     missingRefid: boolean;
     missingId: boolean;
     isDuplicate: boolean;
@@ -337,6 +339,9 @@ const CitationLinker: React.FC = () => {
 
         setTimeout(() => {
             try {
+                const structure = scanReferenceXml(input, {allowDuplicateIds:true});
+                const nodesByStart = new Map(structure.nodes.map(node => [node.start, node]));
+                const duplicateLabels = new Set<string>();
                 const labelMap = new Map<string, string>(); 
                 const nameDateIndex: BibIndex[] = []; 
 
@@ -350,6 +355,7 @@ const CitationLinker: React.FC = () => {
                     if (labelMatch) {
                         const labelText = labelMatch[1].replace(/<[^>]+>/g, '').replace(/[\[\]]/g, '').trim();
                         if (/^\d+$/.test(labelText)) {
+                            if (labelMap.has(labelText) && labelMap.get(labelText) !== id) duplicateLabels.add(labelText);
                             labelMap.set(labelText, id);
                         } else {
                             const firstName = extractFirstName(labelText);
@@ -384,11 +390,9 @@ const CitationLinker: React.FC = () => {
                 
                 // Pre-scan for all IDs to detect duplicates
                 const idCounts = new Map<string, number>();
-                const allIdRegex = /\bid="([^"]+)"/g;
-                let idMatch;
-                while ((idMatch = allIdRegex.exec(input)) !== null) {
-                    const id = idMatch[1];
-                    idCounts.set(id, (idCounts.get(id) || 0) + 1);
+                for (const node of structure.nodes) {
+                    const id = node.attributes.id;
+                    if (id) idCounts.set(id, (idCounts.get(id) || 0) + 1);
                 }
 
                 let foundDoiLabels: string[] = [];
@@ -419,14 +423,13 @@ const CitationLinker: React.FC = () => {
                     const text = tagMatch[4].trim();
                     const originalIsPlural = baseTag.endsWith('s');
 
-                    const idMatch = attrs.match(/\bid="([^"]+)"/);
-                    const refidMatch = attrs.match(/\brefid="([^"]+)"/);
-                    
-                    const existingId = idMatch ? idMatch[1] : '';
-                    const existingRefid = refidMatch ? refidMatch[1] : '';
-
+                    const parsedNode = nodesByStart.get(tagMatch.index);
+                    const existingId = parsedNode?.attributes.id || '';
+                    const existingRefid = parsedNode?.attributes.refid || '';
                     const missingId = !existingId;
-                    const missingRefid = !existingRefid;
+                    const brokenRefid = !!existingRefid && existingRefid.split(/\s+/).filter(Boolean).some(id => idCounts.get(id) !== 1);
+                    const ambiguousRefid = !!existingRefid && existingRefid.split(/\s+/).filter(Boolean).some(id => (idCounts.get(id) || 0) > 1);
+                    const missingRefid = !existingRefid || (targetMissingRefid && brokenRefid);
                     const isDuplicate = !!existingId && (idCounts.get(existingId) || 0) > 1;
 
                     const isInterRef = baseTag.toLowerCase().includes('inter-ref');
@@ -500,6 +503,10 @@ const CitationLinker: React.FC = () => {
                         mappedIds = Array.from(detectedIds);
                     }
 
+                    // A broken existing link requires an unambiguous candidate, never a last-wins label.
+                    if (targetMissingRefid && brokenRefid && (ambiguousRefid || mappedIds.some(id => idCounts.get(id) !== 1) ||
+                        mappedIds.some(id => [...duplicateLabels].some(label => labelMap.get(label) === id)) ||
+                        (!/^\s*\[?\s*\d+/.test(text) && mappedIds.length > 1))) mappedIds = [];
                     const targetIsPlural = mappedIds.length > 1;
 
                     if ((!isInterRef && missingRefid && mappedIds.length > 0) || !missingRefid || (isInterRef && !missingId)) {
@@ -519,6 +526,7 @@ const CitationLinker: React.FC = () => {
                         originalIsPlural,
                         targetIsPlural,
                         missingId,
+                        brokenRefid,
                         missingRefid,
                         isDuplicate
                     });
@@ -580,8 +588,8 @@ const CitationLinker: React.FC = () => {
 
                     // Clean original attributes of id and refid to avoid duplicates
                     let cleanAttrs = res.originalAttrs
-                        .replace(/\bid="[^"]*"/g, '')
-                        .replace(/\brefid="[^"]*"/g, '')
+                        .replace(/\bid\s*=\s*(["'])[\s\S]*?\1/g, '')
+                        .replace(/\brefid\s*=\s*(["'])[\s\S]*?\1/g, '')
                         .replace(/\s+/g, ' ')
                         .trim();
 
@@ -725,7 +733,7 @@ const CitationLinker: React.FC = () => {
 
             <div className="flex justify-center mb-8">
                 <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-200 flex flex-wrap items-center justify-center gap-12">
-                    <Switch id="toggle-refid" label="Resolve Links" subLabel="Missing refid" checked={targetMissingRefid} onChange={setTargetMissingRefid} color="indigo" tooltip="Scans <ce:cross-ref> tags missing refid attributes and automatically links them to matching target nodes." />
+                    <Switch id="toggle-refid" label="Resolve Links" subLabel="Missing or unresolved refid" checked={targetMissingRefid} onChange={setTargetMissingRefid} color="indigo" tooltip="Scans citations with missing or unresolved refid targets and presents matching candidates for review." />
                     <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
                     <Switch id="toggle-id" label="Enforce IDs" subLabel="Missing id (cfxxxx)" checked={targetMissingId} onChange={setTargetMissingId} color="blue" tooltip="Injects generated unique id='cfXXXX' attributes onto <ce:cross-ref> tags missing an element ID." />
                     <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
@@ -819,6 +827,7 @@ const CitationLinker: React.FC = () => {
 
                 {step === 'matrix' && (
                     <div className="flex flex-col h-full bg-slate-50 animate-fade-in overflow-hidden">
+                        {resolutions.some(item => item.brokenRefid) && <p className="px-10 py-3 text-sm bg-amber-50 text-amber-900">Existing unresolved citation targets were detected. Review each proposed replacement before applying links; unmatched or ambiguous targets remain unchanged.</p>}
                         <div className="px-10 py-6 border-b border-slate-200 bg-white flex justify-between items-center shadow-sm z-10">
                             <div className="flex flex-col">
                                 <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Resolution Matrix</h3>

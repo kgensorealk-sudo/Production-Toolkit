@@ -5,7 +5,7 @@ export interface ReferenceXmlNode {
     name: string; start: number; openEnd: number; closeStart: number; end: number; attributes: Record<string, string>;
     attributeRanges: Record<string, {start: number; end: number; valueStart: number; valueEnd: number; quote: string}>;
 }
-export function scanReferenceXml(xml: string) {
+export function scanReferenceXml(xml: string, options: {allowDuplicateIds?: boolean} = {}) {
     const nodes: ReferenceXmlNode[] = [], stack: ReferenceXmlNode[] = [];
     const ids = new Set<string>();
     const ignored: Array<{start: number; end: number; cdata?: boolean}> = [];
@@ -121,7 +121,7 @@ export function scanReferenceXml(xml: string) {
             entityText(attr[3], valueStart); attributes[attr[1]] = attributeValue(attr[3]); rest = rest.slice(attr[0].length);
         }
         const node: ReferenceXmlNode = {name: opening[1], start, openEnd: position, closeStart: position, end: position, attributes, attributeRanges};
-        if (attributes.id) { if (ids.has(attributes.id)) fail(`Duplicate ID ${attributes.id}.`, start); ids.add(attributes.id); }
+        if (attributes.id) { if (ids.has(attributes.id) && !options.allowDuplicateIds) fail(`Duplicate ID ${attributes.id}.`, start); ids.add(attributes.id); }
         nodes.push(node);
         if (!opening[3]) stack.push(node);
     }

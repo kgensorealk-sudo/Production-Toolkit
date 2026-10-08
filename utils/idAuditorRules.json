@@ -1,0 +1,544 @@
+[
+  {
+    "tag": "ce:text",
+    "prefix": "tx",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:textfn",
+    "prefix": "tn",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:textref",
+    "prefix": "tr",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:section-title",
+    "prefix": "st",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:refers-to-document",
+    "prefix": null,
+    "required": false,
+    "source": "unconfigured"
+  },
+  {
+    "tag": "ce:doctopic",
+    "prefix": null,
+    "required": false,
+    "source": "unconfigured"
+  },
+  {
+    "tag": "ce:dochead",
+    "prefix": null,
+    "required": false,
+    "source": "unconfigured"
+  },
+  {
+    "tag": "ce:title",
+    "prefix": "ti",
+    "required": false,
+    "source": "observed"
+  },
+  {
+    "tag": "ce:alt-title",
+    "prefix": "ati",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:subtitle",
+    "prefix": "sti",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:alt-subtitle",
+    "prefix": "ast",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:short-title",
+    "prefix": null,
+    "required": false,
+    "source": "unconfigured"
+  },
+  {
+    "tag": "ce:presented",
+    "prefix": "pr",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:dedication",
+    "prefix": null,
+    "required": false,
+    "source": "unconfigured"
+  },
+  {
+    "tag": "ce:author-group",
+    "prefix": "ag",
+    "required": false,
+    "source": "observed"
+  },
+  {
+    "tag": "ce:collaboration",
+    "prefix": "co",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:author",
+    "prefix": "au",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:correspondence",
+    "prefix": "cr",
+    "required": true,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:e-address",
+    "prefix": "em",
+    "required": false,
+    "source": "observed"
+  },
+  {
+    "tag": "ce:affiliation",
+    "prefix": "af",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:miscellaneous",
+    "prefix": "mi",
+    "required": false,
+    "source": "observed"
+  },
+  {
+    "tag": "ce:abstract",
+    "prefix": "ab",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:abstract-sec",
+    "prefix": "as",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:keywords",
+    "prefix": "ks",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:keyword",
+    "prefix": "kw",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:stereochem",
+    "prefix": "sc",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:nomenclature",
+    "prefix": "no",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:section",
+    "prefix": "s",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:para",
+    "prefix": "p",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:simple-para",
+    "prefix": "sp",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:note-para",
+    "prefix": "np",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:intro",
+    "prefix": "io",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:acknowledgment",
+    "prefix": "ac",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:conflict-of-interest",
+    "prefix": "coi",
+    "required": true,
+    "source": "observed"
+  },
+  {
+    "tag": "ce:data-availability",
+    "prefix": "da",
+    "required": true,
+    "source": "observed"
+  },
+  {
+    "tag": "ce:source-text",
+    "prefix": "se",
+    "required": true,
+    "source": "observed"
+  },
+  {
+    "tag": "ce:bibliography",
+    "prefix": "bi",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:bibliography-sec",
+    "prefix": "bs",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:bib-reference",
+    "prefix": "bb",
+    "required": true,
+    "source": "editor"
+  },
+  {
+    "tag": "sb:reference",
+    "prefix": "rf",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:other-ref",
+    "prefix": "or",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:further-reading",
+    "prefix": "fr",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:further-reading-sec",
+    "prefix": "fs",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:glossary",
+    "prefix": "gl",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:glossary-sec",
+    "prefix": "gs",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:glossary-entry",
+    "prefix": "ge",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:glossary-def",
+    "prefix": null,
+    "required": false,
+    "source": "unconfigured"
+  },
+  {
+    "tag": "ce:index",
+    "prefix": null,
+    "required": false,
+    "source": "unconfigured"
+  },
+  {
+    "tag": "ce:index-sec",
+    "prefix": null,
+    "required": false,
+    "source": "unconfigured"
+  },
+  {
+    "tag": "ce:index-entry",
+    "prefix": null,
+    "required": false,
+    "source": "unconfigured"
+  },
+  {
+    "tag": "ce:index-flag",
+    "prefix": null,
+    "required": true,
+    "source": "unconfigured"
+  },
+  {
+    "tag": "ce:biography",
+    "prefix": "bg",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:footnote",
+    "prefix": "fn",
+    "required": true,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:anchor",
+    "prefix": "an",
+    "required": true,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:displayed-quote",
+    "prefix": "dq",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:enunciation",
+    "prefix": "en",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:link",
+    "prefix": "lk",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:cross-ref",
+    "prefix": "cf",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:cross-refs",
+    "prefix": "cf",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:intra-ref",
+    "prefix": "ia",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:intra-refs",
+    "prefix": "ia",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:intra-refs-text",
+    "prefix": "ix",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:inter-ref",
+    "prefix": "ir",
+    "required": false,
+    "source": "editor",
+    "codedPrefix": "qr"
+  },
+  {
+    "tag": "ce:inter-refs",
+    "prefix": "ir",
+    "required": false,
+    "source": "editor",
+    "codedPrefix": "qr"
+  },
+  {
+    "tag": "ce:inter-refs-text",
+    "prefix": "it",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:list",
+    "prefix": "l",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:list-item",
+    "prefix": "li",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:def-list",
+    "prefix": "dl",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:def-term",
+    "prefix": "dt",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:def-description",
+    "prefix": null,
+    "required": false,
+    "source": "unconfigured"
+  },
+  {
+    "tag": "ce:caption",
+    "prefix": "ca",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:alt-text",
+    "prefix": "al",
+    "required": false,
+    "source": "workflow"
+  },
+  {
+    "tag": "ce:source",
+    "prefix": null,
+    "required": false,
+    "source": "unconfigured"
+  },
+  {
+    "tag": "ce:formula",
+    "prefix": "fo",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:figure",
+    "prefix": "f",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:textbox",
+    "prefix": "b",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:code",
+    "prefix": null,
+    "required": false,
+    "source": "unconfigured"
+  },
+  {
+    "tag": "ce:e-component",
+    "prefix": "ec",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:alt-e-component",
+    "prefix": null,
+    "required": false,
+    "source": "unconfigured"
+  },
+  {
+    "tag": "ce:color",
+    "prefix": null,
+    "required": false,
+    "source": "unconfigured"
+  },
+  {
+    "tag": "ce:grant-sponsor",
+    "prefix": "gts",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:grant-number",
+    "prefix": "gtn",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:exam-questions",
+    "prefix": "eq",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:exam-answers",
+    "prefix": "ea",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:table-footnote",
+    "prefix": "tf",
+    "required": true,
+    "source": "editor"
+  },
+  {
+    "tag": "ce:table",
+    "prefix": "t",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "row",
+    "prefix": null,
+    "required": false,
+    "source": "unconfigured"
+  },
+  {
+    "tag": "entry",
+    "prefix": null,
+    "required": false,
+    "source": "unconfigured"
+  },
+  {
+    "tag": "subchapter",
+    "prefix": "sc",
+    "required": false,
+    "source": "editor"
+  },
+  {
+    "tag": "outline",
+    "prefix": "ou",
+    "required": false,
+    "source": "editor"
+  }
+]

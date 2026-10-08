@@ -98,7 +98,7 @@ const Docs: React.FC = () => {
                             <h2 className="text-3xl font-extrabold text-slate-900 mb-6 uppercase tracking-tight">ID Prefix Auditor</h2>
                             <div className="prose prose-slate max-w-none">
                                 <p className="text-slate-600 mb-4">
-                                    Audits bibliography references to ensure <code>id</code> attributes match the required organizational prefix (e.g., <code>bib</code> or <code>bb</code>).
+                                    Audits existing element <code>id</code> attributes and generates missing IDs only where the DTD requires them. Numbers run from 0005 to 9995 in steps of five. Prefix sources are shown in the audit. Editor rules use qr for inter-references with type="code" and ir otherwise; ce:alt-text uses the workflow prefix al. Unknown prefixes must be configured explicitly. Generated IDs avoid existing citation and local-link targets. Linked duplicate IDs require review before correction. The QA Report explains target problems with citation context, line numbers, before/after ID changes, and evidence. Review it before opening Citation Linker Pro. Review changes in the before/after diff. Author names and citation targets remain unchanged; use Citation Linker Pro for citation targets.
                                 </p>
                             </div>
                         </section>
