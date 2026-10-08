@@ -33,12 +33,12 @@ interface ParsedAuthor {
 const getRoleColor = (roleName: string) => {
     const n = roleName.toLowerCase();
     
-    // Core Writing - Pink/Rose
-    if (n.includes('draft') || n.includes('writing')) {
-         return { text: 'text-pink-600', bg: 'bg-pink-50', border: 'border-pink-200' };
+    // Distinct writing colors; reserve red/rose for validation issues.
+    if (n.includes('draft')) {
+         return { text: 'text-lime-700', bg: 'bg-lime-50', border: 'border-lime-200' };
     }
     if (n.includes('review') || n.includes('editing')) {
-         return { text: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-200' };
+         return { text: 'text-stone-700', bg: 'bg-stone-50', border: 'border-stone-200' };
     }
 
     // Scientific Process - Emerald/Green/Teal
