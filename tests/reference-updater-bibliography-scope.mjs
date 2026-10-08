@@ -16,7 +16,7 @@ const original=article(b,bibliography(a));
 const updated=article(b,bibliography(corrected));
 const state={scanResults:[]};engine(original,updated,state).runAnalysis();
 assert.equal(state.scanResults.length,1);await engine(original,updated,state).initiateUpdate();
-assert.ok(state.output.includes('Corrected Alpha evidence'));assert.ok(!state.output.includes('Unrelated Beta study'));
+assert.ok(state.output.includes('Corrected Alpha evidence'));assert.ok(state.output.includes('Unrelated Beta study')); // Original body is preserved.
 const absent={scanResults:[]};engine(original,article(b,''),absent).runAnalysis();
 assert.deepEqual(absent.scanResults,[]);assert.ok(absent.toasts.some(t=>t.type==='error'&&t.msg.includes('must contain bibliography references')));
 fs.mkdirSync('artifacts/reference-updater-bibliography-scope',{recursive:true});

@@ -59,7 +59,7 @@ const collision=old.find(x=>x.name==='unmanaged-cross-ref-id-collision');
 state={scanResults:[]};engine(collision.original,collision.updated,state,{renumberInternal:false}).runAnalysis();
 await engine(collision.original,collision.updated,state,{renumberInternal:false}).initiateUpdate();
 assert.ok(!state.output);assert.ok(state.toasts.some(x=>x.type==='error'&&x.msg.includes('Duplicate ID')));
-const oldLink=ref('bb0005','Other reference',"<ce:other-ref id='or0005'><ce:textref id='tr0005'>Old text.</ce:textref></ce:other-ref>");
+const oldLink=ref('bb0005','Other reference',"<ce:other-ref id='or0005'><ce:textref id='tr0005'>Old text.</ce:textref></ce:other-ref>")+b.replaceAll('bb10','bb0010').replaceAll('rf10','rf0010').replaceAll('se10','se0010');
 const newLink=ref('bb0900','Other reference',"<ce:other-ref id='or0900'><ce:textref id='tr0&#57;00'>New text <ce:cross-ref id='cf0900' refid='tr0&#57;00'>details</ce:cross-ref> <ce:cross-refs id='cf0910' refid='bb0&#57;00&#x20;bb0010'>related references</ce:cross-refs> <ce:inter-ref id='ir0900' xlink:href='https://example.org/?a=1&amp;b=2'>web</ce:inter-ref>.</ce:textref></ce:other-ref>");
 state={scanResults:[]};engine(oldLink,newLink,state).runAnalysis();engine(oldLink,newLink,state).mergeDuplicate(state.scanResults[0].uid,0);
 await engine(oldLink,newLink,state).initiateUpdate();

@@ -12,7 +12,7 @@ async function merge(old,next,options={}) {
 const output=await merge(original,updated);
 assert.ok(output.includes('refid="tr0005"'));assert.ok(output.includes('xlink:href="#tr0005"'));
 assert.ok(!output.includes('refid="tr0900"'));
-const lists=await merge(original,updated.replace('refid="tr0900"',"refid='tr0900  or0900 bb0900 outside'").replace('xlink:href="#tr0900"','xlink:href="https://example.org/#tr0900"'));
+const lists=await merge('<article><body><ce:anchor id="outside"/></body><ce:bibliography>'+original+'</ce:bibliography></article>',updated.replace('refid="tr0900"',"refid='tr0900  or0900 bb0900 outside'").replace('xlink:href="#tr0900"','xlink:href="https://example.org/#tr0900"'));
 assert.ok(lists.includes("refid='tr0005  or0005 bb0005 outside'"));
 assert.ok(lists.includes('https://example.org/#tr0900'));
 const untouched=await merge(original,updated,{renumberInternal:false});

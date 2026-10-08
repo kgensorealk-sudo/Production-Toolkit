@@ -21,7 +21,7 @@ await engine(internalArticle,updated,state).initiateUpdate();assert.ok(!state.ou
 assert.ok(state.toasts.some(t=>t.msg.includes('Citation target rf0005')));
 const uncitedArticle=`<article><body>Unlinked text</body><ce:bibliography>${original}</ce:bibliography></article>`;
 state={scanResults:[]};engine(uncitedArticle,updated,state).runAnalysis();state.scanResults[0].selected=false;
-await engine(uncitedArticle,updated,state).initiateUpdate();assert.equal(state.output,'');
+await engine(uncitedArticle,updated,state).initiateUpdate();assert.equal(state.output,uncitedArticle.replace(original,''));
 assert.ok(state.toasts.some(t=>t.type==='success'));
 state={scanResults:[]};engine(original,updated,state).runAnalysis();state.output=output;
 state.scanResults[0]={...state.scanResults[0],status:'conflict',reviewed:false};

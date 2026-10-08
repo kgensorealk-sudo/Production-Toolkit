@@ -33,6 +33,7 @@ import Switch from '../components/Switch';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 import useLocalStorage from '../hooks/useLocalStorage';
 import { scanReferenceXml } from '../utils/referenceUpdaterXml';
+import { assembleReferenceUpdaterOutput, localReferenceTarget, validateReferenceUpdaterOwnership } from '../utils/referenceUpdaterOutput';
 
 interface RefBlock {
     fullTag: string;
@@ -1020,7 +1021,14 @@ const ReferenceUpdater: React.FC = () => {
         try {
             // Allocate only prefix + four digits, in steps of five within 0005–9995.
             const idCounters: Record<string, number> = Object.assign(Object.create(null), { bb: 5, rf: 5, se: 5, ir: 5, ca: 5, cf: 5, or: 5, tr: 5, doi: 5 });
-            const existingAllIds = new Set([...scanReferenceXml(originalXml).ids, ...scanReferenceXml(updatedXml).ids]);
+            const originalIdStructure = scanReferenceXml(originalXml), updatedIdStructure = scanReferenceXml(updatedXml);
+            const existingAllIds = new Set([...originalIdStructure.ids, ...updatedIdStructure.ids]);
+            // An unresolved target must never become attached to newly allocated content.
+            for (const node of [...originalIdStructure.nodes, ...updatedIdStructure.nodes]) {
+                for (const target of (node.attributes.refid || '').match(/\S+/g) || []) existingAllIds.add(target);
+                const target = localReferenceTarget(node.attributes['xlink:href']);
+                if (target) existingAllIds.add(target);
+            }
             for (const id of existingAllIds) {
                 const numericId = id.match(/^([A-Za-z][A-Za-z-]*?)(\d+)$/);
                 if (numericId) {
@@ -1057,6 +1065,7 @@ const ReferenceUpdater: React.FC = () => {
             };
 
             const finalBlocks: string[] = [];
+            const originalBlockIndexes: Array<number | null> = [];
             const blockIdMaps: Array<Map<string, string> | null> = [];
             const sequence = projectedSequence;
             const CHUNK_SIZE = 20;
@@ -1136,6 +1145,7 @@ const ReferenceUpdater: React.FC = () => {
                             }
                         }
                         finalBlocks.push(blockMarkup);
+                        originalBlockIndexes.push(item.originalIndex);
                         blockIdMaps.push(renamedIds);
                     }
                 });
@@ -1170,8 +1180,10 @@ const ReferenceUpdater: React.FC = () => {
                         .sort((left, right) => node.attributeRanges[right].valueStart - node.attributeRanges[left].valueStart);
                     for (const name of attributes) {
                         const value = node.attributes[name], range = node.attributeRanges[name];
+                        const target = name === 'xlink:href' ? localReferenceTarget(value) : null;
+                        const resolved = target === null ? null : resolve(target);
                         const next = name === 'refid' ? value.replace(/\S+/g, resolve)
-                            : value.startsWith('#') ? `#${resolve(value.slice(1))}` : value;
+                            : target !== null && resolved !== target ? `#${resolved}` : value;
                         if (next !== value) {
                             const escaped = next.replace(/&/g, '&amp;').replace(/</g, '&lt;')
                                 .replace(range.quote === '"' ? /"/g : /'/g, range.quote === '"' ? '&quot;' : '&apos;');
@@ -1182,9 +1194,24 @@ const ReferenceUpdater: React.FC = () => {
                 }
                 return block;
             });
-            const joinedResult = remappedBlocks.join('\n');
+            const joinedResult = assembleReferenceUpdaterOutput(originalXml, remappedBlocks, originalBlockIndexes);
+            validateReferenceUpdaterOwnership(originalXml, joinedResult, remappedBlocks, originalBlockIndexes);
             const finalStructure = scanReferenceXml(joinedResult); // Validate before publishing.
             const originalStructure = scanReferenceXml(originalXml), updatedStructure = scanReferenceXml(updatedXml);
+            const finalTargets = new Set<string>();
+            for (const node of finalStructure.nodes) {
+                for (const target of (node.attributes.refid || '').match(/\S+/g) || []) finalTargets.add(target);
+                const target = localReferenceTarget(node.attributes['xlink:href']);
+                if (target) finalTargets.add(target);
+            }
+            for (const node of originalStructure.nodes) {
+                const targets: string[] = (node.attributes.refid || '').match(/\S+/g) || [];
+                const target = localReferenceTarget(node.attributes['xlink:href']);
+                if (target) targets.push(target);
+                for (const id of targets) if (!originalStructure.ids.has(id) && finalStructure.ids.has(id) && finalTargets.has(id)) {
+                    throw new Error(`Output would attach unresolved citation target ${id} to newly imported content. Resolve the original citation or enable internal ID renumbering before merging.`);
+                }
+            }
             const originalExternalIds = new Set(originalStructure.nodes.filter(node => node.attributes.id &&
                 !originalStructure.references.some(reference => node.start >= reference.start && node.end <= reference.end))
                 .map(node => node.attributes.id));
@@ -1194,17 +1221,10 @@ const ReferenceUpdater: React.FC = () => {
             for (const node of originalStructure.nodes) {
                 if (originalStructure.references.some(reference => node.start >= reference.start && node.end <= reference.end)) continue;
                 const targets: string[] = (node.attributes.refid || '').match(/\S+/g) || [];
-                if (node.attributes['xlink:href']?.startsWith('#')) targets.push(node.attributes['xlink:href'].slice(1));
+                const localTarget = localReferenceTarget(node.attributes['xlink:href']);
+                if (localTarget) targets.push(localTarget);
                 for (const id of targets) if (originalReferenceIds.has(id) && !finalStructure.ids.has(id)) {
                     throw new Error(`Citation target ${id} is still used outside the bibliography. Retain that reference or correct its citations before merging.`);
-                }
-            }
-            for (const node of finalStructure.nodes) {
-                const targets: string[] = (node.attributes.refid || '').match(/\S+/g) || [];
-                if (node.attributes['xlink:href']?.startsWith('#')) targets.push(node.attributes['xlink:href'].slice(1));
-                for (const id of targets) if (!finalStructure.ids.has(id) && !originalExternalIds.has(id) &&
-                    (originalStructure.ids.has(id) || updatedStructure.ids.has(id))) {
-                    throw new Error(`Link target ${id} was removed or deselected. Resolve the link before merging.`);
                 }
             }
             setOutput(joinedResult);
@@ -1406,7 +1426,7 @@ const ReferenceUpdater: React.FC = () => {
                                 Clear All
                             </button>
                         </div>
-                        <textarea value={originalXml} onChange={e => setOriginalXml(e.target.value)} className="w-full h-full p-6 text-[13px] font-mono text-slate-700 border-0 focus:ring-0 resize-none bg-transparent" placeholder="Paste full article reference list..." spellCheck={false} />
+                        <textarea value={originalXml} onChange={e => setOriginalXml(e.target.value)} className="w-full h-full p-6 text-[13px] font-mono text-slate-700 border-0 focus:ring-0 resize-none bg-transparent" placeholder="Paste the full original article XML or its bibliography. Full article input produces full article output." spellCheck={false} />
                     </div>
                     <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col group focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
                         <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center">
