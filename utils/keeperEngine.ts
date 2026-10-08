@@ -242,6 +242,7 @@ ${isAdmin
       const result = sequenceAffiliationIdsStrict(xmlToProcess, 5, true);
 
       if (lower.includes('do not provide explanations') || lower.includes('modify the xml below according to one requirement only') || lower.includes('complete xml, not a partial excerpt')) {
+        if(result.notices.length)throw new Error('Affiliation sequencing requires review: '+result.notices.join(' '));
         return result.outputXml;
       }
 
@@ -252,7 +253,8 @@ I have corrected the \`<ce:affiliation>\` IDs to be sequential in increments of 
 - **Total Affiliations:** ${result.totalAffiliations}
 - **IDs Corrected:** ${result.changedCount}
 - **Cross-Ref Links Synchronized:** ${result.totalCrossRefsUpdated}${result.crossRefChanges.length > 0 ? ` (e.g. \`refid="${result.crossRefChanges[0].oldRefId}"\` -> \`refid="${result.crossRefChanges[0].newRefId}"\`)` : ''}
-- **Integrity Guarantee:** \`<ce:author>\`, \`<ce:cross-ref id="...">\`, \`<ce:sup>\`, and \`affiliation-id\` remain strictly preserved.
+- **Preserved:** Author names/IDs, cross-reference IDs and affiliation-id. Superscripts follow proven affiliation label mappings.
+${result.notices.length?'\n**Review required:**\n'+result.notices.map(n=>'- '+n).join('\n'):''}
 
 \`\`\`xml
 ${result.outputXml}

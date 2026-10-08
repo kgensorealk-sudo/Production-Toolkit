@@ -30,9 +30,10 @@ import {
     ShieldCheck
 } from 'lucide-react';
 import Toast from '../components/Toast';
+import AffiliationAuditViews from '../components/AffiliationAuditViews';
 import useLocalStorage from '../hooks/useLocalStorage';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
-import { formatAffiliationId } from '../utils/affiliationSequencerLogic';
+import { sequenceAffiliations } from '../utils/affiliationSequencerEngine';
 
 interface AffiliationIssue {
     index: number;
@@ -54,6 +55,8 @@ interface AuditLine {
 }
 
 interface AuthorRemapLink {
+    originalLabel?: string;
+    requiresReview?: boolean;
     crossRefId?: string;
     oldRefId: string;
     newRefId: string;
@@ -70,6 +73,7 @@ interface AuthorRemapItem {
 }
 
 interface AffiliationRemapItem {
+    text?: string;
     index: number;
     originalId: string;
     newId: string;
@@ -171,6 +175,7 @@ const AffiliationSequencer: React.FC = () => {
 
     const [activeTab, setActiveTab] = useState<'xml' | 'diff' | 'report'>('xml');
     const [report, setReport] = useState<AuditLine[]>([]);
+    const [auditView, setAuditView] = useState<'table' | 'rendered'>('table');
     const [issues, setIssues] = useState<AffiliationIssue[]>([]);
     const [suggestions, setSuggestions] = useState<SmartSuggestion[]>([]);
     const [syncLog, setSyncLog] = useState<SyncLogSession | null>(null);
@@ -323,530 +328,27 @@ const AffiliationSequencer: React.FC = () => {
     };
 
     const analyzeXml = () => {
-        if (!input.trim()) {
-            setToast({ msg: "Please enter or paste XML content first.", type: "warn" });
-            return;
-        }
-
-        const foundIssues: AffiliationIssue[] = [];
-        const affRegex = /<ce:affiliation\b([^>]*)>([\s\S]*?)<\/ce:affiliation>/gi;
-        let match;
-        let index = 0;
-        const idMapping: Record<string, string> = {};
-
-        while ((match = affRegex.exec(input)) !== null) {
-            index++;
-            const attrString = match[1];
-            const content = match[2];
-            const idMatch = attrString.match(/(^|\s)id=(["'])(.*?)\2/i);
-            const originalId = idMatch ? idMatch[3] : '';
-            const labelMatch = content.match(/<ce:label>([^<]*)<\/ce:label>/i);
-            const currentLabel = labelMatch ? labelMatch[1].trim() : '';
-
-            const expectedId = formatAffiliationId(index, 5);
-            const expectedLabel = getLabel(index - 1);
-
-            const isIdWrong = originalId !== expectedId;
-            const isLabelWrong = currentLabel !== '' && currentLabel !== expectedLabel;
-
-            if (originalId) {
-                idMapping[originalId] = expectedId;
-            }
-
-            if (isIdWrong || isLabelWrong) {
-                foundIssues.push({
-                    index,
-                    originalId: originalId || '(none)',
-                    expectedId,
-                    currentLabel: currentLabel || '(none)',
-                    expectedLabel,
-                    isIdWrong,
-                    isLabelWrong,
-                    type: 'affiliation'
-                });
-            }
-        }
-
-        // Also pre-scan cross-ref mismatches
-        const crRegex = /<ce:cross-ref\b([^>]*)(?:\/>|>([\s\S]*?)<\/ce:cross-ref>)/gi;
-        let crMatch;
-        let crIndex = 0;
-        while ((crMatch = crRegex.exec(input)) !== null) {
-            const attrString = crMatch[1];
-            const refidMatch = attrString.match(/(^|\s)refid=(["'])(.*?)\2/i);
-            if (refidMatch) {
-                const originalRefIdVal = refidMatch[3];
-                const refTokens = originalRefIdVal.trim().split(/[\s,]+/).filter(Boolean);
-                const isNonAff = refTokens.some(t => /^(bib|b\d|ref|tbl|tb\d|fig|gr\d|fn\d|cor\d)/i.test(t));
-                if (isNonAff) continue;
-
-                const hasMismatch = refTokens.some(t => idMapping[t] && idMapping[t] !== t);
-                if (hasMismatch) {
-                    crIndex++;
-                    const expectedTokens = refTokens.map(t => idMapping[t] || t).join(' ');
-                    foundIssues.push({
-                        index: crIndex,
-                        originalId: originalRefIdVal,
-                        expectedId: expectedTokens,
-                        currentLabel: '',
-                        expectedLabel: '',
-                        isIdWrong: true,
-                        isLabelWrong: false,
-                        type: 'cross-ref',
-                        context: crMatch[0].length > 90 ? crMatch[0].slice(0, 90) + '...' : crMatch[0]
-                    });
-                }
-            }
-        }
-
-        setIssues(foundIssues);
-        if (foundIssues.length === 0 && index > 0) {
-            setToast({ msg: `Pre-flight scan clean! All ${index} affiliation IDs, labels, and cross-references match sequence.`, type: "success" });
-        } else if (index === 0) {
-            setToast({ msg: "No <ce:affiliation> elements detected in XML buffer.", type: "warn" });
-        } else {
-            setToast({ msg: `Audit found ${foundIssues.length} item(s) to normalize.`, type: "warn" });
-        }
-    };
+ try {
+  const result=sequenceAffiliations(input);
+  setIssues(result.changes.filter(c=>c.isChanged).map(c=>({index:c.index,originalId:c.originalId,expectedId:c.newId,currentLabel:c.originalLabel,expectedLabel:c.newLabel,isIdWrong:c.originalId!==c.newId,isLabelWrong:c.originalLabel!==c.newLabel,type:'affiliation' as const})));
+  setReport(result.notices.map(text=>({text,isChanged:false})));
+  setToast({msg:'Structural audit complete. Review IDs, labels and target ownership before sequencing.',type:result.notices.length?'warn':'success'});
+ } catch(error){setIssues([]);setOutput('');setLastProcessedInput('');setSyncLog(null);setReport([]);setToast({msg:error instanceof Error?error.message:'Unable to audit XML',type:'error'});}
+};
 
     const processXml = () => {
-        if (!input.trim()) {
-            setToast({ msg: "Please enter or paste XML content first.", type: "warn" });
-            return;
-        }
-
-        setIsProcessing(true);
-
-        // Snapshot current session state for immediate rollback if needed
-        setRollbackState({
-            input,
-            output,
-            lastProcessedInput,
-            report,
-            syncLog,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-        });
-
-        const auditLog: AuditLine[] = [
-            { text: "AFFILIATION SEQUENCER & AUTHOR RELINKER AUDIT", isChanged: false, isHeader: true },
-            { text: "Rule: Sequential affiliation IDs in increments of 5 (af0005, af0010, af0015, af0020...)", isChanged: false },
-            { text: "Rule: Sequential alphabetical labels (a, b, c, d...)", isChanged: false },
-            { text: "Integrity Directive: Author cross-refs (refid & <ce:sup>) synchronized; affiliation-id, cross-ref id, and author names strictly preserved.", isChanged: false },
-            { text: "=======", isChanged: false, isDivider: true }
-        ];
-
-        try {
-            // 1. Find all <ce:affiliation> tags in the XML
-            const affRegex = /<ce:affiliation\b([^>]*)>([\s\S]*?)<\/ce:affiliation>/gi;
-            const affiliations: {
-                originalId: string;
-                fullTag: string;
-                attrString: string;
-                content: string;
-                originalLabel: string;
-                affiliationId?: string;
-            }[] = [];
-
-            let affMatch;
-            while ((affMatch = affRegex.exec(input)) !== null) {
-                const fullTag = affMatch[0];
-                const attrString = affMatch[1];
-                const content = affMatch[2];
-                const idMatch = attrString.match(/(^|\s)id=(["'])(.*?)\2/i);
-                const originalId = idMatch ? idMatch[3] : '';
-                const affIdMatch = attrString.match(/(^|\s)affiliation-id=(["'])(.*?)\2/i);
-                const affiliationId = affIdMatch ? affIdMatch[3] : undefined;
-                const labelMatch = content.match(/<ce:label>([^<]*)<\/ce:label>/i);
-                const originalLabel = labelMatch ? labelMatch[1].trim() : '';
-
-                affiliations.push({
-                    originalId,
-                    fullTag,
-                    attrString,
-                    content,
-                    originalLabel,
-                    affiliationId
-                });
-            }
-
-            if (affiliations.length === 0) {
-                throw new Error("No <ce:affiliation> elements found in XML buffer.");
-            }
-
-            // 2. Map old IDs and labels to new sequential IDs and labels
-            const idMap: Record<string, { newId: string; newLabel: string; oldLabel: string }> = {};
-            const labelMap: Record<string, { newId: string; newLabel: string }> = {};
-            const affiliationRecords: AffiliationRemapItem[] = [];
-            let changedAffCount = 0;
-
-            affiliations.forEach((aff, index) => {
-                const newId = formatAffiliationId(index + 1, 5);
-                const newLabel = getLabel(index);
-                const isChanged = aff.originalId !== newId || (aff.originalLabel !== '' && aff.originalLabel !== newLabel);
-                if (isChanged) changedAffCount++;
-
-                affiliationRecords.push({
-                    index: index + 1,
-                    originalId: aff.originalId || '(none)',
-                    newId,
-                    originalLabel: aff.originalLabel || '(none)',
-                    newLabel,
-                    affiliationId: aff.affiliationId,
-                    isChanged
-                });
-
-                if (aff.originalId) {
-                    idMap[aff.originalId] = { newId, newLabel, oldLabel: aff.originalLabel };
-                }
-                if (aff.originalLabel) {
-                    labelMap[aff.originalLabel.toLowerCase()] = { newId, newLabel };
-                }
-                labelMap[newLabel.toLowerCase()] = { newId, newLabel };
-                labelMap[String(index + 1)] = { newId, newLabel };
-
-                auditLog.push({
-                    text: `Affiliation #${index + 1}: ${aff.originalId || '(none)'} -> ${newId} [Label: ${newLabel}]${aff.affiliationId ? ` (preserved affiliation-id="${aff.affiliationId}")` : ''}`,
-                    isChanged
-                });
-            });
-
-            // 3. Track author cross-reference links and author associations
-            auditLog.push({ text: "=======", isChanged: false, isDivider: true });
-            auditLog.push({ text: "AUTHOR & CROSS-REFERENCE CASCADE AUDIT", isChanged: false, isHeader: true });
-
-            const referencedIds = new Set<string>();
-            const authorRecords: AuthorRemapItem[] = [];
-            let remappedAuthorsCount = 0;
-            const authorRegex = /<ce:author\b([^>]*)>([\s\S]*?)<\/ce:author>/gi;
-            let authorMatch;
-            let authorIndex = 1;
-
-            const getOrdinal = (n: number) => {
-                const s = ["th", "st", "nd", "rd"], v = n % 100;
-                return n + (s[(v - 20) % 10] || s[v] || s[0]);
-            };
-
-            while ((authorMatch = authorRegex.exec(input)) !== null) {
-                const authorFullTag = authorMatch[0];
-                const authorAttrs = authorMatch[1]; // Attributes of <ce:author>
-                const authorInner = authorMatch[2]; // inner XML between <ce:author> and </ce:author>
-                const givenName = authorInner.match(/<ce:given-name>([^<]*)<\/ce:given-name>/i)?.[1] || '';
-                const surname = authorInner.match(/<ce:surname>([^<]*)<\/ce:surname>/i)?.[1] || '';
-                const fullName = `${givenName} ${surname}`.trim();
-
-                const authorIdAttr = authorAttrs.match(/(^|\s)id=(["'])(.*?)\2/i)?.[3] || 
-                                     authorAttrs.match(/(^|\s)author-id=(["'])(.*?)\2/i)?.[3] || undefined;
-
-                const crRegex = /<ce:cross-ref\b([^>]*)(?:\/>|>([\s\S]*?)<\/ce:cross-ref>)/gi;
-                let crMatch;
-                const authorMappings: AuditLine[] = [];
-                const currentLabels: string[] = [];
-                const seenRefIds = new Set<string>();
-                const duplicateLinks: string[] = [];
-                const authorLinks: AuthorRemapLink[] = [];
-
-                while ((crMatch = crRegex.exec(authorFullTag)) !== null) {
-                    const crAttrs = crMatch[1];
-                    const refidMatch = crAttrs.match(/(^|\s)refid=(["'])(.*?)\2/i);
-                    const cfIdMatch = crAttrs.match(/(^|\s)id=(["'])(.*?)\2/i);
-                    const crossRefId = cfIdMatch ? cfIdMatch[3] : undefined;
-
-                    if (refidMatch) {
-                        const refidVal = refidMatch[3];
-                        const refTokens = refidVal.trim().split(/[\s,]+/).filter(Boolean);
-
-                        // Skip non-affiliation refs (e.g. bib, tbl, fig, fn, cor)
-                        const isNonAff = refTokens.some(t => /^(bib|b\d|ref|tbl|tb\d|fig|gr\d|fn\d|cor\d)/i.test(t));
-                        if (isNonAff) continue;
-
-                        const supMatch = (crMatch[2] || '').match(/<ce:sup>([^<]*)<\/ce:sup>/i);
-                        const currentSup = supMatch ? supMatch[1].trim() : '';
-                        const supLabels = currentSup.split(/(?:,|\band\b|&|;|\s)+/i).map(s => s.trim()).filter(Boolean);
-
-                        const isAffRef = refTokens.some(t => idMap[t] || /^aff?\d*$/i.test(t) || labelMap[t.toLowerCase()]) ||
-                                         supLabels.some(l => labelMap[l.toLowerCase()]);
-
-                        if (isAffRef) {
-                            let matchedNewIds: string[] = [];
-                            if (supLabels.length > 0 && supLabels.some(l => labelMap[l.toLowerCase()])) {
-                                matchedNewIds = supLabels.map(l => labelMap[l.toLowerCase()]?.newId).filter(Boolean) as string[];
-                                if (currentSup) currentLabels.push(currentSup);
-                            } else {
-                                matchedNewIds = refTokens.map(t => idMap[t]?.newId || labelMap[t.toLowerCase()]?.newId || t);
-                                if (currentSup) currentLabels.push(currentSup);
-                            }
-
-                            refTokens.forEach(t => referencedIds.add(t));
-                            matchedNewIds.forEach(nid => {
-                                referencedIds.add(nid);
-                                if (seenRefIds.has(nid)) {
-                                    duplicateLinks.push(nid);
-                                }
-                                seenRefIds.add(nid);
-                            });
-
-                            const isChanged = refidVal !== matchedNewIds.join(' ');
-                            authorMappings.push({
-                                text: `Cross-ref: refid="${refidVal}" -> refid="${matchedNewIds.join(' ')}"${currentSup ? ` [Label: ${currentSup}]` : ''}`,
-                                isChanged
-                            });
-
-                            authorLinks.push({
-                                crossRefId,
-                                oldRefId: refidVal,
-                                newRefId: matchedNewIds.join(' '),
-                                label: currentSup,
-                                isChanged
-                            });
-                        }
-                    }
-                }
-
-                if (fullName || authorMappings.length > 0) {
-                    const isAuthorRemapped = authorLinks.some(link => link.isChanged);
-                    if (isAuthorRemapped) remappedAuthorsCount++;
-
-                    authorRecords.push({
-                        authorIndex,
-                        authorName: fullName || `Author #${authorIndex}`,
-                        authorId: authorIdAttr,
-                        links: authorLinks,
-                        isRemapped: isAuthorRemapped
-                    });
-
-                    auditLog.push({ text: `${getOrdinal(authorIndex)} author: ${fullName || 'Unknown'}${authorIdAttr ? ` [ID: ${authorIdAttr}]` : ''}`, isChanged: false, isHeader: true });
-                    if (currentLabels.length > 0) {
-                        auditLog.push({ text: `Affiliated to: ${currentLabels.join(', ')}`, isChanged: false });
-                    }
-                    if (duplicateLinks.length > 0) {
-                        auditLog.push({ text: `⚠️ Duplicate links found for: ${duplicateLinks.join(', ')}`, isChanged: true });
-                    }
-                    authorMappings.forEach(m => auditLog.push(m));
-                    auditLog.push({ text: `-------`, isChanged: false });
-                    authorIndex++;
-                }
-            }
-
-            // 4. Update affiliations in XML
-            let workingXml = input;
-            const affPlaceholders: { placeholder: string; replacement: string }[] = [];
-
-            affiliations.forEach((aff, i) => {
-                const mapping = idMap[aff.originalId] || { newId: formatAffiliationId(i + 1, 5), newLabel: getLabel(i), oldLabel: '' };
-                
-                // Update id="..." on opening tag while preserving affiliation-id="..."
-                let newOpeningTag = aff.attrString;
-                const idRegex = /(^|\s)id=(["'])(.*?)\2/i;
-                if (idRegex.test(newOpeningTag)) {
-                    newOpeningTag = newOpeningTag.replace(idRegex, `$1id="${mapping.newId}"`);
-                } else {
-                    newOpeningTag = ` id="${mapping.newId}"` + newOpeningTag;
-                }
-
-                // Update or insert <ce:label>
-                let newContent = aff.content;
-                const labelRegex = /<ce:label>([^<]*)<\/ce:label>/i;
-                if (labelRegex.test(newContent)) {
-                    newContent = newContent.replace(labelRegex, `<ce:label>${mapping.newLabel}</ce:label>`);
-                } else {
-                    newContent = `<ce:label>${mapping.newLabel}</ce:label>` + newContent;
-                }
-
-                const replacement = `<ce:affiliation${newOpeningTag}>${newContent}</ce:affiliation>`;
-                const placeholder = `__AFF_SEQ_REPLACE_${i}_${Date.now()}__`;
-                affPlaceholders.push({ placeholder, replacement });
-                workingXml = workingXml.replace(aff.fullTag, placeholder);
-            });
-
-            // 5. Synchronize all <ce:cross-ref> tags in the document
-            let crossRefsUpdated = 0;
-            const crChangesList: { oldRefId: string; newRefId: string; label: string }[] = [];
-            const globalCrossrefRegex = /<ce:cross-ref\b([^>]*)(?:\/>|>([\s\S]*?)<\/ce:cross-ref>)/gi;
-
-            workingXml = workingXml.replace(globalCrossrefRegex, (fullMatch, attrString, innerContent) => {
-                const refidAttrRegex = /(^|\s)refid=(["'])(.*?)\2/i;
-                const refidMatch = attrString.match(refidAttrRegex);
-                if (!refidMatch) return fullMatch;
-
-                const quote = refidMatch[2];
-                const originalRefIdVal = refidMatch[3];
-                const refTokens = originalRefIdVal.trim().split(/[\s,]+/).filter(Boolean);
-
-                // Ignore non-affiliation cross-references (e.g. bib, tbl, fig, fn, cor)
-                const isNonAff = refTokens.some((t: string) => /^(bib|b\d|ref|tbl|tb\d|fig|gr\d|fn\d|cor\d)/i.test(t));
-                if (isNonAff) return fullMatch;
-
-                const supRegex = /<ce:sup>([\s\S]*?)<\/ce:sup>/i;
-                const supMatch = (innerContent || '').match(supRegex);
-                const rawSup = supMatch ? supMatch[1].trim() : '';
-
-                const supLabels = rawSup
-                    .split(/(?:,|\band\b|&|;|\s)+/i)
-                    .map((s: string) => s.trim())
-                    .filter(Boolean);
-
-                const isAffCrossRef = refTokens.some((t: string) => idMap[t] || /^aff?\d*$/i.test(t) || labelMap[t.toLowerCase()]) ||
-                                      supLabels.some((l: string) => labelMap[l.toLowerCase()]);
-
-                if (!isAffCrossRef) return fullMatch;
-
-                let resolvedNewIds: string[] = [];
-                let updatedSup = rawSup;
-
-                // Priority A: Author visible superscript labels represent the true affiliation citation
-                if (supLabels.length > 0 && supLabels.some((l: string) => labelMap[l.toLowerCase()])) {
-                    const validMappings = supLabels
-                        .map((l: string) => ({ oldLabel: l, mapping: labelMap[l.toLowerCase()] }))
-                        .filter((m: { oldLabel: string; mapping: any }) => Boolean(m.mapping));
-
-                    if (validMappings.length > 0) {
-                        resolvedNewIds = validMappings.map((m: { oldLabel: string; mapping: any }) => m.mapping.newId);
-
-                        // If label changed (e.g. re-indexed), update within rawSup while preserving formatting/delimiters
-                        validMappings.forEach((m: { oldLabel: string; mapping: any }) => {
-                            if (m.oldLabel !== m.mapping.newLabel) {
-                                const wordRegex = new RegExp(`\\b${m.oldLabel}\\b`, 'g');
-                                updatedSup = updatedSup.replace(wordRegex, m.mapping.newLabel);
-                            }
-                        });
-                    }
-                }
-
-                // Priority B: If not resolved from supLabels, resolve from refTokens
-                if (resolvedNewIds.length === 0) {
-                    resolvedNewIds = refTokens.map((token: string) => {
-                        if (idMap[token]) return idMap[token].newId;
-                        if (labelMap[token.toLowerCase()]) return labelMap[token.toLowerCase()].newId;
-                        return token;
-                    });
-
-                    // If single token mapped and sup is empty or was old label
-                    if (refTokens.length === 1 && idMap[refTokens[0]]) {
-                        const m = idMap[refTokens[0]];
-                        if (!rawSup || (m.oldLabel && rawSup.toLowerCase() === m.oldLabel.toLowerCase())) {
-                            updatedSup = m.newLabel;
-                        }
-                    }
-                }
-
-                const uniqueNewIds: string[] = [];
-                resolvedNewIds.forEach(id => {
-                    if (!uniqueNewIds.includes(id)) uniqueNewIds.push(id);
-                });
-
-                const newRefIdVal = uniqueNewIds.join(' ');
-                const isRefIdChanged = originalRefIdVal !== newRefIdVal;
-                const isSupChanged = rawSup !== updatedSup;
-
-                if (isRefIdChanged || isSupChanged) {
-                    crossRefsUpdated++;
-                    crChangesList.push({
-                        oldRefId: originalRefIdVal,
-                        newRefId: newRefIdVal,
-                        label: updatedSup || rawSup
-                    });
-
-                    const newAttrs = attrString.replace(refidAttrRegex, `$1refid=${quote}${newRefIdVal}${quote}`);
-                    let newInner = innerContent || '';
-                    if (isSupChanged && supMatch) {
-                        newInner = newInner.replace(supRegex, `<ce:sup>${updatedSup}</ce:sup>`);
-                    }
-
-                    return innerContent !== undefined
-                        ? `<ce:cross-ref${newAttrs}>${newInner}</ce:cross-ref>`
-                        : `<ce:cross-ref${newAttrs}/>`;
-                }
-
-                return fullMatch;
-            });
-
-            // 6. Restore affiliation placeholders
-            affPlaceholders.forEach(({ placeholder, replacement }) => {
-                workingXml = workingXml.replace(placeholder, replacement);
-            });
-
-            // 7. Audit Log Summary
-            if (crChangesList.length > 0) {
-                auditLog.push({ text: `SYNCHRONIZED CROSS-REFERENCES (${crChangesList.length} UPDATED)`, isChanged: false, isHeader: true });
-                crChangesList.forEach(cr => {
-                    auditLog.push({
-                        text: `Cross-Ref: refid="${cr.oldRefId}" -> refid="${cr.newRefId}" [Label: ${cr.label}]`,
-                        isChanged: true
-                    });
-                });
-                auditLog.push({ text: "=======", isChanged: false, isDivider: true });
-            }
-
-            // Unlinked & Redundant Checks
-            const unlinkedAffs = affiliations.filter(aff => aff.originalId && !referencedIds.has(aff.originalId));
-            const contentMap: Record<string, string[]> = {};
-            affiliations.forEach(aff => {
-                const normalized = aff.content.replace(/<ce:label>.*?<\/ce:label>/gi, '').replace(/\s+/g, '').toLowerCase();
-                if (!contentMap[normalized]) contentMap[normalized] = [];
-                contentMap[normalized].push(aff.originalId);
-            });
-            const redundantGroups = Object.values(contentMap).filter(ids => ids.length > 1);
-
-            auditLog.push({ text: "INTEGRITY & DTD VALIDATION SUMMARY", isChanged: false, isHeader: true });
-            if (unlinkedAffs.length === 0) {
-                auditLog.push({ text: "✅ All affiliations are linked to at least one author.", isChanged: false });
-            } else {
-                auditLog.push({ text: `⚠️ Found ${unlinkedAffs.length} unlinked affiliation(s):`, isChanged: true });
-                unlinkedAffs.forEach(aff => {
-                    const m = idMap[aff.originalId];
-                    auditLog.push({ text: `• Unlinked: ${aff.originalId} -> ${m?.newId || '?'} (Label: ${m?.newLabel || '?'})`, isChanged: true });
-                });
-            }
-
-            if (redundantGroups.length === 0) {
-                auditLog.push({ text: "✅ No redundant affiliations (duplicate text) detected.", isChanged: false });
-            } else {
-                auditLog.push({ text: `⚠️ Found ${redundantGroups.length} group(s) of redundant affiliations:`, isChanged: true });
-                redundantGroups.forEach((ids, idx) => {
-                    auditLog.push({ text: `• Group ${idx + 1}: IDs [${ids.join(', ')}] share identical affiliation text`, isChanged: true });
-                });
-            }
-
-            auditLog.push({ text: `Total affiliations scanned: ${affiliations.length}`, isChanged: false });
-            auditLog.push({ text: `Affiliation IDs corrected: ${changedAffCount}`, isChanged: changedAffCount > 0 });
-            auditLog.push({ text: `Cross-references synchronized: ${crossRefsUpdated}`, isChanged: crossRefsUpdated > 0 });
-            auditLog.push({ text: "✅ Zero <ce:author> names or author IDs modified", isChanged: false });
-            auditLog.push({ text: "✅ Zero cross-ref own IDs (id=\"cf...\") modified", isChanged: false });
-            auditLog.push({ text: "✅ Zero affiliation-id attributes modified (strictly preserved)", isChanged: false });
-
-            const sessionLog: SyncLogSession = {
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-                totalAffiliations: affiliations.length,
-                changedAffiliationsCount: changedAffCount,
-                totalAuthors: authorRecords.length,
-                remappedAuthorsCount,
-                totalCrossRefsUpdated: crossRefsUpdated,
-                authors: authorRecords,
-                affiliations: affiliationRecords,
-                unlinkedAffiliations: unlinkedAffs.map(a => a.originalId),
-                redundantAffiliationGroups: redundantGroups,
-                rawAuditLog: auditLog
-            };
-
-            setOutput(workingXml);
-            setLastProcessedInput(input);
-            setReport(auditLog);
-            setSyncLog(sessionLog);
-            setIssues([]);
-            setSuggestions(generateSuggestions(workingXml));
-            setToast({
-                msg: (changedAffCount > 0 || crossRefsUpdated > 0)
-                    ? `Sequenced ${changedAffCount} affiliation(s) and synchronized ${crossRefsUpdated} cross-reference(s) (${remappedAuthorsCount} author IDs remapped).`
-                    : "Affiliations and cross-reference links are already sequential.",
-                type: "success"
-            });
-        } catch (error: any) {
-            console.error(error);
-            setToast({ msg: `Processing error: ${error.message}`, type: "error" });
-        } finally {
-            setIsProcessing(false);
-        }
-    };
+ if(!input.trim()){setToast({msg:'Please enter XML first.',type:'warn'});return;}
+ setIsProcessing(true);
+ setRollbackState({input,output,lastProcessedInput,report,syncLog,timestamp:new Date().toLocaleTimeString()});
+ try {
+  const result=sequenceAffiliations(input);
+  const auditLog:AuditLine[]=[{text:'STRUCTURAL AFFILIATION SEQUENCING — EXISTING TARGET OWNERSHIP PRESERVED',isChanged:false,isHeader:true},...result.changes.map(c=>({text:c.originalId+' → '+c.newId+'; label '+c.originalLabel+' → '+c.newLabel,isChanged:c.isChanged})),...result.linkChanges.filter(c=>c.isChanged).map(c=>({text:'Linked target '+c.oldRefId+' → '+c.newRefId,isChanged:true})),...result.notices.map(text=>({text:'REVIEW: '+text,isChanged:false})),{text:'Unlinked affiliations: '+(result.unlinkedAffiliations.join(', ')||'none'),isChanged:false},{text:'Structural checks passed. Validate the complete output with DTD and VTool.',isChanged:false}];
+  const session:SyncLogSession={timestamp:new Date().toLocaleTimeString(),totalAffiliations:result.changes.length,changedAffiliationsCount:result.changes.filter(c=>c.isChanged).length,totalAuthors:result.authors.length,remappedAuthorsCount:result.authors.filter(a=>a.isRemapped).length,totalCrossRefsUpdated:result.linkChanges.filter(c=>c.isChanged).length,authors:result.authors,affiliations:result.changes,unlinkedAffiliations:result.unlinkedAffiliations,redundantAffiliationGroups:result.redundantAffiliationGroups,rawAuditLog:auditLog};
+  setOutput(result.outputXml);setLastProcessedInput(input);setReport(auditLog);setSyncLog(session);setIssues([]);setSuggestions(generateSuggestions(result.outputXml));setActiveTab(result.notices.length?'report':'diff');
+  setToast({msg:result.changes.length+' affiliations processed; '+result.notices.length+' review notices.',type:result.notices.length?'warn':'success'});
+ } catch(error){setOutput('');setLastProcessedInput('');setReport([]);setSyncLog(null);setIssues([]);setSuggestions([]);setToast({msg:error instanceof Error?error.message:'Unable to sequence safely',type:'error'});}
+ finally{setIsProcessing(false);}
+};
 
     const downloadCSV = () => {
         if (!syncLog && report.length === 0) return;
@@ -859,11 +361,11 @@ const AffiliationSequencer: React.FC = () => {
             ['Total Affiliations', String(syncLog?.totalAffiliations || 0)],
             ['Affiliation IDs Corrected', String(syncLog?.changedAffiliationsCount || 0)],
             ['Total Authors Scanned', String(syncLog?.totalAuthors || 0)],
-            ['Author IDs Remapped', String(syncLog?.remappedAuthorsCount || 0)],
+            ['Authors with updated links', String(syncLog?.remappedAuthorsCount || 0)],
             ['Cross-References Synchronized', String(syncLog?.totalCrossRefsUpdated || 0)],
             [''],
-            ['--- AUTHOR ID & CROSS-REFERENCE REMAPPINGS ---'],
-            ['Author Index', 'Author ID', 'Author Name', 'Status', 'Old RefID', 'New RefID', 'Superscript Label', 'Cross-Ref ID']
+            ['--- AUTHOR CROSS-REFERENCE REMAPPINGS ---'],
+            ['Author Index', 'Author ID', 'Author Name', 'Status', 'Old RefID', 'New RefID', 'Label Before', 'Label After', 'Cross-Ref ID']
         ];
 
         if (syncLog?.authors) {
@@ -874,7 +376,7 @@ const AffiliationSequencer: React.FC = () => {
                         auth.authorId || '(none)',
                         auth.authorName,
                         'No Affiliation Links',
-                        '', '', '', ''
+                        '', '', '', '', ''
                     ]);
                 } else {
                     auth.links.forEach(l => {
@@ -882,9 +384,10 @@ const AffiliationSequencer: React.FC = () => {
                             `#${auth.authorIndex}`,
                             auth.authorId || '(none)',
                             auth.authorName,
-                            l.isChanged ? 'REMAPPED' : 'PRESERVED',
+                            l.requiresReview ? 'REVIEW REQUIRED' : l.isChanged ? 'CHANGED' : 'UNCHANGED',
                             l.oldRefId,
                             l.newRefId,
+                            l.originalLabel || '',
                             l.label || '',
                             l.crossRefId || ''
                         ]);
@@ -1468,14 +971,14 @@ const AffiliationSequencer: React.FC = () => {
                                         <div>
                                             <div className="flex items-center gap-2">
                                                 <h3 className="text-sm font-bold text-slate-800">
-                                                    Read-Only Sync & Remap Log
+                                                    Affiliation Audit Log
                                                 </h3>
                                                 <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-200/70 text-slate-700">
                                                     Read-Only
                                                 </span>
                                             </div>
                                             <p className="text-xs text-slate-500">
-                                                {syncLog ? `Session executed at ${syncLog.timestamp}` : 'Auditing changes and author ID remappings in real-time'}
+                                                {syncLog ? `Session executed at ${syncLog.timestamp}` : 'Process XML to compare affiliation IDs and author citation changes'}
                                             </p>
                                         </div>
                                     </div>
@@ -1503,325 +1006,13 @@ const AffiliationSequencer: React.FC = () => {
                                     </div>
                                 </div>
 
-                                {syncLog && (
-                                    <>
-                                        {/* Summary Statistics Cards */}
-                                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                                            <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between">
-                                                <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-                                                    <span>Authors Remapped</span>
-                                                    <Users className="w-4 h-4 text-amber-600" />
-                                                </div>
-                                                <div className="flex items-baseline gap-2">
-                                                    <span className="text-2xl font-black text-slate-800 font-mono">
-                                                        {syncLog.remappedAuthorsCount}
-                                                    </span>
-                                                    <span className="text-xs text-slate-400">
-                                                        / {syncLog.totalAuthors} authors
-                                                    </span>
-                                                </div>
-                                                <div className="mt-2">
-                                                    {syncLog.remappedAuthorsCount > 0 ? (
-                                                        <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full inline-block">
-                                                            {syncLog.remappedAuthorsCount} IDs updated
-                                                        </span>
-                                                    ) : (
-                                                        <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full inline-block">
-                                                            All in sequence
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between">
-                                                <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-                                                    <span>Affiliations Sequenced</span>
-                                                    <Hash className="w-4 h-4 text-emerald-600" />
-                                                </div>
-                                                <div className="flex items-baseline gap-2">
-                                                    <span className="text-2xl font-black text-slate-800 font-mono">
-                                                        {syncLog.changedAffiliationsCount}
-                                                    </span>
-                                                    <span className="text-xs text-slate-400">
-                                                        / {syncLog.totalAffiliations} total
-                                                    </span>
-                                                </div>
-                                                <div className="mt-2">
-                                                    <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full inline-block">
-                                                        Incremental +5
-                                                    </span>
-                                                </div>
-                                            </div>
-
-                                            <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between">
-                                                <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-                                                    <span>Cross-Refs Updated</span>
-                                                    <LinkIcon className="w-4 h-4 text-blue-600" />
-                                                </div>
-                                                <div className="flex items-baseline gap-2">
-                                                    <span className="text-2xl font-black text-slate-800 font-mono">
-                                                        {syncLog.totalCrossRefsUpdated}
-                                                    </span>
-                                                    <span className="text-xs text-slate-400">
-                                                        references
-                                                    </span>
-                                                </div>
-                                                <div className="mt-2">
-                                                    <span className="text-[10px] font-bold text-blue-800 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full inline-block">
-                                                        Synchronized
-                                                    </span>
-                                                </div>
-                                            </div>
-
-                                            <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between">
-                                                <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-                                                    <span>Integrity Guarantee</span>
-                                                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                                                </div>
-                                                <div className="flex items-baseline gap-2">
-                                                    <span className="text-xl font-bold text-slate-800">
-                                                        100% Intact
-                                                    </span>
-                                                </div>
-                                                <div className="mt-2">
-                                                    <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full inline-block">
-                                                        Names & DTD Preserved
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Highlight Section: Author ID Remappings */}
-                                        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
-                                            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-slate-50 border-b border-slate-200">
-                                                <div className="flex items-center gap-2">
-                                                    <Users className="w-4 h-4 text-amber-600" />
-                                                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                                                        Author ID & Cross-Reference Remappings
-                                                    </h4>
-                                                    <span className="text-[10px] font-mono bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded border border-amber-200">
-                                                        {syncLog.remappedAuthorsCount} remapped
-                                                    </span>
-                                                </div>
-
-                                                <div className="flex items-center bg-white border border-slate-200 rounded-lg p-0.5 text-xs">
-                                                    <button
-                                                        onClick={() => setAuthorFilter('remapped')}
-                                                        className={`px-2.5 py-1 rounded font-medium transition-all ${
-                                                            authorFilter === 'remapped'
-                                                                ? 'bg-amber-100 text-amber-900 font-bold shadow-2xs'
-                                                                : 'text-slate-600 hover:text-slate-900'
-                                                        }`}
-                                                    >
-                                                        Remapped Authors ({syncLog.remappedAuthorsCount})
-                                                    </button>
-                                                    <button
-                                                        onClick={() => setAuthorFilter('all')}
-                                                        className={`px-2.5 py-1 rounded font-medium transition-all ${
-                                                            authorFilter === 'all'
-                                                                ? 'bg-slate-200 text-slate-900 font-bold shadow-2xs'
-                                                                : 'text-slate-600 hover:text-slate-900'
-                                                        }`}
-                                                    >
-                                                        All Authors ({syncLog.totalAuthors})
-                                                    </button>
-                                                </div>
-                                            </div>
-
-                                            <div className="p-4 space-y-3">
-                                                {syncLog.authors && syncLog.authors.length > 0 ? (
-                                                    syncLog.authors
-                                                        .filter(a => authorFilter === 'all' || a.isRemapped)
-                                                        .map(author => (
-                                                            <div 
-                                                                key={author.authorIndex}
-                                                                className={`p-3.5 rounded-xl border transition-all ${
-                                                                    author.isRemapped 
-                                                                        ? 'bg-amber-50/40 border-amber-200/90 shadow-2xs' 
-                                                                        : 'bg-slate-50/50 border-slate-200'
-                                                                }`}
-                                                            >
-                                                                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                                                                    <div className="flex items-center gap-2">
-                                                                        <span className="text-xs font-mono text-slate-400 font-bold">
-                                                                            #{author.authorIndex}
-                                                                        </span>
-                                                                        <span className="text-sm font-bold text-slate-800">
-                                                                            {author.authorName}
-                                                                        </span>
-                                                                        {author.authorId ? (
-                                                                            <code className="text-xs bg-slate-100 text-slate-700 font-mono px-2 py-0.5 rounded border border-slate-200 font-semibold" title="Author ID Attribute in ce:author">
-                                                                                id="{author.authorId}"
-                                                                            </code>
-                                                                        ) : (
-                                                                            <span className="text-[11px] text-slate-400 italic">
-                                                                                (No author id attribute)
-                                                                            </span>
-                                                                        )}
-                                                                    </div>
-
-                                                                    {author.isRemapped ? (
-                                                                        <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1">
-                                                                            <RotateCcw size={10} className="text-amber-700" />
-                                                                            Remapped
-                                                                        </span>
-                                                                    ) : (
-                                                                        <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600">
-                                                                            Preserved
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-
-                                                                {author.links.length > 0 ? (
-                                                                    <div className="space-y-1.5 pt-1">
-                                                                        {author.links.map((link, lIdx) => (
-                                                                            <div 
-                                                                                key={lIdx}
-                                                                                className={`flex flex-wrap items-center gap-2 text-xs font-mono p-2 rounded-lg ${
-                                                                                    link.isChanged 
-                                                                                        ? 'bg-white border border-amber-200 shadow-2xs' 
-                                                                                        : 'bg-white/80 border border-slate-100 text-slate-600'
-                                                                                }`}
-                                                                            >
-                                                                                <span className="text-slate-400 select-none text-[11px]">
-                                                                                    Link #{lIdx + 1}:
-                                                                                </span>
-
-                                                                                {link.isChanged ? (
-                                                                                    <>
-                                                                                        <span className="line-through bg-rose-100 text-rose-800 font-mono px-2 py-0.5 rounded font-semibold text-xs border border-rose-200">
-                                                                                            refid="{link.oldRefId}"
-                                                                                        </span>
-                                                                                        <ArrowRight size={12} className="text-slate-400 shrink-0" />
-                                                                                        <span className="bg-emerald-100 text-emerald-900 font-mono px-2 py-0.5 rounded font-bold text-xs border border-emerald-200 shadow-2xs">
-                                                                                            refid="{link.newRefId}"
-                                                                                        </span>
-                                                                                    </>
-                                                                                ) : (
-                                                                                    <span className="bg-slate-50 text-slate-700 font-mono px-2 py-0.5 rounded text-xs border border-slate-200">
-                                                                                        refid="{link.oldRefId}"
-                                                                                    </span>
-                                                                                )}
-
-                                                                                {link.label && (
-                                                                                    <span className="text-xs text-slate-500 font-sans ml-2">
-                                                                                        Superscript: <strong className="text-slate-800 font-mono bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">{link.label}</strong>
-                                                                                    </span>
-                                                                                )}
-
-                                                                                {link.crossRefId && (
-                                                                                    <span className="text-[11px] text-slate-400 font-mono ml-auto">
-                                                                                        tag id="{link.crossRefId}"
-                                                                                    </span>
-                                                                                )}
-                                                                            </div>
-                                                                        ))}
-                                                                    </div>
-                                                                ) : (
-                                                                    <div className="text-xs text-slate-400 italic py-1">
-                                                                        No affiliation cross-reference links detected for this author.
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        ))
-                                                ) : (
-                                                    <div className="text-center py-6 text-slate-400 text-xs italic">
-                                                        No authors detected in the XML buffer.
-                                                    </div>
-                                                )}
-
-                                                {authorFilter === 'remapped' && syncLog.remappedAuthorsCount === 0 && (
-                                                    <div className="text-center py-8 text-slate-500 text-xs bg-slate-50 rounded-xl border border-slate-200">
-                                                        <CheckCircle2 className="w-6 h-6 text-emerald-600 mx-auto mb-2" />
-                                                        <p className="font-bold text-slate-700">Zero Author IDs Needed Remapping</p>
-                                                        <p className="text-slate-500 mt-1">All author cross-references were already synchronized with the affiliation sequence.</p>
-                                                        <button 
-                                                            onClick={() => setAuthorFilter('all')}
-                                                            className="mt-3 text-xs font-bold text-emerald-700 underline hover:text-emerald-800"
-                                                        >
-                                                            Show all {syncLog.totalAuthors} authors
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {/* Affiliation Sequence Mapping Table */}
-                                        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
-                                            <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                                                <div className="flex items-center gap-2">
-                                                    <Hash className="w-4 h-4 text-emerald-600" />
-                                                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                                                        Affiliation ID Sequence Mapping ({syncLog.affiliations.length})
-                                                    </h4>
-                                                </div>
-                                                <span className="text-xs font-mono text-slate-500">
-                                                    Step: +5 (af0005, af0010...)
-                                                </span>
-                                            </div>
-                                            <div className="overflow-x-auto">
-                                                <table className="w-full text-xs font-mono text-left border-collapse">
-                                                    <thead>
-                                                        <tr className="bg-slate-100/75 text-slate-600 font-bold border-b border-slate-200">
-                                                            <th className="py-2.5 px-3">#</th>
-                                                            <th className="py-2.5 px-3">Original ID</th>
-                                                            <th className="py-2.5 px-3">Sequenced ID</th>
-                                                            <th className="py-2.5 px-3">Label</th>
-                                                            <th className="py-2.5 px-3">affiliation-id attribute</th>
-                                                            <th className="py-2.5 px-3 text-right">Status</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody className="divide-y divide-slate-100">
-                                                        {syncLog.affiliations.map(aff => (
-                                                            <tr key={aff.index} className={aff.isChanged ? 'bg-amber-50/30 hover:bg-amber-50/60' : 'hover:bg-slate-50'}>
-                                                                <td className="py-2 px-3 text-slate-400 font-bold">{aff.index}</td>
-                                                                <td className="py-2 px-3">
-                                                                    <span className={aff.isChanged ? 'line-through text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100' : 'text-slate-700'}>
-                                                                        {aff.originalId}
-                                                                    </span>
-                                                                </td>
-                                                                <td className="py-2 px-3">
-                                                                    <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                                                                        {aff.newId}
-                                                                    </span>
-                                                                </td>
-                                                                <td className="py-2 px-3">
-                                                                    <span className="text-slate-600">
-                                                                        {aff.originalLabel !== aff.newLabel && aff.originalLabel ? (
-                                                                            <span className="line-through text-rose-600 mr-1.5">{aff.originalLabel}</span>
-                                                                        ) : null}
-                                                                        <strong className="text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">{aff.newLabel}</strong>
-                                                                    </span>
-                                                                </td>
-                                                                <td className="py-2 px-3 text-slate-500">
-                                                                    {aff.affiliationId ? (
-                                                                        <span className="bg-emerald-50/60 text-emerald-800 px-1.5 py-0.5 rounded text-[11px] border border-emerald-100">
-                                                                            affiliation-id="{aff.affiliationId}" (preserved)
-                                                                        </span>
-                                                                    ) : (
-                                                                        <span className="text-slate-400 italic text-[11px]">(none)</span>
-                                                                    )}
-                                                                </td>
-                                                                <td className="py-2 px-3 text-right">
-                                                                    {aff.isChanged ? (
-                                                                        <span className="text-[10px] font-bold text-amber-800 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded uppercase">
-                                                                            Modified
-                                                                        </span>
-                                                                    ) : (
-                                                                        <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                                                                            Preserved
-                                                                        </span>
-                                                                    )}
-                                                                </td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </div>
-                                    </>
-                                )}
-
+                                <div role="tablist" aria-label="Audit Log presentation" className="flex gap-2">
+                                    {(['table','rendered'] as const).map(view => <button key={view} type="button" role="tab" id={`affiliation-audit-${view}-tab`} aria-selected={auditView === view} aria-controls="affiliation-audit-presentation" onClick={() => setAuditView(view)} className={`px-4 py-2 rounded-lg text-sm font-semibold border ${auditView === view ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-white border-slate-200 text-slate-600'}`}>{view === 'table' ? 'Table view' : 'Rendered view'}</button>)}
+                                </div>
+                                {report.some(line => line.text.startsWith('REVIEW:')) && <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-900"><h4 className="font-semibold mb-2">Review required</h4><ul className="list-disc pl-5 space-y-1">{report.filter(line => line.text.startsWith('REVIEW:')).map((line,index) => <li key={index}>{line.text.replace(/^REVIEW: /,'')}</li>)}</ul></div>}
+                                <div role="tabpanel" id="affiliation-audit-presentation" aria-labelledby={`affiliation-audit-${auditView}-tab`}>
+                                    {syncLog ? <AffiliationAuditViews view={auditView} authors={syncLog.authors} affiliations={syncLog.affiliations} /> : <p className="p-5 text-sm text-slate-500">Process XML to generate the before-and-after presentation.</p>}
+                                </div>
                                 {/* Detailed Chronological Audit Trail */}
                                 <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
                                     <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-slate-50 border-b border-slate-200">

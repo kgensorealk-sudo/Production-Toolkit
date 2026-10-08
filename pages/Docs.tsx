@@ -239,13 +239,13 @@ const Docs: React.FC = () => {
                                 <div className="p-4 bg-emerald-50/70 border border-emerald-200 rounded-xl">
                                     <h4 className="font-bold text-emerald-950 text-sm mb-1">Strict ID Mode (+5 Step)</h4>
                                     <p className="text-xs text-emerald-800">
-                                        Modifies ONLY the <code>id</code> attribute of <code>&lt;ce:affiliation&gt;</code> elements. Strictly preserves <code>affiliation-id</code>, <code>&lt;ce:author&gt;</code>, <code>&lt;ce:cross-ref refid="..."&gt;</code>, <code>&lt;ce:label&gt;</code>, and all inner text 100% intact.
+                                        Renumbers affiliation IDs and labels together, preserving author names, author IDs, cross-reference own IDs, and affiliation-id attributes. Existing target ownership controls link updates. Duplicate IDs, collisions, malformed XML, and unresolved-target capture block output.
                                     </p>
                                 </div>
                                 <div className="p-4 bg-indigo-50/70 border border-indigo-200 rounded-xl">
                                     <h4 className="font-bold text-indigo-950 text-sm mb-1">Full Relinker Mode</h4>
                                     <p className="text-xs text-indigo-800">
-                                        Synchronizes author superscript labels and cross-reference callout tags if affiliations were re-ordered or re-indexed.
+                                        Updates affiliation targets and simple visible labels, preserving existing ownership and local URI links. Author citations must use separate single-target ce:cross-ref elements. Unmatched labels and formatted callouts remain unchanged for review. Audit Log provides Table and Rendered views. Validate the complete output with DTD and VTool.
                                     </p>
                                 </div>
                             </div>
