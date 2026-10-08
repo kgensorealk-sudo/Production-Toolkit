@@ -13,7 +13,7 @@ assert.equal(Object.keys(declarations).length,names.size);
 const compiled=ts.transpileModule(Object.values(declarations).join('\n'),{compilerOptions:{target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.React}}).outputText;
 function engine(input,state={},options={}){
     const noop=()=>{};
-    const args={...idExports, prefixOverrides:{},inputKeyRef:state.inputKeyRef??={current:input},operationRef:state.operationRef??={current:0},input,setTimeout:fn=>fn(),setToast:t=>(state.toasts??=[]).push(t),setIsLoading:value=>state.loading=value,setSuggestions:s=>state.suggestions=typeof s==='function'?s(state.suggestions||[]):s,setAuditResults:r=>state.results=r,setQaReport:r=>state.qaReport=r,setDiffElements:value=>state.diffElements=value,setStep:noop,setOutput:o=>state.output=o,generateDiff:(a,b)=>state.diff=[a,b],React:{createElement:()=>({})},Hash:noop,LinkIcon:noop,Trash2:noop,Eraser:noop,RefreshCw:noop,Box:noop,...options};
+    const args={...idExports, prefixOverrides:{},auditResults:state.results||[],inputKeyRef:state.inputKeyRef??={current:input},operationRef:state.operationRef??={current:0},input,setTimeout:fn=>fn(),setToast:t=>(state.toasts??=[]).push(t),setIsLoading:value=>state.loading=value,setSuggestions:s=>state.suggestions=typeof s==='function'?s(state.suggestions||[]):s,setAuditResults:r=>state.results=r,setQaReport:r=>state.qaReport=r,setDiffElements:value=>state.diffElements=value,setStep:noop,setOutput:o=>state.output=o,generateDiff:(a,b)=>state.diff=[a,b],React:{createElement:()=>({})},Hash:noop,LinkIcon:noop,Trash2:noop,Eraser:noop,RefreshCw:noop,Box:noop,...options};
     return new Function(...Object.keys(args),compiled+'\nreturn {invalidateGeneratedResult,runAudit,executeFix};')(...Object.values(args));
 }
 const valid='<ce:bib-reference id="bb0005"><ce:other-ref id="or0005"><ce:textref id="tr0005"><ce:given-name>A B</ce:given-name> text</ce:textref></ce:other-ref></ce:bib-reference>';
@@ -45,7 +45,15 @@ assert.equal(idExports.auditElementIds('<ce:para id="p0000"/>')[0].status,'inval
 assert.equal(idExports.auditElementIds('<ce:para id="p0006"/>')[0].status,'invalid');
 assert.equal(idExports.repairElementIds('<ce:para id="p9995"/><ce:para id="bad"/>').output,'<ce:para id="p9995"/><ce:para id="p3000"/>');
 assert.equal(idExports.repairElementIds('<ce:para id="p0005"/><ce:figure id="p0005"/>').changed,1);
-assert.throws(()=>idExports.repairElementIds('<custom id="x0005"/>'),/prefix/);
+assert.equal(idExports.repairElementIds('<custom id="x0005"/>').output,'<custom id="x0005"/>');
+const mixedUnknown='<ce:dochead id="dh0005">Heading</ce:dochead><ce:index-flag/><ce:para id="bad">Body</ce:para>';
+const skippedPrefixResult=idExports.repairElementIds(mixedUnknown);
+assert.equal(skippedPrefixResult.changed,1);
+assert.equal(skippedPrefixResult.output,'<ce:dochead id="dh0005">Heading</ce:dochead><ce:index-flag/><ce:para id="p3000">Body</ce:para>');
+assert.equal(idExports.repairElementIds(mixedUnknown,{'ce:index-flag':'ix'}).changed,2);
+const unconfiguredDuplicate='<custom id="x0005"/><custom id="x0005"/><ce:para id="bad"/>';
+assert.equal(idExports.repairElementIds(unconfiguredDuplicate).output,unconfiguredDuplicate.replace('<ce:para id="bad"/>','<ce:para id="p3000"/>'));
+assert.throws(()=>idExports.repairElementIds(unconfiguredDuplicate+'<ce:cross-ref refid="x0005">1</ce:cross-ref>'),/Linked duplicate/);
 assert.equal(idExports.repairElementIds('<custom id="x0005"/>',{custom:'x'}).changed,0);
 assert.equal(idExports.repairElementIds('<!-- <ce:para id="bad"/> --><ce:para><![CDATA[<ce:para id="bad"/>]]></ce:para>').changed,0);
 assert.throws(()=>idExports.repairElementIds('<ce:para>'),/XML|close|Unclosed/i);

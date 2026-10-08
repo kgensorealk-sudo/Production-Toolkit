@@ -364,7 +364,7 @@ const IdAuditor: React.FC = () => {
                 setOutput(processedXml);
                 generateDiff(input, processedXml);
                 setStep('result');
-                setToast(links.unlinkedCitations || links.brokenTargets ? {msg:"IDs corrected. Some citation or local link targets require review with Citation Linker Pro.", type:"warn"} : {msg:"IDs corrected.", type:"success"});
+                setToast(auditResults.some(row => row.needsPrefix) ? {msg:"Configured IDs corrected. Unconfigured elements were preserved; see the QA Report.", type:"warn"} : links.unlinkedCitations || links.brokenTargets ? {msg:"IDs corrected. Some citation or local link targets require review with Citation Linker Pro.", type:"warn"} : {msg:"IDs corrected.", type:"success"});
                 setIsLoading(false);
             } catch (err) {
                 setOutput('');
@@ -399,6 +399,7 @@ const IdAuditor: React.FC = () => {
                     <button aria-expanded={qaExpanded} onClick={() => setQaExpanded(value => !value)} className="font-bold text-lg text-slate-900">QA Report — {qaReport.changes.length} ID changes; {qaReport.issues.length} link issues</button>
                     {qaExpanded && <div className="mt-4 space-y-4">
                         <p className="text-sm text-slate-600">Review what happened and the affected targets before using another tool. Citation and link attributes remain unchanged.</p>
+                        {auditResults.some(row => row.needsPrefix) && <p role="status" className="text-sm text-amber-900 bg-amber-50 p-3 rounded-lg">{auditResults.filter(row => row.needsPrefix).length} element(s) have no configured prefix: {[...new Set(auditResults.filter(row => row.needsPrefix).map(row => row.tagName))].join(', ')}. Their IDs are preserved and required missing IDs remain missing. Generation continues for configured tags. Set an explicit prefix and re-audit to include these elements.</p>}
                         {qaReport.changes.length > 0 && <div className="overflow-auto"><table className="w-full text-sm text-left"><thead><tr><th>Element / line</th><th>Before ID</th><th>After ID</th><th>Why changed</th></tr></thead><tbody>{qaReport.changes.slice(qaChangesPage * 50, (qaChangesPage + 1) * 50).map((change,index) => <tr key={index} className="border-t"><td className="p-2">{change.tag} / {change.line}</td><td className="p-2 font-mono">{change.before}</td><td className="p-2 font-mono">{change.after}</td><td className="p-2">{change.reason}</td></tr>)}</tbody></table>
                             {qaReport.changes.length > 50 && <div className="flex gap-3 items-center p-2"><button disabled={qaChangesPage===0} onClick={()=>setQaChangesPage(page=>page-1)}>Previous ID changes</button><span>Page {qaChangesPage+1} of {Math.ceil(qaReport.changes.length/50)}</span><button disabled={(qaChangesPage+1)*50>=qaReport.changes.length} onClick={()=>setQaChangesPage(page=>page+1)}>Next ID changes</button></div>}
                         </div>}

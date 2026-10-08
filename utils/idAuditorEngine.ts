@@ -67,7 +67,7 @@ export function auditElementIds(xml: string, overrides: PrefixOverrides = {}): I
         const isDuplicate=!!originalId && (counts.get(originalId)||0)>1;
         const needsReview = isDuplicate && targets.has(originalId);
         const isLengthViolation=!!originalId && !!expectedPrefix && originalId.startsWith(expectedPrefix) && !/^\d{4}$/.test(originalId.slice(expectedPrefix.length));
-        const reason=needsReview?'Linked duplicate ID: review the target in the original XML before correction.':needsPrefix?'Set an explicit prefix for this element before correction.':!originalId?(rule?.required?'Required ID is missing.':'ID is empty.'):isDuplicate?'Duplicate ID in the document.':!validId(originalId,expectedPrefix)?`Expected ${expectedPrefix} + four digits, 0005–9995 in steps of five.`:'';
+        const reason=needsReview?'Linked duplicate ID: review the target in the original XML before correction.':needsPrefix?'Skipped during generation: no configured prefix. Other elements can still be corrected; set a prefix to include this element.':!originalId?(rule?.required?'Required ID is missing.':'ID is empty.'):isDuplicate?'Duplicate ID in the document.':!validId(originalId,expectedPrefix)?`Expected ${expectedPrefix} + four digits, 0005–9995 in steps of five.`:'';
         return [{id:originalId||'[MISSING ID]',originalId,tagName:node.name,expectedPrefix,status:reason?'invalid' as const:'valid' as const,
             isLengthViolation,isDuplicate,prefixSource:Object.prototype.hasOwnProperty.call(overrides,node.name)?'custom':rule?.source||'unconfigured',needsReview,needsPrefix,reason,preview:structure.metadataXml.slice(node.openEnd,node.closeStart).replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,100),fullTag:xml.slice(node.start,node.openEnd)}];
     });
@@ -77,9 +77,8 @@ export function repairElementIds(xml: string, overrides: PrefixOverrides = {}): 
     const rows=auditElementIds(xml,overrides);
     const ambiguous = rows.find(row => row.needsReview);
     if (ambiguous) throw new Error(`Linked duplicate ID ${ambiguous.originalId} is ambiguous. Review its owners and citation targets in the original XML before fixing IDs. No output was generated.`);
-    const unconfigured=rows.find(row=>row.needsPrefix);
-    if(unconfigured) throw new Error(`No configured prefix for ${unconfigured.tagName}. Set its prefix before fixing IDs.`);
     const occupied=new Set([...structure.ids, ...targetIds(structure.nodes)]), retained=new Set<string>(), counters=new Map<string,number>();
+    for(const node of structure.nodes) if(node.attributes.id && !/^[a-z]+$/.test(resolvePrefix(node.name,node.attributes,overrides))) retained.add(node.attributes.id);
     const allocate=(prefix:string)=>{
         for(let attempt=0;attempt<1999;attempt++) {
             const next=counters.get(prefix)??3000;
@@ -94,6 +93,7 @@ export function repairElementIds(xml: string, overrides: PrefixOverrides = {}): 
         const rule=registry.get(node.name), oldId=node.attributes.id||'';
         if(!node.attributeRanges.id&&!rule?.required)continue;
         const prefix=resolvePrefix(node.name, node.attributes, overrides);
+        if(!/^[a-z]+$/.test(prefix))continue;
         if(validId(oldId,prefix)&&!retained.has(oldId)){retained.add(oldId);continue;}
         const id=allocate(prefix);retained.add(id);
         const range=node.attributeRanges.id;
@@ -102,7 +102,7 @@ export function repairElementIds(xml: string, overrides: PrefixOverrides = {}): 
     }
     let output=xml;
     for(const edit of edits.reverse())output=output.slice(0,edit.start)+edit.text+output.slice(edit.end);
-    scanReferenceXml(output); // Check uniqueness and structure before publishing.
+    scanReferenceXml(output, {allowDuplicateIds:true}); // Preserve unresolved IDs on unconfigured elements; allocations remain unique.
     return {output,changed:edits.length};
 }
 
