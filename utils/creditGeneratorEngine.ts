@@ -34,8 +34,15 @@ export function generateCredit(input: string) {
     // Periods in initials stay within the author name; delimiters require a following author colon.
     const segments: string[] = [];
     let cursor = 0;
-    for (const match of text.matchAll(/(?:;\s*|\.\s+|[\r\n]+|\s+and\s+)(?=[^:;\r\n<>]+:)/gi)) {
+    for (const match of text.matchAll(/(?:[,;]\s*|\.\s+|[\r\n]+|\s+and\s+)(?=[^:,;\r\n<>]+:)/gi)) {
         if (!text.slice(cursor, match.index).includes(':')) continue;
+        const candidate=text.slice(match.index!+match[0].length).split(':',1)[0];
+        if([...candidate.matchAll(/([\p{L}]+)\./gu)].some(token=>token[1].length>1 && !/^(?:Dr|Prof|Mr|Mrs|Ms|Jr|Sr)$/i.test(token[1])))continue;
+        if(/^\s+and\s+$/i.test(match[0])) {
+            const preceding=text.slice(cursor,match.index);
+            const roles=splitCreditRoles(preceding.slice(preceding.indexOf(':')+1));
+            if(!roles.length || !roles.every(role=>findCreditRole(role)))continue;
+        }
         segments.push(text.slice(cursor, match.index));
         cursor = match.index! + match[0].length;
     }
@@ -49,6 +56,7 @@ export function generateCredit(input: string) {
         const colon = part.indexOf(':');
         const name = part.slice(0, colon).trim();
         if (colon < 1 || !name || /[<>]/.test(name)) throw new Error('Each author must have a name followed by a colon and contribution roles.');
+        if(part.slice(colon+1).includes(':'))throw new Error('Ambiguous author boundary. Separate each author contribution with a semicolon or a new line.');
         const tokens = splitCreditRoles(part.slice(colon + 1));
         if (!tokens.length) throw new Error(`No contribution roles supplied for ${name}.`);
         const seen = new Set<string>();
