@@ -1,0 +1,82 @@
+[
+  {
+    "name": "dtd-character-entities",
+    "kind": "original",
+    "dtdIssues": [],
+    "errors": "0",
+    "warnings": "2",
+    "skipped": "0",
+    "messages": [
+      {
+        "code": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "code": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "dtd-character-entities",
+    "kind": "output",
+    "dtdIssues": [],
+    "errors": "0",
+    "warnings": "2",
+    "skipped": "0",
+    "messages": [
+      {
+        "code": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "code": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "supplied-text-entity",
+    "kind": "original",
+    "dtdIssues": [],
+    "errors": "0",
+    "warnings": "2",
+    "skipped": "0",
+    "messages": [
+      {
+        "code": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "code": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "supplied-text-entity",
+    "kind": "output",
+    "dtdIssues": [],
+    "errors": "0",
+    "warnings": "2",
+    "skipped": "0",
+    "messages": [
+      {
+        "code": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "code": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  }
+]

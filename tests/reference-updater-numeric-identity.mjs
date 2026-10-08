@@ -7,6 +7,12 @@ for(const [name,incoming,options] of [['same-doi',corrected.replace('[1]','[99]'
     assert.equal(state.scanResults[0].status,'unchanged');assert.equal(state.scanResults[0].updatedIndex,null);
     assert.equal(state.scanResults[1].originalIndex,null);
     await engine(a,incoming,state,options).initiateUpdate();
+    assert.ok(state.scanResults[1].numberingWarning.includes('[1]'));
+    if(options.addOrphans!==false) {
+        assert.ok(!state.output);
+        state.scanResults[1]={...state.scanResults[1],reviewed:true,status:'smart_match'};
+        await engine(a,incoming,state,options).initiateUpdate();
+    }
     assert.ok(state.output.startsWith(a));
     if(options.addOrphans===false)assert.equal(state.output,a);
     else {assert.ok(state.output.includes('id="bb3000"'));assert.ok(state.output.includes('[99]'));}
@@ -16,7 +22,7 @@ const sameNumber={scanResults:[]};engine(a,corrected.replace('[1]','(1)'),sameNu
 assert.equal(sameNumber.scanResults[0].matchType,'DOI');
 const forced={scanResults:[]};engine(a,corrected.replace('[1]','[99]'),forced).runAnalysis();
 forced.scanResults=[{...forced.scanResults[0],status:'update',updatedIndex:0,reviewed:true}];
-await engine(a,corrected.replace('[1]','[99]'),forced).initiateUpdate();assert.equal(forced.output,undefined);
+await engine(a,corrected.replace('[1]','[99]'),forced).initiateUpdate();assert.ok(!forced.output);
 fs.mkdirSync('artifacts/reference-updater-numeric-identity',{recursive:true});
 fs.writeFileSync('artifacts/reference-updater-numeric-identity/results.json',JSON.stringify(results,null,2));
 console.log('5 numeric identity regression scenarios passed.');

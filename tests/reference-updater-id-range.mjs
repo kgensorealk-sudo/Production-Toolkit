@@ -14,6 +14,6 @@ const last=await merge(used);
 assert.ok(last.output.includes('id="ir9995"'));
 assert.ok(!last.output.includes('id="ir10000"'));
 const exhausted=await merge([...used,'ir9995']);
-assert.equal(exhausted.output,undefined);
+assert.ok(!exhausted.output);
 assert.ok(exhausted.toasts.some(t=>t.type==='error'&&t.msg.includes('0005–9995')));
 console.log('3 ID range regression scenarios passed, including exhaustion.');

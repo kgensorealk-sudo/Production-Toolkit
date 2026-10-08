@@ -5,7 +5,7 @@ const old=ref('bb5','Smith, 2020',book('rf5','Smith','2020','Alpha paper')+sourc
 const updated=ref('bb900','Smith, 2020',book('rf900','Smith','2020','Entirely different investigation')+sourceText('se900','Entirely different investigation.'));
 const state={scanResults:[]};engine(old,updated,state).runAnalysis();
 assert.equal(state.scanResults[0].matchType,'Label');assert.equal(state.scanResults[0].status,'potential_duplicate');
-await engine(old,updated,state,{autoUpdateSmartMatch:true}).initiateUpdate();assert.equal(state.output,undefined);
+await engine(old,updated,state,{autoUpdateSmartMatch:true}).initiateUpdate();assert.ok(!state.output);
 engine(old,updated,state).mergeDuplicate(state.scanResults[0].uid,0);
 await engine(old,updated,state).initiateUpdate();assert.ok(state.output.includes('Entirely different investigation'));
 const withDoi=(xml,doi)=>xml.replace('</sb:host>',`<ce:doi>${doi}</ce:doi></sb:host>`);
@@ -17,7 +17,7 @@ const conflicting={scanResults:[]};engine(originalDoi,withDoi(updated,'10.1234/b
 assert.equal(conflicting.scanResults[0].status,'conflict');
 const multiple={scanResults:[]};engine(old,updated+updated.replace(/900/g,'905'),multiple).runAnalysis();
 await engine(old,updated+updated.replace(/900/g,'905'),multiple,{autoUpdateSmartMatch:true}).initiateUpdate();
-assert.equal(multiple.output,undefined);
+assert.ok(!multiple.output);
 fs.mkdirSync('artifacts/reference-updater-name-date-fix',{recursive:true});
 fs.writeFileSync('artifacts/reference-updater-name-date-fix/results.json',JSON.stringify([{name:'doi-name-date',original:originalDoi,updated:updatedDoi,output:exact.output}],null,2));
 console.log('5 name-date regression scenarios passed.');

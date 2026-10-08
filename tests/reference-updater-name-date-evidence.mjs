@@ -9,7 +9,7 @@ const good=mk('905','Alpha evidence','Lee','Corrected prose');
 const state={scanResults:[]};engine(original,bad+good,state,{addOrphans:false}).runAnalysis();
 assert.equal(state.scanResults[0].updatedIndex,1);assert.equal(state.scanResults[0].matchType,'Label');
 assert.equal(state.scanResults[0].status,'potential_duplicate');
-await engine(original,bad+good,state,{addOrphans:false,autoUpdateSmartMatch:true}).initiateUpdate();assert.equal(state.output,undefined);
+await engine(original,bad+good,state,{addOrphans:false,autoUpdateSmartMatch:true}).initiateUpdate();assert.ok(!state.output);
 engine(original,bad+good,state,{addOrphans:false}).mergeDuplicate(state.scanResults[0].uid,0);
 await engine(original,bad+good,state,{addOrphans:false}).initiateUpdate();assert.ok(state.output.includes('Corrected prose'));assert.ok(!state.output.includes('Brown'));
 // Same title and first two authors: a third-author difference must affect ranking.

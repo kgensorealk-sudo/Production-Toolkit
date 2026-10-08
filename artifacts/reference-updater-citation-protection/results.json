@@ -1,0 +1,8 @@
+[
+  {
+    "name": "matched-id-protected",
+    "original": "<ce:bib-reference id=\"bb0005\"><ce:label>[1]</ce:label><sb:reference id=\"rf0005\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Alpha evidence</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book><ce:doi>10.1000/alpha</ce:doi></sb:host></sb:reference><ce:source-text id=\"se0005\">Alpha evidence.</ce:source-text></ce:bib-reference>",
+    "updated": "<ce:bib-reference id=\"bb0900\"><ce:label>[1]</ce:label><sb:reference id=\"rf0900\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Corrected Alpha evidence</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book><ce:doi>10.1000/alpha</ce:doi></sb:host></sb:reference><ce:source-text id=\"se0900\">Corrected Alpha evidence.</ce:source-text></ce:bib-reference>",
+    "output": "<ce:bib-reference id=\"bb0005\"><ce:label>[1]</ce:label><sb:reference id=\"rf0005\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Corrected Alpha evidence</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book><ce:doi>10.1000/alpha</ce:doi></sb:host></sb:reference><ce:source-text id=\"se0005\">Corrected Alpha evidence.</ce:source-text></ce:bib-reference>"
+  }
+]

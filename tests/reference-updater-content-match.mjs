@@ -13,9 +13,10 @@ async function check(name,original,updated,verify,options={}) {
 const original=ref('bb5','[1]',book('rf5','张','2020','甲乙研究')+sourceText('se5','甲乙研究。'));
 const unrelated=ref('bb900','[1]',book('rf900','李','2020','丙丁分析')+sourceText('se900','丙丁分析。'));
 await check('unicode-collision',original,unrelated,state=>{
-    assert.equal(state.scanResults[0].status,'unchanged');
-    assert.ok(state.output.includes('甲乙研究'));
-    assert.ok(!state.output.includes('丙丁分析'));
+    assert.equal(state.scanResults[0].status,'potential_duplicate');
+    assert.notEqual(state.scanResults[0].matchType,'Content');
+    assert.ok(!state.output);
+    assert.ok(state.toasts.some(t=>t.msg.includes('Review required')));
 },{addOrphans:false,autoUpdateSmartMatch:true});
 for(const label of ['[1]','Smith, 2020']) {
     const old=ref('bb5',label,book('rf5','Smith','2020','Alpha','10.1234/a-b'));
@@ -23,7 +24,7 @@ for(const label of ['[1]','Smith, 2020']) {
     await check('doi-conflict-'+label,old,next,state=>{
         assert.equal(state.scanResults[0].status,'conflict');
         assert.notEqual(state.scanResults[0].matchType,'Content');
-        assert.equal(state.output,undefined);
+        assert.ok(!state.output);
         assert.ok(state.toasts.some(t=>t.msg.includes('Review required')));
     },{autoUpdateSmartMatch:true});
 }

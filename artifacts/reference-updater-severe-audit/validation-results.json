@@ -1,0 +1,198 @@
+[
+  {
+    "name": "preserve-off-breaks-body-target",
+    "kind": "original",
+    "dtdIssues": [],
+    "errors": "0",
+    "warnings": "2",
+    "skipped": "0",
+    "messages": [
+      {
+        "code": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "code": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "preserve-off-breaks-body-target",
+    "kind": "output",
+    "dtdIssues": [
+      "Reference to undeclared ID is 'bb0005'."
+    ],
+    "errors": "2",
+    "warnings": "2",
+    "skipped": "0",
+    "messages": [
+      {
+        "code": "IDS503a",
+        "severity": "error",
+        "message": "All bibliographic references within 'ce:bibliography' must be referred to."
+      },
+      {
+        "code": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "code": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      },
+      {
+        "code": "parser",
+        "severity": "error",
+        "message": "Error: An element with the identifier \"bb0005\" must appear in the document."
+      }
+    ]
+  },
+  {
+    "name": "deselection-breaks-body-target",
+    "kind": "original",
+    "dtdIssues": [],
+    "errors": "0",
+    "warnings": "2",
+    "skipped": "0",
+    "messages": [
+      {
+        "code": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "code": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "deselection-breaks-body-target",
+    "kind": "output",
+    "dtdIssues": [
+      "Reference to undeclared ID is 'bb0005'."
+    ],
+    "errors": "1",
+    "warnings": "2",
+    "skipped": "0",
+    "messages": [
+      {
+        "code": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "code": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      },
+      {
+        "code": "parser",
+        "severity": "error",
+        "message": "Error: An element with the identifier \"bb0005\" must appear in the document."
+      }
+    ]
+  },
+  {
+    "name": "blocked-merge-retains-stale-output",
+    "kind": "original",
+    "dtdIssues": [],
+    "errors": "0",
+    "warnings": "2",
+    "skipped": "0",
+    "messages": [
+      {
+        "code": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "code": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "blocked-merge-retains-stale-output",
+    "kind": "output",
+    "dtdIssues": [],
+    "errors": "0",
+    "warnings": "2",
+    "skipped": "0",
+    "messages": [
+      {
+        "code": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "code": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "undeclared-entity-emitted",
+    "kind": "original",
+    "dtdIssues": [],
+    "errors": "0",
+    "warnings": "2",
+    "skipped": "0",
+    "messages": [
+      {
+        "code": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "code": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      }
+    ]
+  },
+  {
+    "name": "undeclared-entity-emitted",
+    "kind": "output",
+    "dtdIssues": [
+      "Exception calling \"Read\" with \"0\" argument(s): \"Reference to undeclared entity 'undefinedEntity'. Line 1, position 57575.\""
+    ],
+    "errors": "3",
+    "warnings": "2",
+    "skipped": "0",
+    "messages": [
+      {
+        "code": "MSC529",
+        "severity": "warning",
+        "message": "Element 'ce:grant-sponsor' should preferably have a sponsor ID (attribute 'sponsor-id')."
+      },
+      {
+        "code": "ROL517",
+        "severity": "warning",
+        "message": "Either the role attribute is missing or the role value is inappropriate."
+      },
+      {
+        "code": "XML503c",
+        "severity": "error",
+        "message": "Multiple whitespace characters (TAB, LF, space) may only appear at the beginning of a line."
+      },
+      {
+        "code": "parser",
+        "severity": "error",
+        "message": "Error: The entity \"undefinedEntity\" was referenced, but not declared."
+      },
+      {
+        "code": "XML510",
+        "severity": "error",
+        "message": "Named entities and numerical Unicode entities are not allowed."
+      }
+    ]
+  }
+]

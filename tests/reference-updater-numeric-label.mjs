@@ -14,20 +14,26 @@ for (const label of ['[1]','1','1.','(1)','[ 1 ]']) {
     const original=a.replace('[1]',label);
     const unrelated=ref('bb900',label,book('rf900','Jones','2022','Completely different paper','10.9999/different')+sourceText('se900','Different paper.'));
     const state=await merge(original,unrelated,{addOrphans:false});
-    assert.equal(state.scanResults[0].status,'unchanged',label);
-    assert.equal(state.scanResults[0].updatedIndex,null,label);
+    assert.ok(['conflict','potential_duplicate'].includes(state.scanResults[0].status),label);
+    assert.equal(state.scanResults[0].updatedIndex,0,label);
+    assert.ok(!state.output,label);
+    engine(original,unrelated,state,{addOrphans:false}).splitMatch(state.scanResults[0]);
+    state.scanResults.find(r=>r.originalIndex===null).selected=false;
+    await engine(original,unrelated,state,{addOrphans:false}).initiateUpdate();
     assert.ok(state.output.includes('Alpha evidence'),label);
     assert.ok(!state.output.includes('Completely different paper'),label);
     results.push({name:label==='[1]'?'numeric-label-wrong-paper':`numeric-label-${results.length}`,original,updated:unrelated,output:state.output});
 }
 
-// Enabling additions must keep the original rather than overwrite its citation target.
+// Even with Auto-Add enabled, a same-number correction waits for explicit review.
 const unrelated=results[0].updated;
 const added=await merge(a,unrelated);
-assert.equal(added.scanResults[0].status,'unchanged');
-assert.equal(added.scanResults[1].status,'add');
-assert.match(added.output,/<ce:bib-reference id="bb5"[^>]*>[\s\S]*?Alpha evidence/);
+assert.equal(added.scanResults.length,1);assert.ok(!added.output);
+engine(a,unrelated,added).mergeDuplicate(added.scanResults[0].uid,0);
+await engine(a,unrelated,added).initiateUpdate();
+assert.ok(added.output.includes('id="bb5"'));
 assert.ok(added.output.includes('Completely different paper'));
+assert.equal((added.output.match(/<ce:bib-reference\b/g)||[]).length,1);
 
 // A genuine DOI-linked correction continues to update and preserve the body target ID.
 const genuine=await merge(a,corrected);

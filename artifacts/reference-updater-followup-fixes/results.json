@@ -1,0 +1,517 @@
+[
+  {
+    "name": "preserve-off-matched-id-collision",
+    "original": "<ce:bib-reference id=\"bb0005\"><ce:label>[1]</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Alpha evidence</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book><ce:doi>10.1234/alpha</ce:doi></sb:host></sb:reference><ce:source-text id=\"se5\">Alpha evidence.</ce:source-text></ce:bib-reference><ce:bib-reference id=\"bb0010\"><ce:label>[2]</ce:label><sb:reference id=\"rf10\"><sb:contribution><sb:authors><sb:author><ce:surname>Jones</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Unrelated Beta study</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2021</sb:date></sb:book><ce:doi>10.1234/beta</ce:doi></sb:host></sb:reference><ce:source-text id=\"se10\">Unrelated Beta study.</ce:source-text></ce:bib-reference>",
+    "updated": "<ce:bib-reference id=\"bb0010\"><ce:label>[1]</ce:label><sb:reference id=\"rf900\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Corrected Alpha evidence</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book><ce:doi>10.1234/alpha</ce:doi></sb:host></sb:reference><ce:source-text id=\"se900\">Corrected Alpha evidence.</ce:source-text></ce:bib-reference>",
+    "analysis": [
+      {
+        "uid": "m04kkblpc5n",
+        "label": "[1]",
+        "id": "bb0005",
+        "status": "update",
+        "reviewed": false,
+        "matchType": "DOI",
+        "matchScore": 100,
+        "preview": "[1]<ce:surname...",
+        "isSynthetic": false,
+        "selected": true,
+        "sortKey": "[1]",
+        "originalIndex": 0,
+        "updatedIndex": 0,
+        "candidateSource": "updated"
+      },
+      {
+        "uid": "50b6sn8lt78",
+        "label": "[2]",
+        "id": "bb0010",
+        "status": "unchanged",
+        "preview": "[2]...",
+        "isSynthetic": false,
+        "selected": true,
+        "sortKey": "[2]",
+        "originalIndex": 1,
+        "updatedIndex": null
+      }
+    ],
+    "finalAnalysis": [
+      {
+        "uid": "m04kkblpc5n",
+        "label": "[1]",
+        "id": "bb0005",
+        "status": "update",
+        "reviewed": false,
+        "matchType": "DOI",
+        "matchScore": 100,
+        "preview": "[1]<ce:surname...",
+        "isSynthetic": false,
+        "selected": true,
+        "sortKey": "[1]",
+        "originalIndex": 0,
+        "updatedIndex": 0,
+        "candidateSource": "updated"
+      },
+      {
+        "uid": "50b6sn8lt78",
+        "label": "[2]",
+        "id": "bb0010",
+        "status": "unchanged",
+        "preview": "[2]...",
+        "isSynthetic": false,
+        "selected": true,
+        "sortKey": "[2]",
+        "originalIndex": 1,
+        "updatedIndex": null
+      }
+    ],
+    "output": "<ce:bib-reference id=\"bb0005\"><ce:label>[1]</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Corrected Alpha evidence</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book><ce:doi>10.1234/alpha</ce:doi></sb:host></sb:reference><ce:source-text id=\"se5\">Corrected Alpha evidence.</ce:source-text></ce:bib-reference>\n<ce:bib-reference id=\"bb0010\"><ce:label>[2]</ce:label><sb:reference id=\"rf10\"><sb:contribution><sb:authors><sb:author><ce:surname>Jones</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Unrelated Beta study</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2021</sb:date></sb:book><ce:doi>10.1234/beta</ce:doi></sb:host></sb:reference><ce:source-text id=\"se10\">Unrelated Beta study.</ce:source-text></ce:bib-reference>",
+    "toasts": [
+      {
+        "msg": "Analysis complete. Found 1 potential updates.",
+        "type": "success"
+      },
+      {
+        "msg": "Merge Protocol Executed. Unchanged references preserved.",
+        "type": "success"
+      }
+    ]
+  },
+  {
+    "name": "cross-entry-links-not-remapped",
+    "original": "<ce:bib-reference id=\"bb0005\"><ce:label>[1]</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Alpha evidence</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book><ce:doi>10.1234/alpha</ce:doi></sb:host></sb:reference><ce:source-text id=\"se5\">Alpha evidence.</ce:source-text></ce:bib-reference><ce:bib-reference id=\"bb0010\"><ce:label>[2]</ce:label><sb:reference id=\"rf10\"><sb:contribution><sb:authors><sb:author><ce:surname>Jones</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Unrelated Beta study</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2021</sb:date></sb:book><ce:doi>10.1234/beta</ce:doi></sb:host></sb:reference><ce:source-text id=\"se10\">Unrelated Beta study.</ce:source-text></ce:bib-reference>",
+    "updated": "<ce:bib-reference id=\"bb0900\"><ce:label>[1]</ce:label><sb:reference id=\"rf900\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Corrected Alpha evidence</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book><ce:doi>10.1234/alpha</ce:doi></sb:host></sb:reference><ce:source-text id=\"se900\">Corrected Alpha evidence.</ce:source-text></ce:bib-reference><ce:bib-reference id=\"bb0905\"><ce:label>[2]</ce:label><sb:reference id=\"rf905\"><sb:contribution><sb:authors><sb:author><ce:surname>Jones</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Unrelated Beta study</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2021</sb:date></sb:book><ce:doi>10.1234/beta</ce:doi></sb:host><sb:comment><ce:cross-ref id=\"cf0905\" refid=\"bb0900\">First paper</ce:cross-ref></sb:comment></sb:reference><ce:source-text id=\"se905\">Unrelated Beta study.</ce:source-text></ce:bib-reference>",
+    "analysis": [
+      {
+        "uid": "ixyiolp3ggs",
+        "label": "[1]",
+        "id": "bb0005",
+        "status": "update",
+        "reviewed": false,
+        "matchType": "DOI",
+        "matchScore": 100,
+        "preview": "[1]<ce:surname...",
+        "isSynthetic": false,
+        "selected": true,
+        "sortKey": "[1]",
+        "originalIndex": 0,
+        "updatedIndex": 0,
+        "candidateSource": "updated"
+      },
+      {
+        "uid": "an5bfzqusct",
+        "label": "[2]",
+        "id": "bb0010",
+        "status": "update",
+        "reviewed": false,
+        "matchType": "DOI",
+        "matchScore": 100,
+        "preview": "[2]<ce:surname...",
+        "isSynthetic": false,
+        "selected": true,
+        "sortKey": "[2]",
+        "originalIndex": 1,
+        "updatedIndex": 1,
+        "candidateSource": "updated"
+      }
+    ],
+    "finalAnalysis": [
+      {
+        "uid": "ixyiolp3ggs",
+        "label": "[1]",
+        "id": "bb0005",
+        "status": "update",
+        "reviewed": false,
+        "matchType": "DOI",
+        "matchScore": 100,
+        "preview": "[1]<ce:surname...",
+        "isSynthetic": false,
+        "selected": true,
+        "sortKey": "[1]",
+        "originalIndex": 0,
+        "updatedIndex": 0,
+        "candidateSource": "updated"
+      },
+      {
+        "uid": "an5bfzqusct",
+        "label": "[2]",
+        "id": "bb0010",
+        "status": "update",
+        "reviewed": false,
+        "matchType": "DOI",
+        "matchScore": 100,
+        "preview": "[2]<ce:surname...",
+        "isSynthetic": false,
+        "selected": true,
+        "sortKey": "[2]",
+        "originalIndex": 1,
+        "updatedIndex": 1,
+        "candidateSource": "updated"
+      }
+    ],
+    "output": "<ce:bib-reference id=\"bb0005\"><ce:label>[1]</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Corrected Alpha evidence</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book><ce:doi>10.1234/alpha</ce:doi></sb:host></sb:reference><ce:source-text id=\"se5\">Corrected Alpha evidence.</ce:source-text></ce:bib-reference>\n<ce:bib-reference id=\"bb0010\"><ce:label>[2]</ce:label><sb:reference id=\"rf10\"><sb:contribution><sb:authors><sb:author><ce:surname>Jones</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Unrelated Beta study</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2021</sb:date></sb:book><ce:doi>10.1234/beta</ce:doi></sb:host><sb:comment><ce:cross-ref id=\"cf0910\" refid=\"bb0005\">First paper</ce:cross-ref></sb:comment></sb:reference><ce:source-text id=\"se10\">Unrelated Beta study.</ce:source-text></ce:bib-reference>",
+    "toasts": [
+      {
+        "msg": "Analysis complete. Found 2 potential updates.",
+        "type": "success"
+      },
+      {
+        "msg": "Merge Protocol Executed. Unchanged references preserved.",
+        "type": "success"
+      }
+    ]
+  },
+  {
+    "name": "unmanaged-cross-ref-id-collision",
+    "original": "<ce:bib-reference id=\"bb0005\"><ce:label>[1]</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Alpha evidence</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book><ce:doi>10.1234/alpha</ce:doi></sb:host></sb:reference><ce:source-text id=\"se5\">Alpha evidence.</ce:source-text></ce:bib-reference><ce:bib-reference id=\"bb0010\"><ce:label>[2]</ce:label><sb:reference id=\"rf10\"><sb:contribution><sb:authors><sb:author><ce:surname>Jones</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Unrelated Beta study</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2021</sb:date></sb:book><ce:doi>10.1234/beta</ce:doi></sb:host><sb:comment><ce:cross-ref id=\"cf0900\" refid=\"bb0010\">Details</ce:cross-ref></sb:comment></sb:reference><ce:source-text id=\"se10\">Unrelated Beta study.</ce:source-text></ce:bib-reference>",
+    "updated": "<ce:bib-reference id=\"bb0900\"><ce:label>[1]</ce:label><sb:reference id=\"rf900\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Corrected Alpha evidence</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book><ce:doi>10.1234/alpha</ce:doi></sb:host><sb:comment><ce:cross-ref id=\"cf0900\" refid=\"bb0900\">Details</ce:cross-ref></sb:comment></sb:reference><ce:source-text id=\"se900\">Corrected Alpha evidence.</ce:source-text></ce:bib-reference>",
+    "analysis": [
+      {
+        "uid": "vja1wlbvrj",
+        "label": "[1]",
+        "id": "bb0005",
+        "status": "update",
+        "reviewed": false,
+        "matchType": "DOI",
+        "matchScore": 100,
+        "preview": "[1]<ce:surname...",
+        "isSynthetic": false,
+        "selected": true,
+        "sortKey": "[1]",
+        "originalIndex": 0,
+        "updatedIndex": 0,
+        "candidateSource": "updated"
+      },
+      {
+        "uid": "i2fidxxqioo",
+        "label": "[2]",
+        "id": "bb0010",
+        "status": "unchanged",
+        "preview": "[2]...",
+        "isSynthetic": false,
+        "selected": true,
+        "sortKey": "[2]",
+        "originalIndex": 1,
+        "updatedIndex": null
+      }
+    ],
+    "finalAnalysis": [
+      {
+        "uid": "vja1wlbvrj",
+        "label": "[1]",
+        "id": "bb0005",
+        "status": "update",
+        "reviewed": false,
+        "matchType": "DOI",
+        "matchScore": 100,
+        "preview": "[1]<ce:surname...",
+        "isSynthetic": false,
+        "selected": true,
+        "sortKey": "[1]",
+        "originalIndex": 0,
+        "updatedIndex": 0,
+        "candidateSource": "updated"
+      },
+      {
+        "uid": "i2fidxxqioo",
+        "label": "[2]",
+        "id": "bb0010",
+        "status": "unchanged",
+        "preview": "[2]...",
+        "isSynthetic": false,
+        "selected": true,
+        "sortKey": "[2]",
+        "originalIndex": 1,
+        "updatedIndex": null
+      }
+    ],
+    "output": "<ce:bib-reference id=\"bb0005\"><ce:label>[1]</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Corrected Alpha evidence</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book><ce:doi>10.1234/alpha</ce:doi></sb:host><sb:comment><ce:cross-ref id=\"cf0905\" refid=\"bb0005\">Details</ce:cross-ref></sb:comment></sb:reference><ce:source-text id=\"se5\">Corrected Alpha evidence.</ce:source-text></ce:bib-reference>\n<ce:bib-reference id=\"bb0010\"><ce:label>[2]</ce:label><sb:reference id=\"rf10\"><sb:contribution><sb:authors><sb:author><ce:surname>Jones</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Unrelated Beta study</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2021</sb:date></sb:book><ce:doi>10.1234/beta</ce:doi></sb:host><sb:comment><ce:cross-ref id=\"cf0900\" refid=\"bb0010\">Details</ce:cross-ref></sb:comment></sb:reference><ce:source-text id=\"se10\">Unrelated Beta study.</ce:source-text></ce:bib-reference>",
+    "toasts": [
+      {
+        "msg": "Analysis complete. Found 1 potential updates.",
+        "type": "success"
+      },
+      {
+        "msg": "Merge Protocol Executed. Unchanged references preserved.",
+        "type": "success"
+      }
+    ]
+  },
+  {
+    "name": "commented-reference-emitted",
+    "original": "<ce:bib-reference id=\"bb0005\"><ce:label>[1]</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Alpha evidence</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book><ce:doi>10.1234/alpha</ce:doi></sb:host></sb:reference><ce:source-text id=\"se5\">Alpha evidence.</ce:source-text></ce:bib-reference>",
+    "updated": "<ce:bib-reference id=\"bb900\"><ce:label>[1]</ce:label><sb:reference id=\"rf900\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Corrected Alpha evidence</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book><ce:doi>10.1234/alpha</ce:doi></sb:host></sb:reference><ce:source-text id=\"se900\">Corrected Alpha evidence.</ce:source-text></ce:bib-reference><!--<ce:bib-reference id=\"bb0010\"><ce:label>[2]</ce:label><sb:reference id=\"rf10\"><sb:contribution><sb:authors><sb:author><ce:surname>Jones</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Unrelated Beta study</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2021</sb:date></sb:book><ce:doi>10.1234/beta</ce:doi></sb:host></sb:reference><ce:source-text id=\"se10\">Unrelated Beta study.</ce:source-text></ce:bib-reference>-->",
+    "analysis": [
+      {
+        "uid": "2evv39mk12i",
+        "label": "[1]",
+        "id": "bb0005",
+        "status": "update",
+        "reviewed": false,
+        "matchType": "DOI",
+        "matchScore": 100,
+        "preview": "[1]<ce:surname...",
+        "isSynthetic": false,
+        "selected": true,
+        "sortKey": "[1]",
+        "originalIndex": 0,
+        "updatedIndex": 0,
+        "candidateSource": "updated"
+      },
+      {
+        "uid": "fla48n630tr",
+        "label": "[2]",
+        "id": "bb0010",
+        "status": "add",
+        "preview": "[2]...",
+        "isSynthetic": false,
+        "selected": true,
+        "sortKey": "[2]",
+        "originalIndex": null,
+        "updatedIndex": 1
+      }
+    ],
+    "finalAnalysis": [
+      {
+        "uid": "2evv39mk12i",
+        "label": "[1]",
+        "id": "bb0005",
+        "status": "update",
+        "reviewed": false,
+        "matchType": "DOI",
+        "matchScore": 100,
+        "preview": "[1]<ce:surname...",
+        "isSynthetic": false,
+        "selected": true,
+        "sortKey": "[1]",
+        "originalIndex": 0,
+        "updatedIndex": 0,
+        "candidateSource": "updated"
+      },
+      {
+        "uid": "fla48n630tr",
+        "label": "[2]",
+        "id": "bb0010",
+        "status": "add",
+        "preview": "[2]...",
+        "isSynthetic": false,
+        "selected": true,
+        "sortKey": "[2]",
+        "originalIndex": null,
+        "updatedIndex": 1
+      }
+    ],
+    "output": "<ce:bib-reference id=\"bb0005\"><ce:label>[1]</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Corrected Alpha evidence</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book><ce:doi>10.1234/alpha</ce:doi></sb:host></sb:reference><ce:source-text id=\"se5\">Corrected Alpha evidence.</ce:source-text></ce:bib-reference>",
+    "toasts": [
+      {
+        "msg": "Analysis complete. Found 2 potential updates.",
+        "type": "success"
+      },
+      {
+        "msg": "Merge Protocol Executed. Unchanged references preserved.",
+        "type": "success"
+      }
+    ]
+  },
+  {
+    "name": "candidate-switch-loses-displaced-update",
+    "original": "<ce:bib-reference id=\"bb0005\"><ce:label>Smith, 2020</ce:label><sb:reference id=\"rf0005\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Alpha</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se0005\">Alpha</ce:source-text></ce:bib-reference>",
+    "updated": "<ce:bib-reference id=\"bb0900\"><ce:label>Smith, 2020</ce:label><sb:reference id=\"rf0900\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Alpha revised</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se0900\">Alpha revised</ce:source-text></ce:bib-reference><ce:bib-reference id=\"bb0905\"><ce:label>Smith, 2020</ce:label><sb:reference id=\"rf0905\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Other</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se0905\">Other</ce:source-text></ce:bib-reference>",
+    "finalAnalysis": [
+      {
+        "uid": "w1t6oh2vco",
+        "label": "Smith, 2020",
+        "id": "bb0005",
+        "status": "update",
+        "reviewed": true,
+        "matchType": "Label",
+        "matchScore": 60,
+        "preview": "<ce:label>Smith, 2020</ce:label><sb:reference id=\"rf0905\"><s...",
+        "isSynthetic": false,
+        "selected": true,
+        "sortKey": "Smith, 2020",
+        "originalIndex": 0,
+        "updatedIndex": 1,
+        "candidateSource": "updated",
+        "candidates": [
+          {
+            "index": 0,
+            "score": 77,
+            "matchType": "Label",
+            "label": "Smith, 2020",
+            "preview": "<ce:label>Smith, 2020</ce:label><sb:reference id=\"rf0900\"><s"
+          },
+          {
+            "index": 1,
+            "score": 60,
+            "matchType": "Label",
+            "label": "Smith, 2020",
+            "preview": "<ce:label>Smith, 2020</ce:label><sb:reference id=\"rf0905\"><s"
+          }
+        ],
+        "potentialMatches": [
+          {
+            "index": 0,
+            "score": 77,
+            "matchType": "Label",
+            "label": "Smith, 2020",
+            "preview": "Smith, 2020<s"
+          },
+          {
+            "index": 1,
+            "score": 60,
+            "matchType": "Label",
+            "label": "Smith, 2020",
+            "preview": "Smith, 2020<s"
+          }
+        ]
+      },
+      {
+        "uid": "p2v3shsu3",
+        "label": "Smith, 2020",
+        "id": "bb0905",
+        "status": "add",
+        "preview": "Smith, 2020<c...",
+        "isSynthetic": false,
+        "selected": true,
+        "sortKey": "Smith, 2020",
+        "originalIndex": null,
+        "updatedIndex": 1,
+        "reviewed": true
+      }
+    ],
+    "output": "<ce:bib-reference id=\"bb0005\"><ce:label>Smith, 2020</ce:label><sb:reference id=\"rf0005\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Other</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se0005\">Other</ce:source-text></ce:bib-reference>\n<ce:bib-reference id=\"bb3000\"><ce:label>Smith, 2020</ce:label><sb:reference id=\"rf0910\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Alpha revised</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se0910\">Alpha revised</ce:source-text></ce:bib-reference>"
+  },
+  {
+    "name": "split-with-deselected-shared-match",
+    "original": "<ce:bib-reference id=\"bb0005\"><ce:label>Smith, 2020</ce:label><sb:reference id=\"rf0005\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Alpha</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se0005\">Alpha</ce:source-text></ce:bib-reference><ce:bib-reference id=\"bb0010\"><ce:label>Smith, 2020</ce:label><sb:reference id=\"rf0010\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Alpha</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se0010\">Alpha</ce:source-text></ce:bib-reference>",
+    "updated": "<ce:bib-reference id=\"bb0900\"><ce:label>Smith, 2020</ce:label><sb:reference id=\"rf0900\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Other</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se0900\">Other</ce:source-text></ce:bib-reference>",
+    "analysis": [
+      {
+        "uid": "t4isz8kwu4",
+        "label": "Smith, 2020",
+        "id": "bb0005",
+        "status": "conflict",
+        "reviewed": false,
+        "matchType": "Label",
+        "matchScore": 60,
+        "preview": "Smith, 2020<c...",
+        "isSynthetic": false,
+        "selected": true,
+        "sortKey": "Smith, 2020",
+        "originalIndex": 0,
+        "updatedIndex": 0,
+        "candidateSource": "updated",
+        "potentialMatches": [
+          {
+            "index": 0,
+            "score": 60,
+            "matchType": "Label",
+            "label": "Smith, 2020",
+            "preview": "Smith, 2020<s"
+          }
+        ]
+      },
+      {
+        "uid": "9317vsccdfh",
+        "label": "Smith, 2020",
+        "id": "bb0010",
+        "status": "conflict",
+        "reviewed": false,
+        "matchType": "Label",
+        "matchScore": 60,
+        "preview": "Smith, 2020<c...",
+        "isSynthetic": false,
+        "selected": true,
+        "sortKey": "Smith, 2020",
+        "originalIndex": 1,
+        "updatedIndex": 0,
+        "candidateSource": "updated",
+        "potentialMatches": [
+          {
+            "index": 0,
+            "score": 60,
+            "matchType": "Label",
+            "label": "Smith, 2020",
+            "preview": "Smith, 2020<s"
+          }
+        ]
+      }
+    ],
+    "finalAnalysis": [
+      {
+        "uid": "t4isz8kwu4",
+        "label": "Smith, 2020",
+        "id": "bb0005",
+        "status": "unchanged",
+        "reviewed": true,
+        "preview": "Smith, 2020<c...",
+        "isSynthetic": false,
+        "selected": true,
+        "sortKey": "Smith, 2020",
+        "originalIndex": 0,
+        "updatedIndex": null,
+        "candidateSource": "updated",
+        "potentialMatches": [
+          {
+            "index": 0,
+            "score": 60,
+            "matchType": "Label",
+            "label": "Smith, 2020",
+            "preview": "Smith, 2020<s"
+          }
+        ]
+      },
+      {
+        "uid": "9317vsccdfh",
+        "label": "Smith, 2020",
+        "id": "bb0010",
+        "status": "conflict",
+        "reviewed": false,
+        "matchType": "Label",
+        "matchScore": 60,
+        "preview": "Smith, 2020<c...",
+        "isSynthetic": false,
+        "selected": false,
+        "sortKey": "Smith, 2020",
+        "originalIndex": 1,
+        "updatedIndex": 0,
+        "candidateSource": "updated",
+        "potentialMatches": [
+          {
+            "index": 0,
+            "score": 60,
+            "matchType": "Label",
+            "label": "Smith, 2020",
+            "preview": "Smith, 2020<s"
+          }
+        ]
+      }
+    ],
+    "output": "<ce:bib-reference id=\"bb0005\"><ce:label>Smith, 2020</ce:label><sb:reference id=\"rf0005\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Alpha</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se0005\">Alpha</ce:source-text></ce:bib-reference>\n<ce:bib-reference id=\"bb3000\"><ce:label>Smith, 2020</ce:label><sb:reference id=\"rf0905\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Other</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se0905\">Other</ce:source-text></ce:bib-reference>",
+    "toasts": [
+      {
+        "msg": "Analysis complete. Found 2 potential updates.",
+        "type": "success"
+      },
+      {
+        "msg": "References split: Keeping both original and update.",
+        "type": "success"
+      },
+      {
+        "msg": "Merge Protocol Executed. Unchanged references preserved.",
+        "type": "success"
+      }
+    ]
+  },
+  {
+    "name": "drag-order-preserved",
+    "original": "<ce:bib-reference id=\"bb0005\"><ce:label>[1]</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Alpha evidence</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book><ce:doi>10.1234/alpha</ce:doi></sb:host></sb:reference><ce:source-text id=\"se5\">Alpha evidence.</ce:source-text></ce:bib-reference><ce:bib-reference id=\"bb0010\"><ce:label>[2]</ce:label><sb:reference id=\"rf10\"><sb:contribution><sb:authors><sb:author><ce:surname>Jones</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Unrelated Beta study</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2021</sb:date></sb:book><ce:doi>10.1234/beta</ce:doi></sb:host></sb:reference><ce:source-text id=\"se10\">Unrelated Beta study.</ce:source-text></ce:bib-reference>",
+    "updated": "<ce:bib-reference id=\"bb900\"><ce:label>[1]</ce:label><sb:reference id=\"rf900\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Corrected Alpha evidence</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book><ce:doi>10.1234/alpha</ce:doi></sb:host></sb:reference><ce:source-text id=\"se900\">Corrected Alpha evidence.</ce:source-text></ce:bib-reference>",
+    "output": "<ce:bib-reference id=\"bb0010\"><ce:label>[2]</ce:label><sb:reference id=\"rf10\"><sb:contribution><sb:authors><sb:author><ce:surname>Jones</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Unrelated Beta study</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2021</sb:date></sb:book><ce:doi>10.1234/beta</ce:doi></sb:host></sb:reference><ce:source-text id=\"se10\">Unrelated Beta study.</ce:source-text></ce:bib-reference>\n<ce:bib-reference id=\"bb0005\"><ce:label>[1]</ce:label><sb:reference id=\"rf5\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Corrected Alpha evidence</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book><ce:doi>10.1234/alpha</ce:doi></sb:host></sb:reference><ce:source-text id=\"se5\">Corrected Alpha evidence.</ce:source-text></ce:bib-reference>"
+  },
+  {
+    "name": "encoded-link-targets",
+    "original": "<ce:bib-reference id=\"bb0005\"><ce:label>Other reference</ce:label><ce:other-ref id='or0005'><ce:textref id='tr0005'>Old text.</ce:textref></ce:other-ref></ce:bib-reference>",
+    "updated": "<ce:bib-reference id=\"bb0900\"><ce:label>Other reference</ce:label><ce:other-ref id='or0900'><ce:textref id='tr0&#57;00'>New text <ce:cross-ref id='cf0900' refid='tr0&#57;00'>details</ce:cross-ref> <ce:cross-refs id='cf0910' refid='bb0&#57;00&#x20;bb0010'>related references</ce:cross-refs> <ce:inter-ref id='ir0900' xlink:href='https://example.org/?a=1&amp;b=2'>web</ce:inter-ref>.</ce:textref></ce:other-ref></ce:bib-reference>",
+    "output": "<ce:bib-reference id=\"bb0005\"><ce:label>Other reference</ce:label><ce:other-ref id=\"or0005\"><ce:textref id=\"tr0005\">New text <ce:cross-ref id=\"cf0915\" refid='tr0005'>details</ce:cross-ref> <ce:cross-refs id=\"cf0920\" refid='bb0005 bb0010'>related references</ce:cross-refs> <ce:inter-ref id=\"ir0905\" xlink:href='https://example.org/?a=1&amp;b=2'>web</ce:inter-ref>.</ce:textref></ce:other-ref></ce:bib-reference>"
+  }
+]
