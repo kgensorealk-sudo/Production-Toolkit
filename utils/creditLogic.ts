@@ -43,43 +43,20 @@ export function getSuggestions(invalidRole: string): Suggestion[] {
 export function findCreditRole(inputRole: string): CreditRole | null {
     if (!inputRole) return null;
     
-    const clean = inputRole.toLowerCase()
-        .replace(/writting/g, "writing")
-        .replace(/orginal/g, "original")
-        .replace(/reviewand/g, "review and")
-        .replace(/&amp;/g, "and")
-        .replace(/amp;/g, "")
-        .replace(/&/g, "and")
-        .replace(/[–—]/g, "-") 
-        .replace(/\./g, "")
-        .replace(/\s+/g, " ")
-        .trim();
-        
+    const clean = normalizeRole(inputRole);
+
     if (!clean) return null;
 
     // 1. Precise Match
     for (const roleDef of CREDIT_DB) {
-        if (roleDef.name.toLowerCase() === clean) return roleDef;
-        if (roleDef.aliases.some(a => a.toLowerCase() === clean)) return roleDef;
-    }
-
-    // 2. Keyword Fallbacks
-    if (clean.includes('review') || clean.includes('editing')) {
-        return CREDIT_DB.find(r => r.name.includes('review')) || null;
-    }
-    if (clean.includes('draft')) {
-        return CREDIT_DB.find(r => r.name.includes('original draft')) || null;
-    }
-    if (clean.includes('funding')) {
-        return CREDIT_DB.find(r => r.name.includes('Funding acquisition')) || null;
-    }
-
-    // 3. Normalized string match (remove all separators)
-    const normClean = clean.replace(/and/g, '').replace(/[\s-]/g, '');
-    for (const roleDef of CREDIT_DB) {
-        const normStandard = roleDef.name.toLowerCase().replace(/and/g, '').replace(/[\s-]/g, '');
-        if (normStandard === normClean) return roleDef;
+        if (normalizeRole(roleDef.name) === clean) return roleDef;
+        if (roleDef.aliases.some(a => normalizeRole(a) === clean)) return roleDef;
     }
 
     return null;
+}
+function normalizeRole(value: string): string {
+    return value.toLowerCase().replace(/writting/g, 'writing').replace(/orginal/g, 'original')
+        .replace(/reviewand/g, 'review and').replace(/&amp;/g, '&').replace(/&/g, ' and ')
+        .replace(/[–—-]/g, ' ').replace(/\s+/g, ' ').trim();
 }

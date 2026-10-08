@@ -1,0 +1,43 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import ts from 'typescript';
+const compile=p=>ts.transpileModule(fs.readFileSync(p,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
+const db={},logic={},scanner={},engine={};
+new Function('exports',compile('constants.ts'))(db);
+new Function('exports','require',compile('utils/creditLogic.ts'))(logic,()=>db);
+new Function('exports','require',compile('utils/referenceUpdaterXml.ts'))(scanner,()=>({default:JSON.parse(fs.readFileSync('utils/referenceUpdaterEntities.json','utf8'))}));
+new Function('exports','require',compile('utils/creditGeneratorEngine.ts'))(engine,n=>n.includes('creditLogic')?logic:scanner);
+let checks=0;
+const test=(name,fn)=>{fn();checks++;};
+for(const separator of ['; ', '\n', '. ', ' and ']) test('author separator '+separator,()=>{
+ const r=engine.generateCredit('J. Doe: Conceptualization'+separator+'A. Smith: Methodology.');
+ assert.deepEqual(r.authors.map(a=>a.name),['J. Doe','A. Smith']); assert.equal(r.issues.length,0);
+});
+test('honorifics and initials retained',()=>assert.deepEqual(engine.generateCredit('Dr. J. Doe: Conceptualization. Prof. A. Smith: Methodology.').authors.map(a=>a.name),['Dr. J. Doe','Prof. A. Smith']));
+test('combined writing roles',()=>assert.equal(engine.generateCredit('Alice: Writing \u2013 original draft and Writing \u2013 review & editing.').authors[0].roles.length,2));
+for(const role of ['No funding acquisition','Literature review','draft review','Not editing'])test('no inferred role '+role,()=>assert.equal(logic.findCreditRole(role),null));
+for(const role of db.CREDIT_DB)test(role.name,()=>assert.equal(logic.findCreditRole(role.name)?.url,role.url));
+test('XML formatted author and retained paragraph attributes',()=>{
+ const r=engine.generateCredit('<ce:para id="p0005"><ce:bold>Alice:</ce:bold> Conceptualization.</ce:para>');
+ assert.equal(r.authors[0].name,'Alice');assert.ok(r.bold.startsWith('<ce:para id="p0005">'));scanner.scanReferenceXml(r.bold);
+});
+test('escaped unknown text',()=>{const r=engine.generateCredit('Alice: <unknown> & task.');assert.ok(r.bold.includes('&lt;unknown&gt; &amp; task'));scanner.scanReferenceXml('<ce:para>'+r.bold+'</ce:para>');});
+test('entities not double escaped',()=>{const r=engine.generateCredit('<ce:para>A &amp; B: Writing - review &amp; editing.</ce:para>');assert.equal(r.authors[0].name,'A & B');assert.ok(!r.bold.includes('&amp;amp;'));});
+test('duplicate role',()=>{const r=engine.generateCredit('Alice: Conceptualization, concept.');assert.equal(r.authors[0].roles[1].isDuplicate,true);assert.equal((r.xml.match(/<ce:contributor-role /g)||[]).length,1);});
+test('author untouched by alias correction',()=>assert.equal(engine.correctCreditAliases('Data: data, methodology.'),'Data: Data curation, Methodology.'));
+test('unknown not auto corrected',()=>assert.equal(engine.correctCreditAliases('Alice: Methodologee.'),'Alice: Methodologee.'));
+test('XML alias correction leaves markup intact',()=>{const x='<ce:para>Alice: data.</ce:para>';assert.equal(engine.correctCreditAliases(x),x);});
+for(const text of ['Alice','Alice:','<ce:para>Alice: data.</ce:other>'])test('invalid input '+text,()=>assert.throws(()=>engine.generateCredit(text)));
+const page=fs.readFileSync('pages/CreditGenerator.tsx','utf8');
+const ast=ts.createSourceFile('CreditGenerator.tsx',page,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+let generator;
+function visit(node){if(ts.isVariableDeclaration(node)&&node.name.getText(ast)==='generate')generator=node.initializer.getText(ast);ts.forEachChild(node,visit);}visit(ast);
+function queued(input){const state={},queue=[],ref={current:0};const args={input,generationRef:ref,generateCredit:engine.generateCredit,setTimeout:f=>queue.push(f)};
+ for(const name of ['Toast','IsLoading','BoldOutput','RolesOutput','LastProcessedInput','ReportIssues','ParsedAuthors','ScanStats','ActiveTab'])args['set'+name]=value=>state[name]=value;
+ const fn=new Function(...Object.keys(args),ts.transpileModule('return ('+generator+');',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText)(...Object.values(args));
+ return {state,queue,ref,fn};}
+test('cancelled work cannot publish stale results',()=>{const q=queued('Alice: data.');q.fn();q.ref.current++;q.queue[0]();assert.equal(q.state.BoldOutput,undefined);});
+test('malformed generation clears outputs',()=>{const q=queued('Alice:');q.state.BoldOutput='old';q.fn();q.queue[0]();assert.equal(q.state.BoldOutput,'');assert.equal(q.state.Toast.type,'error');});
+test('component generation publishes both authors',()=>{const q=queued('J. Doe: Conceptualization; A. Smith: Methodology.');q.fn();q.queue[0]();assert.equal(q.state.ParsedAuthors.length,2);assert.equal(q.state.ScanStats.errors,0);});
+console.log(`${checks} CRediT safety checks passed.`);
+export {engine, scanner, db};

@@ -1,7 +1,8 @@
 
-import React, { useState, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useMemo, useCallback, useLayoutEffect } from 'react';
 import { CREDIT_DB } from '../constants';
-import { findCreditRole, getSuggestions } from '../utils/creditLogic';
+import { findCreditRole } from '../utils/creditLogic';
+import { generateCredit, correctCreditAliases, splitCreditRoles, escapeCreditText } from '../utils/creditGeneratorEngine';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
@@ -240,9 +241,9 @@ const CreditGenerator: React.FC = () => {
         
         // 1. Content inside contributor-role tags
         html = html.replace(/(&gt;)(.*?)(&lt;\/ce:contributor-role)/g, (match, p1, content, p3) => {
-             const cleanContent = content.trim();
+             const cleanContent = content.trim().replace(/&amp;/g, '&');
              const matchRole = findCreditRole(cleanContent);
-             const color = matchRole ? getRoleColor(matchRole.name) : { text: 'text-slate-700', bg: 'bg-transparent', border: '' };
+             const color = matchRole ? getRoleColor(matchRole.name) : { text: 'text-slate-300', bg: 'bg-transparent', border: '' };
              
              return `${p1}<span class="font-medium ${color.text} ${color.bg} px-1 rounded-sm">${content}</span>${p3}`;
         });
@@ -262,65 +263,41 @@ const CreditGenerator: React.FC = () => {
         return html;
     };
 
-    // --- Live Highlighting for Input ---
+    // Highlight raw text before escaping, so entity semicolons cannot become role delimiters.
     const { highlightedHtml, inputStats } = useMemo(() => {
-        let authorCount = 0;
-        let validRolesCount = 0;
-        let invalidRolesCount = 0;
-        let text = input;
-        
-        let escaped = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        
-        // Smart Detection: Do we use periods to separate authors?
-        const hasPeriods = text.includes('.');
-        
-        let regex: RegExp;
-        if (hasPeriods) {
-            regex = /(^|[\n.]\s*)([^:\n.]+?)(:)([^.\n]+)/g;
-        } else {
-            regex = /(^|[\n;]\s*)([^:\n;]+?)(:)([^;\n]+)/g;
-        }
-        
-        const processedText = escaped.replace(regex, (match, prefix, name, colon, roles) => {
-             if (name.length > 80) return match; 
-
-             authorCount++;
-             const localSeen = new Set<string>(); 
-
-             const processedRoles = roles.split(/([,;])/).map((token: string) => {
-                 if (token === ',' || token === ';' || !token.trim()) return token;
-
-                 const rawRole = token;
-                 const cleanRole = rawRole.trim();
-                 const matchRole = findCreditRole(cleanRole);
-                 
-                 if (matchRole) {
-                     if (localSeen.has(matchRole.name)) {
-                         invalidRolesCount++;
-                         return `<span class="text-slate-400 bg-slate-100 font-bold line-through decoration-rose-500 decoration-2 opacity-70 rounded-sm py-1 box-decoration-clone" title="Duplicate: ${matchRole.name}">${rawRole}</span>`;
-                     }
-                     
-                     localSeen.add(matchRole.name);
-                     validRolesCount++;
-                     const colors = getRoleColor(matchRole.name);
-                     
-                     if (cleanRole !== matchRole.name && cleanRole.toLowerCase() !== matchRole.name.toLowerCase()) {
-                          return `<span class="${colors.text} ${colors.bg} bg-opacity-50 font-medium underline decoration-wavy decoration-amber-300 rounded-sm py-1 box-decoration-clone" title="Will correct to: ${matchRole.name}">${rawRole}</span>`;
-                     }
-                     return `<span class="${colors.text} ${colors.bg} font-medium rounded-sm py-1 box-decoration-clone" title="Valid Role">${rawRole}</span>`;
-                 } else {
-                     invalidRolesCount++;
-                     return `<span class="text-rose-600 bg-rose-50 font-bold underline decoration-dotted decoration-rose-300 rounded-sm py-1 box-decoration-clone" title="Unknown role">${rawRole}</span>`;
-                 }
-             }).join('');
-             
-             return `${prefix}<span class="font-bold text-blue-600 bg-blue-50 rounded-sm py-1 box-decoration-clone">${name}</span>${colon}${processedRoles}`;
-        });
-
-        return {
-            highlightedHtml: processedText + (text.endsWith('\n') ? '\n\u200B' : ''),
-            inputStats: { authors: authorCount, valid: validRolesCount, invalid: invalidRolesCount }
-        };
+        let html = escapeCreditText(input);
+        let authors = 0, valid = 0, invalid = 0;
+        try {
+            const result = generateCredit(input);
+            authors = result.authors.length;
+            valid = result.authors.flatMap(a => a.roles).filter(r => !r.isUnknown && !r.isDuplicate).length;
+            invalid = result.authors.flatMap(a => a.roles).filter(r => r.isUnknown || r.isDuplicate).length;
+            if (!/<\/?ce:/.test(input)) {
+                let cursor = 0;
+                const chunks: string[] = [];
+                for (const author of result.authors) {
+                    const start = input.indexOf(author.originalSegment, cursor);
+                    if (start < cursor) continue;
+                    chunks.push(escapeCreditText(input.slice(cursor, start)));
+                    const colon = author.originalSegment.indexOf(':');
+                    const seen = new Set<string>();
+                    const roles = author.originalSegment.slice(colon + 1).split(/([,;])/).map(token => {
+                        if (token === ',' || token === ';') return token;
+                        const matches = splitCreditRoles(token).map(findCreditRole);
+                        const unknown = !matches.length || matches.some(r => !r);
+                        const duplicate = matches.some(r => r && seen.has(r.name));
+                        matches.forEach(r => { if (r) seen.add(r.name); });
+                        const colors = !unknown && matches[0] ? getRoleColor(matches[0].name) : {text: 'text-rose-600', bg: 'bg-rose-50'};
+                        return `<span class="${colors.text} ${colors.bg} rounded-sm ${duplicate ? 'line-through' : ''}">${escapeCreditText(token)}</span>`;
+                    }).join('');
+                    chunks.push(`<span class="font-bold text-blue-600 bg-blue-50 rounded-sm">${escapeCreditText(author.originalSegment.slice(0, colon))}</span>:${roles}`);
+                    cursor = start + author.originalSegment.length;
+                }
+                chunks.push(escapeCreditText(input.slice(cursor)));
+                html = chunks.join('');
+            }
+        } catch { invalid = input.trim() ? 1 : 0; }
+        return {highlightedHtml: html + (input.endsWith('\n') ? '\n\u200B' : ''), inputStats: {authors, valid, invalid}};
     }, [input]);
 
     // --- File Handling ---
@@ -379,208 +356,52 @@ const CreditGenerator: React.FC = () => {
         setToast({ msg: "JSON exported!", type: "success" });
     };
 
-    // --- Parsing Logic ---
+    const generationRef = useRef(0);
+    useLayoutEffect(() => {
+        generationRef.current++;
+        setIsLoading(false);
+        return () => { generationRef.current++; };
+    }, [input]);
+
+    // Parse once, using the same source for roles, author ownership and generated XML.
     const generate = () => {
         if (!input.trim()) {
-            setToast({ msg: "Please enter text to parse", type: "warn" });
+            setToast({msg: 'Please enter text to parse', type: 'warn'});
             return;
         }
-
+        const operation = ++generationRef.current;
         setIsLoading(true);
         setTimeout(() => {
-            let processingText = input;
-            
-            // Cleanup input
-            const paraMatch = input.match(/<ce:para[^>]*>([\s\S]*?)<\/ce:para>/);
-            if (paraMatch) processingText = paraMatch[1];
-            processingText = processingText.replace(/\r?\n|\r/g, " ").replace(/\s+/g, " ").trim();
-            
-            // Smart Split Strategy
-            const semicolonCount = (processingText.match(/;/g) || []).length;
-            const periodCount = (processingText.match(/\./g) || []).length;
-            let segments: string[] = [];
-            
-            if (periodCount > 0) {
-                 const tempPlaceholder = "___SPLIT___";
-                 const smartSplit = processingText.replace(/([a-z]{2,})\.\s+(?=[A-Z])/g, `$1.${tempPlaceholder}`);
-                 segments = smartSplit.split(tempPlaceholder);
-            } else if (semicolonCount > 0) {
-                 segments = processingText.split(';');
-            } else {
-                 segments = [processingText];
-            }
-            
-            // Handle "and" separators
-            let refinedSegments: string[] = [];
-            segments.forEach(seg => {
-                const internalSplit = seg.split(/\s+and\s+(?=[A-Z][a-z]+:)/);
-                refinedSegments.push(...internalSplit);
-            });
-
-            // Analysis Vars
-            let boldSegments: string[] = [];
-            let rolesSegments: string[] = [];
-            let newReportIssues: Issue[] = [];
-            let parsedAuthorsList: ParsedAuthor[] = [];
-            let errorCounter = 0;
-
-            refinedSegments.forEach((part, idx) => {
-                part = part.trim();
-                if (!part) return;
-                
-                if (idx === refinedSegments.length - 1 && part.endsWith('.')) {
-                    part = part.slice(0, -1);
-                }
-
-                const colonIndex = part.indexOf(':');
-                if (colonIndex === -1) {
-                    boldSegments.push(part.replace(/&/g, '&amp;') + ".");
-                    return; 
-                }
-
-                const name = part.substring(0, colonIndex).trim();
-                const rawRolesString = part.substring(colonIndex + 1).trim();
-                const rawRolesList = rawRolesString.split(/[,;]/).map(r => r.trim()).filter(r => r !== "");
-                
-                let displayRoles: string[] = [];
-                let xmlRoles: {name: string, url: string}[] = [];
-                let currentAuthorParsed: ParsedAuthor = {
-                    name,
-                    originalSegment: part,
-                    roles: []
-                };
-
-                const seenRoles = new Set<string>();
-
-                rawRolesList.forEach(rawRole => {
-                    const match = findCreditRole(rawRole);
-                    if (match) {
-                        if (seenRoles.has(match.name)) {
-                            errorCounter++;
-                            newReportIssues.push({
-                                id: `${name}-${rawRole}-${Math.random()}`,
-                                original: rawRole,
-                                suggestion: "Removed duplicate",
-                                type: 'duplicate',
-                                authorIndex: idx
-                            });
-                            
-                            currentAuthorParsed.roles.push({
-                                normalized: match.name,
-                                original: rawRole,
-                                isCorrection: false,
-                                isDuplicate: true,
-                                isUnknown: false
-                            });
-                        } else {
-                            seenRoles.add(match.name);
-                            displayRoles.push(match.name);
-                            xmlRoles.push({ name: match.name, url: match.url });
-                            
-                            const isCorrection = rawRole !== match.name && rawRole.toLowerCase() !== match.name.toLowerCase();
-                            if (isCorrection) {
-                                errorCounter++;
-                                newReportIssues.push({
-                                    id: `${name}-${rawRole}-${Math.random()}`,
-                                    original: rawRole,
-                                    suggestion: match.name,
-                                    type: 'typo',
-                                    authorIndex: idx
-                                });
-                            }
-
-                            currentAuthorParsed.roles.push({
-                                normalized: match.name,
-                                original: rawRole,
-                                isCorrection,
-                                isDuplicate: false,
-                                isUnknown: false
-                            });
-                        }
-                    } else {
-                        errorCounter++;
-                        displayRoles.push(rawRole);
-                        const suggestions = getSuggestions(rawRole);
-                        newReportIssues.push({
-                            id: `${name}-${rawRole}-${Math.random()}`,
-                            original: rawRole,
-                            suggestion: suggestions[0]?.name,
-                            type: 'unknown',
-                            authorIndex: idx
-                        });
-
-                        currentAuthorParsed.roles.push({
-                            normalized: rawRole,
-                            original: rawRole,
-                            isCorrection: false,
-                            isDuplicate: false,
-                            isUnknown: true
-                        });
-                    }
-                });
-
-                parsedAuthorsList.push(currentAuthorParsed);
-
-                const escapedName = name.replace(/&/g, '&amp;');
-                const finalDisplayRoles = displayRoles.map(r => r.replace(/&/g, '&amp;'));
-                boldSegments.push(`<ce:bold>${escapedName}:</ce:bold> ${finalDisplayRoles.join(', ')}.`);
-
-                if (xmlRoles.length > 0) {
-                    let roleBlock = `${name}:\n`;
-                    xmlRoles.forEach(r => roleBlock += `<ce:contributor-role role="${r.url}">${r.name.replace(/&/g, '&amp;')}</ce:contributor-role>\n`);
-                    rolesSegments.push(roleBlock);
-                } else {
-                    rolesSegments.push(`${name}:\n<!-- No valid CRediT roles found -->\n`);
-                }
-            });
-
-            let finalBold = boldSegments.join(' ');
-            if (input.includes('<ce:para')) {
-                 finalBold = `<ce:para>${finalBold}</ce:para>`;
-            }
-
-            setBoldOutput(finalBold);
-            setRolesOutput(rolesSegments.join('\n\n'));
-            setLastProcessedInput(input);
-            setReportIssues(newReportIssues);
-            setParsedAuthors(parsedAuthorsList);
-            setScanStats({ errors: errorCounter, authors: parsedAuthorsList.length }); 
-
-            setActiveTab('preview');
-            
-            if (errorCounter > 0) {
-                setToast({ msg: `Generated with ${errorCounter} warnings`, type: 'warn' });
-            } else {
-                setToast({ msg: "Generated successfully!", type: 'success' });
-            }
-            setIsLoading(false);
+            if (operation !== generationRef.current) return;
+            try {
+                const result = generateCredit(input);
+                setBoldOutput(result.bold);
+                setRolesOutput(result.xml);
+                setLastProcessedInput(input);
+                setReportIssues(result.issues);
+                setParsedAuthors(result.authors);
+                setScanStats({errors: result.issues.length, authors: result.authors.length});
+                setActiveTab('preview');
+                setToast({msg: result.issues.length ? `Generated with ${result.issues.length} warnings` : 'Generated successfully!', type: result.issues.length ? 'warn' : 'success'});
+            } catch (error) {
+                setBoldOutput(''); setRolesOutput(''); setParsedAuthors([]); setReportIssues([]);
+                setScanStats({errors: 0, authors: 0}); setLastProcessedInput('');
+                setToast({msg: error instanceof Error ? error.message : 'Unable to parse contributions', type: 'error'});
+            } finally { setIsLoading(false); }
         }, 800);
     };
 
     const autoFixAll = () => {
-        let text = input;
-        let count = 0;
-        
-        reportIssues.forEach(issue => {
-            if (issue.suggestion && issue.type !== 'duplicate') {
-                const escapedOrig = issue.original.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const regex = new RegExp(escapedOrig, 'g');
-                if (text.match(regex)) {
-                    text = text.replace(regex, issue.suggestion);
-                    count++;
-                }
+        try {
+            const corrected = correctCreditAliases(input);
+            if (corrected === input) {
+                setToast({msg: 'No confident plain-text alias fixes found. Unknown roles require review.', type: 'warn'});
+                return;
             }
-        });
-
-        if (count > 0) {
-            setInput(text);
-            setToast({ msg: `Applied ${count} fixes.`, type: 'success' });
-             setTimeout(() => {
-                const btn = document.getElementById('generate-btn');
-                if (btn) btn.click();
-            }, 100);
-        } else {
-            setToast({ msg: "No confident fixes found.", type: 'warn' });
+            setInput(corrected);
+            setToast({msg: 'Corrected recognized role aliases. Analyze again to refresh the output.', type: 'success'});
+        } catch (error) {
+            setToast({msg: error instanceof Error ? error.message : 'Unable to correct contributions', type: 'error'});
         }
     };
 
@@ -614,6 +435,8 @@ const CreditGenerator: React.FC = () => {
             }
         },
         onClear: () => {
+            generationRef.current++;
+            setIsLoading(false);
             setInput('');
             setBoldOutput('');
             setRolesOutput('');
@@ -691,6 +514,8 @@ const CreditGenerator: React.FC = () => {
                             </button>
                             <button 
                                 onClick={() => {
+                                    generationRef.current++;
+                                    setIsLoading(false);
                                     setInput('');
                                     setBoldOutput('');
                                     setRolesOutput('');
