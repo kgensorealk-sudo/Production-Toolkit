@@ -91,6 +91,7 @@ export const formatMessageTime = (timestamp: number): string => {
 
 interface AIAssistantBubbleProps {
     currentTool?: ToolId;
+    promptRequest?: { text: string; id: number };
 }
 
 export interface DogGreetingInfo {
@@ -268,7 +269,7 @@ const SCENARIO_CATEGORIES = [
 const STORAGE_KEY = 'prod_toolkit_keeper_messages_v9';
 const LAST_DATE_KEY = 'prod_toolkit_keeper_last_date';
 
-export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentTool }) => {
+export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentTool, promptRequest }) => {
     const { user, profile, isAdmin, freeTools, session } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
@@ -283,18 +284,13 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
     );
 
     // Visibility & Open state
-    const [isVisible, setIsVisible] = useState<boolean>(() => {
-        try {
-            const saved = localStorage.getItem('prod_toolkit_keeper_visible');
-            return saved !== null ? JSON.parse(saved) : true;
-        } catch (e) {
-            return true;
-        }
-    });
-
-    const [isOpen, setIsOpen] = useState(false);
-    const [isExpanded, setIsExpanded] = useState(false);
+    const isVisible=true;
+    const isOpen=true;
+    const isExpanded=true;
     const [inputPrompt, setInputPrompt] = useState('');
+    useEffect(() => {
+        if (promptRequest) setInputPrompt(promptRequest.text);
+    }, [promptRequest]);
     const [isLoading, setIsLoading] = useState(false);
     const [currentlyTypingId, setCurrentlyTypingId] = useState<string | null>(null);
     const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -334,23 +330,7 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
         return 'idle';
     })();
 
-    // Draggable position state
-    const [position, setPosition] = useState<{ x: number; y: number }>(() => {
-        try {
-            const saved = localStorage.getItem('prod_toolkit_keeper_pos');
-            if (saved) {
-                const parsed = JSON.parse(saved);
-                if (typeof parsed.x === 'number' && typeof parsed.y === 'number') {
-                    return parsed;
-                }
-            }
-        } catch (e) {}
-        return { x: 0, y: 0 };
-    });
-
-    const [isDragging, setIsDragging] = useState(false);
     const [showResetConfirm, setShowResetConfirm] = useState(false);
-    const [showCloseToast, setShowCloseToast] = useState(false);
     const [resetNotice, setResetNotice] = useState<string | null>(null);
 
     // Space-saving: Common Editorial Scenarios Collapsible state
@@ -372,7 +352,7 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
             localStorage.removeItem('prod_toolkit_keeper_messages_v4');
             localStorage.removeItem('prod_toolkit_keeper_messages_v6');
             localStorage.removeItem('prod_toolkit_keeper_messages_v8');
-            localStorage.removeItem('prod_toolkit_keeper_messages_v9');
+
 
             const today = getTodayDateKey();
             const lastActiveDate = localStorage.getItem(LAST_DATE_KEY);
@@ -458,45 +438,6 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
         };
     }, []);
 
-    // Dragging tracking refs
-    const isDraggingRef = useRef(false);
-    const dragStartRef = useRef<{ mouseX: number; mouseY: number; posX: number; posY: number }>({
-        mouseX: 0,
-        mouseY: 0,
-        posX: 0,
-        posY: 0
-    });
-    const hasMovedRef = useRef(false);
-
-    // Sync status with dedicated header icon in Layout.tsx
-    useEffect(() => {
-        window.dispatchEvent(new CustomEvent('app:keeper-status', {
-            detail: {
-                isOpen: isVisible && isOpen,
-                isVisible,
-                hasUnread
-            }
-        }));
-    }, [isOpen, isVisible, hasUnread]);
-
-    // Listen for toggle/open triggers from header icon
-    useEffect(() => {
-        const handleToggle = () => {
-            setIsVisible(true);
-            setIsOpen(prev => !prev);
-        };
-        const handleOpen = () => {
-            setIsVisible(true);
-            setIsOpen(true);
-        };
-        window.addEventListener('app:toggle-keeper', handleToggle);
-        window.addEventListener('app:open-keeper', handleOpen);
-        return () => {
-            window.removeEventListener('app:toggle-keeper', handleToggle);
-            window.removeEventListener('app:open-keeper', handleOpen);
-        };
-    }, []);
-
     // Auto-scroll helpers (contained strictly inside messagesContainerRef to prevent covering bottom controls)
     const scrollToBottom = (smooth = true) => {
         if (messagesContainerRef.current) {
@@ -553,110 +494,12 @@ export const AIAssistantBubble: React.FC<AIAssistantBubbleProps> = ({ currentToo
         }
     }, [messages, currentlyTypingId]);
 
-    // Persist position
-    useEffect(() => {
-        try {
-            localStorage.setItem('prod_toolkit_keeper_pos', JSON.stringify(position));
-        } catch (e) {}
-    }, [position]);
-
-    // Persist visibility
-    useEffect(() => {
-        try {
-            localStorage.setItem('prod_toolkit_keeper_visible', JSON.stringify(isVisible));
-        } catch (e) {}
-    }, [isVisible]);
-
     // Persist scenarios expanded state
     useEffect(() => {
         try {
             localStorage.setItem('keeper_scenarios_expanded', JSON.stringify(showScenarios));
         } catch (e) {}
     }, [showScenarios]);
-
-    // Drag handle handler
-    const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
-        // Don't initiate drag if clicking buttons, inputs or links
-        const target = e.target as HTMLElement;
-        if (target.closest('button') || target.closest('input') || target.closest('textarea') || target.closest('a')) {
-            return;
-        }
-
-        const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-        const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-
-        isDraggingRef.current = true;
-        hasMovedRef.current = false;
-        dragStartRef.current = {
-            mouseX: clientX,
-            mouseY: clientY,
-            posX: position.x,
-            posY: position.y
-        };
-        setIsDragging(true);
-
-        const onMove = (moveEvent: MouseEvent | TouchEvent) => {
-            if (!isDraggingRef.current) return;
-            const currentX = 'touches' in moveEvent ? moveEvent.touches[0].clientX : moveEvent.clientX;
-            const currentY = 'touches' in moveEvent ? moveEvent.touches[0].clientY : moveEvent.clientY;
-
-            const deltaX = currentX - dragStartRef.current.mouseX;
-            const deltaY = currentY - dragStartRef.current.mouseY;
-
-            if (Math.abs(deltaX) > 4 || Math.abs(deltaY) > 4) {
-                hasMovedRef.current = true;
-            }
-
-            let newX = dragStartRef.current.posX + deltaX;
-            let newY = dragStartRef.current.posY + deltaY;
-
-            // Clamping coordinates relative to bottom-right anchor
-            const winWidth = window.innerWidth;
-            const winHeight = window.innerHeight;
-            const width = isOpen ? (isExpanded ? Math.min(750, winWidth - 48) : Math.min(440, winWidth - 40)) : 170;
-            const height = isOpen ? (isExpanded ? winHeight * 0.85 : Math.min(620, winHeight - 100)) : 48;
-
-            const minX = -(winWidth - width - 24);
-            const maxX = 12;
-            const minY = -(winHeight - height - 24);
-            const maxY = 12;
-
-            newX = Math.max(minX, Math.min(maxX, newX));
-            newY = Math.max(minY, Math.min(maxY, newY));
-
-            setPosition({ x: newX, y: newY });
-        };
-
-        const onEnd = () => {
-            isDraggingRef.current = false;
-            setIsDragging(false);
-            window.removeEventListener('mousemove', onMove);
-            window.removeEventListener('mouseup', onEnd);
-            window.removeEventListener('touchmove', onMove);
-            window.removeEventListener('touchend', onEnd);
-        };
-
-        window.addEventListener('mousemove', onMove);
-        window.addEventListener('mouseup', onEnd);
-        window.addEventListener('touchmove', onMove);
-        window.addEventListener('touchend', onEnd);
-    };
-
-    const handleResetPosition = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        setPosition({ x: 0, y: 0 });
-        try {
-            localStorage.removeItem('prod_toolkit_keeper_pos');
-        } catch (err) {}
-    };
-
-    const handleCloseFloater = (e?: React.MouseEvent) => {
-        if (e) e.stopPropagation();
-        setIsOpen(false);
-        setIsVisible(false);
-        setShowCloseToast(true);
-        setTimeout(() => setShowCloseToast(false), 6000);
-    };
 
     const executeResetChat = () => {
         typingControllerRef.current?.stop();
@@ -1082,7 +925,6 @@ ${userAuthContext}`;
         setTimeout(() => setCopiedId(null), 2000);
     };
 
-    const isPositionMoved = position.x !== 0 || position.y !== 0;
     const currentDogGreeting = getTimeOfDayDogGreeting();
 
     // Most recent assistant reply's model info — replaces the old hardcoded "Gemini AI"
@@ -1092,48 +934,12 @@ ${userAuthContext}`;
 
     return (
         <>
-            {/* Informative Toast when floater is closed */}
-            <AnimatePresence>
-                {showCloseToast && !isVisible && (
-                    <motion.div 
-                        initial={{ opacity: 0, y: 15, scale: 0.95 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 15, scale: 0.95 }}
-                        className="fixed bottom-6 right-6 z-50 pointer-events-auto max-w-sm p-3.5 rounded-2xl bg-slate-900/95 text-white shadow-2xl border border-indigo-500/40 backdrop-blur-md flex items-start gap-3"
-                    >
-                        <div className="shrink-0">
-                            <KeeperAvatar state="idle" size="sm" showBadge={false} interactive={false} />
-                        </div>
-                        <div className="flex-1 text-xs">
-                            <p className="font-bold text-indigo-200 flex items-center gap-1.5">
-                                <span>Keeper Floater Closed</span>
-                                <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-500/30 text-indigo-300">Tip</span>
-                            </p>
-                            <p className="text-slate-300 mt-1 text-[11px] leading-relaxed">
-                                Click the dedicated <strong>Keeper dog icon beside the bell</strong> in the top navigation bar to reopen anytime! 🐾
-                            </p>
-                        </div>
-                        <button 
-                            onClick={() => setShowCloseToast(false)}
-                            className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors cursor-pointer"
-                            title="Dismiss notification"
-                        >
-                            <X size={14} />
-                        </button>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
             {/* Main Draggable Floater Container */}
             <aside 
-                aria-label="Keeper Floating Editorial Assistant" 
-                style={{ 
-                    transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
-                    transition: isDragging ? 'none' : 'transform 0.15s ease-out'
-                }}
-                className={`fixed bottom-6 right-6 z-50 flex flex-col items-end pointer-events-none ${!isVisible ? 'hidden' : ''}`}
+                aria-label="Keeper Editorial Assistant"
+                className="w-full"
             >
-                {/* Expanded Chat Modal Window */}
+                {/* Keeper page chat panel */}
                 <AnimatePresence>
                     {isOpen && (
                         <motion.div
@@ -1141,26 +947,13 @@ ${userAuthContext}`;
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.92, y: 20 }}
                             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-                            className={`pointer-events-auto bg-white rounded-2xl shadow-2xl border border-slate-200/90 flex flex-col overflow-hidden mb-3 transition-all duration-300 ring-1 ring-slate-900/5 relative ${
-                                isExpanded 
-                                    ? 'w-[750px] max-w-[calc(100vw-3rem)] h-[85vh]' 
-                                    : 'w-[440px] max-w-[calc(100vw-2.5rem)] h-[620px] max-h-[calc(100vh-7rem)]'
-                            }`}
+                            className="bg-white rounded-2xl border border-slate-200 flex flex-col overflow-hidden relative w-full h-[calc(100dvh-12rem)] min-h-[480px] shadow-sm"
                         >
-                            {/* Draggable Chat Header */}
-                            <header 
-                                onMouseDown={handleDragStart}
-                                touch-action="none"
-                                onTouchStart={handleDragStart}
-                                className="relative z-20 px-4 py-3 bg-slate-900 text-white flex items-center justify-between shrink-0 shadow-md select-none border-b border-slate-800 cursor-grab active:cursor-grabbing group/header"
-                                title="Click and drag to move floater anywhere on screen"
+                            {/* Chat Header */}
+                            <header className="relative z-20 px-4 py-3 bg-slate-900 text-white flex items-center justify-between shrink-0 shadow-md select-none border-b border-slate-800 group/header"
+                                title="Keeper editorial assistant"
                             >
                                 <div className="flex items-center gap-3 min-w-0 flex-1">
-                                    {/* Drag grip icon */}
-                                    <div className="text-slate-500 group-hover/header:text-slate-300 transition-colors shrink-0" title="Drag to move">
-                                        <GripHorizontal className="w-4 h-4" />
-                                    </div>
-
                                     {/* Avatar with dynamic state micro-animations & status ring */}
                                     <div className="shrink-0">
                                         <KeeperAvatar
@@ -1219,19 +1012,6 @@ ${userAuthContext}`;
 
                                 {/* Header Action Controls */}
                                 <div className="flex items-center gap-1 shrink-0 ml-2" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
-                                    {/* Reset Position */}
-                                    {isPositionMoved && (
-                                        <button
-                                            type="button"
-                                            onClick={handleResetPosition}
-                                            title="Snap back to bottom-right corner"
-                                            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer flex items-center gap-1 text-[11px]"
-                                        >
-                                            <Pin className="w-3.5 h-3.5" />
-                                            <span className="hidden sm:inline">Snap</span>
-                                        </button>
-                                    )}
-
                                     {/* Reset Conversation */}
                                     <button
                                         type="button"
@@ -1243,35 +1023,6 @@ ${userAuthContext}`;
                                         <span className="hidden sm:inline">Reset</span>
                                     </button>
 
-                                    {/* Expand / Restore Window Size */}
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsExpanded(!isExpanded)}
-                                        title={isExpanded ? 'Restore Normal Size' : 'Expand View'}
-                                        className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors hidden sm:block cursor-pointer"
-                                    >
-                                        {isExpanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-                                    </button>
-
-                                    {/* Minimize to launcher bubble */}
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsOpen(false)}
-                                        title="Minimize to floating mascot"
-                                        className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
-                                    >
-                                        <Minus className="w-4 h-4" />
-                                    </button>
-
-                                    {/* Close floater */}
-                                    <button
-                                        type="button"
-                                        onClick={handleCloseFloater}
-                                        title="Close Floater"
-                                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                                    >
-                                        <X className="w-4 h-4" />
-                                    </button>
                                 </div>
                             </header>
 
@@ -2015,77 +1766,6 @@ ${userAuthContext}`;
                     )}
                 </AnimatePresence>
 
-                {/* Launcher Bubble Trigger Button (Draggable & Closeable) */}
-                <div 
-                    onMouseDown={handleDragStart}
-                    onTouchStart={handleDragStart}
-                    className="pointer-events-auto relative group flex items-center gap-1 cursor-grab active:cursor-grabbing select-none"
-                    title="Click to open Keeper, or drag anywhere on screen"
-                >
-                    <button
-                        type="button"
-                        onClick={(e) => {
-                            if (!hasMovedRef.current) {
-                                setIsOpen(!isOpen);
-                            }
-                        }}
-                        className={`relative flex items-center gap-2.5 pl-2 pr-3.5 py-2 rounded-full bg-gradient-to-r from-slate-900 via-indigo-950 to-indigo-900 text-white shadow-xl hover:shadow-2xl hover:shadow-indigo-500/30 border transition-all duration-200 cursor-pointer ${
-                            isExperimental 
-                                ? 'border-amber-400/90 ring-2 ring-amber-400/80 shadow-amber-500/25 hover:scale-105 active:scale-95' 
-                                : 'border-indigo-400/40 hover:scale-105 active:scale-95'
-                        }`}
-                        aria-label="Toggle Keeper Editorial AI Assistant"
-                    >
-                        {/* Drag Handle Dots Indicator */}
-                        <div className="text-slate-400 group-hover:text-indigo-200 transition-colors">
-                            <GripHorizontal className="w-3 h-3" />
-                        </div>
-
-                        {/* Mascot Avatar Thumbnail with micro-animations */}
-                        <div className="shrink-0">
-                            <KeeperAvatar
-                                state={currentKeeperState}
-                                size="md"
-                                showBadge={!isExperimental}
-                                interactive={false}
-                            />
-                        </div>
-
-                        <div className="flex flex-col text-left">
-                            <div className="flex items-center gap-1">
-                                <span className="text-xs font-black tracking-wide uppercase leading-tight">
-                                    Keeper
-                                </span>
-                                <Sparkles className="w-3 h-3 text-amber-300 inline" />
-                            </div>
-                            <span className="text-[9px] text-indigo-200/80 font-medium leading-none">
-                                {isExperimental ? '⚠️ Exp Active' : `${currentDogGreeting.timeLabel} Shift`}
-                            </span>
-                        </div>
-
-                        {/* Experimental Warning Pill */}
-                        {isExperimental && (
-                            <div className="absolute -top-2.5 -left-2 px-2 py-0.5 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-black text-[8px] uppercase tracking-wider rounded-full shadow-md border border-amber-300 flex items-center gap-1 animate-pulse">
-                                <AlertTriangle size={9} className="text-slate-950" />
-                                <span>Exp Version</span>
-                            </div>
-                        )}
-
-                        {hasUnread && !isOpen && (
-                            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 absolute -top-1 -right-1 ring-2 ring-white animate-bounce" />
-                        )}
-                    </button>
-
-                    {/* Quick Close Button for Launcher Bubble */}
-                    <button
-                        type="button"
-                        onClick={handleCloseFloater}
-                        title="Close Floater (Reopen from dog icon in top bar)"
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-full bg-slate-800 hover:bg-rose-600 text-slate-300 hover:text-white border border-slate-700 shadow-md cursor-pointer"
-                    >
-                        <X className="w-3 h-3" />
-                    </button>
-                </div>
             </aside>
         </>
     );

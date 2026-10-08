@@ -25,7 +25,7 @@ import FeedbackModal from './FeedbackModal';
 import TermsModal from './TermsModal';
 import TermsGateModal from './TermsGateModal';
 import Toast from './Toast';
-import AIAssistantBubble from './AIAssistantBubble';
+
 import { KeeperAvatar } from './KeeperAvatar';
 import { MessageSquare, Scale } from 'lucide-react';
 
@@ -46,27 +46,10 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
     const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
     const [isTermsOpen, setIsTermsOpen] = useState(false);
     const [toast, setToast] = useState<{ msg: string, type: 'success' | 'warn' | 'error' | 'info' } | null>(null);
-    const [isKeeperOpen, setIsKeeperOpen] = useState(false);
-    const [isKeeperUnread, setIsKeeperUnread] = useState(false);
-    
+    const isKeeperOpen = location.pathname === '/keeper';
+    const isKeeperUnread = false;
     const isVercel = window.location.hostname.includes('vercel.app');
-
-    useEffect(() => {
-        const handleKeeperStatus = (e: any) => {
-            if (e.detail) {
-                const nextOpen = Boolean(e.detail.isOpen);
-                const nextUnread = Boolean(e.detail.hasUnread);
-                setIsKeeperOpen(prev => (prev !== nextOpen ? nextOpen : prev));
-                setIsKeeperUnread(prev => (prev !== nextUnread ? nextUnread : prev));
-            }
-        };
-        window.addEventListener('app:keeper-status', handleKeeperStatus);
-        return () => window.removeEventListener('app:keeper-status', handleKeeperStatus);
-    }, []);
-
-    const handleToggleKeeper = () => {
-        window.dispatchEvent(new CustomEvent('app:toggle-keeper'));
-    };
+    const handleToggleKeeper = () => navigate('/keeper');
 
     // Tool usage tracking now happens in NodeAccessController (App.tsx), not here —
     // Layout mounts before access is checked, so tracking here counted paywalled
@@ -283,8 +266,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                                             ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/80 ring-2 ring-indigo-400/40' 
                                             : 'text-slate-400 hover:text-indigo-600 hover:bg-white/70'
                                     }`}
-                                    title={isKeeperOpen ? "Keeper AI Assistant (Open - Click to minimize)" : "Keeper AI Assistant (Click to open chat floater)"}
-                                    aria-label="Toggle Keeper AI Chat Floater"
+                                    title="Open Keeper"
+                                    aria-label="Open Keeper"
                                 >
                                     <div className="shrink-0">
                                         <KeeperAvatar
@@ -414,8 +397,6 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
             />
 
             {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
-
-            {!isExiting && <AIAssistantBubble currentTool={currentTool} />}
 
             <footer className="bg-white border-t border-slate-200/60 py-4 mt-auto">
                 <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-4 text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em]">

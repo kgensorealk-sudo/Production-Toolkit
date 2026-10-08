@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { HashRouter } from 'react-router-dom';
 import { Routes, Route, Navigate, useNavigate } from 'react-router';
 import Layout from './components/Layout';
+import Keeper from './pages/Keeper';
 import Landing from './pages/Landing';
 import Dashboard from './pages/Dashboard';
 import XmlRenumber from './pages/XmlRenumber';
@@ -150,6 +151,7 @@ const App: React.FC = () => {
                                 <Route path="/tableBeautifier" element={<ProtectedRoute><Layout currentTool={ToolId.TABLE_BEAUTIFIER}><NodeAccessController toolId={ToolId.TABLE_BEAUTIFIER} displayName="Table XML Beautifier" mode="key-exclusive"><TableBeautifier /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/xmlRenumber" element={<ProtectedRoute><Layout currentTool={ToolId.XML_RENUMBER}><NodeAccessController toolId={ToolId.XML_RENUMBER} displayName="XML Normalizer" mode="key-allowed"><XmlRenumber /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/xmlRenumberExp" element={<ProtectedRoute><Layout currentTool={ToolId.XML_RENUMBER_EXP}><NodeAccessController toolId={ToolId.XML_RENUMBER_EXP} displayName="XML Normalizer Pro (Experimental)" mode="key-allowed"><XmlRenumberExperimental /></NodeAccessController></Layout></ProtectedRoute>} />
+                                <Route path="/keeper" element={<ProtectedRoute><Layout><Keeper /></Layout></ProtectedRoute>} />
                                 <Route path="/creditGenerator" element={<ProtectedRoute><Layout currentTool={ToolId.CREDIT_GENERATOR}><NodeAccessController toolId={ToolId.CREDIT_GENERATOR} displayName="CRediT Tagging" mode="key-allowed"><CreditGenerator /></NodeAccessController></Layout></ProtectedRoute>} />
                                 
                                 <Route path="/uncitedCleaner" element={<ProtectedRoute><Layout currentTool={ToolId.UNCITED_CLEANER}><NodeAccessController toolId={ToolId.UNCITED_CLEANER} displayName="Uncited Ref Cleaner" mode="subscription-only"><UncitedRefCleaner /></NodeAccessController></Layout></ProtectedRoute>} />
