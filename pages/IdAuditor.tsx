@@ -463,10 +463,10 @@ const IdAuditor: React.FC = () => {
 
                 {step === 'input' && (
                     <div className="flex flex-col h-full animate-fade-in">
-                        <div className="bg-slate-50 px-10 py-6 border-b border-slate-100 flex justify-between items-center overflow-x-auto whitespace-nowrap">
-                            <div className="flex items-center gap-6">
-                                <label className="font-black text-slate-800 text-[10px] uppercase tracking-[0.2em]">Protocols</label>
-                                <div className="flex gap-2">
+                        <div className="bg-slate-50 px-4 sm:px-10 py-6 border-b border-slate-100 flex items-center gap-4">
+                            <div className="flex items-center gap-6 flex-1 min-w-0">
+                                <label className="font-black text-slate-800 text-[10px] uppercase tracking-[0.2em] shrink-0">Protocols</label>
+                                <div className="flex gap-2 min-w-0 overflow-x-auto whitespace-nowrap">
                                     {ID_CONFIG.filter(c => c.prefix).reduce((acc, c) => {
                                         if (!acc.find(item => item.prefix === c.prefix)) {
                                             acc.push(c);
@@ -479,7 +479,7 @@ const IdAuditor: React.FC = () => {
                                     ))}
                                 </div>
                             </div>
-                            <button onClick={() => setInput('')} className="text-[10px] font-black text-rose-500 uppercase tracking-widest hover:underline transition-all ml-4">Reset Input</button>
+                            <button onClick={() => { invalidateGeneratedResult(); setInput(''); setAuditResults([]); }} className="shrink-0 whitespace-nowrap text-[10px] font-black text-rose-500 uppercase tracking-widest hover:underline transition-all">Reset Input</button>
                         </div>
                         <div className="flex-grow flex flex-col relative bg-slate-50/30">
                             <div className="absolute inset-0 pointer-events-none opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(#000 0.5px, transparent 0.5px)', backgroundSize: '24px 24px' }}></div>
