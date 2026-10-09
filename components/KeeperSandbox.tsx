@@ -34,6 +34,7 @@ import { startTypingSimulation, TypingSimulatorController } from '../utils/typin
 import { sanitizeOutput, KeeperUserContext, KEEPER_CONTACT_ADMIN_NOTICE } from '../utils/keeperEngine';
 import { KeeperAvatar, KeeperState } from './KeeperAvatar';
 import { supabase } from '../supabaseClient';
+import KeeperEvidenceReport, { type KeeperEvidenceReportData } from './KeeperEvidenceReport';
 
 const keeperAvatar = '/keeper_avatar.jpg';
 
@@ -181,6 +182,39 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
     const isExpanded=true;
     const [inputPrompt, setInputPrompt] = useState('');
     const [taskInstructions, setTaskInstructions] = useState('');
+    const [sandboxArtifacts, setSandboxArtifacts] = useState<{id:string;name:string;kind:'xml'|'pdf';content:string}[]>([]);
+    const [evidenceReport, setEvidenceReport] = useState<KeeperEvidenceReportData | null>(null);
+    const [fileNotice, setFileNotice] = useState('');
+    const [isImporting, setIsImporting] = useState(false);
+    const importVersion = useRef(0);
+    const [inspectionStatus, setInspectionStatus] = useState<'idle'|'running'|'ready'|'error'>('idle');
+    const [inspectionRetry, setInspectionRetry] = useState(0);
+    useEffect(() => {
+        setEvidenceReport(null);
+        if (!sandboxArtifacts.length) { setInspectionStatus('idle'); return; }
+        const controller = new AbortController();
+        let active = true;
+        setInspectionStatus('running');
+        const prepare = async () => {
+            try {
+                const sessionData = await supabase.auth.getSession();
+                if (!active) return;
+                const token = sessionData?.data?.session?.access_token || session?.access_token;
+                const response = await fetch('/api/ai/chat', {
+                    method:'POST', signal:controller.signal,
+                    headers:{'Content-Type':'application/json', ...(token ? {Authorization:`Bearer ${token}`} : {})},
+                    body:JSON.stringify({action:'inspect', artifacts:sandboxArtifacts})
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Background inspection failed.');
+                if (active) { setEvidenceReport(data.evidence); setInspectionStatus('ready'); setFileNotice(''); }
+            } catch (error) {
+                if (active) { setInspectionStatus('error'); setFileNotice(error instanceof Error ? error.message : 'Background inspection failed.'); }
+            }
+        };
+        void prepare();
+        return () => { active=false; controller.abort(); };
+    }, [sandboxArtifacts, inspectionRetry, session?.access_token]);
     useEffect(() => {
         if (promptRequest) setInputPrompt(promptRequest.text);
     }, [promptRequest]);
@@ -275,18 +309,23 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
     const fileInputRef = useRef<HTMLInputElement>(null);
     const typingControllerRef = useRef<TypingSimulatorController | null>(null);
 
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]; e.target.value = '';
         if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const content = event.target?.result as string;
-            if (content) {
-                setInputPrompt(content);
-            }
-        };
-        reader.readAsText(file);
-        e.target.value = '';
+        if (file.size > 4000000) { setFileNotice('Choose a file smaller than 4 MB.'); return; }
+        const version=++importVersion.current;setIsImporting(true);setFileNotice('');setEvidenceReport(null);
+        try {
+            const kind = /\.pdf$/i.test(file.name) ? 'pdf' : /\.xml$/i.test(file.name) ? 'xml' : null;
+            if(!kind){const text=await file.text();if(version===importVersion.current)setInputPrompt(text);return;}
+            const bytes=new Uint8Array(await file.arrayBuffer());
+            let content='';
+            if(kind==='pdf'){let binary='';for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));content=btoa(binary);}
+            else content=new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(bytes);
+            if(version!==importVersion.current)return;
+            setSandboxArtifacts(previous=>[...previous.filter(a=>a.kind!==kind),{id:crypto.randomUUID(),name:file.name,kind,content}]);
+            setEvidenceReport(null);
+        } catch { if(version===importVersion.current)setFileNotice('File could not be imported. Use UTF-8 XML or a PDF.'); }
+        finally {if(version===importVersion.current)setIsImporting(false);}
     };
 
     // Cleanup typing animation if component unmounts
@@ -397,6 +436,7 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
         setShowResetConfirm(false);
         setInputPrompt('');
         setTaskInstructions('');
+        importVersion.current++;setIsImporting(false);setSandboxArtifacts([]);setEvidenceReport(null);setFileNotice('');
         setResetNotice('Sandbox cleared. Keeper is ready for your next task.');
         setTimeout(() => setResetNotice(null), 3000);
         setTimeout(() => {
@@ -427,8 +467,12 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
 
     const handleSendMessage = async (textToSend?: string) => {
         const source = (textToSend || inputPrompt).trim();
-        const text = [taskInstructions.trim() ? 'Task instructions:\n' + taskInstructions.trim() : '', source ? 'Source material:\n' + source : ''].filter(Boolean).join('\n\n');
-        if (!text || isLoading) return;
+        const requestArtifacts = [...sandboxArtifacts];
+        const pastedXml = /^\s*</.test(source);
+        if(pastedXml){if(requestArtifacts.some(a=>a.kind==='xml')){setFileNotice('Remove the imported XML before submitting a different pasted XML.');return;}requestArtifacts.push({id:crypto.randomUUID(),name:'Pasted XML',kind:'xml',content:source});}
+        const modelSource = pastedXml ? 'XML supplied as a sandbox artifact. Inspect it using the evidence tool.' : source;
+        const text = [taskInstructions.trim() ? 'Task instructions:\n' + taskInstructions.trim() : '', modelSource ? 'Source material:\n' + modelSource : requestArtifacts.length ? 'Inspect the supplied sandbox files and report findings.' : ''].filter(Boolean).join('\n\n');
+        if (!text || isLoading || isImporting || inspectionStatus === 'running' || inspectionStatus === 'error') return;
 
         // If Keeper is currently typing out a previous message, skip to end before sending new message
         if (currentlyTypingId) {
@@ -551,12 +595,16 @@ ${userAuthContext}`;
                         },
                         body: JSON.stringify({
                             messages: payloadMessages.length > 0 ? payloadMessages : [{ role: 'user', content: text }],
-                            context: contextInfo
+                            context: contextInfo,
+                            artifacts: requestArtifacts
                         })
                     });
 
                     if (!response.ok) {
                         const errData = await response.json().catch(() => ({}));
+                        if(errData.evidence)setEvidenceReport(errData.evidence);
+                        if(errData.code==='EVIDENCE_REVIEW_INCOMPLETE')return {reply:errData.error,modelUsed:'keeper-review-incomplete'};
+                        if(response.status===400)return {reply:errData.error||'The sandbox input could not be accepted.',modelUsed:'keeper-input-error'};
                         if (response.status === 401 || response.status === 403 || errData.code === 'SUBSCRIPTION_REQUIRED') {
                             return {
                                 reply: 'An active subscription is required to chat with Keeper.',
@@ -567,6 +615,7 @@ ${userAuthContext}`;
                     }
 
                     const data = await response.json();
+                    setEvidenceReport(data.evidence ? {...data.evidence,toolTrace:data.toolTrace} : null);
                     return {
                         reply: data.offline ? KEEPER_CONTACT_ADMIN_NOTICE : data.reply || 'No response generated.',
                         modelUsed: data.modelUsed,
@@ -673,11 +722,16 @@ ${userAuthContext}`;
                         <label htmlFor="keeper-instructions" className="text-sm font-semibold text-slate-800">What should Keeper do?</label>
                         <p className="text-xs text-slate-500 mt-1 mb-3">Include the rules, format, or examples you want him to follow.</p>
                         <textarea id="keeper-instructions" value={taskInstructions} onChange={e => setTaskInstructions(e.target.value)} disabled={isLoading} placeholder="Describe your task and expected output…" className="w-full min-h-[130px] p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm leading-relaxed resize-y outline-none focus:ring-2 focus:ring-indigo-400" />
-                        <div className="flex items-center justify-between mt-6 mb-3"><label htmlFor="keeper-task-input" className="text-sm font-semibold text-slate-800">Source material <span className="font-normal text-slate-400 ml-1">Optional</span></label><button type="button" onClick={() => fileInputRef.current?.click()} disabled={isLoading} className="text-xs font-semibold text-indigo-600 flex items-center gap-1.5 disabled:opacity-40"><Paperclip size={14} /> Import file</button></div>
-                        <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept=".xml,.html,.txt" className="hidden" />
-                        <textarea id="keeper-task-input" ref={textareaRef} value={inputPrompt} onChange={e => setInputPrompt(e.target.value)} disabled={isLoading} placeholder="Paste text, XML, or an example here…" className="w-full min-h-[290px] p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm leading-relaxed font-mono resize-y outline-none focus:ring-2 focus:ring-indigo-400" />
+                        <div className="flex items-center justify-between mt-6 mb-3"><label htmlFor="keeper-task-input" className="text-sm font-semibold text-slate-800">Source material <span className="font-normal text-slate-400 ml-1">Optional</span></label><button type="button" onClick={() => fileInputRef.current?.click()} disabled={isLoading || isImporting} className="text-xs font-semibold text-indigo-600 flex items-center gap-1.5 disabled:opacity-40"><Paperclip size={14} /> Import file</button></div>
+                        <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept=".xml,.pdf,.txt" className="hidden" />
+                        {isImporting && <p role="status" className="text-xs text-slate-500 mb-3">Importing file...</p>}
+                        {inspectionStatus !== 'idle' && <p role="status" className="text-xs text-indigo-700 mb-3">{inspectionStatus === 'running' ? 'Inspecting files in the background…' : inspectionStatus === 'ready' ? 'Inspection ready. Keeper can retrieve these findings.' : 'Inspection failed.'}{inspectionStatus === 'error' && <button className="ml-2 underline" onClick={()=>setInspectionRetry(n=>n+1)}>Retry inspection</button>}</p>}
+                        {fileNotice && <p role="alert" className="text-xs text-amber-700 mb-3">{fileNotice}</p>}
+                        {sandboxArtifacts.map(a=><div key={a.id} className="flex items-center justify-between text-xs bg-indigo-50 rounded-lg p-3 mb-2"><span>{a.name} - {a.kind.toUpperCase()}</span><button disabled={isLoading} onClick={()=>{setSandboxArtifacts(p=>p.filter(x=>x.id!==a.id));setEvidenceReport(null);}}>Remove</button></div>)}
+                        <p className="text-xs text-slate-500 mb-3">Import one XML and an optional edit-report PDF. Uploads are inspected automatically without an AI call. Ask Keeper about the findings once inspection is ready.</p>
+                        <textarea id="keeper-task-input" ref={textareaRef} value={inputPrompt} onChange={e => {setInputPrompt(e.target.value);setEvidenceReport(null);}} disabled={isLoading || isImporting} placeholder="Paste text, XML, or an example here…" className="w-full min-h-[290px] p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm leading-relaxed font-mono resize-y outline-none focus:ring-2 focus:ring-indigo-400" />
                     </div>
-                    <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-3"><span className="text-xs text-slate-400">{(inputPrompt.length + taskInstructions.length).toLocaleString()} characters</span><button onClick={() => handleSendMessage()} disabled={(!inputPrompt.trim() && !taskInstructions.trim()) || isLoading || Boolean(currentlyTypingId)} className="inline-flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl font-semibold text-sm disabled:opacity-40 hover:bg-indigo-700 transition-colors">{isLoading ? 'Working…' : currentlyTypingId ? 'Preparing result…' : 'Run task'}<ArrowRight size={16} /></button></div>
+                    <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-3"><span className="text-xs text-slate-400">{(inputPrompt.length + taskInstructions.length).toLocaleString()} characters</span><button onClick={() => handleSendMessage()} disabled={(!inputPrompt.trim() && !taskInstructions.trim() && !sandboxArtifacts.length) || isLoading || isImporting || inspectionStatus === 'running' || inspectionStatus === 'error' || Boolean(currentlyTypingId)} className="inline-flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl font-semibold text-sm disabled:opacity-40 hover:bg-indigo-700 transition-colors">{isLoading ? 'Working…' : currentlyTypingId ? 'Preparing result…' : 'Run task'}<ArrowRight size={16} /></button></div>
                 </section>
                 <section className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
                     <div className="px-6 py-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3"><div><p className="text-[10px] uppercase tracking-widest font-bold text-indigo-500">02 / Review</p><h2 className="font-semibold text-slate-900 mt-1">Result</h2></div><div className="flex items-center gap-3">{currentlyTypingId && <button onClick={handleSkipTyping} className="text-xs text-indigo-600">Show full result</button>}{lastAssistantMessage && <button onClick={() => copyToClipboard(lastAssistantMessage.content, lastAssistantMessage.id)} className="inline-flex items-center gap-2 text-xs text-slate-600 border border-slate-200 rounded-lg px-3 py-2"><Copy size={13} />{copiedId === lastAssistantMessage.id ? 'Copied' : 'Copy result'}</button>}</div></div>
@@ -687,6 +741,7 @@ ${userAuthContext}`;
                     <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-between text-xs text-slate-400"><span>{lastAssistantMessage ? lastModelBadge.label : 'Ready when you are'}</span><span>Results stay in this sandbox</span></div>
                 </section>
             </div>
+            {evidenceReport && <KeeperEvidenceReport report={evidenceReport} />}
             {messages.some(message => message.role === 'assistant') && <details className="border border-slate-200 rounded-xl bg-white p-5"><summary className="text-sm font-semibold text-slate-600 cursor-pointer">Session history</summary><div className="space-y-4 mt-4">{messages.map(message => <div key={message.id} className="border-t border-slate-100 pt-4"><p className="text-xs font-semibold text-slate-400 mb-2">{message.role === 'user' ? 'Your input' : 'Keeper result'} · {new Date(message.timestamp).toLocaleString()}</p><pre className="text-sm whitespace-pre-wrap break-words font-sans text-slate-700">{message.content}</pre></div>)}</div></details>}
         </section>
     );

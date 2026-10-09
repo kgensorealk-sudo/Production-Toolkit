@@ -1,6 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI } from '@google/genai';
 import OpenAI from 'openai';
+import { validateArtifacts, buildKeeperEvidence, evidenceSummary } from './keeperEvidence.js';
+import { runKeeperToolLoop } from './keeperToolRunner.js';
+import { getKeeperEvidence } from './keeperEvidenceCache.js';
 import { createClient } from '@supabase/supabase-js';
 import {
   CANDIDATE_MODELS,
@@ -149,18 +152,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { messages, context } = req.body || {};
+    if (Buffer.byteLength(JSON.stringify(req.body || {}), 'utf8') > 4000000) return res.status(400).json({error:'Sandbox request exceeds 4 MB. Use smaller files or shorten the conversation.'});
+    const { messages, context, artifacts, action } = req.body || {};
+    let suppliedArtifacts;
+    try { suppliedArtifacts = validateArtifacts(artifacts); } catch (e) { return res.status(400).json({error: (e as Error).message}); }
+    if (context !== undefined && typeof context !== 'string') return res.status(400).json({error:'Invalid context.'});
+    if (action !== undefined && action !== 'inspect') return res.status(400).json({error:'Invalid sandbox action.'});
+    if (action === 'inspect') {
+      if (!suppliedArtifacts.length) return res.status(400).json({error:'Supply a sandbox file to inspect.'});
+      const prepared = await getKeeperEvidence(authResult.user.id, suppliedArtifacts, Date.now() + 25000);
+      return res.json({evidence:evidenceSummary(prepared)});
+    }
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({ error: 'Messages array is required.' });
     }
 
-    const lastUserMessage = [...messages].reverse().find((m: any) => m.role === 'user');
+    if (messages.length > 20 || messages.some((m:any) => !m || !['user','assistant','model'].includes(m.role) || typeof m.content !== 'string') || JSON.stringify(messages).length > 200000) return res.status(400).json({error:'Invalid or excessive message history.'});
+    const deadline = Date.now() + 25000;
+    const evidence = suppliedArtifacts.length ? await getKeeperEvidence(authResult.user.id,suppliedArtifacts,deadline) : null;
+    let toolTrace: any[] = [];
+    let retrievalCoverage: any = null;
     const geminiClient = getGeminiClient();
     const openaiClient = getOpenAIClient();
 
     if (!geminiClient && !openaiClient) {
-      return res.status(503).json({ error: KEEPER_CONTACT_ADMIN_NOTICE, code: 'AI_UNAVAILABLE' });
+      return res.status(503).json({ error: KEEPER_CONTACT_ADMIN_NOTICE, code: 'AI_UNAVAILABLE', ...(evidence ? {evidence:evidenceSummary(evidence)} : {}) });
     }
 
     let systemInstruction = buildKeeperSystemInstruction(context);
@@ -190,16 +207,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     for (let i = 0; i < CANDIDATE_MODELS.length; i++) {
       const candidate = CANDIDATE_MODELS[i];
-      const timeoutMs = PER_MODEL_TIMEOUT_MS;
+      const timeoutMs = Math.min(PER_MODEL_TIMEOUT_MS, Math.max(1, deadline-Date.now()));
 
       // Skip a candidate outright if its provider has no API key configured,
       // rather than burning a timeout slot on a call we know will fail.
       if (candidate.provider === 'gemini' && !geminiClient) continue;
       if (candidate.provider === 'openai' && !openaiClient) continue;
+      if (candidate.provider === 'anthropic' || Date.now() >= deadline) continue;
 
+      let modelTimer: ReturnType<typeof setTimeout> | undefined;
       try {
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(
+        const timeoutPromise = evidence ? null : new Promise((_, reject) =>
+          modelTimer = setTimeout(
             () => reject(new Error(`Model ${candidate.model} request timed out after ${timeoutMs / 1000}s`)),
             timeoutMs
           )
@@ -207,7 +226,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         let text = '';
 
-        if (candidate.provider === 'gemini') {
+        if (evidence) {
+          const result = await runKeeperToolLoop({provider: candidate.provider as 'gemini'|'openai',client:candidate.provider==='gemini'?geminiClient:openaiClient, model:candidate.model,messages:candidate.provider==='gemini'?geminiContents:openaiMessages.slice(1),systemInstruction,evidence,artifacts:suppliedArtifacts,deadline});
+          text=result.text;toolTrace=result.trace;retrievalCoverage=result.coverage;
+        } else if (candidate.provider === 'gemini') {
           const modelPromise = geminiClient!.models.generateContent({
             model: candidate.model,
             contents: geminiContents,
@@ -241,12 +263,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } catch (modelErr: any) {
         console.warn(`[AI Copilot - Vercel] Model ${candidate.model} (${candidate.provider}) encountered error:`, modelErr?.message || modelErr);
         lastError = modelErr;
-      }
+      } finally { clearTimeout(modelTimer); }
     }
 
-    if (!reply) return res.status(503).json({ error: KEEPER_CONTACT_ADMIN_NOTICE, code: 'AI_UNAVAILABLE' });
+    if (!reply) return res.status(503).json({ error: evidence ? 'Keeper could not complete the evidence review. Please narrow the task or retry. The deterministic QA report remains available.' : KEEPER_CONTACT_ADMIN_NOTICE, code: evidence ? 'EVIDENCE_REVIEW_INCOMPLETE' : 'AI_UNAVAILABLE', ...(evidence ? {evidence:evidenceSummary(evidence)} : {}) });
 
-    return res.json({ reply: sanitizeOutput(reply), modelUsed: activeModel });
+    return res.json({ reply: sanitizeOutput(reply), modelUsed: activeModel, ...(evidence ? {evidence: {...evidenceSummary(evidence),retrievalCoverage}, toolTrace} : {}) });
   } catch (err: any) {
     console.error('AI Copilot API Error (Vercel):', err);
     return res.status(503).json({ error: KEEPER_CONTACT_ADMIN_NOTICE, code: 'AI_UNAVAILABLE' });
