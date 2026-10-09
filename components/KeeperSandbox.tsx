@@ -573,6 +573,8 @@ ${userAuthContext}`;
 
             const generateResponsePromise = (async () => {
                 let apiStarted=0;
+                const apiController=new AbortController();
+                const apiTimer=setTimeout(()=>apiController.abort(),75000);
                 try {
                     const sessionData = await supabase.auth.getSession();
                     const token = sessionData?.data?.session?.access_token || session?.access_token;
@@ -580,6 +582,7 @@ ${userAuthContext}`;
                     apiStarted=Date.now();
                     const response = await fetch('/api/ai/chat', {
                         method: 'POST',
+                        signal:apiController.signal,
                         headers: {
                             'Content-Type': 'application/json',
                             ...(token ? { 'Authorization': `Bearer ${token}` } : {})
@@ -621,10 +624,11 @@ ${userAuthContext}`;
                     };
                 } catch (err: any) {
                     if(apiStarted)requestMs=Date.now()-apiStarted;
+                    if(apiController.signal.aborted)return {reply:'Keeper request timed out. Your task and QA report are still saved; please retry.',modelUsed:'keeper-connection-unavailable'};
                     if (err?.message?.includes('server limit')) return {reply:err.message,modelUsed:'keeper-input-error'};
                     console.warn("Keeper live AI connection unavailable:", err?.message || err);
                     return { reply: err?.message || KEEPER_CONTACT_ADMIN_NOTICE, modelUsed: 'keeper-connection-unavailable' };
-                }
+                } finally { clearTimeout(apiTimer);apiController.abort(); }
             })();
 
             const responseData:{reply:string;modelUsed?:string;activity?:KeeperActivity}|null = await generateResponsePromise;

@@ -21,6 +21,7 @@ export async function runKeeperToolLoop(options: {
   evidence: KeeperEvidence;
   artifacts?: KeeperArtifact[];
   deadline: number;
+  question?:string;
   onActivity?:(event:NonNullable<KeeperActivity['events']>[number])=>void;
 }) {
   const { provider, client, model, evidence } = options;
@@ -80,7 +81,7 @@ export async function runKeeperToolLoop(options: {
   const fullyRetrieved = new Set<string>();
   const slices = new Map<string,{ranges:[number,number][];end?:number}>();
   const latestUser = [...options.messages].reverse().find(m=>m.role==='user');
-  const task = typeof latestUser?.content==='string' ? latestUser.content : (latestUser?.parts || []).map((p:any)=>p.text || '').join(' ');
+  const task = options.question ?? (typeof latestUser?.content==='string' ? latestUser.content : (latestUser?.parts || []).map((p:any)=>p.text || '').join(' '));
   const allQueriesRequested = /\b(?:each|all|every)\b[\s\S]{0,100}\bquer(?:y|ies)\b|\bquer(?:y|ies)\b[\s\S]{0,100}\b(?:each|all|every)\b/i.test(task);
   let xmlExcerptReads = 0;
   const coverage = () => ({
@@ -144,6 +145,8 @@ export async function runKeeperToolLoop(options: {
         throw new Error("Empty model response.");
       if (evidence.records.length && !successfulReads)
         throw new Error("Model did not inspect supplied evidence.");
+      const requestedQueries=[...task.matchAll(/\bq\d+\b/gi)].map(m=>m[0].toLowerCase());
+      if(evidence.records.some(r=>r.kind==='query'&&requestedQueries.includes((r.queryId||'').toLowerCase())&&!fullyRetrieved.has(r.id)))throw new Error('Requested query evidence was not retrieved.');
       if(requestsOptTagCounts(task) && !readOptCounts) throw new Error('Insertion/deletion counts were not retrieved from the inventory.');
       if(isOptCountRequest(task) && optCountResult) return {text:renderOptCounts(optCountResult),trace,coverage:coverage()};
       const claimsAllQueries = /\b(?:each|all|every)\b[\s\S]{0,60}\bquer(?:y|ies)\b/i.test(text);

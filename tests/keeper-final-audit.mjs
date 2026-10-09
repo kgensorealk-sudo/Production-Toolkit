@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {keeperOptReviewKinds} from '../utils/keeperReviewScope.ts';
+import {isOptCountRequest,requestsOptTagCounts} from '../utils/keeperOptSummary.ts';
+import {runKeeperToolLoop} from '../utils/keeperToolRunner.ts';
+for(const text of ['Do not count insertions.','How many insertions? Remove them.','How many insertions and authors?','How many insertions were made? Explain each insertion.','Count insertions and describe changes.','How many deletions? Show every deletion.'])assert.equal(isOptCountRequest(text),false,text);
+assert.equal(isOptCountRequest('How many insertion were made?'),true);
+assert.equal(isOptCountRequest('Show insertion and deletion counts'),true);
+assert.equal(requestsOptTagCounts('Do not count insertions.'),false);
+assert.deepEqual(keeperOptReviewKinds('Explain each insertion.'),['opt_ins']);
+const evidence={files:[{id:'xml',name:'test.xml',kind:'xml',inspectionStatus:'ready',diagnostics:[]}],records:[{id:'xml-q1',artifactId:'xml',queryId:'q1',kind:'query',text:'Confirm?',source:'Confirm?',diagnostics:[],binding:{state:'unresolved',reason:'No PDF'}}]};
+let round=0;
+const client={models:{generateContent:async()=>round++===0?{functionCalls:[{id:'count',name:'summarize_opt_changes',args:{}}],candidates:[{content:{role:'model',parts:[{functionCall:{name:'summarize_opt_changes',args:{}}}]}}]}:{text:'Q1 was confirmed by the author.'}}};
+await assert.rejects(runKeeperToolLoop({provider:'gemini',client,model:'synthetic',messages:[{role:'user',parts:[{text:'What did the author answer for Q1?'}]}],systemInstruction:'Keeper',evidence,deadline:Date.now()+1000}),/Requested query evidence was not retrieved/);
+const ui=fs.readFileSync('components/KeeperSandbox.tsx','utf8');
+assert.ok(ui.includes('signal:apiController.signal'));assert.ok(ui.includes('clearTimeout(apiTimer)'));
+const server=fs.readFileSync('utils/chatHandler.ts','utf8');assert.ok(server.includes('abortSignal:modelController.signal'));assert.ok(server.includes('{signal:modelController.signal}'));
+console.log('PASS negated/mixed count requests, specific-query evidence guard, and cancellable browser/provider request wiring');

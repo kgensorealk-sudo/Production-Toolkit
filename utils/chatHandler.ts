@@ -240,11 +240,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (candidate.provider === 'anthropic' || Date.now() >= deadline) continue;
 
       const attemptStarted=Date.now();let attemptOutcome='failed';let failure:string|undefined;
+      const modelController=new AbortController();
       let modelTimer: ReturnType<typeof setTimeout> | undefined;
       try {
         const timeoutPromise = evidence ? null : new Promise((_, reject) =>
           modelTimer = setTimeout(
-            () => reject(new Error(`Model ${candidate.model} request timed out after ${timeoutMs / 1000}s`)),
+            () => {modelController.abort();reject(new Error(`Model ${candidate.model} request timed out after ${timeoutMs / 1000}s`));},
             timeoutMs
           )
         );
@@ -252,7 +253,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         let text = '';
 
         if (evidence) {
-          const result = await runKeeperToolLoop({provider: candidate.provider as 'gemini'|'openai',client:candidate.provider==='gemini'?geminiClient:openaiClient, model:candidate.model,messages:candidate.provider==='gemini'?geminiContents:openaiMessages.slice(1),systemInstruction,evidence,artifacts:suppliedArtifacts,deadline,onActivity:event=>events.push(event)});
+          const result = await runKeeperToolLoop({provider: candidate.provider as 'gemini'|'openai',client:candidate.provider==='gemini'?geminiClient:openaiClient, model:candidate.model,messages:candidate.provider==='gemini'?geminiContents:openaiMessages.slice(1),systemInstruction,evidence,artifacts:suppliedArtifacts,deadline,question,onActivity:event=>events.push(event)});
           text=result.text;toolTrace=result.trace;retrievalCoverage=result.coverage;
         } else if (candidate.provider === 'gemini') {
           const modelPromise = geminiClient!.models.generateContent({
@@ -260,6 +261,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             contents: geminiContents,
             config: {
               systemInstruction,
+              abortSignal:modelController.signal,
               // NOTE: temperature/top_p/top_k intentionally omitted. Gemini 3.x models
               // (gemini-3.7-flash, and gemini-flash-latest when it points at a 3.x build)
               // do not support these legacy sampling parameters — sending them was causing
@@ -275,7 +277,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const modelPromise = openaiClient!.chat.completions.create({
             model: candidate.model,
             messages: openaiMessages,
-          });
+          },{signal:modelController.signal});
           const response: any = await Promise.race([modelPromise, timeoutPromise]);
           text = response?.choices?.[0]?.message?.content || '';
         }
@@ -288,7 +290,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } catch (modelErr: any) {
         console.warn(`[AI Copilot - Vercel] Model ${candidate.model} (${candidate.provider}) encountered error:`, modelErr?.message || modelErr);
         lastError = modelErr;failure=keeperProviderFailure(modelErr);
-      } finally { if(!evidence)events.push({kind:'model_round',model:candidate.model,round:1,elapsedMs:Date.now()-attemptStarted,outcome:attemptOutcome});attempts.push({model:candidate.model,provider:candidate.provider,elapsedMs:Date.now()-attemptStarted,outcome:attemptOutcome,failure});clearTimeout(modelTimer); }
+      } finally { if(!evidence)events.push({kind:'model_round',model:candidate.model,round:1,elapsedMs:Date.now()-attemptStarted,outcome:attemptOutcome});attempts.push({model:candidate.model,provider:candidate.provider,elapsedMs:Date.now()-attemptStarted,outcome:attemptOutcome,failure});clearTimeout(modelTimer);modelController.abort(); }
     }
 
     if (!reply && localEvidence) return res.status(503).json({error:String(lastError?.message||'').includes('API key not valid')?'Gemini rejected the configured API key. Update the server Gemini key. Your local QA report is still available.':'Keeper AI could not complete this review. Your local QA report is still available; no AI interpretation has been produced.',code:'AI_UNAVAILABLE',activity:activity(),evidence:evidenceSummary(localEvidence)});

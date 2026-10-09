@@ -14,13 +14,18 @@ export function summarizeOptChanges(evidence: KeeperEvidence) {
 }
 
 export function requestsOptTagCounts(text:string) {
-  return text.split(/\b(?:and|also|then)\b/i).some(part=>{
+  return text.split(/\b(?:and|also|then|but)\b/i).some(part=>{
+    if(/\b(?:do\s+not|don['’]t|never|avoid)\s+(?:\w+\s+){0,2}(?:count|calculate|tally)\b/i.test(part))return false;
     if(/\b(?:words?|characters?|letters?|sentences?|authors?|references?|citations?|affiliations?|equations?|rows?|columns?|cells?|pages?|paragraphs?|sections?|tables?|figures?|comments?|quer(?:y|ies))\b|\b(?:for|within|under|in)\s+q\d+\b/i.test(part))return false;
     return /\b(?:how\s+many|count|counts|number\s+of|total)\b/i.test(part) && /\b(?:insert(?:ed|ion|ions|s)?|delet(?:e|ed|ion|ions|es)|opt_ins|opt_del)\b/i.test(part);
   });
 }
 export function isOptCountRequest(text:string) {
-  if (/\b(?:words?|characters?|letters?|sentences?|q\d+|quer(?:y|ies)|paragraphs?|sections?|tables?|figures?)\b/i.test(text)) return false;
+  text=text.replace(/\bhow\s+many\s+where\s+(?=insert|delet)/gi,'how many were ');
+  if(/\b(?:do\s+not|don['’]t|never|avoid|without)\b|\b(?:explain|describe|compare|review|analy[sz]e|verify|identify|locate|why|where|which)\b/i.test(text))return false;
+  if(/\b(?:remove|delete|insert|replace|rewrite|revise|edit|fix|correct|format|italicize|indent|save|export|download|send|upload|generate|create|run)\b/i.test(text))return false;
+  if(/\b(?:list|show)\s+(?:me\s+)?(?:each|every|all|the)\s+(?:insertion|deletion|change|edit)/i.test(text))return false;
+  if (/\b(?:words?|characters?|letters?|sentences?|authors?|references?|citations?|affiliations?|equations?|rows?|columns?|cells?|pages?|q\d+|quer(?:y|ies)|paragraphs?|sections?|tables?|figures?)\b/i.test(text)) return false;
   return text.length<600 && requestsOptTagCounts(text) && !/\b(?:also|then|as\s+well|and\s+(?:review|check|explain|compare|list|show))\b/i.test(text);
 }
 
