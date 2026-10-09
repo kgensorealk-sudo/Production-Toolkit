@@ -50,3 +50,6 @@ The server reuses a private process-local evidence cache keyed by authenticated 
 
 ## AI review failures
 When providers are unavailable or cannot complete a review, the server returns a clearly marked deterministic query-response report with source locations, verified answers, and unresolved reasons. It does not claim AI interpretation or edit completion. At most 100 queries and approximately 180,000 characters are reported, with explicit incomplete/truncation notices. The full evidence remains retrievable. Run tests/keeper-query-review.mjs with tsx to verify batch retrieval and report coverage.
+
+## PDF deployment runtime
+PDF extraction explicitly loads the pinned native canvas dependency before PDF.js initializes DOMMatrix, ImageData, and Path2D. Both Vercel chat routes include the native platform package and PDF worker files. File summaries distinguish completed inspection from failed extraction; failed PDF inspections are not cached. If a PDF was uploaded but could not be read, query bindings report the actual extraction failure instead of asking for a missing upload. Run `node --import tsx tests/keeper-pdf-runtime.mjs` for native Node loading, actual synthetic PDF extraction/binding, and failed-versus-missing PDF regression coverage.

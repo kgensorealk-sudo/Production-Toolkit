@@ -22,6 +22,7 @@ export async function runKeeperToolLoop(options: {
   const instruction =
     options.systemInstruction + "\n" + keeperEvidenceInstruction + '\nWhen asked to check author responses to each query, prefer review_query_responses to retrieve compact batches instead of unrelated OPT records. Cover each query individually: question, verified response or unresolved reason, and any evidence needed to assess implementation. Follow nextOffset and disclose truncated records. Never describe retrieval alone as a completed editorial review.';
   const summary = JSON.stringify(evidenceSummary(evidence));
+  const fileStatusInstruction = '\nUse file inventory and extraction diagnostics to explain failed associations precisely. If both files are present, never tell the user to upload them again as though absent. Distinguish PDF extraction failure, unsupported report layout, missing article identity, and conflicting query matches. Do not claim matching is unavailable in this environment unless a specific diagnostic establishes that.';
   const contents: any[] =
     provider === "gemini"
       ? [
@@ -38,7 +39,7 @@ export async function runKeeperToolLoop(options: {
           },
         ]
       : [
-          { role: "system", content: instruction },
+          { role: "system", content: instruction + fileStatusInstruction },
           ...options.messages,
           {
             role: "user",
@@ -89,7 +90,7 @@ export async function runKeeperToolLoop(options: {
               model,
               contents,
               config: {
-                systemInstruction: instruction,
+                systemInstruction: instruction + fileStatusInstruction,
                 tools,
                 abortSignal: controller.signal,
               },

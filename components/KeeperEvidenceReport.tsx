@@ -9,6 +9,7 @@ export interface KeeperEvidenceReportData {
     name: string;
     sha256: string;
     diagnostics: string[];
+    inspectionStatus?: string;
     articleDoi?: string | null;
     articleDois?: string[];
   }[];
@@ -75,6 +76,7 @@ export default function KeeperEvidenceReport({
             className="text-xs break-words bg-slate-50 rounded-lg p-3"
           >
             <strong>{f.name}</strong>
+            {f.inspectionStatus && <p className="mt-1">Inspection: {f.inspectionStatus === 'failed' ? 'Failed — file was uploaded but could not be inspected' : 'Completed'}</p>}
             <p className="font-mono text-slate-500 break-all mt-1">
               SHA-256: {f.sha256}
             </p>

@@ -21,6 +21,10 @@ export async function getKeeperEvidence(owner: string, artifacts: KeeperArtifact
   }
   const value = buildKeeperEvidence(artifacts, deadline);
   if (bytes <= MAX_BYTES) entries.set(key, { expires: now + TTL, bytes, value });
-  try { return await value; }
+  try {
+    const result = await value;
+    if (result.files.some(file => file.inspectionStatus === 'failed')) entries.delete(key);
+    return result;
+  }
   catch (error) { entries.delete(key); throw error; }
 }

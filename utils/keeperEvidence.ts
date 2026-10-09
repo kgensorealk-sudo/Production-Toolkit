@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { scanReferenceXml } from "./referenceUpdaterXml.js";
+import { loadKeeperPdfRuntime } from './keeperPdfRuntime.js';
 
 export interface KeeperArtifact {
   id: string;
@@ -466,6 +467,7 @@ export async function buildKeeperEvidence(
       kind: a.kind,
       sha256: hash(bytes),
       diagnostics: [],
+      inspectionStatus: 'ready',
     };
     files.push(file);
     if (a.kind === "xml") {
@@ -479,7 +481,7 @@ export async function buildKeeperEvidence(
       try {
         if (!bytes.subarray(0, 5).equals(Buffer.from("%PDF-")))
           throw new Error("Missing PDF signature.");
-        const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+        const { getDocument } = await loadKeeperPdfRuntime();
         doc = await getDocument({
           data: new Uint8Array(bytes),
           isEvalSupported: false,
@@ -520,6 +522,7 @@ export async function buildKeeperEvidence(
             "No supported QN / Query: / Answer: blocks found. Scanned PDFs require OCR; no responses were invented.",
           );
       } catch (e) {
+        file.inspectionStatus = 'failed';
         file.diagnostics.push(
           `PDF extraction unavailable: ${(e as Error).message}`,
         );
@@ -536,8 +539,9 @@ export async function buildKeeperEvidence(
       for (const q of x.records.filter((r) => r.kind === "query"))
         q.binding = {
           state: "unresolved",
-          reason:
-            "Supply one XML and one PDF for deterministic response binding.",
+          reason: artifacts.filter(a=>a.kind==='pdf').length === 1 && !pdfs.length
+            ? `The PDF was uploaded, but extraction failed. ${files.filter(f=>f.kind==='pdf').flatMap(f=>f.diagnostics).join(' ')}`
+            : "Supply exactly one XML and one successfully inspected PDF for deterministic response binding.",
         };
   return { files, records };
 }
