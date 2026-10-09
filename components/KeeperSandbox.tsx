@@ -35,6 +35,7 @@ import { sanitizeOutput, KeeperUserContext, KEEPER_CONTACT_ADMIN_NOTICE } from '
 import { KeeperAvatar, KeeperState } from './KeeperAvatar';
 import { supabase } from '../supabaseClient';
 import KeeperEvidenceReport, { type KeeperEvidenceReportData } from './KeeperEvidenceReport';
+import { readKeeperApiResponse } from '../utils/keeperApiResponse';
 
 const keeperAvatar = '/keeper_avatar.jpg';
 
@@ -205,7 +206,7 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
                     headers:{'Content-Type':'application/json', ...(token ? {Authorization:`Bearer ${token}`} : {})},
                     body:JSON.stringify({action:'inspect', artifacts:sandboxArtifacts})
                 });
-                const data = await response.json();
+                const data = await readKeeperApiResponse(response);
                 if (!response.ok) throw new Error(data.error || 'Background inspection failed.');
                 if (active) { setEvidenceReport(data.evidence); setInspectionStatus('ready'); setFileNotice(''); }
             } catch (error) {
@@ -600,8 +601,9 @@ ${userAuthContext}`;
                         })
                     });
 
+                    const data = await readKeeperApiResponse(response);
                     if (!response.ok) {
-                        const errData = await response.json().catch(() => ({}));
+                        const errData = data;
                         if(errData.evidence)setEvidenceReport(errData.evidence);
                         if(errData.code==='EVIDENCE_REVIEW_INCOMPLETE')return {reply:errData.error,modelUsed:'keeper-review-incomplete'};
                         if(response.status===400)return {reply:errData.error||'The sandbox input could not be accepted.',modelUsed:'keeper-input-error'};
@@ -614,7 +616,6 @@ ${userAuthContext}`;
                         throw new Error(errData.error || `Request failed with status ${response.status}`);
                     }
 
-                    const data = await response.json();
                     setEvidenceReport(data.evidence ? {...data.evidence,toolTrace:data.toolTrace} : null);
                     return {
                         reply: data.offline ? KEEPER_CONTACT_ADMIN_NOTICE : data.reply || 'No response generated.',

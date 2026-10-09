@@ -1,6 +1,6 @@
 // Preserve raw markup while checking structure. Named character/text entities
 // are normalized separately so emitted bibliography fragments need no declarations.
-import articleEntities from './referenceUpdaterEntities.json';
+import articleEntities from './referenceUpdaterEntities.json' with { type: 'json' };
 export interface ReferenceXmlNode {
     name: string; start: number; openEnd: number; closeStart: number; end: number; attributes: Record<string, string>;
     attributeRanges: Record<string, {start: number; end: number; valueStart: number; valueEnd: number; quote: string}>;
