@@ -134,6 +134,12 @@ try {
     "PASS real chat handler and Gemini SDK transport round-trip with deterministic evidence",
   );
   aiRound=0;
+  const fastCount=await request({messages:[{role:'user',content:'Task instructions: Check author responses to each query. Source material: How many insertion were made?'}],question:'How many insertion were made?',evidenceSnapshot:cached});
+  assert.equal(fastCount.status,200);assert.equal(aiRound,0);
+  assert.equal(fastCount.data.modelUsed,'keeper-evidence-counts');
+  assert.match(fastCount.data.reply,/Inserted: \*\*1\*\*/);
+  assert.equal(fastCount.data.activity.events[0].name,'summarize_opt_changes');
+  assert.equal(fastCount.data.activity.attempts.length,0);
   const snapshotReply=await request({messages:input.messages,evidenceSnapshot:cached});
   assert.equal(snapshotReply.status,200);
   assert.equal(snapshotReply.data.toolTrace[0].name,'inspect_sandbox_evidence');
@@ -189,7 +195,7 @@ try {
   console.log('PASS failed AI review returns per-query evidence instead of a generic retry error');
   const failedSnapshot=await request({messages:input.messages,evidenceSnapshot:cached});
   assert.ok(failedSnapshot.data.activity.attempts.length>0);
-  assert.ok(failedSnapshot.data.activity.attempts.every(a=>a.outcome==='failed'));
+  assert.ok(failedSnapshot.data.activity.attempts.every(a=>a.outcome==='failed'&&a.failure==='empty_response'));
   assert.equal(failedSnapshot.status,503);assert.equal(failedSnapshot.data.reply,undefined);
   assert.ok(failedSnapshot.data.evidence);
   delete process.env.GEMINI_API_KEY;

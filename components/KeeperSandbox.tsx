@@ -587,7 +587,8 @@ ${userAuthContext}`;
                         body: encodeKeeperRequest({
                             messages: payloadMessages.length > 0 ? payloadMessages : [{ role: 'user', content: text }],
                             context: contextInfo,
-                            evidenceSnapshot
+                            evidenceSnapshot,
+                            question:pastedXml?undefined:source||taskInstructions
                         })
                     });
 

@@ -1,3 +1,4 @@
+import {keeperProviderFailure} from './keeperProviderFailure.js';
 import type {KeeperActivity} from './keeperActivity.js';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {validateKeeperEvidenceSnapshot} from './keeperEvidenceSnapshot.js';
@@ -161,12 +162,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     if (Buffer.byteLength(JSON.stringify(req.body || {}), 'utf8') > 4000000) return res.status(400).json({error:'Sandbox request exceeds 4 MB. Use smaller files or shorten the conversation.'});
-    const { messages, context, artifacts, action, evidenceSnapshot } = req.body || {};
+    const { messages, context, artifacts, action, evidenceSnapshot, question } = req.body || {};
     let suppliedArtifacts;
     let localEvidence;
     try { localEvidence=validateKeeperEvidenceSnapshot(evidenceSnapshot); } catch(e) { return res.status(400).json({error:(e as Error).message}); }
     try { suppliedArtifacts = validateArtifacts(artifacts); } catch (e) { return res.status(400).json({error: (e as Error).message}); }
     if(localEvidence&&(suppliedArtifacts.length||action))return res.status(400).json({error:'Supply either local evidence or source artifacts, not both.'});
+    if(question!==undefined&&(typeof question!=='string'||question.length>200000))return res.status(400).json({error:'Invalid task question.'});
     if (context !== undefined && typeof context !== 'string') return res.status(400).json({error:'Invalid context.'});
     if (action !== undefined && action !== 'inspect') return res.status(400).json({error:'Invalid sandbox action.'});
     if (action === 'inspect') {
@@ -183,9 +185,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const deadline = requestDeadline;
     const evidence = localEvidence || (suppliedArtifacts.length ? await getKeeperEvidence(authResult.user.id,suppliedArtifacts,deadline) : null);
     const latestUser = [...messages].reverse().find((m:any)=>m.role==='user');
-    if(!localEvidence && evidence && latestUser && isOptCountRequest(latestUser.content)) {
+    const countQuestion=question===undefined?latestUser?.content:question;
+    if(evidence && latestUser && isOptCountRequest(countQuestion||'')) {
+      const countStarted=Date.now();
       const result=dispatchKeeperTool(evidence,'summarize_opt_changes',{});
-      return res.json({reply:renderOptCounts(result as ReturnType<typeof summarizeOptChanges>),modelUsed:'keeper-evidence-counts',evidence:evidenceSummary(evidence),toolTrace:[{name:'summarize_opt_changes'}]});
+      events.push({kind:'tool',name:'summarize_opt_changes',elapsedMs:Date.now()-countStarted,outcome:'success'});
+      return res.json({reply:renderOptCounts(result as ReturnType<typeof summarizeOptChanges>),modelUsed:'keeper-evidence-counts',activity:activity(),evidence:evidenceSummary(evidence),toolTrace:[{name:'summarize_opt_changes'}]});
     }
     let toolTrace: any[] = [];
     let retrievalCoverage: any = null;
@@ -234,7 +239,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (candidate.provider === 'openai' && !openaiClient) continue;
       if (candidate.provider === 'anthropic' || Date.now() >= deadline) continue;
 
-      const attemptStarted=Date.now();let attemptOutcome='failed';
+      const attemptStarted=Date.now();let attemptOutcome='failed';let failure:string|undefined;
       let modelTimer: ReturnType<typeof setTimeout> | undefined;
       try {
         const timeoutPromise = evidence ? null : new Promise((_, reject) =>
@@ -282,8 +287,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       } catch (modelErr: any) {
         console.warn(`[AI Copilot - Vercel] Model ${candidate.model} (${candidate.provider}) encountered error:`, modelErr?.message || modelErr);
-        lastError = modelErr;
-      } finally { if(!evidence)events.push({kind:'model_round',model:candidate.model,round:1,elapsedMs:Date.now()-attemptStarted,outcome:attemptOutcome});attempts.push({model:candidate.model,provider:candidate.provider,elapsedMs:Date.now()-attemptStarted,outcome:attemptOutcome});clearTimeout(modelTimer); }
+        lastError = modelErr;failure=keeperProviderFailure(modelErr);
+      } finally { if(!evidence)events.push({kind:'model_round',model:candidate.model,round:1,elapsedMs:Date.now()-attemptStarted,outcome:attemptOutcome});attempts.push({model:candidate.model,provider:candidate.provider,elapsedMs:Date.now()-attemptStarted,outcome:attemptOutcome,failure});clearTimeout(modelTimer); }
     }
 
     if (!reply && localEvidence) return res.status(503).json({error:String(lastError?.message||'').includes('API key not valid')?'Gemini rejected the configured API key. Update the server Gemini key. Your local QA report is still available.':'Keeper AI could not complete this review. Your local QA report is still available; no AI interpretation has been produced.',code:'AI_UNAVAILABLE',activity:activity(),evidence:evidenceSummary(localEvidence)});

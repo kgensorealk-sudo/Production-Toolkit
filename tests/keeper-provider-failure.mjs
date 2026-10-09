@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {keeperProviderFailure as classify} from '../utils/keeperProviderFailure.ts';
+assert.equal(classify(new Error('Keeper model request timed out.')),'timeout');
+assert.equal(classify({status:403,message:'secret provider details'}),'authentication_or_access');
+assert.equal(classify({status:429}),'quota_or_rate_limit');
+assert.equal(classify({status:404}),'model_unavailable');
+assert.equal(classify(new Error('Empty model response.')),'empty_response');
+assert.equal(classify(new Error('Model did not inspect supplied evidence.')),'evidence_not_retrieved');
+assert.equal(classify(new Error('secret details')),'provider_error');
+console.log('PASS safe provider-failure categories without exposing raw provider messages or credentials');
