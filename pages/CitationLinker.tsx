@@ -7,12 +7,14 @@ import Switch from '../components/Switch';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 import { scanReferenceXml } from '../utils/referenceUpdaterXml';
 import { applyCitationLinks, cleanupCitationDois } from '../utils/citationLinkerEdits';
+import { citationReviewCandidates, reviewCitationTarget } from '../utils/citationLinkerReview';
 import { analyzeIdLinks } from '../utils/idAuditorEngine';
 import { ChevronUp, ChevronDown, GitCompare, Lightbulb, ArrowRight, Link as LinkIcon, Eraser, Hash, Trash2, RefreshCw, Box } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SmartSuggestion, ToolId } from '../types';
 
 interface ResolutionItem {
+    manualTarget?: string;
     start: number;
     existingHref: string;
     linkAttribute: 'refid' | 'xlink:href';
@@ -61,10 +63,10 @@ const CitationLinker: React.FC = () => {
 
     // Configuration States
     const [targetMissingRefid, setTargetMissingRefid] = useState(true);
-    const [targetMissingId, setTargetMissingId] = useState(true);
-    const [targetDuplicateId, setTargetDuplicateId] = useState(true);
+    const targetMissingId = false;
+    const targetDuplicateId = false;
     const [cleanDoi, setCleanDoi] = useState(true);
-    const [cfStart, setCfStart] = useState<number>(3000);
+    const cfStart = 3000;
     const [doiCount, setDoiCount] = useState(0);
     const [affectedDoiLabels, setAffectedDoiLabels] = useState<string[]>([]);
 
@@ -566,6 +568,7 @@ const CitationLinker: React.FC = () => {
         setProcessLabel('Surgically Injecting Attributes...');
 
         setTimeout(() => {
+            if(operation!==operationRef.current||snapshot!==analysisKeyRef.current)return;
             try {
                 let result=applyCitationLinks(input,resolutions,{targetMissingId,targetDuplicateId,targetMissingRefid,cfStart});
 
@@ -674,7 +677,7 @@ const CitationLinker: React.FC = () => {
             <div className="mb-10 text-center animate-fade-in relative">
                 <h1 className="text-3xl font-black text-slate-900 tracking-tight sm:text-4xl mb-3 uppercase tracking-tighter">Citation Linker Pro</h1>
                 <p className="text-lg text-slate-500 max-w-2xl mx-auto font-light italic leading-relaxed">
-                    Reviewed resolution and ID enforcement for <code>ce:cross-ref</code> and supported object links.
+                    Reviewed citation linking for <code>ce:cross-ref</code> and supported object links.
                 </p>
             </div>
 
@@ -682,27 +685,10 @@ const CitationLinker: React.FC = () => {
                 <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-200 flex flex-wrap items-center justify-center gap-12">
                     <Switch id="toggle-refid" label="Resolve Links" subLabel="Missing or unresolved refid" checked={targetMissingRefid} onChange={setTargetMissingRefid} color="indigo" tooltip="Scans citations with missing or unresolved refid targets and presents matching candidates for review." />
                     <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
-                    <Switch id="toggle-id" label="Enforce IDs" subLabel="Missing citation/link IDs" checked={targetMissingId} onChange={setTargetMissingId} color="blue" tooltip="Generates unique four-digit IDs with the configured prefix for each citation/link element." />
-                    <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
-                    <Switch id="toggle-dup" label="Fix Duplicates" subLabel="Re-assign duplicate IDs" checked={targetDuplicateId} onChange={setTargetDuplicateId} color="amber" tooltip="Detects duplicate id='...' attributes across <ce:cross-ref> elements and re-assigns unique IDs." />
-                    <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
                     <Switch id="toggle-doi" label="Clean DOIs" subLabel="Convert inter-ref to ce:doi" checked={cleanDoi} onChange={setCleanDoi} color="emerald" tooltip="Converts inter-ref links or raw DOI strings in bibliography entries into standardized <ce:doi> XML tags." />
                     <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
                     
-                    <div className="flex flex-col gap-1">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none ml-1">Starting ID #</label>
-                        <div className="relative">
-                            <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 text-xs font-mono font-bold">cf</span>
-                            <input 
-                                type="number" 
-                                value={cfStart}
-                                onChange={(e) => setCfStart(Math.max(1, parseInt(e.target.value) || 0))}
-                                className="pl-7 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-700 w-28 outline-none focus:ring-2 focus:ring-indigo-100 transition-all shadow-inner"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="h-8 w-px bg-slate-100 hidden sm:block"></div>
+                    <p className="text-xs text-slate-500">ID creation and duplicate-ID repair belong to ID Prefix Auditor.</p>
                     <div className="flex gap-3">
                          <button onClick={() => { setInput(''); setResolutions([]); setStep('input'); }} className="text-[10px] font-black text-slate-400 hover:text-rose-500 uppercase tracking-widest px-4">Clear All</button>
                     </div>
@@ -821,10 +807,10 @@ const CitationLinker: React.FC = () => {
                                         </svg>
                                     </div>
                                     <div className="flex-grow">
-                                        <h4 className="text-sm font-black text-indigo-900 uppercase tracking-widest mb-1">Citation Protocol: Linking & ID Enforcement</h4>
+                                        <h4 className="text-sm font-black text-indigo-900 uppercase tracking-widest mb-1">Citation Protocol: Reviewed Linking</h4>
                                         <p className="text-xs text-indigo-700 font-medium leading-relaxed">
                                             The system will process <span className="font-black underline">{resolutions.filter(r => r.status === 'resolved').length}</span> citation nodes. 
-                                            This includes <span className="font-black">resolving missing refids</span> to match bibliography entries and <span className="font-black">injecting unique IDs with the configured citation prefixes</span> where required.
+                                            This includes <span className="font-black">resolving missing refids</span> to match bibliography entries and <span className="font-black">preserving existing IDs</span> where required.
                                         </p>
                                     </div>
                                     <div className="shrink-0">
@@ -851,8 +837,6 @@ const CitationLinker: React.FC = () => {
                                                 </span>
                                             </div>
                                             <div className="flex gap-2">
-                                                {targetMissingId && res.missingId && <span className="text-[8px] font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 uppercase">Will Inject ID</span>}
-                                                {targetDuplicateId && res.isDuplicate && <span className="text-[8px] font-black text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100 uppercase">Duplicate ID: {res.existingId}</span>}
                                                 {targetMissingRefid && res.missingRefid && res.status === 'resolved' && (!res.tagType.includes('inter-ref') || res.linkAttribute === 'xlink:href') && <span className="text-[8px] font-black text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 uppercase">Will Resolve Link</span>}
                                             </div>
                                             <span className="text-[10px] font-mono text-slate-400 font-bold ml-auto">TXT: "{res.textContent}"</span>
@@ -861,6 +845,24 @@ const CitationLinker: React.FC = () => {
                                             {res.originalTag}
                                         </div>
                                         <p className="text-xs mt-2 text-slate-600">{res.reason}</p>
+                                        {res.missingRefid && res.linkAttribute === 'refid' && ['cross-ref', 'cross-refs'].includes(res.tagType) && (res.status !== 'resolved' || res.manualTarget) && (() => {
+                                            const candidates = citationReviewCandidates(input, res.textContent);
+                                            return candidates.length > 0 ? <label className="block mt-3 text-xs text-slate-700">
+                                                Choose a verified bibliography target (no automatic abbreviation linking)
+                                                <select aria-label={`Review target for ${res.textContent}`} className="block mt-1 w-full border rounded p-2" value={res.manualTarget || ''} onChange={event => {
+                                                    try {
+                                                        const target = event.target.value;
+                                                        setOutput(''); setSuggestions([]); setDiffElements(null); operationRef.current++;
+                                                        setResolutions(prev => prev.map(row => row.id !== res.id ? row : target ? {...row, ...reviewCitationTarget(input, row, target)} : {...row, manualTarget: undefined, mappedIds: [], status: 'failed', reason: 'Target selection cleared; review required.'}));
+                                                    } catch (error) { setToast({msg: error instanceof Error ? error.message : 'Review failed.', type: 'error'}); }
+                                                }}>
+                                                    <option value="">Leave unresolved</option>
+                                                    {candidates.map(candidate => <option key={candidate.id} value={candidate.id}>{candidate.id} — {candidate.preview}</option>)}
+                                                </select>
+                                                <span className="block mt-1">Compare the title and author list before selecting. Grouped citations require manual XML review.</span>
+                                            </label> : null;
+                                        })()}
+
                                     </div>
                                     <div className="shrink-0 flex flex-col items-end">
                                         <div className={`text-[9px] font-black uppercase tracking-widest mb-1 ${res.status === 'resolved' ? 'text-emerald-600' : 'text-rose-600'}`}>

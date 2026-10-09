@@ -1,5 +1,4 @@
 import {scanReferenceXml} from './referenceUpdaterXml';
-import {ID_RULES} from './idAuditorEngine';
 export interface LinkEdit {
     start:number; originalTag:string; existingId:string; existingRefid:string; existingHref?:string;
     linkAttribute?:'refid'|'xlink:href'; mappedIds:string[]; status:string; missingId:boolean;
@@ -8,23 +7,7 @@ export interface LinkEdit {
 export function applyCitationLinks(input:string, rows:LinkEdit[], options:{targetMissingId:boolean;targetDuplicateId:boolean;targetMissingRefid:boolean;cfStart:number}) {
     const structure=scanReferenceXml(input,{allowDuplicateIds:true});
     const nodes=new Map(structure.nodes.map(node=>[node.start,node]));
-    const occupied=new Set(structure.ids), targets=new Set<string>();
-    for(const node of structure.nodes){
-        for(const id of (node.attributes.refid||'').split(/\s+/).filter(Boolean)){occupied.add(id);targets.add(id);}
-        const href=node.attributes['xlink:href']||'';
-        if(href.startsWith('#')){let id=href.slice(1);try{id=decodeURIComponent(id);}catch{}occupied.add(id);targets.add(id);}
-    }
-    const counters=new Map<string,number>();
-    const allocate=(prefix:string)=>{
-        for(let attempt=0;attempt<1999;attempt++){
-            let next=counters.get(prefix)??options.cfStart;
-            if(!Number.isInteger(next)||next<5||next>9995||next%5!==0)throw Error('ID start must be 0005–9995 in steps of five.');
-            counters.set(prefix,next===9995?5:next+5);
-            const id=prefix+String(next).padStart(4,'0');
-            if(!occupied.has(id)){occupied.add(id);return id;}
-        }
-        throw Error(`No available ${prefix} ID in 0005–9995. No output was generated.`);
-    };
+    if (options.targetMissingId || options.targetDuplicateId) throw Error('Citation Linker only edits refid. Use ID Prefix Auditor for IDs.');
     const edits:Array<{start:number;end:number;text:string}>=[];
     const escape=(value:string)=>value.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
     for(const row of rows){
@@ -35,13 +18,6 @@ export function applyCitationLinks(input:string, rows:LinkEdit[], options:{targe
             if(range)edits.push({start:range.valueStart,end:range.valueEnd,text:escape(value).replace(/'/g,range.quote==="'"?'&apos;':"'")});
             else edits.push({start:node.start+1+node.name.length,end:node.start+1+node.name.length,text:` ${name}="${escape(value)}"`});
         };
-        if((options.targetMissingId&&row.missingId)||(options.targetDuplicateId&&row.isDuplicate)){
-            if(row.isDuplicate&&targets.has(row.existingId))throw Error(`Linked duplicate ID ${row.existingId} needs owner review. No output was generated.`);
-            const rule=ID_RULES.find(rule=>rule.tag===node.name);
-            const prefix=node.attributes.type==='code'&&rule?.codedPrefix?rule.codedPrefix:rule?.prefix;
-            if(!prefix)throw Error(`No configured citation ID prefix for ${node.name}.`);
-            setAttribute('id',allocate(prefix));
-        }
         if(options.targetMissingRefid&&row.missingRefid&&row.status==='resolved'){
             if(!row.mappedIds.length||row.mappedIds.some(id=>structure.nodes.filter(n=>n.attributes.id===id).length!==1))throw Error('A proposed target is missing or ambiguous. Re-analyze the XML.');
             if(row.linkAttribute==='xlink:href')setAttribute('xlink:href','#'+row.mappedIds[0]);
