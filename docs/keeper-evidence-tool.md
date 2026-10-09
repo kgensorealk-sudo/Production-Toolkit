@@ -53,3 +53,10 @@ When providers are unavailable or cannot complete a review, the server returns a
 
 ## PDF deployment runtime
 PDF extraction explicitly loads the pinned native canvas dependency before PDF.js initializes DOMMatrix, ImageData, and Path2D. Both Vercel chat routes include the native platform package and PDF worker files. File summaries distinguish completed inspection from failed extraction; failed PDF inspections are not cached. If a PDF was uploaded but could not be read, query bindings report the actual extraction failure instead of asking for a missing upload. Run `node --import tsx tests/keeper-pdf-runtime.mjs` for native Node loading, actual synthetic PDF extraction/binding, and failed-versus-missing PDF regression coverage.
+
+## Matching and completeness safeguards
+Query wording retains meaningful punctuation, decimal points, operators, and word boundaries; only NFC, case, whitespace, and equivalent quote/nonbreaking-hyphen typography are normalized. Unsupported standalone or fused query boundaries are quarantined and cannot contribute a verified answer to a neighboring query. Clear page-number footers at page edges are excluded from decoded response text with a warning, while raw evidence is retained. Other footer layouts are not guessed away.
+
+Whole-query requests and explicit all-query completion claims require complete retrieval of every XML query record, including long-record continuations. Partial retrieval is rejected so the deterministic report can be returned without an unsupported AI completion claim. Uploads and chat requests check the actual UTF-8 JSON payload, including base64, combined artifacts, and conversation overhead. Rejected replacements retain the previous files and report.
+
+Regression suite: `node --import tsx tests/keeper-followup-safety.mjs`.

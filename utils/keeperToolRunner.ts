@@ -69,6 +69,11 @@ export async function runKeeperToolLoop(options: {
   let callsUsed = 0,
     successfulReads = 0;
   const retrieved = new Set<string>();
+  const fullyRetrieved = new Set<string>();
+  const slices = new Map<string,{ranges:[number,number][];end?:number}>();
+  const latestUser = [...options.messages].reverse().find(m=>m.role==='user');
+  const task = typeof latestUser?.content==='string' ? latestUser.content : (latestUser?.parts || []).map((p:any)=>p.text || '').join(' ');
+  const allQueriesRequested = /\b(?:each|all|every)\b[\s\S]{0,100}\bquer(?:y|ies)\b|\bquer(?:y|ies)\b[\s\S]{0,100}\b(?:each|all|every)\b/i.test(task);
   let xmlExcerptReads = 0;
   const coverage = () => ({
     recordsRetrieved: retrieved.size,
@@ -126,6 +131,8 @@ export async function runKeeperToolLoop(options: {
         throw new Error("Empty model response.");
       if (evidence.records.length && !successfulReads)
         throw new Error("Model did not inspect supplied evidence.");
+      const claimsAllQueries = /\b(?:each|all|every)\b[\s\S]{0,60}\bquer(?:y|ies)\b/i.test(text);
+      if ((allQueriesRequested || claimsAllQueries) && evidence.records.some(r=>r.kind==='query' && !fullyRetrieved.has(r.id))) throw new Error('Incomplete query evidence retrieval; refusing a whole-query review claim.');
       return { text, trace, coverage: coverage() };
     }
     if (round === 5 || callsUsed + calls.length > 8)
@@ -159,7 +166,19 @@ export async function runKeeperToolLoop(options: {
         ...(result.error ? { error: result.error } : {}),
       });
       if (!result.error) successfulReads++;
-      for (const record of result.records || []) retrieved.add(record.id);
+      for (const record of result.records || []) {
+        retrieved.add(record.id);
+        const start=record.textOffset || 0;
+        const length=Math.max(record.source?.length || 0,record.text?.length || 0,record.binding?.response?.length || 0);
+        const state=slices.get(record.id) || {ranges:[]};
+        state.ranges.push([start,start+length]);
+        if (!record.truncated) state.end=start+length;
+        state.ranges.sort((a,b)=>a[0]-b[0]);
+        let covered=0;
+        for(const [from,to] of state.ranges) {if(from>covered) break;covered=Math.max(covered,to);}
+        if(state.end!==undefined && covered>=state.end) fullyRetrieved.add(record.id);
+        slices.set(record.id,state);
+      }
       if (!result.error && name === "read_sandbox_xml") xmlExcerptReads++;
       if (!result.error) result.retrievalCoverage = coverage();
       if (provider === "gemini")

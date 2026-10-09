@@ -36,6 +36,7 @@ import { KeeperAvatar, KeeperState } from './KeeperAvatar';
 import { supabase } from '../supabaseClient';
 import KeeperEvidenceReport, { type KeeperEvidenceReportData } from './KeeperEvidenceReport';
 import { readKeeperApiResponse } from '../utils/keeperApiResponse';
+import { encodeKeeperRequest } from '../utils/keeperPayload';
 
 const keeperAvatar = '/keeper_avatar.jpg';
 
@@ -205,7 +206,7 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
                 const response = await fetch('/api/ai/chat', {
                     method:'POST', signal:controller.signal,
                     headers:{'Content-Type':'application/json', ...(token ? {Authorization:`Bearer ${token}`} : {})},
-                    body:JSON.stringify({action:'inspect', artifacts:sandboxArtifacts})
+                    body:encodeKeeperRequest({action:'inspect', artifacts:sandboxArtifacts})
                 });
                 const data = await readKeeperApiResponse(response);
                 if (!response.ok) throw new Error(data.error || 'Background inspection failed.');
@@ -315,7 +316,7 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
         const file = e.target.files?.[0]; e.target.value = '';
         if (!file) return;
         if (file.size > 4000000) { setFileNotice('Choose a file smaller than 4 MB.'); return; }
-        const version=++importVersion.current;setIsImporting(true);setFileNotice('');setEvidenceReport(null);
+        const version=++importVersion.current;setIsImporting(true);setFileNotice('');
         try {
             const kind = /\.pdf$/i.test(file.name) ? 'pdf' : /\.xml$/i.test(file.name) ? 'xml' : null;
             if(!kind){const text=await file.text();if(version===importVersion.current)setInputPrompt(text);return;}
@@ -324,9 +325,11 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
             if(kind==='pdf'){let binary='';for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));content=btoa(binary);}
             else content=new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(bytes);
             if(version!==importVersion.current)return;
-            setSandboxArtifacts(previous=>[...previous.filter(a=>a.kind!==kind),{id:crypto.randomUUID(),name:file.name,kind,content}]);
+            const nextArtifacts: typeof sandboxArtifacts=[...sandboxArtifacts.filter(a=>a.kind!==kind),{id:crypto.randomUUID(),name:file.name,kind,content}];
+            encodeKeeperRequest({action:'inspect',artifacts:nextArtifacts});
+            setSandboxArtifacts(nextArtifacts);
             setEvidenceReport(null);
-        } catch { if(version===importVersion.current)setFileNotice('File could not be imported. Use UTF-8 XML or a PDF.'); }
+        } catch (error) { if(version===importVersion.current)setFileNotice(error instanceof Error && error.message.includes('server limit') ? error.message : 'File could not be imported. Use UTF-8 XML or a PDF.'); }
         finally {if(version===importVersion.current)setIsImporting(false);}
     };
 
@@ -595,7 +598,7 @@ ${userAuthContext}`;
                             'Content-Type': 'application/json',
                             ...(token ? { 'Authorization': `Bearer ${token}` } : {})
                         },
-                        body: JSON.stringify({
+                        body: encodeKeeperRequest({
                             messages: payloadMessages.length > 0 ? payloadMessages : [{ role: 'user', content: text }],
                             context: contextInfo,
                             artifacts: requestArtifacts
@@ -626,6 +629,7 @@ ${userAuthContext}`;
                         note: data.note
                     };
                 } catch (err: any) {
+                    if (err?.message?.includes('server limit')) return {reply:err.message,modelUsed:'keeper-input-error'};
                     console.warn("Keeper live AI connection unavailable:", err?.message || err);
                     return { reply: KEEPER_CONTACT_ADMIN_NOTICE, modelUsed: 'keeper-connection-unavailable' };
                 }
@@ -729,7 +733,7 @@ ${userAuthContext}`;
                         {isImporting && <p role="status" className="text-xs text-slate-500 mb-3">Importing file...</p>}
                         {inspectionStatus !== 'idle' && <p role="status" className="text-xs text-indigo-700 mb-3">{inspectionStatus === 'running' ? 'Inspecting files in the background…' : inspectionStatus === 'ready' ? 'Inspection ready. Keeper can retrieve these findings.' : 'Inspection failed.'}{inspectionStatus === 'error' && <button className="ml-2 underline" onClick={()=>setInspectionRetry(n=>n+1)}>Retry inspection</button>}</p>}
                         {fileNotice && <p role="alert" className="text-xs text-amber-700 mb-3">{fileNotice}</p>}
-                        {sandboxArtifacts.map(a=><div key={a.id} className="flex items-center justify-between text-xs bg-indigo-50 rounded-lg p-3 mb-2"><span>{a.name} - {a.kind.toUpperCase()}</span><button disabled={isLoading} onClick={()=>{setSandboxArtifacts(p=>p.filter(x=>x.id!==a.id));setEvidenceReport(null);}}>Remove</button></div>)}
+                        {sandboxArtifacts.map(a=><div key={a.id} className="flex items-center justify-between text-xs bg-indigo-50 rounded-lg p-3 mb-2"><span>{a.name} - {a.kind.toUpperCase()}</span><button disabled={isLoading} onClick={()=>{importVersion.current++;setIsImporting(false);setSandboxArtifacts(p=>p.filter(x=>x.id!==a.id));setEvidenceReport(null);}}>Remove</button></div>)}
                         <p className="text-xs text-slate-500 mb-3">Import one XML and an optional edit-report PDF. Uploads are inspected automatically without an AI call. Ask Keeper about the findings once inspection is ready.</p>
                         <textarea id="keeper-task-input" ref={textareaRef} value={inputPrompt} onChange={e => {setInputPrompt(e.target.value);setEvidenceReport(null);}} disabled={isLoading || isImporting} placeholder="Paste text, XML, or an example here…" className="w-full min-h-[290px] p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm leading-relaxed font-mono resize-y outline-none focus:ring-2 focus:ring-indigo-400" />
                     </div>

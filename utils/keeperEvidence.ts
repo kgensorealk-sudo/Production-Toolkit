@@ -31,7 +31,8 @@ export interface EvidenceRecord {
 }
 const hash = (s: string | Uint8Array) =>
   createHash("sha256").update(s).digest("hex");
-const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+// Normalize typography, never erase operators, decimals, word boundaries or punctuation.
+const norm = (s: string) => s.normalize('NFC').toLowerCase().replace(/[‘’]/g,"'").replace(/[“”]/g,'"').replace(/[‐‑]/g,'-').replace(/\s+/g,' ').trim();
 const doi = (s: string) =>
   s
     .trim()
@@ -284,6 +285,14 @@ export function inspectKeeperPdf(artifactId: string, pages: PdfPage[]) {
   for (let i = 0; i < all.length; i++) {
     const item = all[i],
       s = item.text.trim();
+    const pageLines = pages.find(p=>p.page===item.page)?.lines || [];
+    const atPageEdge = item.line===1 || item.line===pageLines.length;
+    const footer = /^(?:(?:production|author\s+query|edit)\s+report\s*[-—–:]?\s*)?page\s+\d+\s+(?:of|\/)\s*\d+$/i.test(s);
+    if (current && atPageEdge && footer) {
+      current.source += '\n' + item.text;
+      current.diagnostics.push({severity:'warning',message:'Recognized page footer excluded from response text; raw source retained.'});
+      continue;
+    }
     const context = all
       .slice(i, i + 3)
       .filter((x) => x.page === item.page)
@@ -319,9 +328,10 @@ export function inspectKeeperPdf(artifactId: string, pages: PdfPage[]) {
     if (
       current &&
       fused &&
-      Number(fused[3]) === Number(current.queryId!.slice(1)) + 1 &&
-      /^Query\s*:/i.test(all[i + 1]?.text.trim() || "")
+      (Number(fused[3]) === Number(current.queryId!.slice(1)) + 1 || /^Query\s*:/i.test(all[i + 1]?.text.trim() || ""))
     ) {
+      const supported = /^Query\s*:/i.test(all[i + 1]?.text.trim() || "");
+      if(!supported) current.diagnostics.push({severity:'error',message:'Next fused query boundary has an unsupported header; response extent needs review.'});
       const qa = /^Query\s*:\s*(.*)$/i.exec(fused[1]),
         aa = /^Answer\s*:\s*(.*)$/i.exec(fused[1]);
       if (qa) query.push(qa[1]);
@@ -338,14 +348,15 @@ export function inspectKeeperPdf(artifactId: string, pages: PdfPage[]) {
         line: item.line,
         source: s,
         text: "",
-        diagnostics: [],
+        diagnostics: supported ? [] : [{severity:'error',message:'Unsupported PDF query header: expected Query: after the query number.'}],
       };
       continue;
     }
     if (
-      /^Q\d+$/i.test(s) &&
-      /^Query\s*:/i.test(all[i + 1]?.text.trim() || "")
+      /^Q\d+$/i.test(s)
     ) {
+      const supported = /^Query\s*:/i.test(all[i + 1]?.text.trim() || "");
+      if (!supported && current) current.diagnostics.push({severity:'error',message:'Next query boundary has an unsupported header; preceding response extent needs review.'});
       flush();
       current = {
         id: `${artifactId}-r${records.length + 1}`,
@@ -356,7 +367,7 @@ export function inspectKeeperPdf(artifactId: string, pages: PdfPage[]) {
         line: item.line,
         source: s,
         text: "",
-        diagnostics: [],
+        diagnostics: supported ? [] : [{severity:'error',message:'Unsupported PDF query header: expected Query: after the query number.'}],
       };
       continue;
     }
@@ -419,6 +430,10 @@ export function bindKeeperQueries(
           ),
         ),
       ];
+    if (p.diagnostics.some(d=>d.severity==='error')) {
+      fail('unresolved','PDF query/response boundaries require review. ' + p.diagnostics.filter(d=>d.severity==='error').map(d=>d.message).join(' '));
+      continue;
+    }
     if (qids.length > 1) {
       fail("ambiguous", "Competing explicit QID labels.");
       continue;

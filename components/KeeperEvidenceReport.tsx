@@ -51,7 +51,7 @@ export default function KeeperEvidenceReport({
         Evidence report · {report.recordCount} records
       </summary>
       <p className="text-sm mt-3">
-        {report.errors} OPT errors · {report.warnings} OPT warnings. These do
+        {report.errors} inspection errors · {report.warnings} inspection warnings. These do
         not block the task.
       </p>
       {report.files.some((file) => file.diagnostics.length > 0) && (
