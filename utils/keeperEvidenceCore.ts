@@ -1,3 +1,4 @@
+import {keeperScopeTool,keeperScopeResult} from './keeperScope.js';
 import { scanReferenceXml } from "./referenceUpdaterXml.js";
 import { summarizeOptChanges } from './keeperOptSummary.js';
 
@@ -640,6 +641,7 @@ export function evidenceSummary(e: KeeperEvidence) {
   };
 }
 export const keeperToolDeclarations = [
+  keeperScopeTool,
   {name:'summarize_opt_changes',description:'Retrieve deterministic insertion (opt_INS) and deletion (opt_DEL) tag counts from the full XML inventory, including completeness, flagged tags, and intentional spacing. Use for how-many/count questions. Zero is confirmed only for complete XML inspection. Counts are tag occurrences, not words or completed edits.',parameters:{type:'object',properties:{},additionalProperties:false}},
   {
     name: 'review_query_responses',
@@ -688,11 +690,12 @@ export function dispatchKeeperTool(
 ) {
   if (
     typeof name !== "string" ||
-    !["inspect_sandbox_evidence", "read_sandbox_xml", "review_query_responses", "summarize_opt_changes"].includes(name)
+    !["inspect_sandbox_evidence", "read_sandbox_xml", "review_query_responses", "summarize_opt_changes", "report_scope_limit"].includes(name)
   )
     return { error: "Unauthorized tool." };
   if (!args || typeof args !== "object" || Array.isArray(args))
     return { error: "Arguments must be an object." };
+  if(name==='report_scope_limit')return keeperScopeResult(args);
   const a = args as Record<string, unknown>;
   if(name==='summarize_opt_changes') return Object.keys(a).length ? {error:'Invalid tool arguments.'} : summarizeOptChanges(e);
   if (name === 'review_query_responses') {
