@@ -51,12 +51,12 @@
   ],
   "functions": {
     "api/ai/chat.ts": {
-      "includeFiles": ["node_modules/@napi-rs/canvas*/**", "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"],
+      "includeFiles": "node_modules/{@napi-rs/canvas*,pdfjs-dist/legacy/build}/**",
       "maxDuration": 60,
       "memory": 1024
     },
     "api/chat.ts": {
-      "includeFiles": ["node_modules/@napi-rs/canvas*/**", "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"],
+      "includeFiles": "node_modules/{@napi-rs/canvas*,pdfjs-dist/legacy/build}/**",
       "maxDuration": 60,
       "memory": 1024
     },

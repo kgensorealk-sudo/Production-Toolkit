@@ -2,6 +2,13 @@ import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {buildKeeperEvidence} from '../utils/keeperEvidence.ts';
 import {getKeeperEvidence} from '../utils/keeperEvidenceCache.ts';
+import {readFile} from 'node:fs/promises';
+const config=JSON.parse(await readFile(new URL('../vercel.json',import.meta.url),'utf8'));
+for(const route of ['api/ai/chat.ts','api/chat.ts']) {
+  assert.equal(typeof config.functions[route].includeFiles,'string');
+  assert.match(config.functions[route].includeFiles,/@napi-rs\/canvas/);
+  assert.match(config.functions[route].includeFiles,/pdfjs-dist/);
+}
 
 const xml={id:'xml',name:'article.xml',kind:'xml',content:'<article><item-info><ce:doi>10.1234/keeper-test</ce:doi></item-info><query id="q1">Should this be italic?</query></article>'};
 const lines=['Supplementary data to this article can be found online at','https://doi.org/10.1234/keeper-test','Q1','Query: Should this be italic?','Answer: Please use italics for Sample.'];
