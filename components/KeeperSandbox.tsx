@@ -309,7 +309,7 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
         void writer.save(workspaceSnapshot()).catch(error=>{if(workspaceWriter.current===writer)setSaveError(error instanceof Error?error.message:'Local save failed.');});
     },[user?.id,restoredOwner,sandboxArtifacts,messages,inputPrompt,taskInstructions,activeScope,currentlyTypingId,activeTask,switchingTask]);
     const selectLocalTask=async(task:string,artifacts:typeof sandboxArtifacts)=>{
-        if(!user?.id||switchingTask||saveError)return;
+        if(!user?.id||switchingTask||saveError)return false;
         const account=user.id,generation=ownerGeneration.current;
         setSwitchingTask(true);responseVersion.current++;importVersion.current++;
         typingControllerRef.current?.stop();setCurrentlyTypingId(null);setIsLoading(false);setIsImporting(false);
@@ -321,7 +321,7 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
             if(generation!==ownerGeneration.current)return;
             workspaceWriter.current=new KeeperWorkspaceWriter(account,task,saved?._revision||0);
             applyWorkspace(saved,artifacts);setActiveTask(task);setEvidenceReport(null);setSaveError('');
-            setFileNotice('Selected local ZIP task. Saved instructions and conversation restored.');
+            setFileNotice('Selected local ZIP task. Saved instructions and conversation restored.');return true;
         }catch(error){if(generation===ownerGeneration.current)setSaveError(error instanceof Error?error.message:'Task could not be restored.');}
         finally{if(generation===ownerGeneration.current)setSwitchingTask(false);}
     };
@@ -746,7 +746,7 @@ ${userAuthContext}`;
     return (
         <section aria-label="Keeper sandbox" className="space-y-5">
             {saveError&&<div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm"><p>{saveError}</p><button className="underline mr-4" onClick={exportUnsavedWorkspace}>Export unsaved workspace (contains manuscript data)</button><button className="underline" onClick={()=>setRestoreRetry(n=>n+1)}>Reload saved version</button></div>}
-            <KeeperLocalTasks owner={user?.id} onSelect={(task,artifacts)=>void selectLocalTask(task,artifacts)}/>
+            <KeeperLocalTasks owner={user?.id} disabled={switchingTask} onSelect={(task,artifacts)=>void selectLocalTask(task,artifacts)} onBeforeRemove={async task=>task!==activeTask||Boolean(await selectLocalTask('scratch',[]))}/>
             <button className="text-sm text-indigo-700 underline" disabled={switchingTask||Boolean(saveError)} onClick={()=>void selectLocalTask('scratch',[])}>Open standalone workspace</button>
 
             {resetNotice && <p role="status" className="rounded-xl bg-indigo-50 text-indigo-700 px-4 py-3 text-sm">{resetNotice}</p>}
