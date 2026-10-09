@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { scanReferenceXml } from "./referenceUpdaterXml.js";
 import { loadKeeperPdfRuntime } from './keeperPdfRuntime.js';
+import { summarizeOptChanges } from './keeperOptSummary.js';
 
 export interface KeeperArtifact {
   id: string;
@@ -567,6 +568,7 @@ export function evidenceSummary(e: KeeperEvidence) {
   const unresolved = queries.filter((r) => r.binding?.state !== "established");
   return {
     files: e.files,
+    optChanges: summarizeOptChanges(e),
     recordCount: e.records.length,
     counts: e.records.reduce(
       (a, r) => ((a[r.kind] = (a[r.kind] || 0) + 1), a),
@@ -607,6 +609,7 @@ export function evidenceSummary(e: KeeperEvidence) {
   };
 }
 export const keeperToolDeclarations = [
+  {name:'summarize_opt_changes',description:'Retrieve deterministic insertion (opt_INS) and deletion (opt_DEL) tag counts from the full XML inventory, including completeness, flagged tags, and intentional spacing. Use for how-many/count questions. Zero is confirmed only for complete XML inspection. Counts are tag occurrences, not words or completed edits.',parameters:{type:'object',properties:{},additionalProperties:false}},
   {
     name: 'review_query_responses',
     description: 'Retrieve a compact batch of original XML queries and their strictly verified author responses. Prefer this when asked to check each query. Unresolved bindings never supply a guessed answer. Follow nextOffset for more batches; use inspect_sandbox_evidence for full long records.',
@@ -654,12 +657,13 @@ export function dispatchKeeperTool(
 ) {
   if (
     typeof name !== "string" ||
-    !["inspect_sandbox_evidence", "read_sandbox_xml", "review_query_responses"].includes(name)
+    !["inspect_sandbox_evidence", "read_sandbox_xml", "review_query_responses", "summarize_opt_changes"].includes(name)
   )
     return { error: "Unauthorized tool." };
   if (!args || typeof args !== "object" || Array.isArray(args))
     return { error: "Arguments must be an object." };
   const a = args as Record<string, unknown>;
+  if(name==='summarize_opt_changes') return Object.keys(a).length ? {error:'Invalid tool arguments.'} : summarizeOptChanges(e);
   if (name === 'review_query_responses') {
     if (Object.keys(a).some(k=>!['offset','limit'].includes(k)) || !Number.isSafeInteger(a.offset ?? 0) || Number(a.offset ?? 0)<0 || !Number.isSafeInteger(a.limit ?? 30) || Number(a.limit ?? 30)<1 || Number(a.limit ?? 30)>40) return {error:'Invalid tool arguments.'};
     const selected=e.records.filter(r=>r.kind==='query');

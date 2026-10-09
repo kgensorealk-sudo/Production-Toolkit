@@ -1,10 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI } from '@google/genai';
 import OpenAI from 'openai';
-import { validateArtifacts, buildKeeperEvidence, evidenceSummary } from './keeperEvidence.js';
+import { validateArtifacts, evidenceSummary, dispatchKeeperTool } from './keeperEvidence.js';
 import { runKeeperToolLoop } from './keeperToolRunner.js';
 import { getKeeperEvidence } from './keeperEvidenceCache.js';
 import { keeperQueryReport } from './keeperQueryReport.js';
+import { isOptCountRequest, renderOptCounts, summarizeOptChanges } from './keeperOptSummary.js';
 import { createClient } from '@supabase/supabase-js';
 import {
   CANDIDATE_MODELS,
@@ -173,6 +174,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (messages.length > 20 || messages.some((m:any) => !m || !['user','assistant','model'].includes(m.role) || typeof m.content !== 'string') || JSON.stringify(messages).length > 200000) return res.status(400).json({error:'Invalid or excessive message history.'});
     const deadline = requestDeadline;
     const evidence = suppliedArtifacts.length ? await getKeeperEvidence(authResult.user.id,suppliedArtifacts,deadline) : null;
+    const latestUser = [...messages].reverse().find((m:any)=>m.role==='user');
+    if(evidence && latestUser && isOptCountRequest(latestUser.content)) {
+      const result=dispatchKeeperTool(evidence,'summarize_opt_changes',{});
+      return res.json({reply:renderOptCounts(result as ReturnType<typeof summarizeOptChanges>),modelUsed:'keeper-evidence-counts',evidence:evidenceSummary(evidence),toolTrace:[{name:'summarize_opt_changes'}]});
+    }
     let toolTrace: any[] = [];
     let retrievalCoverage: any = null;
     const geminiClient = getGeminiClient();

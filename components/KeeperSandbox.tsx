@@ -59,6 +59,7 @@ interface Message {
  * actually generated the reply, because data.modelUsed from the API was being discarded.
  */
 export const getModelBadgeInfo = (modelUsed?: string): { label: string; isOffline: boolean } => {
+    if (modelUsed === 'keeper-evidence-counts') return {label:'Verified inventory counts',isOffline:false};
     if (modelUsed === 'keeper-evidence-only') return {label:'Evidence report · AI interpretation unavailable',isOffline:false};
     if (!modelUsed) {
         return { label: 'Editorial AI', isOffline: false };

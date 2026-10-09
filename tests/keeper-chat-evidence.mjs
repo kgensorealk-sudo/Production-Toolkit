@@ -92,6 +92,14 @@ try {
   assert.equal(prepared.status, 200);
   assert.equal(prepared.data.evidence.errors, 1);
   assert.equal(aiRound, 0, 'Upload inspection must not call a model.');
+  const countReply=await request({...input,messages:[{role:'user',content:'Can you tell me how many where Deleted and Inserted?'}]});
+  assert.equal(countReply.status,200);assert.equal(countReply.data.modelUsed,'keeper-evidence-counts');
+  assert.match(countReply.data.reply,/Inserted: \*\*1\*\*/);assert.match(countReply.data.reply,/Deleted: \*\*0\*\*/);
+  assert.equal(countReply.data.toolTrace[0].name,'summarize_opt_changes');
+  assert.equal(aiRound,0,'Simple inventory counts must not depend on AI interpretation.');
+  console.log('PASS user counting question returns actual tool totals without an AI call');
+  const failedCount=await request({...input,artifacts:[{...input.artifacts[0],content:'<article><opt_INS>'}],messages:[{role:'user',content:'How many were inserted and deleted?'}]});
+  assert.equal(failedCount.status,200);assert.match(failedCount.data.reply,/Exact insertion\/deletion counts are unavailable/);assert.equal(aiRound,0);
   assert.equal((await request({action:'inspect', artifacts:input.artifacts}, false)).status,401);
   assert.equal((await request({action:'inspect', artifacts:[]})).status,400);
   console.log('PASS automatic inspection produces QA without AI and requires authenticated files');

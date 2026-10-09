@@ -60,3 +60,10 @@ Query wording retains meaningful punctuation, decimal points, operators, and wor
 Whole-query requests and explicit all-query completion claims require complete retrieval of every XML query record, including long-record continuations. Partial retrieval is rejected so the deterministic report can be returned without an unsupported AI completion claim. Uploads and chat requests check the actual UTF-8 JSON payload, including base64, combined artifacts, and conversation overhead. Rejected replacements retain the previous files and report.
 
 Regression suite: `node --import tsx tests/keeper-followup-safety.mjs`.
+
+## Insertion/deletion counts
+The allowlisted `summarize_opt_changes` function aggregates the full XML inventory by artifact, using case-insensitive opt_INS/opt_DEL kinds. Results include completeness, tag occurrence totals, flagged tags, and whitespace-only tags. Inactive XML comments and CDATA literals are not active edit tags. A successful empty inventory can establish zero; missing, failed, or capped XML inspection cannot establish exact totals. General XML diagnostics conservatively mark counts incomplete.
+
+Simple document-level count questions dispatch directly to this tool and return its deterministic answer, without AI calls. Word/character counts, scoped-query counts, and compound review tasks are not silently replaced by document tag totals. The model also has the tool for conversational retrieval, and a count request cannot be answered after only reading queries. A model's count explanation is replaced with the deterministic count report for recognized count requests. This avoids unsupported absence claims based on an unrelated query page.
+
+Run `node --import tsx tests/keeper-opt-counts.mjs` and `node --import tsx tests/keeper-chat-evidence.mjs` for counting and API routing coverage.
