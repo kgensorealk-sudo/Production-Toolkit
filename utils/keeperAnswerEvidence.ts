@@ -1,4 +1,5 @@
 import type {KeeperEvidence} from './keeperEvidenceCore.js';
+import {fromMarkdown} from 'mdast-util-from-markdown';
 
 export interface KeeperAnswerEvidence {
   contract:'keeper-answer-evidence-v1';
@@ -14,11 +15,37 @@ export const keeperEvidenceRef=(evidence:KeeperEvidence,id:string)=>{
 };
 export function linkKeeperEvidenceCitations(text:string,evidence:KeeperEvidence,retrieved:ReadonlySet<string>){
   const cited=new Set<string>();
-  const linked=text.replace(/\[(E\d+)\](?:\(#keeper-evidence-E\d+\))?/g,(_all,ref:string)=>{
+  const edits:{start:number;end:number;replacement:string}[]=[];
+  const cite=(ref:string,start:number,end:number)=>{
     const record=evidence.records[Number(ref.slice(1))-1];
     if(!record||keeperEvidenceRef(evidence,record.id)!==ref||!retrieved.has(record.id))throw Error('Answer cited evidence that was not retrieved.');
-    cited.add(ref);return `[${ref}](#keeper-evidence-${ref})`;
-  });
+    cited.add(ref);edits.push({start,end,replacement:`[${ref}](#keeper-evidence-${ref})`});
+  };
+  type MarkdownNode={type:string;value?:string;url?:string;children?:MarkdownNode[];position?:{start:{offset?:number};end:{offset?:number}}};
+  const walk=(node:MarkdownNode)=>{
+    const start=node.position?.start.offset,end=node.position?.end.offset;
+    // These nodes render as code, images, or non-citation links in the sandbox.
+    if(['code','inlineCode','image','imageReference','linkReference','definition'].includes(node.type))return;
+    if(node.type==='link'){
+      const label=node.children?.length===1&&node.children[0].type==='text'?node.children[0].value:undefined;
+      if(label&&/^E\d+$/.test(label)){
+        if(node.url!==`#keeper-evidence-${label}`)throw Error('Invalid evidence citation link.');
+        if(start!==undefined&&end!==undefined)cite(label,start,end);
+      }
+      return;
+    }
+    if(node.type==='text'&&start!==undefined&&end!==undefined){
+      const raw=text.slice(start,end);
+      for(const match of raw.matchAll(/\[(E\d+)\]/g)){
+        let escapes=0;for(let i=match.index!-1;i>=0&&raw[i]==='\\';i--)escapes++;
+        if(escapes%2===0)cite(match[1],start+match.index!,start+match.index!+match[0].length);
+      }
+    }
+    for(const child of node.children||[])walk(child);
+  };
+  walk(fromMarkdown(text));
+  let linked=text;
+  for(const edit of edits.sort((a,b)=>b.start-a.start))linked=linked.slice(0,edit.start)+edit.replacement+linked.slice(edit.end);
   return {text:linked,cited};
 }
 export function buildKeeperAnswerEvidence(evidence:KeeperEvidence,options:{retrieved?:ReadonlySet<string>;fullyRetrieved?:ReadonlySet<string>;cited?:ReadonlySet<string>;scopeRecords?:number;xmlExcerptReads?:number;inventoryCountsRead?:boolean;kind?:KeeperAnswerEvidence['answer']['kind']}={}):KeeperAnswerEvidence{

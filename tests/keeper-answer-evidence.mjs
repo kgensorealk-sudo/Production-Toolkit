@@ -23,11 +23,19 @@ assert.equal(result.answerEvidence.answer.linkedRecords,1);
 assert.equal(result.answerEvidence.references[0].cited,true);
 await assert.rejects(runKeeperToolLoop({...options,client:client([{name:'inspect_sandbox_evidence',args:{kind:'opt_ins'}}],'The comment is italic [E2].')}),/not retrieved/);
 assert.throws(()=>linkKeeperEvidenceCitations('Claim [E999]',evidence,new Set([evidence.records[0].id])),/not retrieved/);
+const allowed=new Set([evidence.records[0].id]);
+for(const sample of ['`[E999]`','```xml\n[E999]\n```','~~~\n[E999]\n~~~','\\[E999]','![E999](image.png)']){
+  const literal=linkKeeperEvidenceCitations(sample,evidence,allowed);assert.equal(literal.text,sample);assert.equal(literal.cited.size,0);
+}
+assert.throws(()=>linkKeeperEvidenceCitations('[E1](https://example.invalid)',evidence,allowed),/Invalid evidence citation/);
+const canonical=linkKeeperEvidenceCitations('Claim [E1](#keeper-evidence-E1).',evidence,allowed);assert.equal(canonical.text,'Claim [E1](#keeper-evidence-E1).');assert.equal(canonical.cited.size,1);
+const defined=linkKeeperEvidenceCitations('[E1]\n\n[E1]: https://example.invalid',evidence,allowed);assert.equal(defined.cited.size,0);
 const unlinked=await runKeeperToolLoop({...options,client:client([{name:'inspect_sandbox_evidence',args:{kind:'opt_ins'}}],'Added text exists.')});
 assert.equal(unlinked.answerEvidence.answer.linkedRecords,0);
 const panel=(answer,data,selectedRef='E1')=>renderToStaticMarkup(React.createElement(KeeperAnswerEvidencePanel,{answer,evidence:data,selectedRef,onSelect(){}}));
 const html=panel(result.answerEvidence,evidence);
 assert.match(html,/synthetic.xml/);assert.match(html,/Line 2/);assert.match(html,/Source SHA-256/);assert.match(html,/&lt;script&gt;/);assert.doesNotMatch(html,/<script>/);
+assert.match(html,/Local context/);
 assert.match(panel(unlinked.answerEvidence,evidence),/not verified claim-to-evidence mappings/);
 assert.equal(resolveKeeperAnswerReference(result.answerEvidence,evidence,'E2'),null);
 const changed={...evidence,files:evidence.files.map(f=>({...f,sha256:'changed'}))};

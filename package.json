@@ -27,6 +27,7 @@
     "diff": "^5.2.0",
     "express": "^5.2.1",
     "lucide-react": "^0.574.0",
+    "mdast-util-from-markdown": "^2.0.3",
     "motion": "^12.34.2",
     "openai": "^4.0.0",
     "pdfjs-dist": "5.4.624",

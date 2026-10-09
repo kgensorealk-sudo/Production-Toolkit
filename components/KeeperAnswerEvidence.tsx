@@ -4,12 +4,12 @@ import {keeperAnswerSourcesMatch,resolveKeeperAnswerReference,keeperEvidenceText
 
 export default function KeeperAnswerEvidencePanel({answer,evidence,selectedRef,onSelect}:{answer:KeeperAnswerEvidence;evidence:KeeperEvidence|null;selectedRef:string|null;onSelect:(ref:string)=>void}){
   const [offset,setOffset]=useState(0);
-  const [field,setField]=useState<'text'|'source'|'response'>('text');
+  const [field,setField]=useState<'text'|'source'|'context'|'response'>('text');
   const viewer=useRef<HTMLDivElement>(null);
   useEffect(()=>{setOffset(0);setField('text');if(selectedRef)viewer.current?.scrollIntoView({block:'nearest',behavior:'smooth'});},[selectedRef,answer]);
   const current=keeperAnswerSourcesMatch(answer,evidence);
   const resolved=selectedRef?resolveKeeperAnswerReference(answer,evidence,selectedRef):null;
-  const value=resolved?(field==='response'?(resolved.record.binding?.state==='established'?resolved.record.binding.response||'':''):field==='source'?resolved.record.source:resolved.record.text):'';
+  const value=resolved?(field==='response'?(resolved.record.binding?.state==='established'?resolved.record.binding.response||'':''):field==='source'?resolved.record.source:field==='context'?resolved.record.context||'':resolved.record.text):'';
   const slice=keeperEvidenceTextSlice(value,Math.min(offset,value.length));
   const responseRecord=resolved?.record.binding?.pdfRecordId?evidence?.records.find(r=>r.id===resolved.record.binding!.pdfRecordId):undefined;
   const responseFile=responseRecord?evidence?.files.find(f=>f.id===responseRecord.artifactId):undefined;
@@ -37,7 +37,8 @@ export default function KeeperAnswerEvidencePanel({answer,evidence,selectedRef,o
         <p className="text-xs break-all">Source SHA-256: {resolved.file.sha256}</p>
         <p className="text-xs break-all">Record: {resolved.record.id}</p>
         {resolved.record.binding&&<p className="text-xs">Author response association: {resolved.record.binding.state}. {resolved.record.binding.reason}{responseFile?` Source: ${responseFile.name}${responseRecord?.page!==undefined?`, page ${responseRecord.page}`:''}.`:''} Association does not confirm implementation.</p>}
-        <div className="flex flex-wrap gap-2">{(['text','source','response'] as const).filter(tab=>tab!=='response'||resolved.record.binding?.state==='established').map(tab=><button key={tab} aria-pressed={field===tab} className="rounded border px-2 py-1 text-xs" onClick={()=>{setField(tab);setOffset(0);}}>{tab==='text'?'Extracted text':tab==='source'?(resolved.file.kind==='xml'?'Exact XML source':'Retained PDF text'):'Associated author response'}</button>)}</div>
+        <div className="flex flex-wrap gap-2">{(['text','source','context','response'] as const).filter(tab=>(tab!=='response'||resolved.record.binding?.state==='established')&&(tab!=='context'||!!resolved.record.context)).map(tab=><button key={tab} aria-pressed={field===tab} className="rounded border px-2 py-1 text-xs" onClick={()=>{setField(tab);setOffset(0);}}>{tab==='text'?'Extracted text':tab==='source'?(resolved.file.kind==='xml'?'Exact XML source':'Retained PDF text'):tab==='context'?'Local context':'Associated author response'}</button>)}</div>
+        {field==='context'&&<p className="text-xs text-slate-600">Surrounding text retained locally. Keeper’s tool context excerpt is limited to 1,500 characters; this viewer may show more.</p>}
         <p className="text-xs">Characters {slice.total?Math.min(offset,slice.total)+1:0}–{Math.min(offset+5000,slice.total)} of {slice.total}. This viewer does not add to Keeper’s retrieval coverage.</p>
         <pre className="whitespace-pre-wrap break-words text-xs max-h-80 overflow-auto">{slice.text||'No text available for this field.'}</pre>
         <div className="flex gap-3 text-xs">{offset>0&&<button className="underline" onClick={()=>setOffset(Math.max(0,offset-5000))}>Previous text</button>}{slice.next!==null&&<button className="underline" onClick={()=>setOffset(slice.next!)}>Next text</button>}</div>
