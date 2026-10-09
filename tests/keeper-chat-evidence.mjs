@@ -8,6 +8,7 @@ process.env.GEMINI_API_KEY = "synthetic-test-key";
 delete process.env.OPENAI_API_KEY;
 const requests = [];
 let aiRound = 0;
+let blankReplies = false;
 let admin = true;
 globalThis.fetch = async (input, init) => {
   const url = typeof input === "string" ? input : input.url || String(input);
@@ -40,7 +41,7 @@ globalThis.fetch = async (input, init) => {
                   ]
                 : [
                     {
-                      text: "A self-closing OPT tag was found. It does not block the requested review.",
+                      text: blankReplies ? '' : "A self-closing OPT tag was found. It does not block the requested review.",
                     },
                   ],
           },
@@ -150,10 +151,19 @@ try {
     400,
   );
   console.log("PASS API rejects injected system roles");
+  blankReplies = true;
+  const failedReview = await request({...input,artifacts:[{...input.artifacts[0],content:'<article><query id="q1">Confirm?</query></article>'}]});
+  assert.equal(failedReview.status,200);
+  assert.equal(failedReview.data.modelUsed,'keeper-evidence-only');
+  assert.match(failedReview.data.reply,/Confirm\?/);
+  assert.match(failedReview.data.reply,/Not verified/);
+  console.log('PASS failed AI review returns per-query evidence instead of a generic retry error');
   delete process.env.GEMINI_API_KEY;
   const unavailable = await request(input);
-  assert.equal(unavailable.status, 503);
+  assert.equal(unavailable.status, 200);
   assert.equal(unavailable.data.evidence.errors, 1);
+  assert.equal(unavailable.data.modelUsed,'keeper-evidence-only');
+  assert.match(unavailable.data.reply,/AI interpretation was unavailable/);
   console.log(
     "PASS deterministic QA remains available when provider configuration is missing",
   );

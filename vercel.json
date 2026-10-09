@@ -51,11 +51,11 @@
   ],
   "functions": {
     "api/ai/chat.ts": {
-      "maxDuration": 30,
+      "maxDuration": 60,
       "memory": 1024
     },
     "api/chat.ts": {
-      "maxDuration": 30,
+      "maxDuration": 60,
       "memory": 1024
     },
     "api/health.ts": {

@@ -4,6 +4,7 @@ import OpenAI from 'openai';
 import { validateArtifacts, buildKeeperEvidence, evidenceSummary } from './keeperEvidence.js';
 import { runKeeperToolLoop } from './keeperToolRunner.js';
 import { getKeeperEvidence } from './keeperEvidenceCache.js';
+import { keeperQueryReport } from './keeperQueryReport.js';
 import { createClient } from '@supabase/supabase-js';
 import {
   CANDIDATE_MODELS,
@@ -14,7 +15,7 @@ import {
 
 export const config = {
   runtime: 'nodejs',
-  maxDuration: 30,
+  maxDuration: 60,
 };
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://jtrvpqxhjqpifglrhbzu.supabase.co';
@@ -129,6 +130,7 @@ function getOpenAIClient(): OpenAI | null {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const requestDeadline = Date.now() + 55000;
   // Setup standard CORS headers for cross-origin and Vercel preview environments
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -169,7 +171,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (messages.length > 20 || messages.some((m:any) => !m || !['user','assistant','model'].includes(m.role) || typeof m.content !== 'string') || JSON.stringify(messages).length > 200000) return res.status(400).json({error:'Invalid or excessive message history.'});
-    const deadline = Date.now() + 25000;
+    const deadline = requestDeadline;
     const evidence = suppliedArtifacts.length ? await getKeeperEvidence(authResult.user.id,suppliedArtifacts,deadline) : null;
     let toolTrace: any[] = [];
     let retrievalCoverage: any = null;
@@ -177,6 +179,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const openaiClient = getOpenAIClient();
 
     if (!geminiClient && !openaiClient) {
+      if (evidence) return res.json({reply:keeperQueryReport(evidence),modelUsed:'keeper-evidence-only',evidence:evidenceSummary(evidence),interpretationUnavailable:true});
       return res.status(503).json({ error: KEEPER_CONTACT_ADMIN_NOTICE, code: 'AI_UNAVAILABLE', ...(evidence ? {evidence:evidenceSummary(evidence)} : {}) });
     }
 
@@ -199,7 +202,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ];
 
     // Per-model timeout budget (12s max per candidate to allow reliable completion while failing over if hanging)
-    const PER_MODEL_TIMEOUT_MS = 12000;
+    const PER_MODEL_TIMEOUT_MS = evidence ? 30000 : 12000;
 
     let reply = '';
     let activeModel = '';
@@ -266,7 +269,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } finally { clearTimeout(modelTimer); }
     }
 
-    if (!reply) return res.status(503).json({ error: evidence ? 'Keeper could not complete the evidence review. Please narrow the task or retry. The deterministic QA report remains available.' : KEEPER_CONTACT_ADMIN_NOTICE, code: evidence ? 'EVIDENCE_REVIEW_INCOMPLETE' : 'AI_UNAVAILABLE', ...(evidence ? {evidence:evidenceSummary(evidence)} : {}) });
+    if (!reply && evidence) return res.json({reply:keeperQueryReport(evidence),modelUsed:'keeper-evidence-only',evidence:evidenceSummary(evidence),interpretationUnavailable:true});
+    if (!reply) return res.status(503).json({error:KEEPER_CONTACT_ADMIN_NOTICE,code:'AI_UNAVAILABLE'});
 
     return res.json({ reply: sanitizeOutput(reply), modelUsed: activeModel, ...(evidence ? {evidence: {...evidenceSummary(evidence),retrievalCoverage}, toolTrace} : {}) });
   } catch (err: any) {

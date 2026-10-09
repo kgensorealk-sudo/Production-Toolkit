@@ -20,7 +20,7 @@ export async function runKeeperToolLoop(options: {
 }) {
   const { provider, client, model, evidence } = options;
   const instruction =
-    options.systemInstruction + "\n" + keeperEvidenceInstruction;
+    options.systemInstruction + "\n" + keeperEvidenceInstruction + '\nWhen asked to check author responses to each query, prefer review_query_responses to retrieve compact batches instead of unrelated OPT records. Cover each query individually: question, verified response or unresolved reason, and any evidence needed to assess implementation. Follow nextOffset and disclose truncated records. Never describe retrieval alone as a completed editorial review.';
   const summary = JSON.stringify(evidenceSummary(evidence));
   const contents: any[] =
     provider === "gemini"
@@ -76,7 +76,7 @@ export async function runKeeperToolLoop(options: {
   });
   const trace: { name: string; error?: string }[] = [];
   for (let round = 0; round < 6; round++) {
-    const remaining = Math.min(12000, options.deadline - Date.now());
+    const remaining = Math.min(30000, options.deadline - Date.now());
     if (remaining <= 0)
       throw new Error("Keeper request time budget exhausted.");
     let timer: ReturnType<typeof setTimeout> | undefined;
