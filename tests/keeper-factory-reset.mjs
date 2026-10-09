@@ -1,0 +1,23 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import ts from 'typescript';
+import {execFileSync} from 'node:child_process';
+const source=fs.readFileSync('utils/keeperEngine.ts','utf8');
+const runtime={};
+new Function('exports',ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText)(runtime);
+const prior=execFileSync('git',['show','HEAD:utils/keeperEngine.ts'],{encoding:'utf8'});
+const modelBlock=text=>text.slice(text.indexOf('export const CANDIDATE_MODELS'),text.indexOf('\n];',text.indexOf('export const CANDIDATE_MODELS'))+3);
+assert.equal(modelBlock(source).replaceAll('\r\n','\n'),modelBlock(prior).replaceAll('\r\n','\n'),'Provider chain must remain unchanged');
+assert.equal(runtime.generateOfflineKeeperResponse,undefined);
+assert.equal(runtime.getOfflineFaqResponse,undefined);
+assert.equal(runtime.sanitizeOutput('Elsevier DTD v5.6'), 'Elsevier DTD v5.6','Reset must not rewrite supplied publisher text');
+assert.equal(runtime.buildKeeperSystemInstruction('Old account context with XML guidance'),runtime.buildKeeperSystemInstruction());
+const handler=fs.readFileSync('utils/chatHandler.ts','utf8');
+assert.ok(!handler.includes('sequenceAffiliationIdsStrict'));
+assert.ok(!handler.includes('offline-keeper'));
+assert.ok(handler.includes('res.status(503)'));
+
+const ui=fs.readFileSync('components/KeeperSandbox.tsx','utf8');
+assert.ok(ui.includes("const STORAGE_KEY = 'prod_toolkit_keeper_messages_factory_v1'"));
+assert.ok(ui.includes('version <= 9'));
+console.log('Keeper reset checks passed: unchanged provider chain, removed offline knowledge and shortcuts, fresh history namespace.');

@@ -1,46 +1,41 @@
 import React, { useState } from 'react';
-import { ArrowRight, ArrowUpRight, LayoutDashboard, FlaskConical, Compass, FileText, BookOpen } from 'lucide-react';
+import { FlaskConical, ShieldCheck, Wrench, FileText, BookOpen, ScanLine, ListChecks, ArrowRight } from 'lucide-react';
 import KeeperSandbox from '../components/KeeperSandbox';
 import { KeeperAvatar } from '../components/KeeperAvatar';
 
-const tasks = [
-    { title: 'Tag a reference', description: 'Draft reference XML from the citation you provide, without inventing data or IDs.', icon: BookOpen, prompt: 'Tag this reference as structured Journal CE/SB XML within the Keeper sandbox. Preserve the original in plain-text ce:source-text and do not generate IDs: ' },
-    { title: 'Draft a JM query', description: 'Prepare an editorial query from your correction notes.', icon: FileText, prompt: 'Query to JM: ' },
-    { title: 'Explore XML guidance', description: 'Ask about tags, references, and editorial conventions.', icon: BookOpen, prompt: 'Explain the XML structure for ' },
-    { title: 'Review a snippet', description: 'Work through XML or editorial text pasted into this sandbox.', icon: Compass, prompt: 'Review this snippet within the Keeper sandbox: ' },
+const toolPlaceholders = [
+    { name: 'Reference Tagger', description: 'A future space for drafting structured reference XML from supplied citations.', icon: BookOpen },
+    { name: 'Affiliation Review', description: 'A future space for reviewing displayed and structured affiliation differences.', icon: ScanLine },
+    { name: 'XML Review', description: 'A future space for reviewing XML against rules supplied in this sandbox.', icon: ListChecks },
+    { name: 'Query Drafting', description: 'A future space for drafting queries using your instructions and examples.', icon: FileText },
 ];
 
 export default function Keeper() {
-    const [view, setView] = useState<'dashboard' | 'sandbox'>('dashboard');
-    const [request, setRequest] = useState<{ text: string; id: number }>();
-    return <div className="max-w-7xl mx-auto w-full px-4 py-8 flex flex-col lg:flex-row gap-8">
-        <aside className="lg:w-56 shrink-0" aria-label="Keeper workspace navigation">
-            <div className="flex items-center gap-3 mb-8"><KeeperAvatar size="lg" showBadge={false} /><div><h1 className="text-xl font-bold text-slate-900">Keeper</h1><p className="text-xs text-slate-500">Editorial workspace</p></div></div>
-            <nav className="flex lg:flex-col gap-2">
-                {(['dashboard', 'sandbox'] as const).map(item => <button key={item} onClick={() => setView(item)} aria-current={view === item ? 'page' : undefined} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-left ${view === item ? 'bg-indigo-100 text-indigo-800' : 'text-slate-600 hover:bg-white'}`}>{item === 'dashboard' ? <LayoutDashboard size={18} /> : <FlaskConical size={18} />}{item === 'dashboard' ? 'Overview' : 'Sandbox'}</button>)}
-            </nav>
-            <p className="hidden lg:block mt-8 border-t border-slate-200 pt-5 text-xs leading-relaxed text-slate-500">Keeper works only with content you provide here. Other tools and their inputs remain outside this sandbox.</p>
-        </aside>
-        <main className="flex-1 min-w-0">
-            {view === 'dashboard' && <>
-                <section className="rounded-3xl bg-slate-900 text-white p-8 md:p-10">
-                    <span className="text-xs font-semibold uppercase tracking-widest text-indigo-300">Keeper workspace</span>
-                    <h2 className="text-3xl md:text-4xl font-bold tracking-tight mt-4">What are we working on?</h2>
-                    <p className="text-slate-300 max-w-lg mt-4 leading-relaxed">Bring your editorial notes, explore an XML question, or prepare your next query to the journal manager.</p>
-                    <button onClick={() => setView('sandbox')} className="inline-flex items-center gap-2 mt-7 bg-white text-slate-900 px-5 py-3 rounded-xl text-sm font-semibold hover:bg-indigo-50">Open sandbox<ArrowRight size={17} /></button>
-                </section>
-                <section className="mt-8" aria-labelledby="keeper-tasks">
-                    <h2 id="keeper-tasks" className="text-lg font-bold text-slate-900">Start a task</h2><p className="text-sm text-slate-500 mt-1">Choose a starting point, then add your details in the sandbox.</p>
-                    <div className="grid md:grid-cols-3 gap-4 mt-5">{tasks.map(task => <button key={task.title} onClick={() => { setRequest({ text: task.prompt, id: Date.now() }); setView('sandbox'); }} className="bg-white border border-slate-200 rounded-2xl p-5 text-left hover:border-indigo-400 hover:shadow-md transition-all group">
-                        <task.icon size={22} className="text-indigo-600 mb-5" /><h3 className="font-semibold text-slate-900 flex items-center justify-between gap-2">{task.title}<ArrowUpRight size={16} className="text-slate-400" /></h3><p className="text-sm text-slate-500 leading-relaxed mt-2">{task.description}</p>
-                    </button>)}</div>
-                </section>
-                <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6"><h2 className="font-semibold text-slate-900">Your sandbox, your content</h2><p className="text-sm text-slate-500 mt-1">Drafts and suggestions stay here. Keeper cannot open, read, or change another tool's workspace.</p></section>
-            </>}
-            <div hidden={view !== 'sandbox'}>
-                <div className="mb-5"><h2 className="text-2xl font-bold text-slate-900">Editorial sandbox</h2><p className="text-sm text-slate-500 mt-1">Work through your questions and drafts with Keeper.</p></div>
-                <KeeperSandbox promptRequest={request} />
-            </div>
-        </main>
-    </div>;
+    const [activeTab, setActiveTab] = useState<'workbench' | 'tools'>('workbench');
+    return <main className="max-w-[1500px] mx-auto w-full px-4 md:px-8 py-7 md:py-10">
+        <header className="flex flex-wrap items-center justify-between gap-5 mb-8">
+            <div className="flex items-center gap-4"><KeeperAvatar size="lg" showBadge={false} /><div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-indigo-600 flex items-center gap-2"><FlaskConical size={13} /> Keeper sandbox</p>
+                <h1 className="text-3xl font-semibold tracking-tight text-slate-900 mt-1">Your workspace. Your rules.</h1>
+                <p className="text-sm text-slate-500 mt-2">Give Keeper a task, supply your material, and review the result.</p>
+            </div></div>
+            <div className="flex items-center gap-2 text-xs text-slate-600 border border-slate-200 bg-white rounded-full px-4 py-2"><ShieldCheck size={15} className="text-indigo-500" /> Isolated from other tools</div>
+        </header>
+        <div role="tablist" aria-label="Keeper workspace sections" className="flex gap-2 border-b border-slate-200 mb-6">
+            {(['workbench', 'tools'] as const).map(tab => <button key={tab} id={`keeper-${tab}-tab`} role="tab" aria-selected={activeTab === tab} aria-controls={`keeper-${tab}-panel`} tabIndex={activeTab === tab ? 0 : -1} onClick={() => setActiveTab(tab)} onKeyDown={event => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const next = event.key === 'Home' ? 'workbench' : event.key === 'End' ? 'tools' : tab === 'tools' ? 'workbench' : 'tools'; setActiveTab(next); document.getElementById(`keeper-${next}-tab`)?.focus(); } }} className={`inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${activeTab === tab ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
+                {tab === 'workbench' ? <FlaskConical size={16} /> : <Wrench size={16} />}{tab === 'workbench' ? 'Workbench' : 'Keeper Tools'}{tab === 'tools' && <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">Planned</span>}
+            </button>)}
+        </div>
+        <section id="keeper-workbench-panel" role="tabpanel" aria-labelledby="keeper-workbench-tab" hidden={activeTab !== 'workbench'}>
+            <div className="flex flex-wrap justify-between items-center gap-3 bg-indigo-50/60 border border-indigo-100 rounded-xl px-5 py-3 mb-5"><p className="text-xs text-slate-600">General sandbox · No dedicated tools connected yet</p><button onClick={() => setActiveTab('tools')} className="inline-flex items-center gap-2 text-xs font-semibold text-indigo-700">Explore Keeper Tools<ArrowRight size={14} /></button></div>
+            <KeeperSandbox />
+        </section>
+        <section id="keeper-tools-panel" role="tabpanel" aria-labelledby="keeper-tools-tab" hidden={activeTab !== 'tools'}>
+            <div className="flex flex-wrap justify-between items-start gap-4 mb-6"><div><h2 className="text-xl font-semibold text-slate-900">Keeper’s toolbox</h2><p className="text-sm text-slate-500 mt-2 max-w-2xl">Dedicated tools will live inside this sandbox. These placeholders reserve their space; they do not run tasks or load any instructions.</p></div><span className="text-xs text-slate-500 bg-white border border-slate-200 rounded-full px-3 py-2">0 tools available</span></div>
+            <div className="grid sm:grid-cols-2 gap-5">{toolPlaceholders.map(tool => <article key={tool.name} className="bg-white border border-dashed border-slate-300 rounded-2xl p-6 flex flex-col">
+                <div className="flex items-center justify-between mb-5"><div className="p-3 bg-slate-50 rounded-xl text-slate-500"><tool.icon size={22} strokeWidth={1.5} /></div><span className="text-[10px] uppercase tracking-widest font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">Placeholder</span></div>
+                <h3 className="font-semibold text-slate-800">{tool.name}</h3><p className="text-sm text-slate-500 mt-2 leading-relaxed flex-1">{tool.description}</p><div className="border-t border-slate-100 mt-6 pt-4 flex items-center justify-between"><span className="text-xs text-slate-400">Not configured</span><button disabled className="text-xs font-semibold text-slate-400 bg-slate-100 rounded-lg px-3 py-2 cursor-not-allowed">Coming later</button></div>
+            </article>)}</div>
+        </section>
+    </main>;
 }

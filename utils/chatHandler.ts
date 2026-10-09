@@ -5,13 +5,9 @@ import { createClient } from '@supabase/supabase-js';
 import {
   CANDIDATE_MODELS,
   sanitizeOutput,
-  generateOfflineKeeperResponse,
   buildKeeperSystemInstruction,
-  OFFLINE_FAQ_TOPICS,
   KEEPER_CONTACT_ADMIN_NOTICE,
-  getOfflineFaqResponse,
 } from './keeperEngine.js';
-import { sequenceAffiliationIdsStrict } from './affiliationSequencerLogic.js';
 
 export const config = {
   runtime: 'nodejs',
@@ -153,132 +149,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { messages, context, topicId } = req.body || {};
-
-    // Offline FAQ mode: the frontend sends a selected topicId instead of free
-    // text once it has switched to button-only mode. This is fully
-    // deterministic — no keyword classification involved — so answer it
-    // immediately regardless of whether live models are currently up.
-    if (typeof topicId === 'string' && topicId.trim()) {
-      const faqReply = getOfflineFaqResponse(topicId.trim(), context);
-      return res.json({
-        reply: sanitizeOutput(faqReply),
-        modelUsed: 'offline-keeper-faq',
-        offline: true,
-        faqTopics: OFFLINE_FAQ_TOPICS.map(({ id, label }) => ({ id, label })),
-        note: KEEPER_CONTACT_ADMIN_NOTICE,
-      });
-    }
+    const { messages, context } = req.body || {};
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({ error: 'Messages array is required.' });
     }
 
     const lastUserMessage = [...messages].reverse().find((m: any) => m.role === 'user');
-    const userText = (lastUserMessage?.content || '').trim();
-    const userTextLower = userText.toLowerCase();
-
-    // Check if user is inquiring about the Affiliation Sequencer or trying to sequence affiliations in XML
-    const isAffiliationSequencingTask = 
-      (userTextLower.includes('affiliation') || userTextLower.includes('ce:affiliation') || userTextLower.includes('cross-ref') || userTextLower.includes('cross ref') || userTextLower.includes('refid')) &&
-      (userTextLower.includes('increments of 5') || userTextLower.includes('af0005') || userTextLower.includes('af0010') || userTextLower.includes('sequence') || userTextLower.includes('sequential') || userTextLower.includes('correct the id') || userTextLower.includes('af0020') || userTextLower.includes('af0025') || userTextLower.includes('cross-ref') || userTextLower.includes('cross ref'));
-
-    const isAffiliationToolInquiry = 
-      (userTextLower.includes('affiliation') && (userTextLower.includes('tool') || userTextLower.includes('where') || userTextLower.includes('find') || userTextLower.includes('how') || userTextLower.includes('know'))) ||
-      ((userTextLower.includes("can't find") || userTextLower.includes("cannot find") || userTextLower.includes("where is the tool") || userTextLower.includes("find the tool") || userTextLower.includes("where is")) && 
-       (userTextLower.includes("keeper") || userTextLower.includes("affiliation") || userTextLower.includes("new tool") || userTextLower.includes("tool")));
-
-    // Handle XML affiliation sequencing immediately
-    if (isAffiliationSequencingTask) {
-      const xmlMatch = userText.match(/<([a-zA-Z0-9:]+\b[\s\S]*>)/);
-      if (xmlMatch && (userText.includes('<ce:affiliation') || userText.includes('<ce:cross-ref'))) {
-        const result = sequenceAffiliationIdsStrict(xmlMatch[0], 5, true);
-        if (userTextLower.includes('do not provide explanations') || userTextLower.includes('modify the xml below according to one requirement only') || userTextLower.includes('complete xml, not a partial excerpt')) {
-          if(result.notices.length)throw new Error('Affiliation sequencing requires review: '+result.notices.join(' '));
-          return res.json({
-            reply: result.outputXml,
-            modelUsed: 'keeper-affiliation-sequencer'
-          });
-        }
-        return res.json({
-          reply: sanitizeOutput(`### 🐾 Affiliation ID Sequence & Cross-Ref Synchronization (+5 Increments)
-
-I have corrected the \`<ce:affiliation>\` IDs to be sequential in increments of 5 (\`af0005\`, \`af0010\`, \`af0015\`...) and synchronized all corresponding author cross-reference links:
-
-- **Total Affiliations:** ${result.totalAffiliations}
-- **Affiliation IDs Corrected:** ${result.changedCount}
-- **Cross-Ref Links Synchronized:** ${result.totalCrossRefsUpdated}${result.crossRefChanges.length > 0 ? ` (e.g. \`refid="${result.crossRefChanges[0].oldRefId}"\` -> \`refid="${result.crossRefChanges[0].newRefId}"\`)` : ''}
-- **Preserved:** Author names/IDs, cross-reference IDs and affiliation-id. Superscripts follow proven affiliation label mappings.
-${result.notices.length?'\n**Review required:**\n'+result.notices.map(n=>'- '+n).join('\n'):''}
-
-\`\`\`xml
-${result.outputXml}
-\`\`\`
-
-👉 **[Open Affiliation Sequencer Tool](#/affiliationSequencer)**`),
-          modelUsed: 'keeper-affiliation-sequencer'
-        });
-      } else if (userTextLower.includes('cross-ref') || userTextLower.includes('refid') || userTextLower.includes('af0025')) {
-        return res.json({
-          reply: sanitizeOutput(`### 🐾 Cross-Reference Synchronization Update
-
-I have updated the **Affiliation Sequencer** and Keeper's processing engine to automatically synchronize author \`<ce:cross-ref refid="...">\` links whenever affiliation IDs are corrected or normalized to increments of 5!
-
-#### 🔄 What Was Corrected:
-- When an affiliation ID changes (e.g. from \`af0025\` to \`af0020\`), any associated cross-reference call:
-  \`<ce:cross-ref refid="af0025" id="cf0040"><ce:sup>d</ce:sup></ce:cross-ref>\`
-  is now automatically updated to:
-  \`<ce:cross-ref refid="af0020" id="cf0040"><ce:sup>d</ce:sup></ce:cross-ref>\`
-- **Integrity Guarantee:** The cross-reference's own \`id="cf0040"\`, inner \`<ce:sup>d</ce:sup>\`, and all author tags remain strictly preserved.
-
-#### 🚀 How to Run It:
-1. Open the **[Affiliation Sequencer Tool](#/affiliationSequencer)**.
-2. Paste your XML buffer and click **Execute Sequence**.
-3. All affiliation IDs are sequentially normalized (+5 step) and corresponding author cross-references are automatically synchronized!
-
-You can also paste the XML snippet or full article directly here in chat, and Keeper will return the fully synchronized XML.`),
-          modelUsed: 'keeper-affiliation-sequencer'
-        });
-      }
-    }
-
-    // Handle tool location / discovery inquiry
-    if (isAffiliationToolInquiry && !userText.includes('<ce:affiliation')) {
-      return res.json({
-        reply: sanitizeOutput(`### 🐾 Affiliation Sequencer (ID Normalizer)
-
-The **Affiliation Sequencer** is available directly in the workspace:
-
-1. **Direct Access:** **[Open Affiliation Sequencer](#/affiliationSequencer)**
-2. **On the Dashboard:** Go to your **[Workspace Dashboard](#/dashboard)** — the **Affiliation Sequencer** card is located in the tools grid (search for *"Affiliation"* or look for the green Building icon).
-
----
-
-#### 🛠️ Core Capabilities:
-- **Sequential IDs (+5 Step):** Automatically standardizes \`<ce:affiliation>\` \`id\` attributes to \`af0005\`, \`af0010\`, \`af0015\`, \`af0020\`... in sequential occurrence order.
-- **Automatic Cross-Ref Synchronization:** Keeps all author cross-references (\`<ce:cross-ref refid="...">\`) linked accurately to their updated affiliations.
-- **Strict DTD Integrity:** Preserves \`affiliation-id\` attributes, author names, cross-ref \`id\` values, superscripts, and document structure intact.
-
-👉 **[Launch Affiliation Sequencer Now](#/affiliationSequencer)**`),
-        modelUsed: 'keeper-tool-router'
-      });
-    }
-
     const geminiClient = getGeminiClient();
     const openaiClient = getOpenAIClient();
 
-    // If NEITHER provider has a key configured, go straight to the offline engine
     if (!geminiClient && !openaiClient) {
-      const offlineReply = lastUserMessage
-        ? generateOfflineKeeperResponse(lastUserMessage.content || '', context)
-        : generateOfflineKeeperResponse('hello', context);
-      return res.json({
-        reply: sanitizeOutput(offlineReply),
-        modelUsed: 'offline-keeper',
-        offline: true,
-        faqTopics: OFFLINE_FAQ_TOPICS.map(({ id, label }) => ({ id, label })),
-        note: KEEPER_CONTACT_ADMIN_NOTICE,
-      });
+      return res.status(503).json({ error: KEEPER_CONTACT_ADMIN_NOTICE, code: 'AI_UNAVAILABLE' });
     }
 
     let systemInstruction = buildKeeperSystemInstruction(context);
@@ -362,37 +244,11 @@ The **Affiliation Sequencer** is available directly in the workspace:
       }
     }
 
-    if (!reply) {
-      const lastUserMessage = [...messages].reverse().find((m: any) => m.role === 'user');
-      const fallbackReply = lastUserMessage
-        ? generateOfflineKeeperResponse(lastUserMessage.content || '', context)
-        : generateOfflineKeeperResponse('hello', context);
-      return res.json({
-        reply: sanitizeOutput(fallbackReply),
-        modelUsed: 'offline-keeper-fallback',
-        offline: true,
-        faqTopics: OFFLINE_FAQ_TOPICS.map(({ id, label }) => ({ id, label })),
-        note: KEEPER_CONTACT_ADMIN_NOTICE,
-      });
-    }
+    if (!reply) return res.status(503).json({ error: KEEPER_CONTACT_ADMIN_NOTICE, code: 'AI_UNAVAILABLE' });
 
     return res.json({ reply: sanitizeOutput(reply), modelUsed: activeModel });
   } catch (err: any) {
     console.error('AI Copilot API Error (Vercel):', err);
-    const context = req.body?.context;
-    const lastUserMessage = Array.isArray(req.body?.messages)
-      ? [...req.body.messages].reverse().find((m: any) => m.role === 'user')
-      : null;
-    const offlineReply = lastUserMessage
-      ? generateOfflineKeeperResponse(lastUserMessage.content || '', context)
-      : generateOfflineKeeperResponse('hello', context);
-
-    return res.json({
-      reply: sanitizeOutput(offlineReply),
-      modelUsed: 'offline-keeper-recovery',
-      offline: true,
-      faqTopics: OFFLINE_FAQ_TOPICS.map(({ id, label }) => ({ id, label })),
-      note: KEEPER_CONTACT_ADMIN_NOTICE,
-    });
+    return res.status(503).json({ error: KEEPER_CONTACT_ADMIN_NOTICE, code: 'AI_UNAVAILABLE' });
   }
 }

@@ -31,7 +31,7 @@ import { ToolId } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { isExperimentalTool, getToolInfo } from '../utils/toolRegistry';
 import { startTypingSimulation, TypingSimulatorController } from '../utils/typingSimulator';
-import { generateOfflineKeeperResponse, sanitizeOutput, KeeperUserContext, OFFLINE_FAQ_TOPICS, KEEPER_CONTACT_ADMIN_NOTICE, getOfflineFaqResponse } from '../utils/keeperEngine';
+import { sanitizeOutput, KeeperUserContext, KEEPER_CONTACT_ADMIN_NOTICE } from '../utils/keeperEngine';
 import { KeeperAvatar, KeeperState } from './KeeperAvatar';
 import { supabase } from '../supabaseClient';
 
@@ -110,7 +110,7 @@ export const getTimeOfDayDogGreeting = (date: Date = new Date()): DogGreetingInf
             period: 'morning',
             timeLabel: 'Morning Shift',
             greeting: 'Good morning!',
-            tagline: 'Ears perked and ready for today\'s editorial proofs!'
+            tagline: 'Ready for your next task.'
         };
     } else if (hour >= 12 && hour < 17) {
         return {
@@ -147,126 +147,18 @@ export const getTodayDateKey = (date: Date = new Date()): string => {
 };
 
 /**
- * Generates the clean, charming editorial welcome message for Keeper.
+ * Generates the fresh sandbox welcome message for Keeper.
  */
-export const generateKeeperWelcomeMessage = (): Message => {
-    const hour = new Date().getHours();
-    let timeGreeting = "Good afternoon";
-    if (hour >= 5 && hour < 12) {
-        timeGreeting = "Good morning";
-    } else if (hour >= 12 && hour < 17) {
-        timeGreeting = "Good afternoon";
-    } else {
-        timeGreeting = "Good evening";
-    }
+export const generateKeeperWelcomeMessage = (): Message => ({
+    id: `init-welcome-${Date.now()}`, role: 'assistant', timestamp: Date.now(),
+    content: 'Hello, I am Keeper. This is a fresh sandbox. Tell me what you want to do and provide any rules or examples I should follow.'
+});
 
-    const content = `### **${timeGreeting}! 🐾 Keeper at your service.**
+const ROUTE_TOOL_NAMES: Record<string, string> = {};
+const SCENARIO_CATEGORIES: { category: string; items: { label: string; prompt: string }[] }[] = [];
 
-I'm your trusty Japanese Spitz Editorial AI companion — equipped with a keen nose for broken citations, malformed XML nodes, and tricky Journal Manager (JM) queries!
-
----
-
-#### **What We Can Tackle Together:**
-
-**1. 📝 Standardized Journal Manager (JM) Queries**
-Formulate protocol-compliant queries ready for the JM:
-* **Authorship & Order Changes:** *Query to JM: The authors requested to exchange the positions of the second and third authors (Yiqi Wang and Wei Peng). A signed authorship change form has been submitted to the journal.*
-* **Author Name Corrections:** *Query to JM: Author requested to change the author name from [Original] to [Amended]*
-* **Corresponding Author Email:** *Query to JM: Corresponding author email address is required, so either disregard or let the author provide*
-* **Figure & Artwork Updates:** *Query to JM: The author provided a replacement for Figure 3 with data changes*
-* **Uncited Citations:** *Query to JM: Reference [14] is uncited in the text body*
-
-**2. 🏷️ Journal XML & Structure Specifications**
-* Assistance with \`<sb:reference>\` structures, \`<ce:cross-ref>\` linking, CRediT contributor taxonomy, grant tags, and table footnotes.
-
-**3. 🧭 Workflow Navigation & Tool Discovery**
-* Let me fetch the exact tool you need among our 18 production modules for affiliation ID sequencing, reference renumbering, citation linking, or MS Word conversion!
-
----
-*Pick a quick prompt below or paste raw author notes directly into the box! 🐾*`;
-
-    return {
-        id: `init-welcome-${Date.now()}`,
-        role: 'assistant',
-        content,
-        timestamp: Date.now()
-    };
-};
-
-const ROUTE_TOOL_NAMES: Record<string, string> = {
-    '/affiliationSequencer': 'Open Affiliation Sequencer',
-    '/affiliationIdSequencer': 'Open Affiliation Sequencer',
-    '/affiliation-id-normalizer': 'Open Affiliation Sequencer',
-    '/viewSync': 'Open View Synchronizer',
-    '/quickDiff': 'Open Quick Text Diff',
-    '/uncitedCleaner': 'Open Uncited Ref Cleaner',
-    '/xmlRenumber': 'Open XML Normalizer',
-    '/citationLinker': 'Open Citation Linker Pro',
-    '/structuralArchitect': 'Open Reference Structure Repair',
-    '/creditGenerator': 'Open CRediT Tagging',
-    '/wordToXml': 'Open MS Word to XML Converter',
-    '/tableBeautifier': 'Open Table XML Beautifier',
-    '/tableFixer': 'Open XML Table Fixer',
-    '/grantTagger': 'Open Grant Tagger',
-    '/idAuditor': 'Open ID Prefix Auditor',
-    '/refExtractor': 'Open Bibliography Extractor',
-    '/tagCleaner': 'Open XML Tag Cleaner',
-    '/highlightsGen': 'Open Article Highlights Gen',
-    '/referenceGen': 'Open Reference Updater',
-    '/otherRefScanner': 'Open Other-Ref Scanner',
-    '/dashboard': 'Workspace Dashboard',
-    '/admin': 'Admin Portal',
-    '/settings': 'Account Settings & Subscriptions',
-    '/login': 'Log In / Register',
-};
-
-const SCENARIO_CATEGORIES = [
-    {
-        category: '📝 Master JM Queries',
-        items: [
-            { label: 'Author Order / Authorship Query', prompt: 'Query to JM: The authors requested to exchange the positions of the second and third authors (Yiqi Wang and Wei Peng). A signed authorship change form has been submitted to the journal.' },
-            { label: 'Author Name Change Query', prompt: 'Query to JM: Author requested to change the author name from Muhammed Afnas "Villayateri" to "Vilayatteri"' },
-            { label: 'Corresponding Author Email Query', prompt: 'Query to JM: Corresponding author email address is required, so either disregard or let the author provide' },
-            { label: 'Figure Replacement Query', prompt: 'Query to JM: The author provided a replacement for Figure 3. However, it\'s unclear whether the reason for this replacement is quality improvement, the addition or removal of elements, or changed content. Could you please validate if we can proceed with the new version?' },
-            { label: 'Uncited Reference in Text Body', prompt: 'Query to JM: Reference [14] is uncited in the text body. Kindly ask author for citation or confirmation to delete.' },
-            { label: 'Figure Panel Label Mismatch', prompt: 'Query to JM: Panels (c) and (d) are mentioned in the caption for Figure 2 but are not found in the artwork. Please check and amend as necessary.' }
-        ]
-    },
-    {
-        category: '🔢 Citations & References',
-        items: [
-            { label: 'Renumber references & callouts', prompt: 'Which tool should I use when references or citation callouts are out of order in the body text, and how does it work?' },
-            { label: 'Link plain-text citations', prompt: 'What tool connects unlinked in-text citations like "[1-3]" or "(Smith et al., 2021)" to bibliography entries with <ce:cross-ref> tags?' },
-            { label: 'Repair broken XML reference nodes', prompt: 'How do I audit and auto-repair malformed reference XML, missing <sb:reference> tags, and unformatted author initials using Reference Structure Repair?' },
-            { label: 'Purge uncited bibliography entries', prompt: 'Which tool detects bibliography references that are never cited in the text body and allows safe purging?' },
-            { label: 'Audit ID prefixes & cross-links', prompt: 'Which tool audits and normalizes reference ID prefixes (e.g. bib0010 vs b1) and synchronizes internal document cross-links?' }
-        ]
-    },
-    {
-        category: '🛠️ XML Markup & Document Utilities',
-        items: [
-            { label: 'Sequence Affiliation IDs (+5 Increments)', prompt: 'How do I use the Affiliation Sequencer to renumber <ce:affiliation> IDs sequentially in increments of 5 (af0005, af0010, af0015...) while preserving affiliation-id?' },
-            { label: 'Upstream Feedback: Leftover Uncited Section', prompt: 'I received an upstream feedback because i forgot to remove the Uncited Reference section. What should I do to fix and validate this?' },
-            { label: 'Synchronize paragraph views (compact vs extended)', prompt: 'How do I synchronize and mirror text edits and citation callouts between compact and extended paragraph views using View Synchronizer?' },
-            { label: 'Convert Word text to Journal XML', prompt: 'Which tool converts formatted text from MS Word with bold, italics, chemical subscripts (<ce:inf>), and superscripts (<ce:sup>) into standard Journal CE XML?' },
-            { label: 'Tag author CRediT roles', prompt: 'How do I use the CRediT Tagging tool to convert informal author contribution statements into NISO CRediT XML (<ce:contributor-role>)?' },
-            { label: 'Table footnotes & legend notes', prompt: 'Which tool manages and relocates table footnotes (<ce:table-footnote>) and table legend notes?' },
-            { label: 'Tag research grants & sponsors', prompt: 'How do I tag funding sponsors and award numbers with <ce:grant-sponsor> and <ce:grant-number>?' },
-            { label: 'Dashboard Editorial Tools Guide', prompt: 'Which tools are available in the Production Toolkit Pro dashboard console, and how do they streamline production workflows?' }
-        ]
-    },
-    {
-        category: '👤 Account, Subscription & Access',
-        items: [
-            { label: 'Check My Subscription & Role', prompt: 'What is my current subscription status, account tier, and system role (Admin or not)?' },
-            { label: 'Identify User Subscription Status', prompt: 'Can you identify user subscription statuses and explain how subscription tiers and admin privileges work in Production Toolkit Pro?' },
-            { label: 'How to unlock tools or renew', prompt: 'How do I activate or renew my subscription and unlock production tools using an access key?' }
-        ]
-    }
-];
-
-const STORAGE_KEY = 'prod_toolkit_keeper_messages_v9';
-const LAST_DATE_KEY = 'prod_toolkit_keeper_last_date';
+const STORAGE_KEY = 'prod_toolkit_keeper_messages_factory_v1';
+const LAST_DATE_KEY = 'prod_toolkit_keeper_factory_last_date';
 
 export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) => {
     const currentTool: ToolId | undefined = undefined;
@@ -288,6 +180,7 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
     const isOpen=true;
     const isExpanded=true;
     const [inputPrompt, setInputPrompt] = useState('');
+    const [taskInstructions, setTaskInstructions] = useState('');
     useEffect(() => {
         if (promptRequest) setInputPrompt(promptRequest.text);
     }, [promptRequest]);
@@ -297,16 +190,6 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
     const [hasUnread, setHasUnread] = useState(false);
     const [successCelebration, setSuccessCelebration] = useState(false);
     const [isLazyMode, setIsLazyMode] = useState(false);
-
-    // Offline FAQ mode: when the backend (or a network failure) signals `offline: true`,
-    // Keeper stops accepting free text entirely and shows a fixed topic list instead —
-    // free-text classification is what caused wrong/confusing answers, so once we know
-    // the live models are down, don't keep guessing from typed text.
-    const [isOfflineFaqMode, setIsOfflineFaqMode] = useState(false);
-    const [offlineFaqTopics, setOfflineFaqTopics] = useState<{ id: string; label: string }[]>(
-        OFFLINE_FAQ_TOPICS.map(({ id, label }) => ({ id, label }))
-    );
-    const [offlineNotice, setOfflineNotice] = useState<string>(KEEPER_CONTACT_ADMIN_NOTICE);
 
     // Inactivity timer to trigger lazy mode (power nap)
     useEffect(() => {
@@ -336,7 +219,7 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
     // Space-saving: Common Editorial Scenarios Collapsible state
     const [showScenarios, setShowScenarios] = useState<boolean>(() => {
         try {
-            return localStorage.getItem('keeper_scenarios_expanded') === 'true';
+            return localStorage.getItem('keeper_factory_scenarios_expanded') === 'true';
         } catch (e) {
             return false;
         }
@@ -351,7 +234,9 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
             localStorage.removeItem('prod_toolkit_keeper_messages_v3');
             localStorage.removeItem('prod_toolkit_keeper_messages_v4');
             localStorage.removeItem('prod_toolkit_keeper_messages_v6');
-            localStorage.removeItem('prod_toolkit_keeper_messages_v8');
+            for (let version = 1; version <= 9; version++) localStorage.removeItem('prod_toolkit_keeper_messages_v' + version);
+            localStorage.removeItem('prod_toolkit_keeper_last_date');
+            localStorage.removeItem('keeper_scenarios_expanded');
 
 
             const today = getTodayDateKey();
@@ -368,7 +253,7 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
             if (saved) {
                 const parsed = JSON.parse(saved);
                 if (Array.isArray(parsed) && parsed.length > 0) {
-                    return parsed.map((m: Message) => ({
+                    return parsed.filter((m: Message) => !/offline-keeper/.test(m.modelUsed || '') && !/Lazy Offline Mode|editorial brain is fully loaded|office rug|off-grid or snoozing/i.test(m.content || '')).map((m: Message) => ({
                         ...m,
                         content: typeof m.content === 'string'
                             ? sanitizeOutput(m.content)
@@ -397,7 +282,7 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
         reader.onload = (event) => {
             const content = event.target?.result as string;
             if (content) {
-                handleSendMessage(`Here is the manuscript file content (${file.name}):\n\n${content}`);
+                setInputPrompt(content);
             }
         };
         reader.readAsText(file);
@@ -497,7 +382,7 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
     // Persist scenarios expanded state
     useEffect(() => {
         try {
-            localStorage.setItem('keeper_scenarios_expanded', JSON.stringify(showScenarios));
+            localStorage.setItem('keeper_factory_scenarios_expanded', JSON.stringify(showScenarios));
         } catch (e) {}
     }, [showScenarios]);
 
@@ -511,7 +396,8 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
         } catch (e) {}
         setShowResetConfirm(false);
         setInputPrompt('');
-        setResetNotice('Chat refreshed! Keeper is ready for your next manuscript task. 🐾');
+        setTaskInstructions('');
+        setResetNotice('Sandbox cleared. Keeper is ready for your next task.');
         setTimeout(() => setResetNotice(null), 3000);
         setTimeout(() => {
             scrollToTop();
@@ -540,7 +426,8 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
     });
 
     const handleSendMessage = async (textToSend?: string) => {
-        const text = (textToSend || inputPrompt).trim();
+        const source = (textToSend || inputPrompt).trim();
+        const text = [taskInstructions.trim() ? 'Task instructions:\n' + taskInstructions.trim() : '', source ? 'Source material:\n' + source : ''].filter(Boolean).join('\n\n');
         if (!text || isLoading) return;
 
         // If Keeper is currently typing out a previous message, skip to end before sending new message
@@ -561,18 +448,7 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
 
         // Subscription Enforcement: Keeper only responds to users with active subscriptions or admin privileges
         if (!hasActiveSubscription) {
-            const subscriptionLockReply = `### 🐾 **Subscription Required to Chat with Keeper**
-
-Woof! Keeper's editorial AI assistant, automated Journal Manager (JM) query drafting, and XML manuscript diagnostics are reserved exclusively for members with an **Active Subscription**.
-
----
-
-#### 🔒 **What is included with a Subscription:**
-* **📝 Standardized JM Queries:** One-click drafting for authorship changes, email corrections, figure replacements, and uncited reference queries.
-* **🏷️ Full XML & DTD Diagnostic Support:** Deep-dive assistance with \`<sb:reference>\`, \`<ce:cross-ref>\`, and CRediT taxonomy.
-* **🧭 Workflow Automation & Tool Routing:** Immediate guidance and XML transforms across all 18+ editorial modules.
-
-${user ? '👉 **[Go to Account Settings & Subscriptions](#/settings)** to activate or renew your subscription.' : '👉 **[Log In / Register](#/login)** to access your subscribed account.'}`;
+            const subscriptionLockReply = 'An active subscription is required to chat with Keeper.';
 
             const assistantMessageId = `ast-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
             const initialAssistantMessage: Message = {
@@ -683,7 +559,7 @@ ${userAuthContext}`;
                         const errData = await response.json().catch(() => ({}));
                         if (response.status === 401 || response.status === 403 || errData.code === 'SUBSCRIPTION_REQUIRED') {
                             return {
-                                reply: `### 🐾 **Subscription Required to Chat with Keeper**\n\nWoof! Keeper's editorial AI assistant is available exclusively to active subscribers.\n\n👉 **[Go to Account Settings & Subscriptions](#/settings)** to verify or activate your subscription plan.`,
+                                reply: 'An active subscription is required to chat with Keeper.',
                                 modelUsed: 'keeper-subscription-lock'
                             };
                         }
@@ -692,34 +568,19 @@ ${userAuthContext}`;
 
                     const data = await response.json();
                     return {
-                        reply: data.reply || 'No response generated.',
+                        reply: data.offline ? KEEPER_CONTACT_ADMIN_NOTICE : data.reply || 'No response generated.',
                         modelUsed: data.modelUsed,
                         offline: Boolean(data.offline),
                         faqTopics: data.faqTopics,
                         note: data.note
                     };
                 } catch (err: any) {
-                    console.warn("AI Chat server fallback to Keeper smart offline engine:", err?.message || err);
-                    const offlineReply = generateOfflineKeeperResponse(text, userContextPayload);
-                    return {
-                        reply: offlineReply,
-                        modelUsed: 'offline-keeper',
-                        offline: true,
-                        faqTopics: OFFLINE_FAQ_TOPICS.map(({ id, label }) => ({ id, label })),
-                        note: KEEPER_CONTACT_ADMIN_NOTICE
-                    };
+                    console.warn("Keeper live AI connection unavailable:", err?.message || err);
+                    return { reply: KEEPER_CONTACT_ADMIN_NOTICE, modelUsed: 'keeper-connection-unavailable' };
                 }
             })();
 
             const responseData = await generateResponsePromise;
-
-            if (responseData.offline) {
-                setIsOfflineFaqMode(true);
-                setOfflineFaqTopics(responseData.faqTopics || OFFLINE_FAQ_TOPICS.map(({ id, label }) => ({ id, label })));
-                setOfflineNotice(responseData.note || KEEPER_CONTACT_ADMIN_NOTICE);
-            } else {
-                setIsOfflineFaqMode(false);
-            }
 
             const rawContent = responseData.reply;
             const sanitizedContent = sanitizeOutput(rawContent);
@@ -773,137 +634,6 @@ ${userAuthContext}`;
         }
     };
 
-    /**
-     * Deterministic counterpart to handleSendMessage, used only while isOfflineFaqMode
-     * is active. Sends `{ topicId }` instead of free text — the selection IS the intent,
-     * so there's no keyword classification involved and this can't misfire the way
-     * free-text routing can.
-     */
-    const handleSelectFaqTopic = async (topic: { id: string; label: string }) => {
-        if (isLoading) return;
-        if (currentlyTypingId) {
-            handleSkipTyping();
-        }
-
-        const userMessage: Message = {
-            id: `usr-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-            role: 'user',
-            content: topic.label,
-            timestamp: Date.now()
-        };
-        setMessages(prev => [...prev, userMessage]);
-
-        // Same gate as handleSendMessage: the FAQ is a deterministic subset of the
-        // same paid chat feature, not a free side door. A subscription that expires
-        // mid-session (while the topic buttons are still on screen) must still hit
-        // this wall, not just rely on the server rejecting the request.
-        if (!hasActiveSubscription) {
-            const subscriptionLockReply = `### 🐾 **Subscription Required to Chat with Keeper**\n\nWoof! Keeper's editorial AI assistant, automated Journal Manager (JM) query drafting, and XML manuscript diagnostics — including this FAQ topic list — are reserved exclusively for members with an **Active Subscription**.\n\n${user ? '👉 **[Go to Account Settings & Subscriptions](#/settings)** to activate or renew your subscription.' : '👉 **[Log In / Register](#/login)** to access your subscribed account.'}`;
-
-            const assistantMessageId = `ast-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-            setMessages(prev => [...prev, {
-                id: assistantMessageId,
-                role: 'assistant',
-                content: '',
-                timestamp: Date.now(),
-                modelUsed: 'keeper-subscription-lock'
-            }]);
-            setCurrentlyTypingId(assistantMessageId);
-            if (!isOpen) {
-                setHasUnread(true);
-            }
-            scrollToBottom(true);
-
-            typingControllerRef.current = startTypingSimulation({
-                fullText: subscriptionLockReply,
-                onUpdate: (displayedText) => {
-                    setMessages(prev => prev.map(m => m.id === assistantMessageId ? { ...m, content: displayedText } : m));
-                },
-                onComplete: () => {
-                    setCurrentlyTypingId(null);
-                    typingControllerRef.current = null;
-                }
-            });
-            return;
-        }
-
-        setIsLoading(true);
-
-        let replyText = '';
-        let modelUsed = 'offline-keeper-faq';
-        let nextTopics = OFFLINE_FAQ_TOPICS.map(({ id, label }) => ({ id, label }));
-        let notice = KEEPER_CONTACT_ADMIN_NOTICE;
-
-        try {
-            const sessionData = await supabase.auth.getSession();
-            const token = sessionData?.data?.session?.access_token || session?.access_token;
-
-
-            const response = await fetch('/api/ai/chat', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-                },
-                body: JSON.stringify({ topicId: topic.id })
-            });
-
-            if (!response.ok) {
-                throw new Error(`Request failed with status ${response.status}`);
-            }
-
-            const data = await response.json();
-            replyText = data.reply || '';
-            modelUsed = data.modelUsed || modelUsed;
-            nextTopics = data.faqTopics || nextTopics;
-            notice = data.note || notice;
-        } catch (netErr) {
-            // Even a network failure resolves the topic locally instead of leaving
-            // the user stuck — the topic list itself never depends on connectivity.
-            console.warn("FAQ topic request failed, resolving locally:", netErr);
-            replyText = getOfflineFaqResponse(topic.id, buildUserContextPayload());
-        }
-
-        setIsOfflineFaqMode(true);
-        setOfflineFaqTopics(nextTopics);
-        setOfflineNotice(notice);
-
-        const sanitizedContent = sanitizeOutput(replyText);
-        const assistantMessageId = `ast-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-
-        setIsLoading(false);
-        setMessages(prev => [...prev, {
-            id: assistantMessageId,
-            role: 'assistant',
-            content: '',
-            timestamp: Date.now(),
-            modelUsed
-        }]);
-        setCurrentlyTypingId(assistantMessageId);
-        if (!isOpen) {
-            setHasUnread(true);
-        }
-        scrollToBottom(true);
-
-        typingControllerRef.current = startTypingSimulation({
-            fullText: sanitizedContent,
-            onUpdate: (displayedText) => {
-                setMessages(prev => prev.map(m => m.id === assistantMessageId ? { ...m, content: displayedText } : m));
-                if (messagesContainerRef.current) {
-                    const container = messagesContainerRef.current;
-                    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 120;
-                    if (isNearBottom) {
-                        container.scrollTop = container.scrollHeight;
-                    }
-                }
-            },
-            onComplete: () => {
-                setCurrentlyTypingId(null);
-                typingControllerRef.current = null;
-            }
-        });
-    };
-
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
         if (e.key === 'Escape' && currentlyTypingId) {
             e.preventDefault();
@@ -928,33 +658,36 @@ ${userAuthContext}`;
     const currentDogGreeting = getTimeOfDayDogGreeting();
 
     // Most recent assistant reply's model info — replaces the old hardcoded "Gemini AI"
-    // label, which never reflected what actually answered (Gemini, OpenAI, or offline).
+    // label, which never reflected what actually answered (the connected AI provider).
     const lastAssistantMessage = [...messages].reverse().find(m => m.role === 'assistant');
     const lastModelBadge = getModelBadgeInfo(lastAssistantMessage?.modelUsed);
 
     return (
-        <section aria-label="Keeper sandbox" className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
-                <div><h3 className="font-semibold text-slate-900">Workspace</h3><p className="text-xs text-slate-500 mt-1">Prepare your input, run a task, and review the result.</p></div>
-                <button type="button" onClick={() => setShowResetConfirm(true)} className="text-sm text-slate-600 border border-slate-200 rounded-lg px-3 py-2 hover:bg-white">Reset workspace</button>
-            </div>
-            {showResetConfirm && <div role="alertdialog" aria-label="Reset Keeper workspace" className="border border-amber-200 bg-amber-50 rounded-xl p-4 flex flex-wrap items-center gap-3"><p className="text-sm flex-1">Clear the sandbox input and previous results?</p><button onClick={() => setShowResetConfirm(false)} className="text-sm px-3 py-2">Cancel</button><button onClick={executeResetChat} className="text-sm bg-slate-900 text-white px-3 py-2 rounded-lg">Clear workspace</button></div>}
-            <div className="grid xl:grid-cols-2 gap-5">
-                <section className="bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col">
-                    <div className="p-4 border-b border-slate-200 flex items-center justify-between"><label htmlFor="keeper-task-input" className="font-semibold text-sm text-slate-900">Task input</label><button type="button" onClick={() => fileInputRef.current?.click()} disabled={isLoading} className="text-sm text-indigo-700 disabled:opacity-50">Import file</button></div>
-                    <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept=".xml,.html,.txt" className="hidden" />
-                    <textarea id="keeper-task-input" ref={textareaRef} value={inputPrompt} onChange={e => setInputPrompt(e.target.value)} placeholder="Describe your task and paste your editorial notes or XML here." disabled={isLoading} className="w-full min-h-[420px] flex-1 p-5 resize-y outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-400 text-sm leading-relaxed font-mono text-slate-800" />
-                    <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between gap-3"><span className="text-xs text-slate-500">{inputPrompt.length.toLocaleString()} characters</span><button type="button" onClick={() => handleSendMessage()} disabled={!inputPrompt.trim() || isLoading || Boolean(currentlyTypingId)} className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg font-semibold text-sm disabled:opacity-40 hover:bg-indigo-700">{isLoading ? 'Working…' : currentlyTypingId ? 'Preparing result…' : 'Run task'}</button></div>
-                </section>
-                <section className="bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col">
-                    <div className="p-4 border-b border-slate-200 flex items-center justify-between gap-2"><h3 className="font-semibold text-sm text-slate-900">Result</h3><div className="flex items-center gap-3">{currentlyTypingId && <button onClick={handleSkipTyping} className="text-sm text-indigo-700">Show full result</button>}{lastAssistantMessage && <button onClick={() => copyToClipboard(lastAssistantMessage.content, lastAssistantMessage.id)} className="text-sm text-indigo-700">{copiedId === lastAssistantMessage.id ? 'Copied' : 'Copy result'}</button>}</div></div>
-                    <div ref={messagesContainerRef} aria-live="polite" aria-busy={isLoading || Boolean(currentlyTypingId)} className="min-h-[420px] max-h-[650px] flex-1 overflow-y-auto p-5">
-                        {lastAssistantMessage ? <div className="prose prose-sm max-w-none text-slate-800 break-words"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{a: ({children}) => <span>{children}</span>}}>{lastAssistantMessage.content}</ReactMarkdown></div> : <div className="h-full min-h-[350px] flex flex-col justify-center items-center text-center text-slate-400"><FileText size={32} className="mb-4" /><p className="text-sm font-medium">Your result will appear here</p><p className="text-xs mt-2 max-w-xs">Run a task using content supplied in this sandbox.</p></div>}
+        <section aria-label="Keeper sandbox" className="space-y-5">
+            {resetNotice && <p role="status" className="rounded-xl bg-indigo-50 text-indigo-700 px-4 py-3 text-sm">{resetNotice}</p>}
+            {showResetConfirm && <div role="alertdialog" aria-label="Reset Keeper workspace" className="border border-amber-200 bg-amber-50 rounded-xl p-4 flex flex-wrap items-center gap-3"><p className="text-sm flex-1">Clear instructions, source material, and previous results?</p><button onClick={() => setShowResetConfirm(false)} className="text-sm px-3 py-2">Cancel</button><button onClick={executeResetChat} disabled={isLoading} className="text-sm bg-slate-900 text-white px-3 py-2 rounded-lg disabled:opacity-40">Clear workspace</button></div>}
+            <div className="grid xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] gap-6 items-start">
+                <section className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                    <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between"><div><p className="text-[10px] uppercase tracking-widest font-bold text-indigo-500">01 / Prepare</p><h2 className="font-semibold text-slate-900 mt-1">Task workspace</h2></div><button onClick={() => setShowResetConfirm(true)} disabled={isLoading} className="text-xs text-slate-500 hover:text-slate-900 disabled:opacity-40 flex items-center gap-2"><RotateCcw size={14} /> Clear</button></div>
+                    <div className="p-6">
+                        <label htmlFor="keeper-instructions" className="text-sm font-semibold text-slate-800">What should Keeper do?</label>
+                        <p className="text-xs text-slate-500 mt-1 mb-3">Include the rules, format, or examples you want him to follow.</p>
+                        <textarea id="keeper-instructions" value={taskInstructions} onChange={e => setTaskInstructions(e.target.value)} disabled={isLoading} placeholder="Describe your task and expected output…" className="w-full min-h-[130px] p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm leading-relaxed resize-y outline-none focus:ring-2 focus:ring-indigo-400" />
+                        <div className="flex items-center justify-between mt-6 mb-3"><label htmlFor="keeper-task-input" className="text-sm font-semibold text-slate-800">Source material <span className="font-normal text-slate-400 ml-1">Optional</span></label><button type="button" onClick={() => fileInputRef.current?.click()} disabled={isLoading} className="text-xs font-semibold text-indigo-600 flex items-center gap-1.5 disabled:opacity-40"><Paperclip size={14} /> Import file</button></div>
+                        <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept=".xml,.html,.txt" className="hidden" />
+                        <textarea id="keeper-task-input" ref={textareaRef} value={inputPrompt} onChange={e => setInputPrompt(e.target.value)} disabled={isLoading} placeholder="Paste text, XML, or an example here…" className="w-full min-h-[290px] p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm leading-relaxed font-mono resize-y outline-none focus:ring-2 focus:ring-indigo-400" />
                     </div>
-                    <div className="p-4 border-t border-slate-200 bg-slate-50 text-xs text-slate-500">{lastAssistantMessage ? lastModelBadge.label : 'Ready for input'} · Results stay in Keeper</div>
+                    <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-3"><span className="text-xs text-slate-400">{(inputPrompt.length + taskInstructions.length).toLocaleString()} characters</span><button onClick={() => handleSendMessage()} disabled={(!inputPrompt.trim() && !taskInstructions.trim()) || isLoading || Boolean(currentlyTypingId)} className="inline-flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl font-semibold text-sm disabled:opacity-40 hover:bg-indigo-700 transition-colors">{isLoading ? 'Working…' : currentlyTypingId ? 'Preparing result…' : 'Run task'}<ArrowRight size={16} /></button></div>
+                </section>
+                <section className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                    <div className="px-6 py-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3"><div><p className="text-[10px] uppercase tracking-widest font-bold text-indigo-500">02 / Review</p><h2 className="font-semibold text-slate-900 mt-1">Result</h2></div><div className="flex items-center gap-3">{currentlyTypingId && <button onClick={handleSkipTyping} className="text-xs text-indigo-600">Show full result</button>}{lastAssistantMessage && <button onClick={() => copyToClipboard(lastAssistantMessage.content, lastAssistantMessage.id)} className="inline-flex items-center gap-2 text-xs text-slate-600 border border-slate-200 rounded-lg px-3 py-2"><Copy size={13} />{copiedId === lastAssistantMessage.id ? 'Copied' : 'Copy result'}</button>}</div></div>
+                    <div ref={messagesContainerRef} aria-live="polite" aria-busy={isLoading || Boolean(currentlyTypingId)} className="min-h-[550px] max-h-[800px] overflow-y-auto p-6">
+                        {lastAssistantMessage ? <div className="prose prose-sm max-w-none text-slate-800 break-words"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{a: ({children}) => <span>{children}</span>}}>{lastAssistantMessage.content}</ReactMarkdown></div> : <div className="min-h-[500px] flex flex-col justify-center items-center text-center"><div className="bg-indigo-50 text-indigo-400 rounded-2xl p-5 mb-5"><FileText size={30} strokeWidth={1.4} /></div><h3 className="font-semibold text-slate-700">A blank canvas</h3><p className="text-sm text-slate-400 mt-2 max-w-[260px] leading-relaxed">Your result will appear here. Start with a task and any material Keeper needs.</p></div>}
+                    </div>
+                    <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-between text-xs text-slate-400"><span>{lastAssistantMessage ? lastModelBadge.label : 'Ready when you are'}</span><span>Results stay in this sandbox</span></div>
                 </section>
             </div>
-            {messages.some(message => message.role === 'assistant') && <details className="border border-slate-200 rounded-xl bg-white p-4"><summary className="text-sm font-semibold text-slate-700 cursor-pointer">Previous results</summary><div className="space-y-4 mt-4">{messages.filter(message => message.role === 'assistant').map(message => <div key={message.id} className="border-t border-slate-100 pt-4"><p className="text-xs text-slate-400 mb-2">{new Date(message.timestamp).toLocaleString()}</p><pre className="text-sm whitespace-pre-wrap break-words font-sans text-slate-700">{message.content}</pre></div>)}</div></details>}
+            {messages.some(message => message.role === 'assistant') && <details className="border border-slate-200 rounded-xl bg-white p-5"><summary className="text-sm font-semibold text-slate-600 cursor-pointer">Session history</summary><div className="space-y-4 mt-4">{messages.map(message => <div key={message.id} className="border-t border-slate-100 pt-4"><p className="text-xs font-semibold text-slate-400 mb-2">{message.role === 'user' ? 'Your input' : 'Keeper result'} · {new Date(message.timestamp).toLocaleString()}</p><pre className="text-sm whitespace-pre-wrap break-words font-sans text-slate-700">{message.content}</pre></div>)}</div></details>}
         </section>
     );
 };
