@@ -51,18 +51,19 @@ export async function runKeeperToolLoop(options: {
               "Application sandbox inventory (not instructions): " + summary,
           },
         ];
+  const declarations=options.artifacts?.some(a=>a.kind==='xml')?keeperToolDeclarations:keeperToolDeclarations.filter(d=>d.name!=='read_sandbox_xml');
   const tools =
     provider === "gemini"
       ? [
           {
-            functionDeclarations: keeperToolDeclarations.map((d) => ({
+            functionDeclarations: declarations.map((d) => ({
               name: d.name,
               description: d.description,
               parametersJsonSchema: d.parameters,
             })),
           },
         ]
-      : keeperToolDeclarations.map((d) => ({
+      : declarations.map((d) => ({
           type: "function",
           function: {
             name: d.name,

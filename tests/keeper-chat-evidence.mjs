@@ -133,6 +133,18 @@ try {
   console.log(
     "PASS real chat handler and Gemini SDK transport round-trip with deterministic evidence",
   );
+  aiRound=0;
+  const snapshotReply=await request({messages:input.messages,evidenceSnapshot:cached});
+  assert.equal(snapshotReply.status,200);
+  assert.equal(snapshotReply.data.toolTrace[0].name,'inspect_sandbox_evidence');
+  assert.ok(snapshotReply.data.modelUsed.startsWith('gemini'));
+  const snapshotCalls=requests.filter(r=>r.url.includes('generativelanguage.googleapis.com')).slice(-2).map(r=>JSON.parse(r.body));
+  assert.ok(!snapshotCalls[0].tools[0].functionDeclarations.some(d=>d.name==='read_sandbox_xml'));
+  assert.ok(JSON.stringify(snapshotCalls[1]).includes('functionResponse'));
+  assert.equal((await request({messages:input.messages,evidenceSnapshot:{files:[],records:[{}]}})).status,400);
+  assert.equal((await request({...input,evidenceSnapshot:cached})).status,400);
+  assert.equal((await request({messages:input.messages,evidenceSnapshot:cached},false)).status,401);
+  console.log('PASS browser evidence reaches Gemini tool loop, unavailable raw-source tool is excluded, malformed/mixed input rejected, and auth retained');
   assert.equal((await request(input, false)).status, 401);
   console.log("PASS authentication remains required");
   admin = false;
@@ -166,7 +178,12 @@ try {
   assert.match(failedReview.data.reply,/Confirm\?/);
   assert.match(failedReview.data.reply,/Not verified/);
   console.log('PASS failed AI review returns per-query evidence instead of a generic retry error');
+  const failedSnapshot=await request({messages:input.messages,evidenceSnapshot:cached});
+  assert.equal(failedSnapshot.status,503);assert.equal(failedSnapshot.data.reply,undefined);
+  assert.ok(failedSnapshot.data.evidence);
   delete process.env.GEMINI_API_KEY;
+  const noProviderSnapshot=await request({messages:input.messages,evidenceSnapshot:cached});
+  assert.equal(noProviderSnapshot.status,503);assert.equal(noProviderSnapshot.data.code,'AI_CONFIGURATION_MISSING');
   const unavailable = await request(input);
   assert.equal(unavailable.status, 200);
   assert.equal(unavailable.data.evidence.errors, 1);

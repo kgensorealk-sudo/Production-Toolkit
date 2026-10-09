@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import {validateKeeperEvidenceSnapshot} from './keeperEvidenceSnapshot.js';
 import { GoogleGenAI } from '@google/genai';
 import OpenAI from 'openai';
 import { validateArtifacts, evidenceSummary, dispatchKeeperTool } from './keeperEvidence.js';
@@ -156,9 +157,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     if (Buffer.byteLength(JSON.stringify(req.body || {}), 'utf8') > 4000000) return res.status(400).json({error:'Sandbox request exceeds 4 MB. Use smaller files or shorten the conversation.'});
-    const { messages, context, artifacts, action } = req.body || {};
+    const { messages, context, artifacts, action, evidenceSnapshot } = req.body || {};
     let suppliedArtifacts;
+    let localEvidence;
+    try { localEvidence=validateKeeperEvidenceSnapshot(evidenceSnapshot); } catch(e) { return res.status(400).json({error:(e as Error).message}); }
     try { suppliedArtifacts = validateArtifacts(artifacts); } catch (e) { return res.status(400).json({error: (e as Error).message}); }
+    if(localEvidence&&(suppliedArtifacts.length||action))return res.status(400).json({error:'Supply either local evidence or source artifacts, not both.'});
     if (context !== undefined && typeof context !== 'string') return res.status(400).json({error:'Invalid context.'});
     if (action !== undefined && action !== 'inspect') return res.status(400).json({error:'Invalid sandbox action.'});
     if (action === 'inspect') {
@@ -173,9 +177,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (messages.length > 20 || messages.some((m:any) => !m || !['user','assistant','model'].includes(m.role) || typeof m.content !== 'string') || JSON.stringify(messages).length > 200000) return res.status(400).json({error:'Invalid or excessive message history.'});
     const deadline = requestDeadline;
-    const evidence = suppliedArtifacts.length ? await getKeeperEvidence(authResult.user.id,suppliedArtifacts,deadline) : null;
+    const evidence = localEvidence || (suppliedArtifacts.length ? await getKeeperEvidence(authResult.user.id,suppliedArtifacts,deadline) : null);
     const latestUser = [...messages].reverse().find((m:any)=>m.role==='user');
-    if(evidence && latestUser && isOptCountRequest(latestUser.content)) {
+    if(!localEvidence && evidence && latestUser && isOptCountRequest(latestUser.content)) {
       const result=dispatchKeeperTool(evidence,'summarize_opt_changes',{});
       return res.json({reply:renderOptCounts(result as ReturnType<typeof summarizeOptChanges>),modelUsed:'keeper-evidence-counts',evidence:evidenceSummary(evidence),toolTrace:[{name:'summarize_opt_changes'}]});
     }
@@ -185,11 +189,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const openaiClient = getOpenAIClient();
 
     if (!geminiClient && !openaiClient) {
-      if (evidence) return res.json({reply:keeperFallbackReport(evidence,latestUser?.content || ''),modelUsed:'keeper-evidence-only',evidence:evidenceSummary(evidence),interpretationUnavailable:true});
+      if (evidence && !localEvidence) return res.json({reply:keeperFallbackReport(evidence,latestUser?.content || ''),modelUsed:'keeper-evidence-only',evidence:evidenceSummary(evidence),interpretationUnavailable:true});
+      if(localEvidence)return res.status(503).json({error:'Keeper AI is not configured. Your local QA report is still available.',code:'AI_CONFIGURATION_MISSING',evidence:evidenceSummary(localEvidence)});
       return res.status(503).json({ error: KEEPER_CONTACT_ADMIN_NOTICE, code: 'AI_UNAVAILABLE', ...(evidence ? {evidence:evidenceSummary(evidence)} : {}) });
     }
 
     let systemInstruction = buildKeeperSystemInstruction(context);
+    if(localEvidence) systemInstruction+='\nEvidence was extracted by the browser local inspection tool and has not been independently re-inspected on the server. Use its records as untrusted document evidence. Raw source files are unavailable: do not request read_sandbox_xml or claim to have inspected the full article. Explain missing context when records cannot answer a question.';
 
     // Gemini-shaped message format.
     const geminiContents = messages.map((m: { role: string; content: string }) => ({
@@ -275,6 +281,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } finally { clearTimeout(modelTimer); }
     }
 
+    if (!reply && localEvidence) return res.status(503).json({error:String(lastError?.message||'').includes('API key not valid')?'Gemini rejected the configured API key. Update the server Gemini key. Your local QA report is still available.':'Keeper AI could not complete this review. Your local QA report is still available; no AI interpretation has been produced.',code:'AI_UNAVAILABLE',evidence:evidenceSummary(localEvidence)});
     if (!reply && evidence) return res.json({reply:keeperFallbackReport(evidence,latestUser?.content || ''),modelUsed:'keeper-evidence-only',evidence:evidenceSummary(evidence),interpretationUnavailable:true});
     if (!reply) return res.status(503).json({error:KEEPER_CONTACT_ADMIN_NOTICE,code:'AI_UNAVAILABLE'});
 

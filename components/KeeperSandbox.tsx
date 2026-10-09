@@ -45,7 +45,6 @@ import {keeperRestoredSources} from '../utils/keeperConversationScope';
 import {validateKeeperLocalSources} from '../utils/keeperLocalLimits';
 import {inspectKeeperLocally} from '../utils/keeperLocalInspection';
 import {evidenceSummary,type KeeperEvidence} from '../utils/keeperEvidenceCore';
-import {keeperFallbackReport} from '../utils/keeperQueryReport';
 
 const keeperAvatar = '/keeper_avatar.jpg';
 
@@ -204,7 +203,7 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
     const responseVersion = useRef(0);
     const pastedArtifactRef = useRef<KeeperPastedArtifact|null>(null);
     const [activeScope,setActiveScope] = useState('[]');
-    const [cloudChatEnabled,setCloudChatEnabled]=useState(false);
+
     const localEvidence = useRef<KeeperEvidence|null>(null);
     const localEvidenceSources = useRef<typeof sandboxArtifacts|null>(null);
     const [inspectionStatus, setInspectionStatus] = useState<'idle'|'running'|'ready'|'error'>('idle');
@@ -292,7 +291,7 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
         let active=true;ownerGeneration.current++;
         responseVersion.current++;importVersion.current++;
         typingControllerRef.current?.stop();setCurrentlyTypingId(null);setIsLoading(false);setIsImporting(false);
-        setCloudChatEnabled(false);setRestoredOwner(null);setRestoreError('');setSaveError('');setSwitchingTask(false);
+        setRestoredOwner(null);setRestoreError('');setSaveError('');setSwitchingTask(false);
         workspaceWriter.current=null;applyWorkspace(null);setEvidenceReport(null);
         const account=user?.id;
         if(account)void (async()=>{
@@ -471,30 +470,19 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
         const modelSource = pastedXml ? 'XML supplied as a sandbox artifact. Inspect it using the evidence tool.' : source;
         const text = [taskInstructions.trim() ? 'Task instructions:\n' + taskInstructions.trim() : '', modelSource ? 'Source material:\n' + modelSource : requestArtifacts.length ? 'Inspect the supplied sandbox files and report findings.' : ''].filter(Boolean).join('\n\n');
         if (!user?.id || restoredOwner!==user.id || !text || isLoading || isImporting || inspectionStatus === 'running' || inspectionStatus === 'error') return;
-        // Manuscript tasks are deterministic and local. Never enter the cloud chat path.
-        if(requestArtifacts.length){
-            try{validateKeeperLocalSources(requestArtifacts);}catch(error){setFileNotice((error as Error).message);return;}
-            if(pastedXml){setSandboxArtifacts(requestArtifacts);setInputPrompt('');}
-            const localGeneration=++responseVersion.current;
-            setIsLoading(true);
-            try{
-                const evidence=!localEvidence.current||!keeperSameSources(localEvidenceSources.current,requestArtifacts) ? await inspectKeeperLocally(requestArtifacts) : localEvidence.current;
-                if(localGeneration!==responseVersion.current)return;
-                localEvidence.current=evidence;localEvidenceSources.current=[...requestArtifacts];
-                setEvidenceReport(evidenceSummary(evidence));
-                const scope=keeperArtifactScope(requestArtifacts);setActiveScope(scope);
-                const now=Date.now();
-                setMessages(prev=>[...prev,{id:'local-user-'+now,role:'user',content:text,timestamp:now,artifactScope:scope},{id:'local-result-'+now,role:'assistant',content:'Local deterministic inspection. No manuscript files were sent to the server or AI provider.\n\n'+keeperFallbackReport(evidence,text),timestamp:now,artifactScope:scope,modelUsed:'keeper-local-inspection'}]);
-            }catch{if(localGeneration===responseVersion.current)setFileNotice('Local inspection failed. No files were transmitted.');}
-            finally{if(localGeneration===responseVersion.current)setIsLoading(false);}
-            return;
-        }
-        // Cloud chat must not include any local manuscript conversation.
-        if(messages.some(m=>m.artifactScope&&m.artifactScope!=='[]')){
-            setFileNotice('Clear the local manuscript conversation before using cloud chat. Cloud prompts leave this browser.');return;
-        }
-        if(!cloudChatEnabled){setFileNotice('Cloud chat is off. Import XML/PDF for local inspection, or explicitly enable text-only cloud chat below.');return;}
         const generation=++responseVersion.current;
+        setIsLoading(true);
+        let evidenceSnapshot:KeeperEvidence|undefined;
+        if(requestArtifacts.length){
+            try{
+                validateKeeperLocalSources(requestArtifacts);
+                if(pastedXml){setSandboxArtifacts(requestArtifacts);setInputPrompt('');}
+                evidenceSnapshot=!localEvidence.current||!keeperSameSources(localEvidenceSources.current,requestArtifacts)?await inspectKeeperLocally(requestArtifacts):localEvidence.current;
+                if(generation!==responseVersion.current)return;
+                localEvidence.current=evidenceSnapshot;localEvidenceSources.current=[...requestArtifacts];
+                setEvidenceReport(evidenceSummary(evidenceSnapshot));
+            }catch(error){if(generation===responseVersion.current){setIsLoading(false);setFileNotice(error instanceof Error?error.message:'Local inspection failed.');}return;}
+        }
         const scope=keeperArtifactScope(requestArtifacts);
         setActiveScope(scope);
 
@@ -622,7 +610,7 @@ ${userAuthContext}`;
                         body: encodeKeeperRequest({
                             messages: payloadMessages.length > 0 ? payloadMessages : [{ role: 'user', content: text }],
                             context: contextInfo,
-                            artifacts: requestArtifacts
+                            evidenceSnapshot
                         })
                     });
 
@@ -635,14 +623,15 @@ ${userAuthContext}`;
                         if(response.status===400)return {reply:errData.error||'The sandbox input could not be accepted.',modelUsed:'keeper-input-error'};
                         if (response.status === 401 || response.status === 403 || errData.code === 'SUBSCRIPTION_REQUIRED') {
                             return {
-                                reply: 'An active subscription is required to chat with Keeper.',
-                                modelUsed: 'keeper-subscription-lock'
+                                reply: errData.error || (response.status===401?'Your sign-in session has expired. Please sign in again.':'An active subscription is required to chat with Keeper.'),
+                                modelUsed: response.status===401?'keeper-auth-required':'keeper-subscription-lock'
                             };
                         }
                         throw new Error(errData.error || `Request failed with status ${response.status}`);
                     }
 
                     setEvidenceReport(data.evidence ? {...data.evidence,toolTrace:data.toolTrace} : null);
+                    if(data.interpretationUnavailable)setFileNotice('Keeper AI is unavailable. The reply below is a tool report, not an AI interpretation.');
                     return {
                         reply: data.offline ? KEEPER_CONTACT_ADMIN_NOTICE : data.reply || 'No response generated.',
                         modelUsed: data.modelUsed,
@@ -653,7 +642,7 @@ ${userAuthContext}`;
                 } catch (err: any) {
                     if (err?.message?.includes('server limit')) return {reply:err.message,modelUsed:'keeper-input-error'};
                     console.warn("Keeper live AI connection unavailable:", err?.message || err);
-                    return { reply: KEEPER_CONTACT_ADMIN_NOTICE, modelUsed: 'keeper-connection-unavailable' };
+                    return { reply: err?.message || KEEPER_CONTACT_ADMIN_NOTICE, modelUsed: 'keeper-connection-unavailable' };
                 }
             })();
 
@@ -768,7 +757,6 @@ ${userAuthContext}`;
                         {fileNotice && <p role="alert" className="text-xs text-amber-700 mb-3">{fileNotice}</p>}
                         {sandboxArtifacts.map(a=><div key={a.id} className="flex items-center justify-between text-xs bg-indigo-50 rounded-lg p-3 mb-2"><span>{a.name} - {a.kind.toUpperCase()}</span><button disabled={isLoading} onClick={()=>{importVersion.current++;setIsImporting(false);const remaining=sandboxArtifacts.filter(x=>x.id!==a.id);setSandboxArtifacts(remaining);setActiveScope(keeperArtifactScope(remaining));typingControllerRef.current?.stop();setCurrentlyTypingId(null);setEvidenceReport(null);}}>Remove</button></div>)}
                         <p className="text-xs text-slate-500 mb-3">Local workspace: import one XML and an optional edit-report PDF. Browser data deletion removes local copies. Processing pauses when the app closes. Files are inspected locally in this browser without server or AI transmission. Run task shows deterministic evidence; cloud interpretation is disabled for imported files.</p>
-                        <label className="flex items-start gap-2 text-xs text-slate-600 mb-3"><input type="checkbox" checked={cloudChatEnabled} onChange={e=>setCloudChatEnabled(e.target.checked)} disabled={isLoading}/><span>Enable text-only cloud chat. Prompts and cloud conversation history are sent to the application server and configured AI providers. Imported-file reviews stay local.</span></label>
                         <textarea id="keeper-task-input" ref={textareaRef} value={inputPrompt} onChange={e => {setInputPrompt(e.target.value);if(/^\s*</.test(inputPrompt)||/^\s*</.test(e.target.value))setEvidenceReport(null);}} disabled={isLoading || isImporting} placeholder="Paste text, XML, or an example here…" className="w-full min-h-[290px] p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm leading-relaxed font-mono resize-y outline-none focus:ring-2 focus:ring-indigo-400" />
                     </div>
                     <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-3"><span className="text-xs text-slate-400">{(inputPrompt.length + taskInstructions.length).toLocaleString()} characters</span><button onClick={() => handleSendMessage()} disabled={(!inputPrompt.trim() && !taskInstructions.trim() && !sandboxArtifacts.length) || isLoading || isImporting || inspectionStatus === 'running' || inspectionStatus === 'error' || Boolean(currentlyTypingId)} className="inline-flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl font-semibold text-sm disabled:opacity-40 hover:bg-indigo-700 transition-colors">{isLoading ? 'Working…' : currentlyTypingId ? 'Preparing result…' : 'Run task'}<ArrowRight size={16} /></button></div>

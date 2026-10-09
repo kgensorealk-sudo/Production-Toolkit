@@ -1,10 +1,10 @@
 # Local Keeper implementation status
 
-2026-10-09. Local working-tree implementation; not pushed or deployed.
+2026-10-09. Updated Keeper interpretation workflow; ZIP storage and background inspection remain local.
 
 Implemented:
 - Browser workers inspect imported XML/PDF with the shared deterministic inspection core. Node's hashing/PDF runtime remain behind a server adapter for regression parity.
-- Imported-file and pasted-XML reviews return deterministic local evidence reports rather than entering the cloud tool loop. General text-only cloud chat requires explicit opt-in; local manuscript history cannot enter that path. Markdown result images are suppressed to avoid external image requests.
+- Keeper chat is enabled directly, without the cloud-chat checkbox. Imported-file questions send the locally extracted evidence snapshot (not ZIP/PDF/full XML source files) to the authenticated application API. Gemini requests allowlisted evidence tools and receives their bounded outputs before answering. Browser-reported evidence is validated but is not represented as independently inspected on the server. Raw article excerpt retrieval is unavailable in this mode. Provider failures remain explicit; detailed QA is available separately. Markdown result images remain suppressed.
 - Account-scoped IndexedDB retains workspace source files, prompts and conversations across refresh. Daily deletion and global history restoration are removed. Account changes invalidate old operations and hide old workspace content during restoration. This is application isolation, not encryption against someone with browser-profile access.
 - Local ZIP tasks accept multiple packages, save originals, detect duplicate byte hashes, extract selected article XML/PDF locally and retain detailed preparation results. Users select an article package to open it. Unfinished preparation is retried on reopening; failed tasks offer retry.
 - Archive validation rejects unsafe paths, symlinks, encrypted entries, ambiguity and oversized data. Selected evidence extraction verifies CRC and enforces actual byte limits. Unselected attachments remain in the original ZIP and are not extracted/fully validated. ORDER presence is checked by matching basename; ORDER semantics are not yet interpreted.
@@ -23,5 +23,5 @@ Remaining before the complete planned task product:
 - Full task/history backup import/export and deletion/archive controls. Users should retain original ZIPs; clearing browser data removes local records.
 - Immutable task revisions for attached missing files, ORDER identity inspection, and richer source-role candidate selection. Manual XML/PDF attachment currently updates the local workspace; it does not rewrite the saved original package.
 - Longer PDF page checkpoints; interrupted extraction restarts from retained local sources rather than resuming a page checkpoint.
-- Optional evidence-preview cloud interpretation. It is disabled for imported-file tasks; preserve the provider connection for explicit general text-only chat.
-- Deployed authenticated UI verification. Production remains unchanged until an explicit release.
+- On-demand browser excerpt relay for questions needing article context beyond extracted records. Current AI evidence includes extracted OPT/query records and verified response associations only.
+- Authenticated production provider verification remains a rollout check. The local Gemini key was rejected by Google; production credentials are not inferred from that result.
