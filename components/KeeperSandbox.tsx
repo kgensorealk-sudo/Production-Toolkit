@@ -1,6 +1,8 @@
 import KeeperActivityReport from './KeeperActivityReport';
 import type {KeeperActivity} from '../utils/keeperActivity';
 import type {KeeperReviewBatch,KeeperReviewCursor} from '../utils/keeperReviewBatch';
+import {planKeeperReviewBatch,keeperBatchProgress} from '../utils/keeperReviewBatch';
+import {keeperReviewContinuity} from '../utils/keeperReviewContinuity';
 import KeeperAnswerEvidencePanel from './KeeperAnswerEvidence';
 import KeeperQueryProvenance from './KeeperQueryProvenance';
 import type {KeeperAnswerEvidence} from '../utils/keeperAnswerEvidence';
@@ -66,6 +68,7 @@ interface Message {
     modelUsed?: string;
     activity?:KeeperActivity;
     reviewBatch?:KeeperReviewBatch;
+    reviewInstructions?:string;
     answerEvidence?:KeeperAnswerEvidence;
 }
 
@@ -500,6 +503,14 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
         }
         const scope=keeperArtifactScope(requestArtifacts);
         setActiveScope(scope);
+        let pendingBatch:KeeperReviewBatch|undefined;
+        if(evidenceSnapshot){
+            try{
+                if(reviewCursor){const savedReview=keeperReviewContinuity(messages,scope,evidenceSnapshot,taskInstructions);if(savedReview?.status!=='ready'||savedReview.batch.next?.key!==reviewCursor.key||savedReview.batch.next?.offset!==reviewCursor.offset)throw Error('Saved review cannot continue with these sources or instructions. Start a fresh review.');}
+                const plan=planKeeperReviewBatch(evidenceSnapshot,pastedXml?text:source||taskInstructions,reviewCursor);
+                if(plan)pendingBatch=keeperBatchProgress(plan,false);
+            }catch(error){setIsLoading(false);setFileNotice(error instanceof Error?error.message:'Review continuation is unavailable.');return;}
+        }
 
         // If Keeper is currently typing out a previous message, skip to end before sending new message
         if (currentlyTypingId) {
@@ -510,6 +521,7 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
             artifactScope:scope,
             id: `usr-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
             role: 'user',
+            reviewBatch:pendingBatch,reviewInstructions:pendingBatch?taskInstructions.trim():undefined,
             content: text,
             timestamp: Date.now()
         };
@@ -531,6 +543,13 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
         }
 
         setIsLoading(true);
+
+        const requestWriter=workspaceWriter.current;
+        if(pendingBatch){
+            try{if(!requestWriter)throw Error('Local review storage is unavailable.');await requestWriter.save({...workspaceSnapshot(),artifacts:requestArtifacts,messages:newMessages,activeScope:scope,inputPrompt:pastedXml?'':inputPrompt});}
+            catch(error){if(generation===responseVersion.current){setSaveError(error instanceof Error?error.message:'Review position could not be saved.');setIsLoading(false);}return;}
+            if(generation!==responseVersion.current)return;
+        }
 
         try {
             const dogGreeting = getTimeOfDayDogGreeting();
@@ -657,9 +676,15 @@ ${userAuthContext}`;
                 artifactScope:scope,id:assistantMessageId,role:'assistant',content:sanitizedContent,
                 timestamp:Date.now(),modelUsed:responseData.modelUsed,
                 answerEvidence:responseData.answerEvidence,
-                reviewBatch:responseData.reviewBatch || (reviewCursor?{question:reviewCursor.question,key:reviewCursor.key,start:reviewCursor.offset,end:reviewCursor.offset,total:messages.slice().reverse().find(m=>m.reviewBatch?.key===reviewCursor.key)?.reviewBatch?.total||reviewCursor.offset,reviewed:reviewCursor.offset,complete:false,next:reviewCursor}:undefined),
+                reviewBatch:responseData.reviewBatch || pendingBatch,
+                reviewInstructions:pendingBatch?taskInstructions.trim():undefined,
                 activity:{...responseData.activity,clientElapsedMs:Date.now()-clientStarted,localInspectionMs,requestMs}
             };
+            if(pendingBatch){
+                try{await requestWriter!.save({...workspaceSnapshot(),artifacts:requestArtifacts,messages:[...newMessages,assistantMessage],activeScope:scope,inputPrompt:pastedXml?'':inputPrompt});}
+                catch(error){if(generation===responseVersion.current){setSaveError(error instanceof Error?error.message:'Completed review position could not be saved.');setMessages([...newMessages,{...assistantMessage,reviewBatch:pendingBatch}]);setIsLoading(false);}return;}
+                if(generation!==responseVersion.current)return;
+            }
             setIsLoading(false);setCurrentlyTypingId(null);
             setMessages(prev=>[...prev,assistantMessage]);
             if(!isOpen)setHasUnread(true);
@@ -698,6 +723,7 @@ ${userAuthContext}`;
     // label, which never reflected what actually answered (the connected AI provider).
     const lastAssistantMessage = [...keeperScopedMessages(messages,activeScope)].reverse().find(m => m.role === 'assistant');
     const lastModelBadge = getModelBadgeInfo(lastAssistantMessage?.modelUsed);
+    const savedReview=keeperReviewContinuity(messages,keeperArtifactScope(sandboxArtifacts),inspectionStatus==='ready'?localEvidence.current:null,taskInstructions);
     useEffect(()=>setSelectedEvidenceRef(null),[lastAssistantMessage?.id]);
 
     // Never render the previous account's local state while the new account restores.
@@ -751,9 +777,9 @@ ${userAuthContext}`;
             {lastAssistantMessage?.activity && <KeeperActivityReport activity={lastAssistantMessage.activity}/> }
             {lastAssistantMessage?.answerEvidence && <KeeperAnswerEvidencePanel answer={lastAssistantMessage.answerEvidence} evidence={inspectionStatus==='ready'?localEvidence.current:null} selectedRef={selectedEvidenceRef} onSelect={setSelectedEvidenceRef}/>}
             {lastAssistantMessage&&!lastAssistantMessage.answerEvidence&&sandboxArtifacts.length>0&&<p className="text-xs text-slate-500">No answer-level evidence references are available for this reply. The local QA report remains separate.</p>}
-            {lastAssistantMessage?.reviewBatch && <section aria-label="Review progress" className="rounded-xl border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-950">
-                <p>{lastAssistantMessage.reviewBatch.reviewed} of {lastAssistantMessage.reviewBatch.total} inventory records covered by completed batch answers. Retrieval and an answer do not establish editorial completion. Inspection limits still apply.</p>
-                {lastAssistantMessage.reviewBatch.next && <button className="mt-3 rounded-lg bg-indigo-700 px-4 py-2 text-white disabled:opacity-50" disabled={isLoading||isImporting||switchingTask} onClick={()=>void handleSendMessage(undefined,lastAssistantMessage.reviewBatch!.next!)}>{lastAssistantMessage.reviewBatch.reviewed===lastAssistantMessage.reviewBatch.start?'Retry batch':'Continue review'}</button>}
+            {savedReview && <section aria-label="Review progress" className="rounded-xl border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-950">
+                {savedReview.status==='ready'?<><p>{savedReview.batch.reviewed} of {savedReview.batch.total} inventory records covered by completed batch answers · {savedReview.batch.total-savedReview.batch.reviewed} remaining. Retrieval and an answer do not establish editorial completion. Inspection limits still apply.</p><p className="mt-1 text-xs whitespace-pre-wrap break-words">Review task: {savedReview.batch.question}</p>
+                {savedReview.batch.next&&<button className="mt-3 rounded-lg bg-indigo-700 px-4 py-2 text-white disabled:opacity-50" disabled={isLoading||isImporting||switchingTask||Boolean(saveError)} onClick={()=>void handleSendMessage(undefined,savedReview.batch.next!)}>{savedReview.batch.reviewed===savedReview.batch.start?'Retry pending batch':'Continue review'}</button>}</>:<><p>{savedReview.reason}</p>{savedReview.status==='stale'&&<button className="mt-3 underline disabled:opacity-50" disabled={isLoading||isImporting||switchingTask||inspectionStatus!=='ready'||Boolean(saveError)||typeof savedReview.batch.question!=='string'} onClick={()=>void handleSendMessage(savedReview.batch.question)}>Start fresh review</button>}</>}
             </section>}
             {evidenceReport && <KeeperEvidenceReport report={evidenceReport} />}
             {inspectionStatus==='ready'&&localEvidence.current&&<KeeperQueryProvenance evidence={localEvidence.current}/>}

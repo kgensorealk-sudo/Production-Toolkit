@@ -271,7 +271,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const result = await runKeeperToolLoop({provider: candidate.provider as 'gemini'|'openai',client:candidate.provider==='gemini'?geminiClient:openaiClient, model:candidate.model,messages:candidate.provider==='gemini'?geminiContents:openaiMessages.slice(1),systemInstruction,evidence:reviewEvidence!,countEvidence:evidence,requiredRecordIds:batch?.evidence.records.map(r=>r.id),artifacts:suppliedArtifacts,deadline,question:countQuestion,onActivity:event=>events.push(event),onEvidenceProgress:progress=>{answerEvidence=progress;}});
           text=result.text;toolTrace=result.trace;retrievalCoverage=result.coverage;
           answerEvidence=result.answerEvidence;
-          batchCompleted=!!batch&&result.coverage.fullyRetrievedRecords===batch.evidence.records.length;
+          batchCompleted=!!batch&&result.answerEvidence.answer.kind==='interpretation'&&result.coverage.fullyRetrievedRecords===batch.evidence.records.length;
         } else if (candidate.provider === 'gemini') {
           const modelPromise = geminiClient!.models.generateContent({
             model: candidate.model,

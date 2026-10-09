@@ -34,11 +34,11 @@ assert.equal(opt.evidence.records.length,10);
 console.log('PASS three resumable batches, exact coverage without skipped records, failed batch retry, source/task mismatch rejection, count-only bypass, unrelated read rejection and OPT batching');
 const originalFetch=globalThis.fetch,originalKey=process.env.GEMINI_API_KEY;
 process.env.GEMINI_API_KEY='synthetic-key';
-let apiRound=0;
+let apiRound=0,scopeOnly=false;
 globalThis.fetch=async(input)=>{
   const url=typeof input==='string'?input:input.url||String(input);
   if(url.includes('/auth/v1/user'))return Response.json({id:'synthetic',app_metadata:{role:'admin'}});
-  if(url.includes('generativelanguage.googleapis.com'))return Response.json({candidates:[{content:{role:'model',parts:apiRound++%2===0?[{functionCall:{name:'review_query_responses',args:{},id:'review'}}]:[{text:'All queries in this batch have unresolved responses.'}]},finishReason:'STOP'}]});
+  if(url.includes('generativelanguage.googleapis.com'))return Response.json({candidates:[{content:{role:'model',parts:apiRound++%2===0?[{functionCall:{name:'review_query_responses',args:{},id:'review'}}]:scopeOnly?[{functionCall:{name:'report_scope_limit',args:{status:'insufficient_evidence',reason:'Cannot complete the requested assessment.'},id:'scope'}}]:[{text:'All queries in this batch have unresolved responses.'}]},finishReason:'STOP'}]});
   throw Error('Unexpected mock transport');
 };
 async function request(reviewCursor){
@@ -50,5 +50,6 @@ try{
   const second=await request(first.data.reviewBatch.next);assert.equal(second.status,200);assert.equal(second.data.reviewBatch.reviewed,20);
   const third=await request(second.data.reviewBatch.next);assert.equal(third.data.reviewBatch.reviewed,23);assert.equal(third.data.reviewBatch.next,null);
   const stale=await request({...first.data.reviewBatch.next,key:'stale'});assert.equal(stale.status,400);
+  scopeOnly=true;apiRound=0;const limited=await request(first.data.reviewBatch.next);assert.equal(limited.data.answerEvidence.retrieval.fullyRetrieved,10);assert.equal(limited.data.reviewBatch.reviewed,10);assert.equal(limited.data.reviewBatch.next.offset,10);assert.equal(limited.data.answerEvidence.answer.kind,'scope');
   console.log('PASS authenticated API batch/continue/final flow and stale cursor rejection with mocked provider transport');
 }finally{globalThis.fetch=originalFetch;if(originalKey===undefined)delete process.env.GEMINI_API_KEY;else process.env.GEMINI_API_KEY=originalKey;}
