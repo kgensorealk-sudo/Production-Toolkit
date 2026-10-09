@@ -1,3 +1,5 @@
+import KeeperActivityReport from './KeeperActivityReport';
+import type {KeeperActivity} from '../utils/keeperActivity';
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -30,7 +32,7 @@ import remarkGfm from 'remark-gfm';
 import { ToolId } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { isExperimentalTool, getToolInfo } from '../utils/toolRegistry';
-import { startTypingSimulation, TypingSimulatorController } from '../utils/typingSimulator';
+import { type TypingSimulatorController } from '../utils/typingSimulator';
 import { sanitizeOutput, KeeperUserContext, KEEPER_CONTACT_ADMIN_NOTICE } from '../utils/keeperEngine';
 import { KeeperAvatar, KeeperState } from './KeeperAvatar';
 import { supabase } from '../supabaseClient';
@@ -58,6 +60,7 @@ interface Message {
      *  or one of the offline-engine variants ('offline-keeper', 'offline-keeper-fallback',
      *  'offline-keeper-recovery'). Undefined for user messages and legacy stored messages. */
     modelUsed?: string;
+    activity?:KeeperActivity;
 }
 
 /**
@@ -471,6 +474,7 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
         const text = [taskInstructions.trim() ? 'Task instructions:\n' + taskInstructions.trim() : '', modelSource ? 'Source material:\n' + modelSource : requestArtifacts.length ? 'Inspect the supplied sandbox files and report findings.' : ''].filter(Boolean).join('\n\n');
         if (!user?.id || restoredOwner!==user.id || !text || isLoading || isImporting || inspectionStatus === 'running' || inspectionStatus === 'error') return;
         const generation=++responseVersion.current;
+        const clientStarted=Date.now();let localInspectionMs=0,requestMs=0;
         setIsLoading(true);
         let evidenceSnapshot:KeeperEvidence|undefined;
         if(requestArtifacts.length){
@@ -479,6 +483,7 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
                 if(pastedXml){setSandboxArtifacts(requestArtifacts);setInputPrompt('');}
                 evidenceSnapshot=!localEvidence.current||!keeperSameSources(localEvidenceSources.current,requestArtifacts)?await inspectKeeperLocally(requestArtifacts):localEvidence.current;
                 if(generation!==responseVersion.current)return;
+                localInspectionMs=Date.now()-clientStarted;
                 localEvidence.current=evidenceSnapshot;localEvidenceSources.current=[...requestArtifacts];
                 setEvidenceReport(evidenceSummary(evidenceSnapshot));
             }catch(error){if(generation===responseVersion.current){setIsLoading(false);setFileNotice(error instanceof Error?error.message:'Local inspection failed.');}return;}
@@ -508,40 +513,10 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
             const subscriptionLockReply = 'An active subscription is required to chat with Keeper.';
 
             const assistantMessageId = `ast-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-            const initialAssistantMessage: Message = {
-                artifactScope:scope,
-                id: assistantMessageId,
-                role: 'assistant',
-                content: '',
-                timestamp: Date.now(),
-                modelUsed: 'keeper-subscription-lock'
-            };
-
-            setIsLoading(false);
-            setMessages(prev => [...prev, initialAssistantMessage]);
-            setCurrentlyTypingId(assistantMessageId);
-            if (!isOpen) {
-                setHasUnread(true);
-            }
+            setIsLoading(false);setCurrentlyTypingId(null);
+            setMessages(prev=>[...prev,{artifactScope:scope,id:assistantMessageId,role:'assistant',content:subscriptionLockReply,timestamp:Date.now(),modelUsed:'keeper-subscription-lock'}]);
+            if(!isOpen)setHasUnread(true);
             scrollToBottom(true);
-
-            typingControllerRef.current = startTypingSimulation({
-                fullText: subscriptionLockReply,
-                onUpdate: (displayedText) => {
-                    setMessages(prev => prev.map(m => m.id === assistantMessageId ? { ...m, content: displayedText } : m));
-                    if (messagesContainerRef.current) {
-                        const container = messagesContainerRef.current;
-                        const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 120;
-                        if (isNearBottom) {
-                            container.scrollTop = container.scrollHeight;
-                        }
-                    }
-                },
-                onComplete: () => {
-                    setCurrentlyTypingId(null);
-                    typingControllerRef.current = null;
-                }
-            });
             return;
         }
 
@@ -597,10 +572,12 @@ ${userAuthContext}`;
                 }));
 
             const generateResponsePromise = (async () => {
+                let apiStarted=0;
                 try {
                     const sessionData = await supabase.auth.getSession();
                     const token = sessionData?.data?.session?.access_token || session?.access_token;
 
+                    apiStarted=Date.now();
                     const response = await fetch('/api/ai/chat', {
                         method: 'POST',
                         headers: {
@@ -615,6 +592,7 @@ ${userAuthContext}`;
                     });
 
                     const data = await readKeeperApiResponse(response);
+                    requestMs=Date.now()-apiStarted;
                     if(generation!==responseVersion.current)return null;
                     if (!response.ok) {
                         const errData = data;
@@ -627,7 +605,7 @@ ${userAuthContext}`;
                                 modelUsed: response.status===401?'keeper-auth-required':'keeper-subscription-lock'
                             };
                         }
-                        throw new Error(errData.error || `Request failed with status ${response.status}`);
+                        return {reply:errData.error || `Request failed with status ${response.status}`,modelUsed:'keeper-connection-unavailable',activity:errData.activity};
                     }
 
                     setEvidenceReport(data.evidence ? {...data.evidence,toolTrace:data.toolTrace} : null);
@@ -635,18 +613,20 @@ ${userAuthContext}`;
                     return {
                         reply: data.offline ? KEEPER_CONTACT_ADMIN_NOTICE : data.reply || 'No response generated.',
                         modelUsed: data.modelUsed,
+                        activity:data.activity,
                         offline: Boolean(data.offline),
                         faqTopics: data.faqTopics,
                         note: data.note
                     };
                 } catch (err: any) {
+                    if(apiStarted)requestMs=Date.now()-apiStarted;
                     if (err?.message?.includes('server limit')) return {reply:err.message,modelUsed:'keeper-input-error'};
                     console.warn("Keeper live AI connection unavailable:", err?.message || err);
                     return { reply: err?.message || KEEPER_CONTACT_ADMIN_NOTICE, modelUsed: 'keeper-connection-unavailable' };
                 }
             })();
 
-            const responseData = await generateResponsePromise;
+            const responseData:{reply:string;modelUsed?:string;activity?:KeeperActivity}|null = await generateResponsePromise;
             if(!responseData || generation!==responseVersion.current)return;
 
             const rawContent = responseData.reply;
@@ -654,47 +634,15 @@ ${userAuthContext}`;
 
             const assistantMessageId = `ast-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
 
-            const initialAssistantMessage: Message = {
-                artifactScope:scope,
-                id: assistantMessageId,
-                role: 'assistant',
-                content: '',
-                timestamp: Date.now(),
-                modelUsed: responseData.modelUsed
+            const assistantMessage: Message = {
+                artifactScope:scope,id:assistantMessageId,role:'assistant',content:sanitizedContent,
+                timestamp:Date.now(),modelUsed:responseData.modelUsed,
+                activity:{...responseData.activity,clientElapsedMs:Date.now()-clientStarted,localInspectionMs,requestMs}
             };
-
-            // Switch from "sniffing out" spinner to active typing simulation
-            setIsLoading(false);
-            setMessages(prev => [...prev, initialAssistantMessage]);
-            setCurrentlyTypingId(assistantMessageId);
-            if (!isOpen) {
-                setHasUnread(true);
-            }
-
-            // Scroll container gently to reveal new response without affecting outer page
+            setIsLoading(false);setCurrentlyTypingId(null);
+            setMessages(prev=>[...prev,assistantMessage]);
+            if(!isOpen)setHasUnread(true);
             scrollToBottom(true);
-
-            // Start swift, human-like typing simulation with realistic cadence
-            typingControllerRef.current = startTypingSimulation({
-                fullText: sanitizedContent,
-                onUpdate: (displayedText) => {
-                    setMessages(prev => prev.map(m => m.id === assistantMessageId ? { ...m, content: displayedText } : m));
-                    // Smart scrolling: Only auto-scroll down if user was already at or near the bottom
-                    if (messagesContainerRef.current) {
-                        const container = messagesContainerRef.current;
-                        const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 120;
-                        if (isNearBottom) {
-                            container.scrollTop = container.scrollHeight;
-                        }
-                    }
-                },
-                onComplete: () => {
-                    setCurrentlyTypingId(null);
-                    typingControllerRef.current = null;
-                    setSuccessCelebration(true);
-                    setTimeout(() => setSuccessCelebration(false), 2600);
-                }
-            });
 
         } catch (err: any) {
             console.error("Critical error in AI chat message handling:", err);
@@ -769,6 +717,7 @@ ${userAuthContext}`;
                     <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-between text-xs text-slate-400"><span>{lastAssistantMessage ? lastModelBadge.label : 'Ready when you are'}</span><span>Results stay in this sandbox</span></div>
                 </section>
             </div>
+            {lastAssistantMessage?.activity && <KeeperActivityReport activity={lastAssistantMessage.activity}/> }
             {evidenceReport && <KeeperEvidenceReport report={evidenceReport} />}
             {messages.some(message => message.role === 'assistant') && <details className="border border-slate-200 rounded-xl bg-white p-5"><summary className="text-sm font-semibold text-slate-600 cursor-pointer">Session history</summary><div className="space-y-4 mt-4">{messages.map(message => <div key={message.id} className="border-t border-slate-100 pt-4"><p className="text-xs font-semibold text-slate-400 mb-2">{message.role === 'user' ? 'Your input' : 'Keeper result'} · {new Date(message.timestamp).toLocaleString()}</p><pre className="text-sm whitespace-pre-wrap break-words font-sans text-slate-700">{message.content}</pre></div>)}</div></details>}
         </section>

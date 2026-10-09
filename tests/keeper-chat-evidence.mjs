@@ -138,6 +138,15 @@ try {
   assert.equal(snapshotReply.status,200);
   assert.equal(snapshotReply.data.toolTrace[0].name,'inspect_sandbox_evidence');
   assert.ok(snapshotReply.data.modelUsed.startsWith('gemini'));
+  assert.equal(snapshotReply.data.activity.attempts.length,1);
+  assert.equal(snapshotReply.data.activity.attempts[0].outcome,'success');
+  assert.equal(snapshotReply.data.activity.events.filter(e=>e.kind==='model_round').length,2);
+  const toolEvent=snapshotReply.data.activity.events.find(e=>e.kind==='tool');
+  assert.equal(toolEvent.name,'inspect_sandbox_evidence');
+  assert.ok(toolEvent.records>0);assert.ok(toolEvent.elapsedMs>=0);
+  assert.ok(snapshotReply.data.activity.serverElapsedMs>=0);
+  assert.ok(!JSON.stringify(snapshotReply.data.activity).includes('<opt_INS'));
+
   const snapshotCalls=requests.filter(r=>r.url.includes('generativelanguage.googleapis.com')).slice(-2).map(r=>JSON.parse(r.body));
   assert.ok(!snapshotCalls[0].tools[0].functionDeclarations.some(d=>d.name==='read_sandbox_xml'));
   assert.ok(JSON.stringify(snapshotCalls[1]).includes('functionResponse'));
@@ -179,6 +188,8 @@ try {
   assert.match(failedReview.data.reply,/Not verified/);
   console.log('PASS failed AI review returns per-query evidence instead of a generic retry error');
   const failedSnapshot=await request({messages:input.messages,evidenceSnapshot:cached});
+  assert.ok(failedSnapshot.data.activity.attempts.length>0);
+  assert.ok(failedSnapshot.data.activity.attempts.every(a=>a.outcome==='failed'));
   assert.equal(failedSnapshot.status,503);assert.equal(failedSnapshot.data.reply,undefined);
   assert.ok(failedSnapshot.data.evidence);
   delete process.env.GEMINI_API_KEY;

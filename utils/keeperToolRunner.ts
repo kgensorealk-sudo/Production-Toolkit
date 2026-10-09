@@ -1,3 +1,4 @@
+import type {KeeperActivity} from './keeperActivity.js';
 import {renderKeeperScope} from './keeperScope.js';
 import {
   dispatchKeeperTool,
@@ -20,6 +21,7 @@ export async function runKeeperToolLoop(options: {
   evidence: KeeperEvidence;
   artifacts?: KeeperArtifact[];
   deadline: number;
+  onActivity?:(event:NonNullable<KeeperActivity['events']>[number])=>void;
 }) {
   const { provider, client, model, evidence } = options;
   const instruction =
@@ -96,6 +98,7 @@ export async function runKeeperToolLoop(options: {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const controller = new AbortController();
     let response: any;
+    const roundStarted=Date.now();let roundOutcome='failed';
     try {
       response = await Promise.race([
         provider === "gemini"
@@ -123,7 +126,9 @@ export async function runKeeperToolLoop(options: {
           }, remaining);
         }),
       ]);
+      roundOutcome='success';
     } finally {
+      options.onActivity?.({kind:'model_round',model,round:round+1,elapsedMs:Date.now()-roundStarted,outcome:roundOutcome});
       clearTimeout(timer);
     }
     const calls =
@@ -161,6 +166,7 @@ export async function runKeeperToolLoop(options: {
     const parts: any[] = [];
     for (const call of calls) {
       callsUsed++;
+      const toolStarted=Date.now();
       let args: any;
       let result: any;
       const name = provider === "gemini" ? call.name : call.function?.name;
@@ -173,6 +179,7 @@ export async function runKeeperToolLoop(options: {
       } catch {
         result = { error: "Invalid tool arguments." };
       }
+      options.onActivity?.({kind:'tool',model,name:String(name),elapsedMs:Date.now()-toolStarted,outcome:result.error?'failed':'success',records:Array.isArray(result.records)?result.records.length:undefined});
       trace.push({
         name: String(name),
         ...(result.error ? { error: result.error } : {}),

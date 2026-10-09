@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import React from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import fs from 'node:fs';
+import KeeperActivityReport from '../components/KeeperActivityReport.tsx';
+const html=renderToStaticMarkup(React.createElement(KeeperActivityReport,{activity:{clientElapsedMs:1234,localInspectionMs:0,requestMs:1200,serverElapsedMs:1000,attempts:[{model:'slow-first',provider:'gemini',elapsedMs:700,outcome:'failed'},{model:'working',provider:'gemini',elapsedMs:300,outcome:'success'}],events:[{kind:'model_round',elapsedMs:250,outcome:'success'},{kind:'tool',name:'review_query_responses',elapsedMs:1,outcome:'success',records:15}]}}));
+assert.match(html,/1.23 s/);assert.match(html,/review_query_responses/);assert.match(html,/15/);assert.match(html,/slow-first/);assert.match(html,/failed/);assert.match(html,/figures overlap/);
+const ui=fs.readFileSync('components/KeeperSandbox.tsx','utf8');assert.ok(!ui.includes('startTypingSimulation'));
+assert.ok(ui.includes('content:sanitizedContent'));assert.ok(ui.includes('activity={lastAssistantMessage.activity}'));
+console.log('PASS immediate complete replies and per-reply activity display with failed attempts, tool counts and overlapping timing explanation');

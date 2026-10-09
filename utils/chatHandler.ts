@@ -1,3 +1,4 @@
+import type {KeeperActivity} from './keeperActivity.js';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {validateKeeperEvidenceSnapshot} from './keeperEvidenceSnapshot.js';
 import { GoogleGenAI } from '@google/genai';
@@ -132,7 +133,10 @@ function getOpenAIClient(): OpenAI | null {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const requestDeadline = Date.now() + 55000;
+  const requestStarted=Date.now();
+  const requestDeadline = requestStarted + 55000;
+  const attempts:NonNullable<KeeperActivity['attempts']>=[],events:NonNullable<KeeperActivity['events']>=[];
+  const activity=():KeeperActivity=>({serverElapsedMs:Date.now()-requestStarted,attempts,events});
   // Setup standard CORS headers for cross-origin and Vercel preview environments
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -189,8 +193,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const openaiClient = getOpenAIClient();
 
     if (!geminiClient && !openaiClient) {
-      if (evidence && !localEvidence) return res.json({reply:keeperFallbackReport(evidence,latestUser?.content || ''),modelUsed:'keeper-evidence-only',evidence:evidenceSummary(evidence),interpretationUnavailable:true});
-      if(localEvidence)return res.status(503).json({error:'Keeper AI is not configured. Your local QA report is still available.',code:'AI_CONFIGURATION_MISSING',evidence:evidenceSummary(localEvidence)});
+      if (evidence && !localEvidence) return res.json({reply:keeperFallbackReport(evidence,latestUser?.content || ''),modelUsed:'keeper-evidence-only',activity:activity(),evidence:evidenceSummary(evidence),interpretationUnavailable:true});
+      if(localEvidence)return res.status(503).json({error:'Keeper AI is not configured. Your local QA report is still available.',code:'AI_CONFIGURATION_MISSING',activity:activity(),evidence:evidenceSummary(localEvidence)});
       return res.status(503).json({ error: KEEPER_CONTACT_ADMIN_NOTICE, code: 'AI_UNAVAILABLE', ...(evidence ? {evidence:evidenceSummary(evidence)} : {}) });
     }
 
@@ -230,6 +234,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (candidate.provider === 'openai' && !openaiClient) continue;
       if (candidate.provider === 'anthropic' || Date.now() >= deadline) continue;
 
+      const attemptStarted=Date.now();let attemptOutcome='failed';
       let modelTimer: ReturnType<typeof setTimeout> | undefined;
       try {
         const timeoutPromise = evidence ? null : new Promise((_, reject) =>
@@ -242,7 +247,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         let text = '';
 
         if (evidence) {
-          const result = await runKeeperToolLoop({provider: candidate.provider as 'gemini'|'openai',client:candidate.provider==='gemini'?geminiClient:openaiClient, model:candidate.model,messages:candidate.provider==='gemini'?geminiContents:openaiMessages.slice(1),systemInstruction,evidence,artifacts:suppliedArtifacts,deadline});
+          const result = await runKeeperToolLoop({provider: candidate.provider as 'gemini'|'openai',client:candidate.provider==='gemini'?geminiClient:openaiClient, model:candidate.model,messages:candidate.provider==='gemini'?geminiContents:openaiMessages.slice(1),systemInstruction,evidence,artifacts:suppliedArtifacts,deadline,onActivity:event=>events.push(event)});
           text=result.text;toolTrace=result.trace;retrievalCoverage=result.coverage;
         } else if (candidate.provider === 'gemini') {
           const modelPromise = geminiClient!.models.generateContent({
@@ -272,20 +277,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (text) {
           reply = text;
-          activeModel = candidate.model;
+          activeModel = candidate.model;attemptOutcome='success';
           break;
         }
       } catch (modelErr: any) {
         console.warn(`[AI Copilot - Vercel] Model ${candidate.model} (${candidate.provider}) encountered error:`, modelErr?.message || modelErr);
         lastError = modelErr;
-      } finally { clearTimeout(modelTimer); }
+      } finally { if(!evidence)events.push({kind:'model_round',model:candidate.model,round:1,elapsedMs:Date.now()-attemptStarted,outcome:attemptOutcome});attempts.push({model:candidate.model,provider:candidate.provider,elapsedMs:Date.now()-attemptStarted,outcome:attemptOutcome});clearTimeout(modelTimer); }
     }
 
-    if (!reply && localEvidence) return res.status(503).json({error:String(lastError?.message||'').includes('API key not valid')?'Gemini rejected the configured API key. Update the server Gemini key. Your local QA report is still available.':'Keeper AI could not complete this review. Your local QA report is still available; no AI interpretation has been produced.',code:'AI_UNAVAILABLE',evidence:evidenceSummary(localEvidence)});
-    if (!reply && evidence) return res.json({reply:keeperFallbackReport(evidence,latestUser?.content || ''),modelUsed:'keeper-evidence-only',evidence:evidenceSummary(evidence),interpretationUnavailable:true});
-    if (!reply) return res.status(503).json({error:KEEPER_CONTACT_ADMIN_NOTICE,code:'AI_UNAVAILABLE'});
+    if (!reply && localEvidence) return res.status(503).json({error:String(lastError?.message||'').includes('API key not valid')?'Gemini rejected the configured API key. Update the server Gemini key. Your local QA report is still available.':'Keeper AI could not complete this review. Your local QA report is still available; no AI interpretation has been produced.',code:'AI_UNAVAILABLE',activity:activity(),evidence:evidenceSummary(localEvidence)});
+    if (!reply && evidence) return res.json({reply:keeperFallbackReport(evidence,latestUser?.content || ''),modelUsed:'keeper-evidence-only',activity:activity(),evidence:evidenceSummary(evidence),interpretationUnavailable:true});
+    if (!reply) return res.status(503).json({error:KEEPER_CONTACT_ADMIN_NOTICE,code:'AI_UNAVAILABLE',activity:activity()});
 
-    return res.json({ reply: sanitizeOutput(reply), modelUsed: activeModel, ...(evidence ? {evidence: {...evidenceSummary(evidence),retrievalCoverage}, toolTrace} : {}) });
+    return res.json({ reply: sanitizeOutput(reply), modelUsed: activeModel, activity:activity(), ...(evidence ? {evidence: {...evidenceSummary(evidence),retrievalCoverage}, toolTrace} : {}) });
   } catch (err: any) {
     console.error('AI Copilot API Error (Vercel):', err);
     return res.status(503).json({ error: KEEPER_CONTACT_ADMIN_NOTICE, code: 'AI_UNAVAILABLE' });
