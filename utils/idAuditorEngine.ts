@@ -10,11 +10,28 @@ export interface IdAuditItem {
 export type PrefixOverrides = Record<string,string>;
 const registry = new Map(rules.map(rule=>[rule.tag,rule]));
 // Prefixes are naming conventions; the DTD separately controls missing-ID generation.
-function resolvePrefix(name: string, attributes: Record<string, string>, overrides: PrefixOverrides): string {
+function resolvePrefix(name: string, attributes: Record<string, string>, overrides: PrefixOverrides, scheme = false): string {
     if (Object.prototype.hasOwnProperty.call(overrides, name)) return overrides[name];
+    if (name === 'ce:figure' && (scheme || /^sch\d+$/.test(attributes.id || ''))) return 'sch';
     const rule = registry.get(name);
     if (attributes.type === 'code' && rule?.codedPrefix) return rule.codedPrefix;
     return rule?.prefix || '';
+}
+// Schemes share ce:figure with ordinary figures. Only its own label identifies it;
+// a mention of "Scheme" in the caption must not change an ordinary figure's prefix.
+function schemeFigures(structure: ReturnType<typeof scanReferenceXml>): Set<number> {
+    const schemes = new Set<number>();
+    const stack: typeof structure.nodes = [];
+    for (const node of structure.nodes) {
+        while (stack.length && stack[stack.length - 1].end <= node.start) stack.pop();
+        const parent = stack[stack.length - 1];
+        if (node.name === 'ce:label' && parent?.name === 'ce:figure') {
+            const label = structure.textContent(node).trim();
+            if (/^Scheme\b/i.test(label)) schemes.add(parent.start);
+        }
+        stack.push(node);
+    }
+    return schemes;
 }
 function validId(id: string, prefix: string): boolean {
     if (!prefix || !id.startsWith(prefix)) return false;
@@ -55,12 +72,13 @@ export function analyzeIdLinks(xml: string) {
 }
 export function auditElementIds(xml: string, overrides: PrefixOverrides = {}): IdAuditItem[] {
     const structure=scanReferenceXml(xml,{allowDuplicateIds:true});
+    const schemes=schemeFigures(structure);
     const counts=new Map<string,number>();
     for(const node of structure.nodes) if(node.attributes.id) counts.set(node.attributes.id,(counts.get(node.attributes.id)||0)+1);
     const targets = targetIds(structure.nodes);
     return structure.nodes.flatMap(node=>{
         const rule=registry.get(node.name), originalId=node.attributes.id||'';
-        const expectedPrefix=resolvePrefix(node.name, node.attributes, overrides);
+        const expectedPrefix=resolvePrefix(node.name, node.attributes, overrides, schemes.has(node.start));
         // Configured tags receive missing IDs, including DTD-optional IDs. Known unconfigured tags remain visible for QA.
         if (!node.attributeRanges.id && !rule && !expectedPrefix) return [];
         const needsPrefix=!/^[a-z]+$/.test(expectedPrefix);
@@ -69,11 +87,12 @@ export function auditElementIds(xml: string, overrides: PrefixOverrides = {}): I
         const isLengthViolation=!!originalId && !!expectedPrefix && originalId.startsWith(expectedPrefix) && !/^\d{4}$/.test(originalId.slice(expectedPrefix.length));
         const reason=needsReview?'Linked duplicate ID: review the target in the original XML before correction.':needsPrefix?'Skipped during generation: no configured prefix. Other elements can still be corrected; set a prefix to include this element.':!originalId?(node.attributeRanges.id?'ID is empty.':rule?.required?'Required ID is missing.':'Configured ID is missing.'):isDuplicate?'Duplicate ID in the document.':!validId(originalId,expectedPrefix)?`Expected ${expectedPrefix} + four digits, 0005–9995 in steps of five.`:'';
         return [{id:originalId||'[MISSING ID]',originalId,tagName:node.name,expectedPrefix,status:reason?'invalid' as const:'valid' as const,
-            isLengthViolation,isDuplicate,prefixSource:Object.prototype.hasOwnProperty.call(overrides,node.name)?'custom':rule?.source||'unconfigured',needsReview,needsPrefix,reason,preview:structure.metadataXml.slice(node.openEnd,node.closeStart).replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,100),fullTag:xml.slice(node.start,node.openEnd)}];
+            isLengthViolation,isDuplicate,prefixSource:Object.prototype.hasOwnProperty.call(overrides,node.name)?'custom':node.name==='ce:figure'&&expectedPrefix==='sch'?'workflow':rule?.source||'unconfigured',needsReview,needsPrefix,reason,preview:structure.metadataXml.slice(node.openEnd,node.closeStart).replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,100),fullTag:xml.slice(node.start,node.openEnd)}];
     });
 }
 export function repairElementIds(xml: string, overrides: PrefixOverrides = {}): {output:string;changed:number} {
     const structure=scanReferenceXml(xml,{allowDuplicateIds:true});
+    const schemes=schemeFigures(structure);
     const rows=auditElementIds(xml,overrides);
     const ambiguous = rows.find(row => row.needsReview);
     if (ambiguous) throw new Error(`Linked duplicate ID ${ambiguous.originalId} is ambiguous. Review its owners and citation targets in the original XML before fixing IDs. No output was generated.`);
@@ -91,7 +110,7 @@ export function repairElementIds(xml: string, overrides: PrefixOverrides = {}): 
     const edits: Array<{start:number;end:number;text:string}>=[];
     for(const node of structure.nodes) {
         const oldId=node.attributes.id||'';
-        const prefix=resolvePrefix(node.name, node.attributes, overrides);
+        const prefix=resolvePrefix(node.name, node.attributes, overrides, schemes.has(node.start));
         if(!/^[a-z]+$/.test(prefix))continue;
         if(validId(oldId,prefix)&&!retained.has(oldId)){retained.add(oldId);continue;}
         const id=allocate(prefix);retained.add(id);

@@ -153,3 +153,20 @@ assert.ok(idExports.auditElementIds(captionInput).some(row=>row.tagName==='ce:do
 assert.ok(idExports.createIdQaReport(captionInput,captionOutput).changes.some(change=>change.tag==='ce:caption'&&change.reason==='Generated a missing ID for a configured prefix.'));
 assert.equal(idExports.repairElementIds(captionOutput).changed,0);
 console.log('Configured missing caption IDs and unconfigured QA cases passed.');
+
+// Schemes are represented by ce:figure; they use sch rather than f.
+const schemeXml='<ce:figure id="sch0005"><ce:label>Scheme 1</ce:label></ce:figure><ce:cross-ref id="cf0005" refid="sch0005">Scheme 1</ce:cross-ref>';
+assert.equal(idExports.auditElementIds(schemeXml)[0].expectedPrefix,'sch');
+assert.equal(idExports.auditElementIds(schemeXml)[0].status,'valid');
+assert.equal(idExports.repairElementIds(schemeXml).output,schemeXml);
+assert.equal(idExports.repairElementIds('<ce:figure id="sch0005"/>').changed,0);
+for(const label of ['Scheme 1','SCHEME 2','<ce:italic>Scheme</ce:italic> 3','&#83;cheme 4']){
+ const input=`<ce:figure><ce:label>${label}</ce:label></ce:figure>`;
+ assert.equal(idExports.repairElementIds(input).output,input.replace('<ce:figure>','<ce:figure id="sch3000">'));
+}
+assert.equal(idExports.repairElementIds('<ce:figure id="bad"><ce:label>Scheme 1</ce:label></ce:figure><ce:figure id="sch3000"/>').output,'<ce:figure id="sch3005"><ce:label>Scheme 1</ce:label></ce:figure><ce:figure id="sch3000"/>');
+const ordinary='<ce:figure id="f0005"><ce:label>Fig. 1</ce:label><ce:caption id="ca0005">Scheme 1 is mentioned here</ce:caption></ce:figure>';
+assert.equal(idExports.repairElementIds(ordinary).output,ordinary);
+assert.equal(idExports.auditElementIds('<ce:figure><ce:label>Scheme 1</ce:label></ce:figure>',{'ce:figure':'custom'})[0].expectedPrefix,'custom');
+assert.throws(()=>idExports.repairElementIds(schemeXml+'<ce:figure id="sch0005"/>'),/Linked duplicate/);
+console.log('PASS Scheme preservation, linked target preservation, missing/malformed Scheme IDs, formatted labels, collisions, ordinary figures and explicit overrides');
