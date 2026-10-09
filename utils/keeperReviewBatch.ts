@@ -18,7 +18,7 @@ export function planKeeperReviewBatch(evidence:KeeperEvidence,question:string,cu
   if(!records.length)return null;
   let end=start,characters=0;
   while(end<records.length&&end-start<10){
-    const r=records[end],length=Math.max(r.source.length,r.text.length,r.binding?.response?.length||0);
+    const r=records[end],length=r.contentLength??Math.max(r.source.length,r.text.length,r.binding?.response?.length||0);
     if(end>start&&characters+length>20000)break;
     characters+=length;end++;
   }

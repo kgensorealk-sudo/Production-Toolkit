@@ -6,7 +6,7 @@ export function summarizeOptChanges(evidence: KeeperEvidence) {
     const records=evidence.records.filter(r=>r.artifactId===file.id);
     const count=(kind:string)=>{
       const hits=records.filter(r=>r.kind===kind);
-      return {tags:hits.length,flagged:hits.filter(r=>r.diagnostics.some(d=>d.severity==='error')).length,whitespaceOnly:hits.filter(r=>/^\s+$/.test(r.text)).length};
+      return {tags:hits.length,flagged:hits.filter(r=>r.diagnostics.some(d=>d.severity==='error')).length,whitespaceOnly:hits.filter(r=>r.contentOmitted?r.whitespaceOnly:/^\s+$/.test(r.text)).length};
     };
     return {artifactId:file.id,name:file.name,complete:file.inspectionStatus!=='failed' && file.diagnostics.length===0,diagnostics:file.diagnostics,inserted:count('opt_ins'),deleted:count('opt_del')};
   });

@@ -3,6 +3,7 @@ import type {KeeperActivity} from '../utils/keeperActivity';
 import type {KeeperReviewBatch,KeeperReviewCursor} from '../utils/keeperReviewBatch';
 import {planKeeperReviewBatch,keeperBatchProgress} from '../utils/keeperReviewBatch';
 import {keeperReviewContinuity} from '../utils/keeperReviewContinuity';
+import {keeperTaskQuestion,prepareKeeperRequestEvidence} from '../utils/keeperRequestEvidence';
 import KeeperAnswerEvidencePanel from './KeeperAnswerEvidence';
 import KeeperQueryProvenance from './KeeperQueryProvenance';
 import type {KeeperAnswerEvidence} from '../utils/keeperAnswerEvidence';
@@ -503,12 +504,15 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
         }
         const scope=keeperArtifactScope(requestArtifacts);
         setActiveScope(scope);
+        const requestQuestion=keeperTaskQuestion(taskInstructions,pastedXml?modelSource:source,reviewCursor);
+        let requestEvidence=evidenceSnapshot;
         let pendingBatch:KeeperReviewBatch|undefined;
         if(evidenceSnapshot){
             try{
                 if(reviewCursor){const savedReview=keeperReviewContinuity(messages,scope,evidenceSnapshot,taskInstructions);if(savedReview?.status!=='ready'||savedReview.batch.next?.key!==reviewCursor.key||savedReview.batch.next?.offset!==reviewCursor.offset)throw Error('Saved review cannot continue with these sources or instructions. Start a fresh review.');}
-                const plan=planKeeperReviewBatch(evidenceSnapshot,pastedXml?text:source||taskInstructions,reviewCursor);
+                const plan=planKeeperReviewBatch(evidenceSnapshot,requestQuestion,reviewCursor);
                 if(plan)pendingBatch=keeperBatchProgress(plan,false);
+                requestEvidence=prepareKeeperRequestEvidence(evidenceSnapshot,requestQuestion,reviewCursor);
             }catch(error){setIsLoading(false);setFileNotice(error instanceof Error?error.message:'Review continuation is unavailable.');return;}
         }
 
@@ -620,9 +624,9 @@ ${userAuthContext}`;
                         body: encodeKeeperRequest({
                             messages: payloadMessages.length > 0 ? payloadMessages : [{ role: 'user', content: text }],
                             context: contextInfo,
-                            evidenceSnapshot,
+                            evidenceSnapshot:requestEvidence,
                             reviewCursor,
-                            question:pastedXml?undefined:source||taskInstructions
+                            question:requestQuestion
                         })
                     });
 

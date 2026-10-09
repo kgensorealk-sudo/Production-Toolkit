@@ -9,6 +9,9 @@ export interface KeeperArtifact {
   content: string;
 }
 export interface EvidenceRecord {
+  contentOmitted?: boolean;
+  contentLength?: number;
+  whitespaceOnly?: boolean;
   id: string;
   artifactId: string;
   kind: string;
@@ -601,6 +604,9 @@ export function evidenceSummary(e: KeeperEvidence) {
     files: e.files,
     optChanges: summarizeOptChanges(e),
     recordCount: e.records.length,
+    unavailableRecordText: e.records.filter(r=>r.contentOmitted).length,
+    transportLimitations: e.records.some(r=>r.contentOmitted)?'Full inventory metadata is supplied, but record text outside the selected request is unavailable. Omitted text is not retrieved evidence. Request a new review batch or specific query IDs to inspect it.':undefined,
+    availableRecords: e.records.some(r=>r.contentOmitted)?e.records.filter(r=>!r.contentOmitted).slice(0,100).map(r=>({id:r.id,queryId:r.queryId,kind:r.kind})):undefined,
     counts: e.records.reduce(
       (a, r) => ((a[r.kind] = (a[r.kind] || 0) + 1), a),
       {} as Record<string, number>,
@@ -704,9 +710,13 @@ export function dispatchKeeperTool(
     const offset=Number(a.offset ?? 0), rows=[];
     let used=0;
     for (const r of selected.slice(offset,offset+Number(a.limit ?? 30))) {
-      const row={id:r.id, artifactId:r.artifactId, queryId:r.queryId, line:r.line, commented:r.commented, text:r.text.slice(0,2500), binding:r.binding ? {...r.binding,response:r.binding.state==='established'?r.binding.response?.slice(0,2500):undefined}:undefined,truncated:r.text.length>2500 || (r.binding?.response?.length || 0)>2500};
-      const size=JSON.stringify(row).length;
-      if (used+size>48000) break;
+      if(r.contentOmitted)return {error:'Selected query text is outside this request. Start the next review batch or request specific query IDs.'};
+      const longest=Math.max(r.text.length,r.binding?.response?.length||0);
+      const makeRow=(length:number)=>({id:r.id, artifactId:r.artifactId, queryId:r.queryId, line:r.line, commented:r.commented, text:r.text.slice(0,length), binding:r.binding ? {...r.binding,response:r.binding.state==='established'?r.binding.response?.slice(0,length):undefined}:undefined,textOffset:0,nextTextOffset:length<longest?length:null,truncated:length<longest});
+      let length=2500,row=makeRow(length),size=new TextEncoder().encode(JSON.stringify(row)).length;
+      if(used+size>48000&&rows.length)break;
+      while(size>48000&&length>1){length=Math.max(1,Math.floor(length/2));row=makeRow(length);size=new TextEncoder().encode(JSON.stringify(row)).length;}
+      if(size>48000)return {error:'Query metadata exceeds the retrieval budget. Reduce the source metadata; no query text was retrieved.'};
       rows.push(row);used+=size;
     }
     return {records:rows,total:selected.length,nextOffset:offset+rows.length<selected.length?offset+rows.length:null,limitations:'Response association does not prove edit completion. Commented queries are explicitly marked. Truncated records require full retrieval.'};
@@ -773,6 +783,7 @@ export function dispatchKeeperTool(
   }
   if (a.artifactId && !e.files.some((f) => f.id === a.artifactId))
     return { error: "Unknown sandbox artifact ID." };
+  if(a.search&&e.records.some(r=>r.contentOmitted&&(!a.artifactId||r.artifactId===a.artifactId)&&(!a.recordId||r.id===a.recordId)&&(!a.kind||r.kind===a.kind)))return {error:'This request does not contain all text needed for that search. Request a specific query ID or continue the review batch; no full-inventory search was performed.'};
   const selected = e.records.filter(
     (r) =>
       (!a.artifactId || r.artifactId === a.artifactId) &&
@@ -787,28 +798,31 @@ export function dispatchKeeperTool(
   const rows = [];
   const textOffset = Number(a.textOffset ?? 0);
   for (const r of selected.slice(offset, offset + Number(a.limit ?? 5))) {
+    if(r.contentOmitted)return {error:'Selected record text is outside this request. Start the next review batch or request specific query IDs.'};
     const longest = Math.max(
       r.source.length,
       r.text.length,
       r.binding?.response?.length || 0,
     );
-    const bounded = {
+    const makeSlice = (length:number) => ({
       ...r,
-      source: r.source.slice(textOffset, textOffset + 5000),
-      text: r.text.slice(textOffset, textOffset + 5000),
+      source: r.source.slice(textOffset, textOffset + length),
+      text: r.text.slice(textOffset, textOffset + length),
       context: r.context?.slice(0, 1500),
       textOffset,
-      nextTextOffset: textOffset + 5000 < longest ? textOffset + 5000 : null,
-      truncated: textOffset + 5000 < longest,
+      nextTextOffset: textOffset + length < longest ? textOffset + length : null,
+      truncated: textOffset + length < longest,
       binding: r.binding
         ? {
             ...r.binding,
-            response: r.binding.response?.slice(textOffset, textOffset + 5000),
+            response: r.binding.response?.slice(textOffset, textOffset + length),
           }
         : undefined,
-    };
-    const size = JSON.stringify(bounded).length;
-    if (used + size > 24000) break;
+    });
+    let length=5000,bounded=makeSlice(length),size=new TextEncoder().encode(JSON.stringify(bounded)).length;
+    if(used+size>24000&&rows.length)break;
+    while(size>24000&&length>1){length=Math.max(1,Math.floor(length/2));bounded=makeSlice(length);size=new TextEncoder().encode(JSON.stringify(bounded)).length;}
+    if(size>24000)return {error:'Record metadata exceeds the retrieval budget. Reduce the source metadata or request a smaller source; no text was retrieved.'};
     rows.push(bounded);
     used += size;
   }

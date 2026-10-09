@@ -23,7 +23,10 @@ export function validateKeeperEvidenceSnapshot(input:unknown):KeeperEvidence|nul
     if(!/^(?:query|pdf_query|opt_[a-z0-9_.:-]+)$/.test(r.kind)||recordIds.has(id)||!ids.has(artifactId))fail();recordIds.add(id);
     const diagnostics=list(r.diagnostics,1000).map(value=>{const d=object(value);if(!['error','warning'].includes(d.severity))fail();return {severity:d.severity as 'error'|'warning',message:str(d.message,10000)};});
     const binding=r.binding===undefined?undefined:(()=>{const b=object(r.binding);if(!['established','unresolved','ambiguous','conflicting'].includes(b.state))fail();return {state:b.state,reason:str(b.reason),response:optional(b.response),pdfRecordId:optional(b.pdfRecordId)};})();
-    return {id,artifactId,kind:str(r.kind,100),source:str(r.source),text:str(r.text),diagnostics,offset:position(r.offset),line:position(r.line),page:position(r.page),queryId:optional(r.queryId),qid:optional(r.qid),context:optional(r.context),commented:r.commented===true,binding};
+    if(r.contentOmitted!==undefined&&r.contentOmitted!==true)fail();
+    if(r.contentOmitted&&(r.source!==''||r.text!==''||r.context!==undefined||binding?.response!==undefined||!Number.isSafeInteger(r.contentLength)||r.contentLength<0||typeof r.whitespaceOnly!=='boolean'))fail();
+    if(!r.contentOmitted&&(r.contentLength!==undefined||r.whitespaceOnly!==undefined))fail();
+    return {id,artifactId,kind:str(r.kind,100),source:str(r.source),text:str(r.text),diagnostics,offset:position(r.offset),line:position(r.line),page:position(r.page),queryId:optional(r.queryId),qid:optional(r.qid),context:optional(r.context),commented:r.commented===true,binding,...(r.contentOmitted?{contentOmitted:true,contentLength:r.contentLength,whitespaceOnly:r.whitespaceOnly}:{})};
   });
   for(const r of records)if(r.binding?.pdfRecordId&&!recordIds.has(r.binding.pdfRecordId))fail();
   return {files,records};
