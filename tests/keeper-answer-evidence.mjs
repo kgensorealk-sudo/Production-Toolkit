@@ -45,6 +45,7 @@ assert.equal(keeperAnswerSourcesMatch(result.answerEvidence,null),false);
 const writer=new KeeperWorkspaceWriter('phase1-user','phase1-task');
 await writer.save({artifacts:sources,messages:[{id:'answer',role:'assistant',content:result.text,answerEvidence:result.answerEvidence}]});
 const saved=await readKeeperTaskWorkspace('phase1-user','phase1-task');
+assert.deepEqual(saved.messages[0].answerEvidence.findingCoverage,result.answerEvidence.findingCoverage);
 const reinspected=await buildKeeperEvidence(saved.artifacts);
 assert.ok(resolveKeeperAnswerReference(saved.messages[0].answerEvidence,reinspected,'E1'));
 assert.equal(await readKeeperTaskWorkspace('other-user','phase1-task'),undefined);

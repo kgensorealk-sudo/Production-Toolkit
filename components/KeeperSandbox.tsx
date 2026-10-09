@@ -2,6 +2,7 @@ import KeeperActivityReport from './KeeperActivityReport';
 import type {KeeperActivity} from '../utils/keeperActivity';
 import type {KeeperReviewBatch,KeeperReviewCursor} from '../utils/keeperReviewBatch';
 import KeeperAnswerEvidencePanel from './KeeperAnswerEvidence';
+import KeeperQueryProvenance from './KeeperQueryProvenance';
 import type {KeeperAnswerEvidence} from '../utils/keeperAnswerEvidence';
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -185,6 +186,9 @@ const LAST_DATE_KEY = 'prod_toolkit_keeper_factory_last_date';
 export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) => {
     const currentTool: ToolId | undefined = undefined;
     const { user, profile, isAdmin, freeTools, session } = useAuth();
+    const [personalGemini,setPersonalGemini]=useState({owner:'',key:''});
+    const personalGeminiKey=personalGemini.owner===user?.id?personalGemini.key:'';
+    useEffect(()=>setPersonalGemini({owner:user?.id||'',key:''}),[user?.id]);
 
 
     const isExpLocation = false;
@@ -591,6 +595,7 @@ ${userAuthContext}`;
                         signal:apiController.signal,
                         headers: {
                             'Content-Type': 'application/json',
+                            ...(personalGeminiKey.trim()?{'X-Keeper-Gemini-Key':personalGeminiKey.trim()}:{}),
                             ...(token ? { 'Authorization': `Bearer ${token}` } : {})
                         },
                         body: encodeKeeperRequest({
@@ -702,6 +707,15 @@ ${userAuthContext}`;
 
     return (
         <section aria-label="Keeper sandbox" className="space-y-5">
+            <details className="rounded-xl border border-slate-200 bg-white p-4">
+                <summary className="cursor-pointer text-sm font-semibold">Gemini API key · {personalGeminiKey.trim()?'Personal key':'Application key'}</summary>
+                <div className="mt-3 space-y-3 text-sm">
+                    <label className="block" htmlFor="keeper-gemini-key">Your Gemini API key (optional)</label>
+                    <input id="keeper-gemini-key" type="password" autoComplete="off" spellCheck={false} maxLength={256} disabled={isLoading} value={personalGeminiKey} onChange={e=>setPersonalGemini({owner:user.id,key:e.target.value})} className="w-full rounded-lg border border-slate-300 px-3 py-2" aria-describedby="keeper-key-help"/>
+                    <p id="keeper-key-help" className="text-xs text-slate-600">Used for your next Keeper AI request. Kept in memory only; refresh, sign-out, or leaving Keeper clears it. Sent through the application server to Gemini, never saved in tasks or conversation history. Your Gemini quota and billing apply. Personal-key requests use Gemini only. Existing account access requirements still apply.</p>
+                    <button disabled={isLoading||!personalGeminiKey} className="text-indigo-700 underline disabled:opacity-40" onClick={()=>setPersonalGemini({owner:user.id,key:''})}>Clear personal key</button>
+                </div>
+            </details>
             {saveError&&<div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm"><p>{saveError}</p><button className="underline mr-4" onClick={exportUnsavedWorkspace}>Export unsaved workspace (contains manuscript data)</button><button className="underline" onClick={()=>setRestoreRetry(n=>n+1)}>Reload saved version</button></div>}
             <KeeperLocalTasks owner={user?.id} disabled={switchingTask} onSelect={(task,artifacts)=>void selectLocalTask(task,artifacts)} onBeforeRemove={async task=>task!==activeTask||Boolean(await selectLocalTask('scratch',[]))}/>
             <button className="text-sm text-indigo-700 underline" disabled={switchingTask||Boolean(saveError)} onClick={()=>void selectLocalTask('scratch',[])}>Open standalone workspace</button>
@@ -742,6 +756,7 @@ ${userAuthContext}`;
                 {lastAssistantMessage.reviewBatch.next && <button className="mt-3 rounded-lg bg-indigo-700 px-4 py-2 text-white disabled:opacity-50" disabled={isLoading||isImporting||switchingTask} onClick={()=>void handleSendMessage(undefined,lastAssistantMessage.reviewBatch!.next!)}>{lastAssistantMessage.reviewBatch.reviewed===lastAssistantMessage.reviewBatch.start?'Retry batch':'Continue review'}</button>}
             </section>}
             {evidenceReport && <KeeperEvidenceReport report={evidenceReport} />}
+            {inspectionStatus==='ready'&&localEvidence.current&&<KeeperQueryProvenance evidence={localEvidence.current}/>}
             {messages.some(message => message.role === 'assistant') && <details className="border border-slate-200 rounded-xl bg-white p-5"><summary className="text-sm font-semibold text-slate-600 cursor-pointer">Session history</summary><div className="space-y-4 mt-4">{messages.map(message => <div key={message.id} className="border-t border-slate-100 pt-4"><p className="text-xs font-semibold text-slate-400 mb-2">{message.role === 'user' ? 'Your input' : 'Keeper result'} · {new Date(message.timestamp).toLocaleString()}</p><pre className="text-sm whitespace-pre-wrap break-words font-sans text-slate-700">{message.content}</pre></div>)}</div></details>}
         </section>
     );

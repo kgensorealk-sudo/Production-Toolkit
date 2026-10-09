@@ -1,5 +1,14 @@
 import type {KeeperEvidence} from './keeperEvidenceCore.js';
 import {fromMarkdown} from 'mdast-util-from-markdown';
+import {gfmFromMarkdown} from 'mdast-util-gfm';
+import {gfm} from 'micromark-extension-gfm';
+
+export interface KeeperFindingCoverage {
+  contract:'keeper-finding-coverage-v1';
+  units:{id:string;kind:'paragraph'|'table-row';text:string;references:string[];status:'citation-present'|'uncited'}[];
+}
+type MarkdownNode={type:string;value?:string;url?:string;children?:MarkdownNode[];position?:{start:{offset?:number};end:{offset?:number}}};
+const parseAnswer=(text:string)=>fromMarkdown(text,{extensions:[gfm()],mdastExtensions:[gfmFromMarkdown()]});
 
 export interface KeeperAnswerEvidence {
   contract:'keeper-answer-evidence-v1';
@@ -8,6 +17,7 @@ export interface KeeperAnswerEvidence {
   retrieval:{records:number;fullyRetrieved:number;scopeRecords:number;xmlExcerptReads:number;inventoryCountsRead:boolean};
   answer:{kind:'interpretation'|'counts'|'scope'|'unavailable';linkedRecords:number};
   references:{ref:string;recordId:string;artifactId:string;complete:boolean;cited:boolean}[];
+  findingCoverage?:KeeperFindingCoverage;
 }
 export const keeperEvidenceRef=(evidence:KeeperEvidence,id:string)=>{
   const index=evidence.records.findIndex(r=>r.id===id);
@@ -21,7 +31,6 @@ export function linkKeeperEvidenceCitations(text:string,evidence:KeeperEvidence,
     if(!record||keeperEvidenceRef(evidence,record.id)!==ref||!retrieved.has(record.id))throw Error('Answer cited evidence that was not retrieved.');
     cited.add(ref);edits.push({start,end,replacement:`[${ref}](#keeper-evidence-${ref})`});
   };
-  type MarkdownNode={type:string;value?:string;url?:string;children?:MarkdownNode[];position?:{start:{offset?:number};end:{offset?:number}}};
   const walk=(node:MarkdownNode)=>{
     const start=node.position?.start.offset,end=node.position?.end.offset;
     // These nodes render as code, images, or non-citation links in the sandbox.
@@ -43,10 +52,36 @@ export function linkKeeperEvidenceCitations(text:string,evidence:KeeperEvidence,
     }
     for(const child of node.children||[])walk(child);
   };
-  walk(fromMarkdown(text));
+  walk(parseAnswer(text));
   let linked=text;
   for(const edit of edits.sort((a,b)=>b.start-a.start))linked=linked.slice(0,edit.start)+edit.replacement+linked.slice(edit.end);
-  return {text:linked,cited};
+  return {text:linked,cited,findingCoverage:keeperFindingCoverage(linked,cited)};
+}
+// Citation presence is a syntactic check, never a semantic support verdict.
+export function keeperFindingCoverage(text:string,validatedReferences:ReadonlySet<string>):KeeperFindingCoverage{
+  const units:KeeperFindingCoverage['units']=[];
+  const plain=(node:MarkdownNode):string=>node.value??(node.children||[]).map(plain).join(node.type==='tableRow'?' | ':'');
+  const refs=(node:MarkdownNode,found:Set<string>)=>{
+    if(node.type==='link'){
+      const ref=node.url?.match(/^#keeper-evidence-(E[1-9]\d*)$/)?.[1];
+      if(ref&&validatedReferences.has(ref)&&node.children?.length===1&&node.children[0].value===ref)found.add(ref);
+      return;
+    }
+    if(['inlineCode','code','image','imageReference','html'].includes(node.type))return;
+    for(const child of node.children||[])refs(child,found);
+  };
+  const visit=(node:MarkdownNode)=>{
+    if(['code','heading','definition','html','footnoteDefinition'].includes(node.type))return;
+    if(node.type==='table'){for(const row of (node.children||[]).slice(1))visit(row);return;}
+    if(node.type==='paragraph'||node.type==='tableRow'){
+      const value=plain(node).trim();if(!value)return;
+      const found=new Set<string>();refs(node,found);
+      units.push({id:`F${units.length+1}`,kind:node.type==='tableRow'?'table-row':'paragraph',text:value.slice(0,1200),references:[...found],status:found.size?'citation-present':'uncited'});
+      return;
+    }
+    for(const child of node.children||[])visit(child);
+  };
+  visit(parseAnswer(text));return {contract:'keeper-finding-coverage-v1',units};
 }
 export function buildKeeperAnswerEvidence(evidence:KeeperEvidence,options:{retrieved?:ReadonlySet<string>;fullyRetrieved?:ReadonlySet<string>;cited?:ReadonlySet<string>;scopeRecords?:number;xmlExcerptReads?:number;inventoryCountsRead?:boolean;kind?:KeeperAnswerEvidence['answer']['kind']}={}):KeeperAnswerEvidence{
   const retrieved=options.retrieved||new Set<string>(),full=options.fullyRetrieved||new Set<string>();

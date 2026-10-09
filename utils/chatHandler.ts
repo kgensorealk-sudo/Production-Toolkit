@@ -112,8 +112,8 @@ async function verifySubscriptionAccess(req: VercelRequest): Promise<{ authorize
   }
 }
 
-function getGeminiClient(): GoogleGenAI | null {
-  const apiKey = process.env.GEMINI_API_KEY;
+function getGeminiClient(personalKey?: string): GoogleGenAI | null {
+  const apiKey = personalKey || process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return null;
   }
@@ -143,7 +143,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Setup standard CORS headers for cross-origin and Vercel preview environments
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Keeper-Gemini-Key');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -163,6 +163,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    const keyHeader=req.headers['x-keeper-gemini-key'];
+    if(keyHeader!==undefined&&(typeof keyHeader!=='string'||!keyHeader.trim()||keyHeader.length>256||!/^[A-Za-z0-9_-]+$/.test(keyHeader.trim())))return res.status(400).json({error:'Invalid personal Gemini API key format.'});
+    const personalGeminiKey=typeof keyHeader==='string'?keyHeader.trim():undefined;
     if (Buffer.byteLength(JSON.stringify(req.body || {}), 'utf8') > 4000000) return res.status(400).json({error:'Sandbox request exceeds 4 MB. Use smaller files or shorten the conversation.'});
     const { messages, context, artifacts, action, evidenceSnapshot, question, reviewCursor } = req.body || {};
     let suppliedArtifacts;
@@ -204,8 +207,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let toolTrace: any[] = [];
     let retrievalCoverage: any = null;
     let answerEvidence:KeeperAnswerEvidence|undefined;
-    const geminiClient = getGeminiClient();
-    const openaiClient = getOpenAIClient();
+    const geminiClient = getGeminiClient(personalGeminiKey);
+    const openaiClient = personalGeminiKey ? null : getOpenAIClient();
 
     if (!geminiClient && !openaiClient) {
       if (evidence && !localEvidence) return res.json({reply:keeperFallbackReport(evidence,latestUser?.content || ''),modelUsed:'keeper-evidence-only',activity:activity(),evidence:evidenceSummary(evidence),interpretationUnavailable:true});
@@ -302,19 +305,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           break;
         }
       } catch (modelErr: any) {
-        console.warn(`[AI Copilot - Vercel] Model ${candidate.model} (${candidate.provider}) encountered error:`, modelErr?.message || modelErr);
+        console.warn(`[AI Copilot - Vercel] Model ${candidate.model} (${candidate.provider}) encountered error:`, keeperProviderFailure(modelErr));
         lastError = modelErr;failure=keeperProviderFailure(modelErr);
+        if(personalGeminiKey&&failure==='authentication_or_access')break;
       } finally { if(!evidence)events.push({kind:'model_round',model:candidate.model,round:1,elapsedMs:Date.now()-attemptStarted,outcome:attemptOutcome});attempts.push({model:candidate.model,provider:candidate.provider,elapsedMs:Date.now()-attemptStarted,outcome:attemptOutcome,failure});clearTimeout(modelTimer);modelController.abort(); }
     }
 
-    if (!reply && localEvidence) return res.status(503).json({error:String(lastError?.message||'').includes('API key not valid')?'Gemini rejected the configured API key. Update the server Gemini key. Your local QA report is still available.':'Keeper AI could not complete this review. Your local QA report is still available; no AI interpretation has been produced.',code:'AI_UNAVAILABLE',activity:activity(),answerEvidence,evidence:evidenceSummary(localEvidence),...(batch?{reviewBatch:keeperBatchProgress(batch,false)}:{})});
+    if (!reply && localEvidence) return res.status(503).json({error:keeperProviderFailure(lastError)==='authentication_or_access'?(personalGeminiKey?'Gemini rejected your personal API key or its access. Check the key and permissions. Your local QA report is still available.':'Gemini rejected the configured API key or its access. Contact the administrator. Your local QA report is still available.'):'Keeper AI could not complete this review. Your local QA report is still available; no AI interpretation has been produced.',code:'AI_UNAVAILABLE',activity:activity(),answerEvidence,evidence:evidenceSummary(localEvidence),...(batch?{reviewBatch:keeperBatchProgress(batch,false)}:{})});
     if (!reply && evidence) return res.json({reply:keeperFallbackReport(evidence,latestUser?.content || ''),modelUsed:'keeper-evidence-only',activity:activity(),evidence:evidenceSummary(evidence),interpretationUnavailable:true});
-    if (!reply) return res.status(503).json({error:KEEPER_CONTACT_ADMIN_NOTICE,code:'AI_UNAVAILABLE',activity:activity()});
+    if (!reply) return res.status(503).json({error:personalGeminiKey&&keeperProviderFailure(lastError)==='authentication_or_access'?'Gemini rejected your personal API key or its access. Check the key and permissions.':personalGeminiKey?'Keeper could not complete this request with your personal Gemini key. Check its access and quota, then retry.':KEEPER_CONTACT_ADMIN_NOTICE,code:'AI_UNAVAILABLE',activity:activity()});
 
     if(batch)reply=`Batch ${batch.start+1}–${batch.end} of ${batch.total} inventory records. ${batchCompleted?'Evidence retrieved and answer returned for this batch.':'This batch is incomplete; progress has not advanced.'} This does not confirm that edits were implemented.\n\n${reply}`;
     return res.json({ reply: sanitizeOutput(reply), modelUsed: activeModel, activity:activity(), answerEvidence, ...(batch?{reviewBatch:keeperBatchProgress(batch,batchCompleted)}:{}), ...(evidence ? {evidence: {...evidenceSummary(evidence),retrievalCoverage}, toolTrace} : {}) });
   } catch (err: any) {
-    console.error('AI Copilot API Error (Vercel):', err);
+    console.error('AI Copilot API Error (Vercel):', keeperProviderFailure(err));
     return res.status(503).json({ error: KEEPER_CONTACT_ADMIN_NOTICE, code: 'AI_UNAVAILABLE' });
   }
 }

@@ -28,6 +28,8 @@
     "express": "^5.2.1",
     "lucide-react": "^0.574.0",
     "mdast-util-from-markdown": "^2.0.3",
+    "mdast-util-gfm": "^3.1.0",
+    "micromark-extension-gfm": "^3.0.0",
     "motion": "^12.34.2",
     "openai": "^4.0.0",
     "pdfjs-dist": "5.4.624",
