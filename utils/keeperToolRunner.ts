@@ -1,4 +1,5 @@
 import type {KeeperActivity} from './keeperActivity.js';
+import {buildKeeperAnswerEvidence,keeperEvidenceRef,linkKeeperEvidenceCitations,type KeeperAnswerEvidence} from './keeperAnswerEvidence.js';
 import {renderKeeperScope} from './keeperScope.js';
 import {
   dispatchKeeperTool,
@@ -24,15 +25,17 @@ export async function runKeeperToolLoop(options: {
   question?:string;
   countEvidence?:KeeperEvidence;
   requiredRecordIds?:string[];
+  onEvidenceProgress?:(evidence:KeeperAnswerEvidence)=>void;
   onActivity?:(event:NonNullable<KeeperActivity['events']>[number])=>void;
 }) {
   const { provider, client, model, evidence } = options;
+  const inventory=options.countEvidence||evidence;
   // An empty failed inventory is unavailable evidence, never a verified absence.
   if (!evidence.records.length && evidence.files.some(f=>f.inspectionStatus==='failed' || f.diagnostics.length>0)) {
-    return {text:renderKeeperScope({status:'insufficient_evidence',reason:'File inspection is incomplete and returned no reviewable records. This does not establish that the document has no changes or queries.',suggestedAction:'Check the local QA report for inspection errors, then repair or replace the affected source and retry.'}),trace:[],coverage:{recordsRetrieved:0,inventoryRecords:0,xmlExcerptReads:0,fullyRetrievedRecords:0}};
+    return {text:renderKeeperScope({status:'insufficient_evidence',reason:'File inspection is incomplete and returned no reviewable records. This does not establish that the document has no changes or queries.',suggestedAction:'Check the local QA report for inspection errors, then repair or replace the affected source and retry.'}),trace:[],coverage:{recordsRetrieved:0,inventoryRecords:0,xmlExcerptReads:0,fullyRetrievedRecords:0},answerEvidence:buildKeeperAnswerEvidence(inventory,{kind:'scope',scopeRecords:evidence.records.length})};
   }
   const instruction =
-    options.systemInstruction + "\n" + keeperEvidenceInstruction + '\nWhen asked to check author responses to each query, prefer review_query_responses to retrieve compact batches instead of unrelated OPT records. Cover each query individually: question, verified response or unresolved reason, and any evidence needed to assess implementation. Follow nextOffset and disclose truncated records. Never describe retrieval alone as a completed editorial review.';
+    options.systemInstruction + "\n" + keeperEvidenceInstruction + '\nWhen asked to check author responses to each query, prefer review_query_responses to retrieve compact batches instead of unrelated OPT records. Cover each query individually: question, verified response or unresolved reason, and any evidence needed to assess implementation. Follow nextOffset and disclose truncated records. Never describe retrieval alone as a completed editorial review. Tool records include application-assigned evidenceRef values such as E1. Cite observed facts using [E1] immediately beside the relevant statement. Use only references returned by tools in this request, never references from conversation history. Keep observed evidence, your interpretation, and any suggested response distinct. A citation establishes provenance, not that a correction was implemented.';
   const summary = JSON.stringify(evidenceSummary(evidence));
   const wholeOptInstruction = '\nFor a review of all OPT comments, insertions, deletions or changes, retrieve every relevant record and all text continuations before claiming complete coverage. Counts alone do not establish that the records were reviewed. If the request exceeds the bounded retrieval budget, disclose the limit.';
   const countInstruction = '\nInsertion/deletion tags are opt_INS and opt_DEL (case-insensitive). For tag count questions call summarize_opt_changes; query records or a missing document-level change log do not establish absence of edits. Use complete inventory totals, never a paged-record count. Report observed lower bounds, not exact totals or zero, when XML inspection is incomplete. Counts are tag occurrences, not words or proof of completed edits.';
@@ -99,6 +102,7 @@ export async function runKeeperToolLoop(options: {
   const trace: { name: string; error?: string }[] = [];
   let readOptCounts = false;
   let optCountResult: ReturnType<typeof summarizeOptChanges> | undefined;
+  const answerEvidence=(kind:KeeperAnswerEvidence['answer']['kind']='interpretation',cited?:ReadonlySet<string>)=>buildKeeperAnswerEvidence(inventory,{kind,cited,retrieved,fullyRetrieved,scopeRecords:evidence.records.length,xmlExcerptReads,inventoryCountsRead:readOptCounts});
   for (let round = 0; round < 6; round++) {
     const remaining = Math.min(30000, options.deadline - Date.now());
     if (remaining <= 0)
@@ -156,12 +160,13 @@ export async function runKeeperToolLoop(options: {
       if(evidence.records.some(r=>r.kind==='query'&&requestedQueries.includes((r.queryId||'').toLowerCase())&&!fullyRetrieved.has(r.id)))throw new Error('Requested query evidence was not retrieved.');
       if(options.requiredRecordIds?.some(id=>!fullyRetrieved.has(id)))throw new Error('Incomplete batch evidence retrieval; retry this batch.');
       if(requestsOptTagCounts(task) && !readOptCounts) throw new Error('Insertion/deletion counts were not retrieved from the inventory.');
-      if(isOptCountRequest(task) && optCountResult) return {text:renderOptCounts(optCountResult),trace,coverage:coverage()};
+      if(isOptCountRequest(task) && optCountResult) return {text:renderOptCounts(optCountResult),trace,coverage:coverage(),answerEvidence:answerEvidence('counts')};
       const claimsAllQueries = /\b(?:each|all|every)\b[\s\S]{0,60}\bquer(?:y|ies)\b/i.test(text);
       if ((allQueriesRequested || claimsAllQueries) && evidence.records.some(r=>r.kind==='query' && !fullyRetrieved.has(r.id))) throw new Error('Incomplete query evidence retrieval; refusing a whole-query review claim.');
       const optKinds=[...keeperOptReviewKinds(task),...keeperOptReviewKinds(text)];
       if(evidence.records.some(r=>keeperRecordInOptReview(r.kind,optKinds)&&!fullyRetrieved.has(r.id)))throw new Error('Incomplete OPT evidence retrieval; refusing a whole-inventory review claim.');
-      return { text:requestsOptTagCounts(task) && optCountResult ? renderOptCounts(optCountResult)+'\n\n'+text : text, trace, coverage: coverage() };
+      const linked=linkKeeperEvidenceCitations(text,inventory,retrieved);
+      return { text:requestsOptTagCounts(task) && optCountResult ? renderOptCounts(optCountResult)+'\n\n'+linked.text : linked.text, trace, coverage: coverage(),answerEvidence:answerEvidence('interpretation',linked.cited) };
     }
     if (round === 5 || callsUsed + calls.length > 8)
       throw new Error(
@@ -190,12 +195,13 @@ export async function runKeeperToolLoop(options: {
       } catch {
         result = { error: "Invalid tool arguments." };
       }
+      if(!result.error&&Array.isArray(result.records))result.records=result.records.map((record:any)=>({...record,evidenceRef:keeperEvidenceRef(inventory,record.id)}));
       options.onActivity?.({kind:'tool',model,name:String(name),elapsedMs:Date.now()-toolStarted,outcome:result.error?'failed':'success',records:Array.isArray(result.records)?result.records.length:undefined});
       trace.push({
         name: String(name),
         ...(result.error ? { error: result.error } : {}),
       });
-      if(!result.error && name==='report_scope_limit')return {text:renderKeeperScope(result),trace,coverage:coverage()};
+      if(!result.error && name==='report_scope_limit')return {text:renderKeeperScope(result),trace,coverage:coverage(),answerEvidence:answerEvidence('scope')};
       if (!result.error) successfulReads++;
       if(!result.error && name==='summarize_opt_changes') {readOptCounts=true;optCountResult=result;}
       for (const record of result.records || []) {
@@ -212,6 +218,7 @@ export async function runKeeperToolLoop(options: {
         slices.set(record.id,state);
       }
       if (!result.error && name === "read_sandbox_xml") xmlExcerptReads++;
+      options.onEvidenceProgress?.(answerEvidence('unavailable'));
       if (!result.error) result.retrievalCoverage = coverage();
       if (provider === "gemini")
         parts.push({

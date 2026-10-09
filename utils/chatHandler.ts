@@ -1,4 +1,5 @@
 import {keeperProviderFailure} from './keeperProviderFailure.js';
+import {buildKeeperAnswerEvidence,type KeeperAnswerEvidence} from './keeperAnswerEvidence.js';
 import {planKeeperReviewBatch,keeperBatchProgress} from './keeperReviewBatch.js';
 import type {KeeperActivity} from './keeperActivity.js';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
@@ -198,16 +199,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const countStarted=Date.now();
       const result=dispatchKeeperTool(evidence,'summarize_opt_changes',{});
       events.push({kind:'tool',name:'summarize_opt_changes',elapsedMs:Date.now()-countStarted,outcome:'success'});
-      return res.json({reply:renderOptCounts(result as ReturnType<typeof summarizeOptChanges>),modelUsed:'keeper-evidence-counts',activity:activity(),evidence:evidenceSummary(evidence),toolTrace:[{name:'summarize_opt_changes'}]});
+      return res.json({reply:renderOptCounts(result as ReturnType<typeof summarizeOptChanges>),modelUsed:'keeper-evidence-counts',activity:activity(),evidence:evidenceSummary(evidence),toolTrace:[{name:'summarize_opt_changes'}],answerEvidence:buildKeeperAnswerEvidence(evidence,{kind:'counts',inventoryCountsRead:true})});
     }
     let toolTrace: any[] = [];
     let retrievalCoverage: any = null;
+    let answerEvidence:KeeperAnswerEvidence|undefined;
     const geminiClient = getGeminiClient();
     const openaiClient = getOpenAIClient();
 
     if (!geminiClient && !openaiClient) {
       if (evidence && !localEvidence) return res.json({reply:keeperFallbackReport(evidence,latestUser?.content || ''),modelUsed:'keeper-evidence-only',activity:activity(),evidence:evidenceSummary(evidence),interpretationUnavailable:true});
-      if(localEvidence)return res.status(503).json({error:'Keeper AI is not configured. Your local QA report is still available.',code:'AI_CONFIGURATION_MISSING',activity:activity(),evidence:evidenceSummary(localEvidence)});
+      if(localEvidence)return res.status(503).json({error:'Keeper AI is not configured. Your local QA report is still available.',code:'AI_CONFIGURATION_MISSING',activity:activity(),evidence:evidenceSummary(localEvidence),answerEvidence:buildKeeperAnswerEvidence(localEvidence,{kind:'unavailable',scopeRecords:reviewEvidence!.records.length})});
       return res.status(503).json({ error: KEEPER_CONTACT_ADMIN_NOTICE, code: 'AI_UNAVAILABLE', ...(evidence ? {evidence:evidenceSummary(evidence)} : {}) });
     }
 
@@ -249,6 +251,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (candidate.provider === 'anthropic' || Date.now() >= deadline) continue;
 
       const attemptStarted=Date.now();let attemptOutcome='failed';let failure:string|undefined;
+      if(evidence)answerEvidence=buildKeeperAnswerEvidence(evidence,{kind:'unavailable',scopeRecords:reviewEvidence!.records.length});
       const modelController=new AbortController();
       let modelTimer: ReturnType<typeof setTimeout> | undefined;
       try {
@@ -262,8 +265,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         let text = '';
 
         if (evidence) {
-          const result = await runKeeperToolLoop({provider: candidate.provider as 'gemini'|'openai',client:candidate.provider==='gemini'?geminiClient:openaiClient, model:candidate.model,messages:candidate.provider==='gemini'?geminiContents:openaiMessages.slice(1),systemInstruction,evidence:reviewEvidence!,countEvidence:evidence,requiredRecordIds:batch?.evidence.records.map(r=>r.id),artifacts:suppliedArtifacts,deadline,question:countQuestion,onActivity:event=>events.push(event)});
+          const result = await runKeeperToolLoop({provider: candidate.provider as 'gemini'|'openai',client:candidate.provider==='gemini'?geminiClient:openaiClient, model:candidate.model,messages:candidate.provider==='gemini'?geminiContents:openaiMessages.slice(1),systemInstruction,evidence:reviewEvidence!,countEvidence:evidence,requiredRecordIds:batch?.evidence.records.map(r=>r.id),artifacts:suppliedArtifacts,deadline,question:countQuestion,onActivity:event=>events.push(event),onEvidenceProgress:progress=>{answerEvidence=progress;}});
           text=result.text;toolTrace=result.trace;retrievalCoverage=result.coverage;
+          answerEvidence=result.answerEvidence;
           batchCompleted=!!batch&&result.coverage.fullyRetrievedRecords===batch.evidence.records.length;
         } else if (candidate.provider === 'gemini') {
           const modelPromise = geminiClient!.models.generateContent({
@@ -303,12 +307,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } finally { if(!evidence)events.push({kind:'model_round',model:candidate.model,round:1,elapsedMs:Date.now()-attemptStarted,outcome:attemptOutcome});attempts.push({model:candidate.model,provider:candidate.provider,elapsedMs:Date.now()-attemptStarted,outcome:attemptOutcome,failure});clearTimeout(modelTimer);modelController.abort(); }
     }
 
-    if (!reply && localEvidence) return res.status(503).json({error:String(lastError?.message||'').includes('API key not valid')?'Gemini rejected the configured API key. Update the server Gemini key. Your local QA report is still available.':'Keeper AI could not complete this review. Your local QA report is still available; no AI interpretation has been produced.',code:'AI_UNAVAILABLE',activity:activity(),evidence:evidenceSummary(localEvidence),...(batch?{reviewBatch:keeperBatchProgress(batch,false)}:{})});
+    if (!reply && localEvidence) return res.status(503).json({error:String(lastError?.message||'').includes('API key not valid')?'Gemini rejected the configured API key. Update the server Gemini key. Your local QA report is still available.':'Keeper AI could not complete this review. Your local QA report is still available; no AI interpretation has been produced.',code:'AI_UNAVAILABLE',activity:activity(),answerEvidence,evidence:evidenceSummary(localEvidence),...(batch?{reviewBatch:keeperBatchProgress(batch,false)}:{})});
     if (!reply && evidence) return res.json({reply:keeperFallbackReport(evidence,latestUser?.content || ''),modelUsed:'keeper-evidence-only',activity:activity(),evidence:evidenceSummary(evidence),interpretationUnavailable:true});
     if (!reply) return res.status(503).json({error:KEEPER_CONTACT_ADMIN_NOTICE,code:'AI_UNAVAILABLE',activity:activity()});
 
     if(batch)reply=`Batch ${batch.start+1}–${batch.end} of ${batch.total} inventory records. ${batchCompleted?'Evidence retrieved and answer returned for this batch.':'This batch is incomplete; progress has not advanced.'} This does not confirm that edits were implemented.\n\n${reply}`;
-    return res.json({ reply: sanitizeOutput(reply), modelUsed: activeModel, activity:activity(), ...(batch?{reviewBatch:keeperBatchProgress(batch,batchCompleted)}:{}), ...(evidence ? {evidence: {...evidenceSummary(evidence),retrievalCoverage}, toolTrace} : {}) });
+    return res.json({ reply: sanitizeOutput(reply), modelUsed: activeModel, activity:activity(), answerEvidence, ...(batch?{reviewBatch:keeperBatchProgress(batch,batchCompleted)}:{}), ...(evidence ? {evidence: {...evidenceSummary(evidence),retrievalCoverage}, toolTrace} : {}) });
   } catch (err: any) {
     console.error('AI Copilot API Error (Vercel):', err);
     return res.status(503).json({ error: KEEPER_CONTACT_ADMIN_NOTICE, code: 'AI_UNAVAILABLE' });

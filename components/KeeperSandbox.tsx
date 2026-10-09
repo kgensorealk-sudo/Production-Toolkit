@@ -1,6 +1,8 @@
 import KeeperActivityReport from './KeeperActivityReport';
 import type {KeeperActivity} from '../utils/keeperActivity';
 import type {KeeperReviewBatch,KeeperReviewCursor} from '../utils/keeperReviewBatch';
+import KeeperAnswerEvidencePanel from './KeeperAnswerEvidence';
+import type {KeeperAnswerEvidence} from '../utils/keeperAnswerEvidence';
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -63,6 +65,7 @@ interface Message {
     modelUsed?: string;
     activity?:KeeperActivity;
     reviewBatch?:KeeperReviewBatch;
+    answerEvidence?:KeeperAnswerEvidence;
 }
 
 /**
@@ -208,6 +211,7 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
     const responseVersion = useRef(0);
     const pastedArtifactRef = useRef<KeeperPastedArtifact|null>(null);
     const [activeScope,setActiveScope] = useState('[]');
+    const [selectedEvidenceRef,setSelectedEvidenceRef]=useState<string|null>(null);
 
     const localEvidence = useRef<KeeperEvidence|null>(null);
     const localEvidenceSources = useRef<typeof sandboxArtifacts|null>(null);
@@ -612,7 +616,7 @@ ${userAuthContext}`;
                                 modelUsed: response.status===401?'keeper-auth-required':'keeper-subscription-lock'
                             };
                         }
-                        return {reply:errData.error || `Request failed with status ${response.status}`,modelUsed:'keeper-connection-unavailable',activity:errData.activity,reviewBatch:errData.reviewBatch};
+                        return {reply:errData.error || `Request failed with status ${response.status}`,modelUsed:'keeper-connection-unavailable',activity:errData.activity,reviewBatch:errData.reviewBatch,answerEvidence:errData.answerEvidence};
                     }
 
                     setEvidenceReport(data.evidence ? {...data.evidence,toolTrace:data.toolTrace} : null);
@@ -622,6 +626,7 @@ ${userAuthContext}`;
                         modelUsed: data.modelUsed,
                         activity:data.activity,
                         reviewBatch:data.reviewBatch,
+                        answerEvidence:data.answerEvidence,
                         offline: Boolean(data.offline),
                         faqTopics: data.faqTopics,
                         note: data.note
@@ -635,7 +640,7 @@ ${userAuthContext}`;
                 } finally { clearTimeout(apiTimer);apiController.abort(); }
             })();
 
-            const responseData:{reply:string;modelUsed?:string;activity?:KeeperActivity;reviewBatch?:KeeperReviewBatch}|null = await generateResponsePromise;
+            const responseData:{reply:string;modelUsed?:string;activity?:KeeperActivity;reviewBatch?:KeeperReviewBatch;answerEvidence?:KeeperAnswerEvidence}|null = await generateResponsePromise;
             if(!responseData || generation!==responseVersion.current)return;
 
             const rawContent = responseData.reply;
@@ -646,6 +651,7 @@ ${userAuthContext}`;
             const assistantMessage: Message = {
                 artifactScope:scope,id:assistantMessageId,role:'assistant',content:sanitizedContent,
                 timestamp:Date.now(),modelUsed:responseData.modelUsed,
+                answerEvidence:responseData.answerEvidence,
                 reviewBatch:responseData.reviewBatch || (reviewCursor?{question:reviewCursor.question,key:reviewCursor.key,start:reviewCursor.offset,end:reviewCursor.offset,total:messages.slice().reverse().find(m=>m.reviewBatch?.key===reviewCursor.key)?.reviewBatch?.total||reviewCursor.offset,reviewed:reviewCursor.offset,complete:false,next:reviewCursor}:undefined),
                 activity:{...responseData.activity,clientElapsedMs:Date.now()-clientStarted,localInspectionMs,requestMs}
             };
@@ -687,6 +693,7 @@ ${userAuthContext}`;
     // label, which never reflected what actually answered (the connected AI provider).
     const lastAssistantMessage = [...keeperScopedMessages(messages,activeScope)].reverse().find(m => m.role === 'assistant');
     const lastModelBadge = getModelBadgeInfo(lastAssistantMessage?.modelUsed);
+    useEffect(()=>setSelectedEvidenceRef(null),[lastAssistantMessage?.id]);
 
     // Never render the previous account's local state while the new account restores.
     if(restoreError)return <section aria-label="Keeper storage error" className="p-6 space-y-3"><p role="alert">{restoreError} Your saved workspace has not been overwritten.</p><button onClick={()=>setRestoreRetry(n=>n+1)}>Retry local storage</button></section>;
@@ -722,12 +729,14 @@ ${userAuthContext}`;
                 <section className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
                     <div className="px-6 py-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3"><div><p className="text-[10px] uppercase tracking-widest font-bold text-indigo-500">02 / Review</p><h2 className="font-semibold text-slate-900 mt-1">Result</h2></div><div className="flex items-center gap-3">{currentlyTypingId && <button onClick={handleSkipTyping} className="text-xs text-indigo-600">Show full result</button>}{lastAssistantMessage && <button onClick={() => copyToClipboard(lastAssistantMessage.content, lastAssistantMessage.id)} className="inline-flex items-center gap-2 text-xs text-slate-600 border border-slate-200 rounded-lg px-3 py-2"><Copy size={13} />{copiedId === lastAssistantMessage.id ? 'Copied' : 'Copy result'}</button>}</div></div>
                     <div ref={messagesContainerRef} aria-live="polite" aria-busy={isLoading || Boolean(currentlyTypingId)} className="min-h-[550px] max-h-[800px] overflow-y-auto p-6">
-                        {lastAssistantMessage ? <div className="prose prose-sm max-w-none text-slate-800 break-words"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{a: ({children}) => <span>{children}</span>, img: ({alt}) => <span>{alt || 'Image omitted in local report'}</span>}}>{lastAssistantMessage.content}</ReactMarkdown></div> : <div className="min-h-[500px] flex flex-col justify-center items-center text-center"><div className="bg-indigo-50 text-indigo-400 rounded-2xl p-5 mb-5"><FileText size={30} strokeWidth={1.4} /></div><h3 className="font-semibold text-slate-700">A blank canvas</h3><p className="text-sm text-slate-400 mt-2 max-w-[260px] leading-relaxed">Your result will appear here. Start with a task and any material Keeper needs.</p></div>}
+                        {lastAssistantMessage ? <div className="prose prose-sm max-w-none text-slate-800 break-words"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{a: ({children,href}) => {const ref=href?.match(/^#keeper-evidence-(E[1-9]\d*)$/)?.[1];return ref&&lastAssistantMessage.answerEvidence?.references.some(r=>r.ref===ref&&r.cited)?<button className="text-indigo-700 underline" onClick={()=>setSelectedEvidenceRef(ref)} aria-label={`Open evidence ${ref}`}>{children}</button>:<span>{children}</span>;}, img: ({alt}) => <span>{alt || 'Image omitted in local report'}</span>}}>{lastAssistantMessage.content}</ReactMarkdown></div> : <div className="min-h-[500px] flex flex-col justify-center items-center text-center"><div className="bg-indigo-50 text-indigo-400 rounded-2xl p-5 mb-5"><FileText size={30} strokeWidth={1.4} /></div><h3 className="font-semibold text-slate-700">A blank canvas</h3><p className="text-sm text-slate-400 mt-2 max-w-[260px] leading-relaxed">Your result will appear here. Start with a task and any material Keeper needs.</p></div>}
                     </div>
                     <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-between text-xs text-slate-400"><span>{lastAssistantMessage ? lastModelBadge.label : 'Ready when you are'}</span><span>Results stay in this sandbox</span></div>
                 </section>
             </div>
             {lastAssistantMessage?.activity && <KeeperActivityReport activity={lastAssistantMessage.activity}/> }
+            {lastAssistantMessage?.answerEvidence && <KeeperAnswerEvidencePanel answer={lastAssistantMessage.answerEvidence} evidence={inspectionStatus==='ready'?localEvidence.current:null} selectedRef={selectedEvidenceRef} onSelect={setSelectedEvidenceRef}/>}
+            {lastAssistantMessage&&!lastAssistantMessage.answerEvidence&&sandboxArtifacts.length>0&&<p className="text-xs text-slate-500">No answer-level evidence references are available for this reply. The local QA report remains separate.</p>}
             {lastAssistantMessage?.reviewBatch && <section aria-label="Review progress" className="rounded-xl border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-950">
                 <p>{lastAssistantMessage.reviewBatch.reviewed} of {lastAssistantMessage.reviewBatch.total} inventory records covered by completed batch answers. Retrieval and an answer do not establish editorial completion. Inspection limits still apply.</p>
                 {lastAssistantMessage.reviewBatch.next && <button className="mt-3 rounded-lg bg-indigo-700 px-4 py-2 text-white disabled:opacity-50" disabled={isLoading||isImporting||switchingTask} onClick={()=>void handleSendMessage(undefined,lastAssistantMessage.reviewBatch!.next!)}>{lastAssistantMessage.reviewBatch.reviewed===lastAssistantMessage.reviewBatch.start?'Retry batch':'Continue review'}</button>}
