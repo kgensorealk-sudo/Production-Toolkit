@@ -18,6 +18,7 @@ assert.ok(!handler.includes('offline-keeper'));
 assert.ok(handler.includes('res.status(503)'));
 
 const ui=fs.readFileSync('components/KeeperSandbox.tsx','utf8');
-assert.ok(ui.includes("const STORAGE_KEY = 'prod_toolkit_keeper_messages_factory_v1'"));
-assert.ok(ui.includes('version <= 9'));
+assert.ok(ui.includes("readKeeperTaskWorkspace(account,task)"));
+assert.ok(ui.includes("restoredOwner!==user.id"));
+assert.ok(!ui.includes("localStorage.setItem(STORAGE_KEY"));
 console.log('Keeper reset checks passed: unchanged provider chain, removed offline knowledge and shortcuts, fresh history namespace.');

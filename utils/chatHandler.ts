@@ -4,7 +4,7 @@ import OpenAI from 'openai';
 import { validateArtifacts, evidenceSummary, dispatchKeeperTool } from './keeperEvidence.js';
 import { runKeeperToolLoop } from './keeperToolRunner.js';
 import { getKeeperEvidence } from './keeperEvidenceCache.js';
-import { keeperQueryReport } from './keeperQueryReport.js';
+import { keeperFallbackReport } from './keeperQueryReport.js';
 import { isOptCountRequest, renderOptCounts, summarizeOptChanges } from './keeperOptSummary.js';
 import { createClient } from '@supabase/supabase-js';
 import {
@@ -185,7 +185,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const openaiClient = getOpenAIClient();
 
     if (!geminiClient && !openaiClient) {
-      if (evidence) return res.json({reply:keeperQueryReport(evidence),modelUsed:'keeper-evidence-only',evidence:evidenceSummary(evidence),interpretationUnavailable:true});
+      if (evidence) return res.json({reply:keeperFallbackReport(evidence,latestUser?.content || ''),modelUsed:'keeper-evidence-only',evidence:evidenceSummary(evidence),interpretationUnavailable:true});
       return res.status(503).json({ error: KEEPER_CONTACT_ADMIN_NOTICE, code: 'AI_UNAVAILABLE', ...(evidence ? {evidence:evidenceSummary(evidence)} : {}) });
     }
 
@@ -275,7 +275,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } finally { clearTimeout(modelTimer); }
     }
 
-    if (!reply && evidence) return res.json({reply:keeperQueryReport(evidence),modelUsed:'keeper-evidence-only',evidence:evidenceSummary(evidence),interpretationUnavailable:true});
+    if (!reply && evidence) return res.json({reply:keeperFallbackReport(evidence,latestUser?.content || ''),modelUsed:'keeper-evidence-only',evidence:evidenceSummary(evidence),interpretationUnavailable:true});
     if (!reply) return res.status(503).json({error:KEEPER_CONTACT_ADMIN_NOTICE,code:'AI_UNAVAILABLE'});
 
     return res.json({ reply: sanitizeOutput(reply), modelUsed: activeModel, ...(evidence ? {evidence: {...evidenceSummary(evidence),retrievalCoverage}, toolTrace} : {}) });

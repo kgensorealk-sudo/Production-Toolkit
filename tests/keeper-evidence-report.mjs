@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import React from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import KeeperEvidenceReport from '../components/KeeperEvidenceReport.tsx';
+import {buildKeeperEvidence,evidenceSummary} from '../utils/keeperEvidence.ts';
+
+const evidence=await buildKeeperEvidence([{id:'xml',name:'synthetic.xml',kind:'xml',content:'<article><opt_INS> </opt_INS><opt_DEL/><opt_INS>new</opt_INS></article>'}]);
+const report=evidenceSummary(evidence);
+let html=renderToStaticMarkup(React.createElement(KeeperEvidenceReport,{report}));
+assert.match(html,/Verified totals/);
+assert.match(html,/2 insertion tags/);
+assert.match(html,/1 deletion tags/);
+assert.match(html,/1 flagged tags and 1 whitespace-only tags/);
+const partial={...report,optChanges:{...report.optChanges,complete:false},files:report.files.map(file=>({...file,diagnostics:['Extraction limit reached.']})),issues:[{recordId:'pdf-r1',artifactId:'pdf',page:2,diagnostics:[{severity:'warning',message:'Header excluded.'}]}]};
+html=renderToStaticMarkup(React.createElement(KeeperEvidenceReport,{report:partial}));
+assert.match(html,/lower bounds/);
+assert.match(html,/Finished with limitations/);
+assert.match(html,/page 2/);
+assert.doesNotMatch(html,/line undefined/);
+console.log('PASS verified edit inventory, included flagged/spacing counts, incomplete evidence disclosure, and PDF issue locations');

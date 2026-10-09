@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {buildKeeperEvidence as core} from '../utils/keeperEvidenceCore.ts';
+import {buildKeeperEvidence as server} from '../utils/keeperEvidence.ts';
+import {createHash} from 'node:crypto';
+const artifacts=[{id:'local',kind:'xml',name:'synthetic.xml',content:'<article><opt_INS>Added</opt_INS><opt_DEL>Removed</opt_DEL></article>'}];
+let pdfCalls=0;
+const local=await core(artifacts,Date.now()+10000,{hash:async bytes=>createHash('sha256').update(bytes).digest('hex'),pdf:async()=>{pdfCalls++;throw Error('unexpected PDF');}});
+assert.deepEqual(local,await server(artifacts));assert.equal(pdfCalls,0);
+const ui=fs.readFileSync('components/KeeperSandbox.tsx','utf8');
+const prepare=ui.slice(ui.indexOf('const prepare = async'),ui.indexOf('}, [sandboxArtifacts'));
+assert.ok(prepare.includes('inspectKeeperLocally'));assert.ok(!prepare.includes('fetch('));
+const localBranch=ui.slice(ui.indexOf('if(requestArtifacts.length){'),ui.indexOf('const generation=++responseVersion.current;',ui.indexOf('if(requestArtifacts.length){')));
+assert.ok(localBranch.includes('keeperFallbackReport'));assert.ok(localBranch.includes('return;'));assert.ok(!localBranch.includes('fetch('));
+assert.ok(localBranch.includes('Clear the local manuscript conversation'));
+const engine=fs.readFileSync('utils/keeperEvidenceCore.ts','utf8');assert.ok(!/node:|Buffer\.|fetch\(/.test(engine));
+assert.ok(!fs.readFileSync('utils/keeperLocalStore.ts','utf8').includes('supabase'));
+console.log('PASS shared local/server XML parity, local inspection routing, cloud history boundary and browser-only dependencies');

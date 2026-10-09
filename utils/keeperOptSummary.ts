@@ -13,9 +13,15 @@ export function summarizeOptChanges(evidence: KeeperEvidence) {
   return {files:rows,complete:rows.length>0 && rows.every(f=>f.complete),inserted:rows.reduce((n,f)=>n+f.inserted.tags,0),deleted:rows.reduce((n,f)=>n+f.deleted.tags,0),unit:'OPT tag occurrences, not words or verified completed edits'};
 }
 
+export function requestsOptTagCounts(text:string) {
+  return text.split(/\b(?:and|also|then)\b/i).some(part=>{
+    if(/\b(?:words?|characters?|letters?|sentences?|authors?|references?|citations?|affiliations?|equations?|rows?|columns?|cells?|pages?|paragraphs?|sections?|tables?|figures?|comments?|quer(?:y|ies))\b|\b(?:for|within|under|in)\s+q\d+\b/i.test(part))return false;
+    return /\b(?:how\s+many|count|counts|number\s+of|total)\b/i.test(part) && /\b(?:insert(?:ed|ion|ions|s)?|delet(?:e|ed|ion|ions|es)|opt_ins|opt_del)\b/i.test(part);
+  });
+}
 export function isOptCountRequest(text:string) {
   if (/\b(?:words?|characters?|letters?|sentences?|q\d+|quer(?:y|ies)|paragraphs?|sections?|tables?|figures?)\b/i.test(text)) return false;
-  return text.length<600 && /\b(?:how\s+many|count|counts|number\s+of|total)\b/i.test(text) && /\b(?:insert(?:ed|ion|ions|s)?|delet(?:e|ed|ion|ions|es)|opt_ins|opt_del)\b/i.test(text) && !/\b(?:also|then|as\s+well|and\s+(?:review|check|explain|compare|list|show))\b/i.test(text);
+  return text.length<600 && requestsOptTagCounts(text) && !/\b(?:also|then|as\s+well|and\s+(?:review|check|explain|compare|list|show))\b/i.test(text);
 }
 
 export function renderOptCounts(result:ReturnType<typeof summarizeOptChanges>) {

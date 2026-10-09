@@ -1,0 +1,52 @@
+import assert from 'node:assert/strict';
+import {inspectKeeperXml,inspectKeeperPdf,bindKeeperQueries,keeperPdfLines,validateArtifacts} from '../utils/keeperEvidence.ts';
+import {requestsOptTagCounts,isOptCountRequest} from '../utils/keeperOptSummary.ts';
+import {keeperOptReviewKinds} from '../utils/keeperReviewScope.ts';
+import {keeperFallbackReport} from '../utils/keeperQueryReport.ts';
+import {runKeeperToolLoop} from '../utils/keeperToolRunner.ts';
+import {keeperPastedXmlArtifact} from '../utils/keeperConversationScope.ts';
+const marker='Supplementary data to this article can be found online at https://doi.org/10.1234/layout';
+const xml=text=>inspectKeeperXml({id:'xml',name:'synthetic.xml',kind:'xml',content:`<article><item-info><ce:doi>10.1234/layout</ce:doi></item-info><query id="q1">${text}</query></article>`});
+const pdf=lines=>inspectKeeperPdf('pdf',[{page:1,lines:[marker,...lines]}]);
+const callout=pdf(['Q1','Author block in the proof','Q3','Article body','Queries and Answers','Q1','Query: Confirm?','Answer: Yes']);
+assert.equal(callout.records.length,1);const article=xml('Confirm?');bindKeeperQueries(article,callout);assert.equal(article.records[0].binding.state,'established');
+const duplicate=pdf(['Q1','Query: Confirm?','Answer: Yes','Q1','Query: Confirm?','Answer: No']);
+const duplicated=xml('Confirm?');bindKeeperQueries(duplicated,duplicate);assert.equal(duplicated.records[0].binding.state,'ambiguous');
+for(const [source,rendered] of [['Confirm regular issue.','Confirm regular issue .'],['For this table, confirm (bold).','For this table , confirm ( bold ).']]){
+  const a=xml(source);bindKeeperQueries(a,pdf(['Q1','Query: '+rendered,'Answer: Yes']));assert.equal(a.records[0].binding.state,'established');
+}
+for(const [source,rendered] of [['Is 1.0 correct?','Is 10 correct?'],['Is now here correct?','Is nowhere correct?'],['Is x &lt; 5 correct?','Is x > 5 correct?'],['Is -10 correct?','Is 10 correct?']]){
+  const a=xml(source);bindKeeperQueries(a,pdf(['Q1','Query: '+rendered,'Answer: Yes']));assert.equal(a.records[0].binding.state,'unresolved');
+}
+const item=(str,x,width)=>({str,width,transform:[10,0,0,10,x,100]});
+assert.equal(keeperPdfLines([item('P',10,5),item('é',15,5),item('rez',20,15)])[0],'Pérez');
+assert.equal(keeperPdfLines([item('now',10,15),item('here',28,20)])[0],'now here');
+assert.equal(keeperPdfLines([item('now',10,15),item(' ',25,3),item('here',28,20)])[0],'now here');
+assert.equal(keeperPdfLines([item('now',10,undefined),item('here',25,undefined)])[0],'now here');
+assert.equal(keeperPdfLines([item('left',10,20),item('right',10,25)])[0],'left right');
+const inert=inspectKeeperXml({id:'xml',name:'literal.xml',kind:'xml',content:'<article><ce:para><![CDATA[<!-- <query id="q1">Literal example</query> -->]]></ce:para><?example <!-- <query id="q2">PI example</query> -->?><!----><!-- <query id="q3">Actual commented query</query> --></article>'});
+assert.deepEqual(inert.records.map(r=>r.queryId),['q3']);
+assert.equal(inert.records[0].offset,inert.records[0].source.length ? '<article><ce:para><![CDATA[<!-- <query id="q1">Literal example</query> -->]]></ce:para><?example <!-- <query id="q2">PI example</query> -->?><!----><!-- '.length : -1);
+assert.throws(()=>validateArtifacts([{id:1,name:'numeric.xml',kind:'xml',content:'<article/>'}]),/Invalid/);
+for(const question of ['How many authors were deleted?','Count deleted references','How many citations were inserted?','Count deleted words'])assert.equal(isOptCountRequest(question),false,question);
+assert.equal(requestsOptTagCounts('Count insertions and review every author.'),true);
+assert.equal(requestsOptTagCounts('Review references and count deletions.'),true);
+assert.equal(requestsOptTagCounts('Count insertions for query q1.'),false);
+assert.deepEqual(keeperOptReviewKinds('Review all comments.'),['opt_comment']);
+assert.deepEqual(keeperOptReviewKinds('All insertions were reviewed.'),['opt_ins']);
+assert.deepEqual(keeperOptReviewKinds('All 20 comments were reviewed.'),['opt_comment']);
+assert.deepEqual(keeperOptReviewKinds('Review all `opt_*` tags.'),['opt_*']);
+assert.deepEqual(keeperOptReviewKinds('Show all commentary.'),[]);
+assert.deepEqual(keeperOptReviewKinds('Count all insertions.'),[]);
+const opts=inspectKeeperXml({id:'xml',name:'edits.xml',kind:'xml',content:'<article><opt_comment>First instruction</opt_comment><opt_comment>Second instruction</opt_comment></article>'});
+const evidence={files:[{id:'xml',name:'edits.xml',kind:'xml',diagnostics:[],inspectionStatus:'ready'}],records:opts.records};
+const mocked=(args)=>{let round=0;const call={name:'inspect_sandbox_evidence',args,id:'inspection'};return {models:{generateContent:async()=>round++?{text:'All comments were reviewed.'}:{functionCalls:[call],candidates:[{content:{role:'model',parts:[{functionCall:call}]}}]}}};};
+const loop={provider:'gemini',model:'synthetic',messages:[{role:'user',parts:[{text:'Review all comments.'}]}],systemInstruction:'Sandbox',evidence,deadline:Date.now()+5000};
+await assert.rejects(runKeeperToolLoop({...loop,client:mocked({kind:'opt_comment',limit:1})}),/Incomplete OPT evidence/);
+await runKeeperToolLoop({...loop,client:mocked({kind:'opt_comment',limit:5})});
+const fallback=keeperFallbackReport(evidence,'Review all comments.');
+assert.match(fallback,/First instruction/);assert.match(fallback,/Second instruction/);assert.doesNotMatch(fallback,/Original XML queries/);
+const pasted=keeperPastedXmlArtifact(null,'<article/>',()=>'first');
+assert.strictEqual(keeperPastedXmlArtifact(pasted,'<article/>',()=>{throw new Error('Unchanged XML must reuse source identity');}),pasted);
+assert.equal(keeperPastedXmlArtifact(pasted,'<article><ce:para/></article>',()=>'changed').id,'changed');
+console.log('PASS proof callouts excluded, genuine duplicates retained, punctuation spacing, semantic differences, font-split accented names, measured spaces, unknown widths and overlapping runs');

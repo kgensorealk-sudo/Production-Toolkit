@@ -141,5 +141,6 @@ export function scanReferenceXml(xml: string, options: {allowDuplicateIds?: bool
         bibliographies.some(bibliography => node.start >= bibliography.openEnd && node.end <= bibliography.closeStart)));
     const textValue=(value:string)=>{const previous=expandedCharacters;expandedCharacters=0;try{return attributeValue(value);}finally{expandedCharacters=previous;}};
     const textContent=(node:ReferenceXmlNode)=>xml.slice(node.openEnd,node.closeStart).replace(/<!\[CDATA\[([\s\S]*?)\]\]>|<!--[\s\S]*?-->|<\?[\s\S]*?\?>|<(?:[^>"']|"[^"]*"|'[^']*')*>|([^<]+)/g,(_all,cdata:string|undefined,plain:string|undefined)=>cdata!==undefined?cdata:plain!==undefined?textValue(plain):'');
-    return {nodes, ids, metadataXml, normalizedXml, references, textValue, textContent};
+    return {nodes, ids, metadataXml, normalizedXml, references, textValue, textContent,
+        comments: ignored.filter(span=>xml.startsWith('<!--',span.start))};
 }
