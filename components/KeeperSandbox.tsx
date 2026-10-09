@@ -1,5 +1,6 @@
 import KeeperActivityReport from './KeeperActivityReport';
 import type {KeeperActivity} from '../utils/keeperActivity';
+import type {KeeperReviewBatch,KeeperReviewCursor} from '../utils/keeperReviewBatch';
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -61,6 +62,7 @@ interface Message {
      *  'offline-keeper-recovery'). Undefined for user messages and legacy stored messages. */
     modelUsed?: string;
     activity?:KeeperActivity;
+    reviewBatch?:KeeperReviewBatch;
 }
 
 /**
@@ -465,8 +467,8 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
         freeTools
     });
 
-    const handleSendMessage = async (textToSend?: string) => {
-        const source = (textToSend || inputPrompt).trim();
+    const handleSendMessage = async (textToSend?: string, reviewCursor?:KeeperReviewCursor) => {
+        const source = (reviewCursor?.question || textToSend || inputPrompt).trim();
         const requestArtifacts = [...sandboxArtifacts];
         const pastedXml = /^\s*</.test(source);
         if(pastedXml){if(requestArtifacts.some(a=>a.kind==='xml')){setFileNotice('Remove the imported XML before submitting a different pasted XML.');return;}pastedArtifactRef.current=keeperPastedXmlArtifact(pastedArtifactRef.current,source);requestArtifacts.push(pastedArtifactRef.current);}
@@ -591,6 +593,7 @@ ${userAuthContext}`;
                             messages: payloadMessages.length > 0 ? payloadMessages : [{ role: 'user', content: text }],
                             context: contextInfo,
                             evidenceSnapshot,
+                            reviewCursor,
                             question:pastedXml?undefined:source||taskInstructions
                         })
                     });
@@ -609,7 +612,7 @@ ${userAuthContext}`;
                                 modelUsed: response.status===401?'keeper-auth-required':'keeper-subscription-lock'
                             };
                         }
-                        return {reply:errData.error || `Request failed with status ${response.status}`,modelUsed:'keeper-connection-unavailable',activity:errData.activity};
+                        return {reply:errData.error || `Request failed with status ${response.status}`,modelUsed:'keeper-connection-unavailable',activity:errData.activity,reviewBatch:errData.reviewBatch};
                     }
 
                     setEvidenceReport(data.evidence ? {...data.evidence,toolTrace:data.toolTrace} : null);
@@ -618,6 +621,7 @@ ${userAuthContext}`;
                         reply: data.offline ? KEEPER_CONTACT_ADMIN_NOTICE : data.reply || 'No response generated.',
                         modelUsed: data.modelUsed,
                         activity:data.activity,
+                        reviewBatch:data.reviewBatch,
                         offline: Boolean(data.offline),
                         faqTopics: data.faqTopics,
                         note: data.note
@@ -631,7 +635,7 @@ ${userAuthContext}`;
                 } finally { clearTimeout(apiTimer);apiController.abort(); }
             })();
 
-            const responseData:{reply:string;modelUsed?:string;activity?:KeeperActivity}|null = await generateResponsePromise;
+            const responseData:{reply:string;modelUsed?:string;activity?:KeeperActivity;reviewBatch?:KeeperReviewBatch}|null = await generateResponsePromise;
             if(!responseData || generation!==responseVersion.current)return;
 
             const rawContent = responseData.reply;
@@ -642,6 +646,7 @@ ${userAuthContext}`;
             const assistantMessage: Message = {
                 artifactScope:scope,id:assistantMessageId,role:'assistant',content:sanitizedContent,
                 timestamp:Date.now(),modelUsed:responseData.modelUsed,
+                reviewBatch:responseData.reviewBatch || (reviewCursor?{question:reviewCursor.question,key:reviewCursor.key,start:reviewCursor.offset,end:reviewCursor.offset,total:messages.slice().reverse().find(m=>m.reviewBatch?.key===reviewCursor.key)?.reviewBatch?.total||reviewCursor.offset,reviewed:reviewCursor.offset,complete:false,next:reviewCursor}:undefined),
                 activity:{...responseData.activity,clientElapsedMs:Date.now()-clientStarted,localInspectionMs,requestMs}
             };
             setIsLoading(false);setCurrentlyTypingId(null);
@@ -709,7 +714,7 @@ ${userAuthContext}`;
                         {inspectionStatus !== 'idle' && <p role="status" className="text-xs text-indigo-700 mb-3">{inspectionStatus === 'running' ? 'Inspecting files in the background…' : inspectionStatus === 'ready' ? 'Inspection ready. Keeper can retrieve these findings.' : 'Inspection failed.'}{inspectionStatus === 'error' && <button className="ml-2 underline" onClick={()=>setInspectionRetry(n=>n+1)}>Retry inspection</button>}</p>}
                         {fileNotice && <p role="alert" className="text-xs text-amber-700 mb-3">{fileNotice}</p>}
                         {sandboxArtifacts.map(a=><div key={a.id} className="flex items-center justify-between text-xs bg-indigo-50 rounded-lg p-3 mb-2"><span>{a.name} - {a.kind.toUpperCase()}</span><button disabled={isLoading} onClick={()=>{importVersion.current++;setIsImporting(false);const remaining=sandboxArtifacts.filter(x=>x.id!==a.id);setSandboxArtifacts(remaining);setActiveScope(keeperArtifactScope(remaining));typingControllerRef.current?.stop();setCurrentlyTypingId(null);setEvidenceReport(null);}}>Remove</button></div>)}
-                        <p className="text-xs text-slate-500 mb-3">Local workspace: import one XML and an optional edit-report PDF. Browser data deletion removes local copies. Processing pauses when the app closes. Files are inspected locally in this browser without server or AI transmission. Run task shows deterministic evidence; cloud interpretation is disabled for imported files.</p>
+                        <p className="text-xs text-slate-500 mb-3">Local workspace: import one XML and an optional edit-report PDF. Browser data deletion removes local copies. Processing pauses when the app closes. Automatic inspection runs locally. When you ask Keeper, extracted evidence is sent to the application server and AI provider for interpretation; original files remain on this device.</p>
                         <textarea id="keeper-task-input" ref={textareaRef} value={inputPrompt} onChange={e => {setInputPrompt(e.target.value);if(/^\s*</.test(inputPrompt)||/^\s*</.test(e.target.value))setEvidenceReport(null);}} disabled={isLoading || isImporting} placeholder="Paste text, XML, or an example here…" className="w-full min-h-[290px] p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm leading-relaxed font-mono resize-y outline-none focus:ring-2 focus:ring-indigo-400" />
                     </div>
                     <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-3"><span className="text-xs text-slate-400">{(inputPrompt.length + taskInstructions.length).toLocaleString()} characters</span><button onClick={() => handleSendMessage()} disabled={(!inputPrompt.trim() && !taskInstructions.trim() && !sandboxArtifacts.length) || isLoading || isImporting || inspectionStatus === 'running' || inspectionStatus === 'error' || Boolean(currentlyTypingId)} className="inline-flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl font-semibold text-sm disabled:opacity-40 hover:bg-indigo-700 transition-colors">{isLoading ? 'Working…' : currentlyTypingId ? 'Preparing result…' : 'Run task'}<ArrowRight size={16} /></button></div>
@@ -723,6 +728,10 @@ ${userAuthContext}`;
                 </section>
             </div>
             {lastAssistantMessage?.activity && <KeeperActivityReport activity={lastAssistantMessage.activity}/> }
+            {lastAssistantMessage?.reviewBatch && <section aria-label="Review progress" className="rounded-xl border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-950">
+                <p>{lastAssistantMessage.reviewBatch.reviewed} of {lastAssistantMessage.reviewBatch.total} inventory records covered by completed batch answers. Retrieval and an answer do not establish editorial completion. Inspection limits still apply.</p>
+                {lastAssistantMessage.reviewBatch.next && <button className="mt-3 rounded-lg bg-indigo-700 px-4 py-2 text-white disabled:opacity-50" disabled={isLoading||isImporting||switchingTask} onClick={()=>void handleSendMessage(undefined,lastAssistantMessage.reviewBatch!.next!)}>{lastAssistantMessage.reviewBatch.reviewed===lastAssistantMessage.reviewBatch.start?'Retry batch':'Continue review'}</button>}
+            </section>}
             {evidenceReport && <KeeperEvidenceReport report={evidenceReport} />}
             {messages.some(message => message.role === 'assistant') && <details className="border border-slate-200 rounded-xl bg-white p-5"><summary className="text-sm font-semibold text-slate-600 cursor-pointer">Session history</summary><div className="space-y-4 mt-4">{messages.map(message => <div key={message.id} className="border-t border-slate-100 pt-4"><p className="text-xs font-semibold text-slate-400 mb-2">{message.role === 'user' ? 'Your input' : 'Keeper result'} · {new Date(message.timestamp).toLocaleString()}</p><pre className="text-sm whitespace-pre-wrap break-words font-sans text-slate-700">{message.content}</pre></div>)}</div></details>}
         </section>

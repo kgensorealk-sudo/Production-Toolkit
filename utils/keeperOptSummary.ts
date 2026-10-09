@@ -22,6 +22,10 @@ export function requestsOptTagCounts(text:string) {
 }
 export function isOptCountRequest(text:string) {
   text=text.replace(/\bhow\s+many\s+where\s+(?=insert|delet)/gi,'how many were ');
+  // This shortcut must only answer counts. Unknown wording goes to the model
+  // rather than silently dropping another requested action.
+  const countWords=new Set('a an the this these those my our your supplied uploaded provided xml file files document article in from of for on to please thanks thank you can could would will tell me give us show what is are was were has have been made there how many count counts counting number numbers total totals both and or plus with insert inserted insertion insertions inserts delete deleted deletion deletions deletes opt_ins opt_del tag tags occurrence occurrences overall'.split(' '));
+  if ((text.toLowerCase().match(/[\p{L}\p{N}_]+/gu)||[]).some(word=>!countWords.has(word))) return false;
   if(/\b(?:do\s+not|don['’]t|never|avoid|without)\b|\b(?:explain|describe|compare|review|analy[sz]e|verify|identify|locate|why|where|which)\b/i.test(text))return false;
   if(/\b(?:remove|delete|insert|replace|rewrite|revise|edit|fix|correct|format|italicize|indent|save|export|download|send|upload|generate|create|run)\b/i.test(text))return false;
   if(/\b(?:list|show)\s+(?:me\s+)?(?:each|every|all|the)\s+(?:insertion|deletion|change|edit)/i.test(text))return false;

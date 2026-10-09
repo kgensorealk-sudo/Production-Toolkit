@@ -22,9 +22,15 @@ export async function runKeeperToolLoop(options: {
   artifacts?: KeeperArtifact[];
   deadline: number;
   question?:string;
+  countEvidence?:KeeperEvidence;
+  requiredRecordIds?:string[];
   onActivity?:(event:NonNullable<KeeperActivity['events']>[number])=>void;
 }) {
   const { provider, client, model, evidence } = options;
+  // An empty failed inventory is unavailable evidence, never a verified absence.
+  if (!evidence.records.length && evidence.files.some(f=>f.inspectionStatus==='failed' || f.diagnostics.length>0)) {
+    return {text:renderKeeperScope({status:'insufficient_evidence',reason:'File inspection is incomplete and returned no reviewable records. This does not establish that the document has no changes or queries.',suggestedAction:'Check the local QA report for inspection errors, then repair or replace the affected source and retry.'}),trace:[],coverage:{recordsRetrieved:0,inventoryRecords:0,xmlExcerptReads:0,fullyRetrievedRecords:0}};
+  }
   const instruction =
     options.systemInstruction + "\n" + keeperEvidenceInstruction + '\nWhen asked to check author responses to each query, prefer review_query_responses to retrieve compact batches instead of unrelated OPT records. Cover each query individually: question, verified response or unresolved reason, and any evidence needed to assess implementation. Follow nextOffset and disclose truncated records. Never describe retrieval alone as a completed editorial review.';
   const summary = JSON.stringify(evidenceSummary(evidence));
@@ -88,6 +94,7 @@ export async function runKeeperToolLoop(options: {
     recordsRetrieved: retrieved.size,
     inventoryRecords: evidence.records.length,
     xmlExcerptReads,
+    fullyRetrievedRecords: fullyRetrieved.size,
   });
   const trace: { name: string; error?: string }[] = [];
   let readOptCounts = false;
@@ -143,10 +150,11 @@ export async function runKeeperToolLoop(options: {
           : response.choices?.[0]?.message?.content;
       if (typeof text !== "string" || !text.trim())
         throw new Error("Empty model response.");
-      if (evidence.records.length && !successfulReads)
+      if ((evidence.records.length || evidence.files.length) && !successfulReads)
         throw new Error("Model did not inspect supplied evidence.");
       const requestedQueries=[...task.matchAll(/\bq\d+\b/gi)].map(m=>m[0].toLowerCase());
       if(evidence.records.some(r=>r.kind==='query'&&requestedQueries.includes((r.queryId||'').toLowerCase())&&!fullyRetrieved.has(r.id)))throw new Error('Requested query evidence was not retrieved.');
+      if(options.requiredRecordIds?.some(id=>!fullyRetrieved.has(id)))throw new Error('Incomplete batch evidence retrieval; retry this batch.');
       if(requestsOptTagCounts(task) && !readOptCounts) throw new Error('Insertion/deletion counts were not retrieved from the inventory.');
       if(isOptCountRequest(task) && optCountResult) return {text:renderOptCounts(optCountResult),trace,coverage:coverage()};
       const claimsAllQueries = /\b(?:each|all|every)\b[\s\S]{0,60}\bquer(?:y|ies)\b/i.test(text);
@@ -178,7 +186,7 @@ export async function runKeeperToolLoop(options: {
           provider === "gemini"
             ? call.args
             : JSON.parse(call.function.arguments);
-        result = dispatchKeeperTool(evidence, name, args, options.artifacts);
+        result = dispatchKeeperTool(name==='summarize_opt_changes'?(options.countEvidence||evidence):evidence, name, args, options.artifacts);
       } catch {
         result = { error: "Invalid tool arguments." };
       }

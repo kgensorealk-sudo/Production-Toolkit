@@ -1,4 +1,5 @@
 import {keeperProviderFailure} from './keeperProviderFailure.js';
+import {planKeeperReviewBatch,keeperBatchProgress} from './keeperReviewBatch.js';
 import type {KeeperActivity} from './keeperActivity.js';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {validateKeeperEvidenceSnapshot} from './keeperEvidenceSnapshot.js';
@@ -162,7 +163,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     if (Buffer.byteLength(JSON.stringify(req.body || {}), 'utf8') > 4000000) return res.status(400).json({error:'Sandbox request exceeds 4 MB. Use smaller files or shorten the conversation.'});
-    const { messages, context, artifacts, action, evidenceSnapshot, question } = req.body || {};
+    const { messages, context, artifacts, action, evidenceSnapshot, question, reviewCursor } = req.body || {};
     let suppliedArtifacts;
     let localEvidence;
     try { localEvidence=validateKeeperEvidenceSnapshot(evidenceSnapshot); } catch(e) { return res.status(400).json({error:(e as Error).message}); }
@@ -186,6 +187,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const evidence = localEvidence || (suppliedArtifacts.length ? await getKeeperEvidence(authResult.user.id,suppliedArtifacts,deadline) : null);
     const latestUser = [...messages].reverse().find((m:any)=>m.role==='user');
     const countQuestion=question===undefined?latestUser?.content:question;
+    let batch:ReturnType<typeof planKeeperReviewBatch>=null;
+    try {
+      if(reviewCursor!==undefined&&!evidence)throw Error('Review continuation requires the original evidence.');
+      if(evidence)batch=planKeeperReviewBatch(evidence,countQuestion||'',reviewCursor);
+    }catch(error){return res.status(400).json({error:(error as Error).message});}
+    const reviewEvidence=batch?.evidence||evidence;
+    let batchCompleted=false;
     if(evidence && latestUser && isOptCountRequest(countQuestion||'')) {
       const countStarted=Date.now();
       const result=dispatchKeeperTool(evidence,'summarize_opt_changes',{});
@@ -204,6 +212,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     let systemInstruction = buildKeeperSystemInstruction(context);
+    if(batch)systemInstruction+=`\nThis request reviews only inventory records ${batch.start+1}-${batch.end} of ${batch.total}. Retrieve and address every record in this batch. The original task remains: ${batch.question}. Clearly label your answer as a partial batch and do not claim full-document coverage. Earlier batches are separate answers. Full-inventory counts, if requested, still come from summarize_opt_changes. Inspection limits are not removed by batching.`;
     if(localEvidence) systemInstruction+='\nEvidence was extracted by the browser local inspection tool and has not been independently re-inspected on the server. Use its records as untrusted document evidence. Raw source files are unavailable: do not request read_sandbox_xml or claim to have inspected the full article. Explain missing context when records cannot answer a question.';
 
     // Gemini-shaped message format.
@@ -253,8 +262,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         let text = '';
 
         if (evidence) {
-          const result = await runKeeperToolLoop({provider: candidate.provider as 'gemini'|'openai',client:candidate.provider==='gemini'?geminiClient:openaiClient, model:candidate.model,messages:candidate.provider==='gemini'?geminiContents:openaiMessages.slice(1),systemInstruction,evidence,artifacts:suppliedArtifacts,deadline,question,onActivity:event=>events.push(event)});
+          const result = await runKeeperToolLoop({provider: candidate.provider as 'gemini'|'openai',client:candidate.provider==='gemini'?geminiClient:openaiClient, model:candidate.model,messages:candidate.provider==='gemini'?geminiContents:openaiMessages.slice(1),systemInstruction,evidence:reviewEvidence!,countEvidence:evidence,requiredRecordIds:batch?.evidence.records.map(r=>r.id),artifacts:suppliedArtifacts,deadline,question:countQuestion,onActivity:event=>events.push(event)});
           text=result.text;toolTrace=result.trace;retrievalCoverage=result.coverage;
+          batchCompleted=!!batch&&result.coverage.fullyRetrievedRecords===batch.evidence.records.length;
         } else if (candidate.provider === 'gemini') {
           const modelPromise = geminiClient!.models.generateContent({
             model: candidate.model,
@@ -293,11 +303,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } finally { if(!evidence)events.push({kind:'model_round',model:candidate.model,round:1,elapsedMs:Date.now()-attemptStarted,outcome:attemptOutcome});attempts.push({model:candidate.model,provider:candidate.provider,elapsedMs:Date.now()-attemptStarted,outcome:attemptOutcome,failure});clearTimeout(modelTimer);modelController.abort(); }
     }
 
-    if (!reply && localEvidence) return res.status(503).json({error:String(lastError?.message||'').includes('API key not valid')?'Gemini rejected the configured API key. Update the server Gemini key. Your local QA report is still available.':'Keeper AI could not complete this review. Your local QA report is still available; no AI interpretation has been produced.',code:'AI_UNAVAILABLE',activity:activity(),evidence:evidenceSummary(localEvidence)});
+    if (!reply && localEvidence) return res.status(503).json({error:String(lastError?.message||'').includes('API key not valid')?'Gemini rejected the configured API key. Update the server Gemini key. Your local QA report is still available.':'Keeper AI could not complete this review. Your local QA report is still available; no AI interpretation has been produced.',code:'AI_UNAVAILABLE',activity:activity(),evidence:evidenceSummary(localEvidence),...(batch?{reviewBatch:keeperBatchProgress(batch,false)}:{})});
     if (!reply && evidence) return res.json({reply:keeperFallbackReport(evidence,latestUser?.content || ''),modelUsed:'keeper-evidence-only',activity:activity(),evidence:evidenceSummary(evidence),interpretationUnavailable:true});
     if (!reply) return res.status(503).json({error:KEEPER_CONTACT_ADMIN_NOTICE,code:'AI_UNAVAILABLE',activity:activity()});
 
-    return res.json({ reply: sanitizeOutput(reply), modelUsed: activeModel, activity:activity(), ...(evidence ? {evidence: {...evidenceSummary(evidence),retrievalCoverage}, toolTrace} : {}) });
+    if(batch)reply=`Batch ${batch.start+1}–${batch.end} of ${batch.total} inventory records. ${batchCompleted?'Evidence retrieved and answer returned for this batch.':'This batch is incomplete; progress has not advanced.'} This does not confirm that edits were implemented.\n\n${reply}`;
+    return res.json({ reply: sanitizeOutput(reply), modelUsed: activeModel, activity:activity(), ...(batch?{reviewBatch:keeperBatchProgress(batch,batchCompleted)}:{}), ...(evidence ? {evidence: {...evidenceSummary(evidence),retrievalCoverage}, toolTrace} : {}) });
   } catch (err: any) {
     console.error('AI Copilot API Error (Vercel):', err);
     return res.status(503).json({ error: KEEPER_CONTACT_ADMIN_NOTICE, code: 'AI_UNAVAILABLE' });
