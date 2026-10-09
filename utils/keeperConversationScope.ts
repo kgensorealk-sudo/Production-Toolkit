@@ -19,3 +19,9 @@ export interface KeeperPastedArtifact {id:string;name:string;kind:'xml';content:
 export function keeperPastedXmlArtifact(previous:KeeperPastedArtifact|null,content:string,newId:()=>string=()=>crypto.randomUUID()):KeeperPastedArtifact {
   return previous?.content===content ? previous : {id:newId(),name:'Pasted XML',kind:'xml',content};
 }
+
+// An empty cleared workspace must not hide the original ZIP's prepared sources.
+export function keeperRestoredSources<T extends {id:string}>(saved:{artifacts?:T[];activeScope?:string}|null|undefined,fallback:T[]=[]){
+  const artifacts=saved?.artifacts?.length?saved.artifacts:fallback;
+  return {artifacts,activeScope:keeperArtifactScope(artifacts)};
+}

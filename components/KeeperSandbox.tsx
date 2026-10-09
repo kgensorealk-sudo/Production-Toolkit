@@ -39,8 +39,9 @@ import { readKeeperApiResponse } from '../utils/keeperApiResponse';
 import { encodeKeeperRequest } from '../utils/keeperPayload';
 import {keeperArtifactScope,keeperSameSources,keeperScopedMessages,keeperPastedXmlArtifact,type KeeperPastedArtifact} from '../utils/keeperConversationScope';
 
-import {readKeeperTaskWorkspace,keeperSelectedTask,KeeperWorkspaceWriter} from '../utils/keeperLocalStore';
+import {readKeeperTaskWorkspace,keeperSelectedTask,KeeperWorkspaceWriter,localTaskRecords} from '../utils/keeperLocalStore';
 import KeeperLocalTasks from './KeeperLocalTasks';
+import {keeperRestoredSources} from '../utils/keeperConversationScope';
 import {validateKeeperLocalSources} from '../utils/keeperLocalLimits';
 import {inspectKeeperLocally} from '../utils/keeperLocalInspection';
 import {evidenceSummary,type KeeperEvidence} from '../utils/keeperEvidenceCore';
@@ -281,9 +282,10 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
     const workspaceWriter=useRef<KeeperWorkspaceWriter|null>(null);
     const ownerGeneration=useRef(0);
     const applyWorkspace=(saved:any,artifacts:typeof sandboxArtifacts=[])=>{
-        setSandboxArtifacts(saved?.artifacts||artifacts);setMessages(saved?.messages||[]);
+        const restored=keeperRestoredSources(saved,artifacts);
+        setSandboxArtifacts(restored.artifacts);setMessages(saved?.messages||[]);
         setInputPrompt(saved?.inputPrompt||'');setTaskInstructions(saved?.taskInstructions||'');
-        setActiveScope(saved?.activeScope||keeperArtifactScope(saved?.artifacts||artifacts));
+        setActiveScope(restored.activeScope);
         localEvidence.current=null;localEvidenceSources.current=null;pastedArtifactRef.current=null;
     };
     useEffect(()=>{
@@ -296,9 +298,10 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
         if(account)void (async()=>{
             const task=await keeperSelectedTask(account);
             const saved=await readKeeperTaskWorkspace(account,task);
+            const sources=task!=='scratch'&&!saved?.artifacts?.length?(await localTaskRecords(account)).find(row=>row.id===task)?.artifacts||[]:[];
             if(!active)return;
             workspaceWriter.current=new KeeperWorkspaceWriter(account,task,saved?._revision||0);
-            applyWorkspace(saved);setActiveTask(task);setRestoredOwner(account);
+            applyWorkspace(saved,sources);setActiveTask(task);setRestoredOwner(account);
         })().catch(error=>{if(active)setRestoreError(error instanceof Error?error.message:'Local storage could not be restored.');});
         return()=>{active=false;ownerGeneration.current++;responseVersion.current++;};
     },[user?.id,restoreRetry]);
@@ -424,15 +427,15 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
 
     const executeResetChat = () => {
         pastedArtifactRef.current=null;
-        responseVersion.current++;setActiveScope('[]');
+        responseVersion.current++;setActiveScope(keeperArtifactScope(sandboxArtifacts));
         typingControllerRef.current?.stop();
         setCurrentlyTypingId(null);
         setMessages([]);
         setShowResetConfirm(false);
         setInputPrompt('');
         setTaskInstructions('');
-        importVersion.current++;setIsImporting(false);setSandboxArtifacts([]);setEvidenceReport(null);setFileNotice('');
-        setResetNotice('Sandbox cleared. Keeper is ready for your next task.');
+        importVersion.current++;setIsImporting(false);setFileNotice('');
+        setResetNotice('Conversation cleared. Attached task files and findings are retained.');
         setTimeout(() => setResetNotice(null), 3000);
         setTimeout(() => {
             scrollToTop();
@@ -750,10 +753,10 @@ ${userAuthContext}`;
             <button className="text-sm text-indigo-700 underline" disabled={switchingTask||Boolean(saveError)} onClick={()=>void selectLocalTask('scratch',[])}>Open standalone workspace</button>
 
             {resetNotice && <p role="status" className="rounded-xl bg-indigo-50 text-indigo-700 px-4 py-3 text-sm">{resetNotice}</p>}
-            {showResetConfirm && <div role="alertdialog" aria-label="Reset Keeper workspace" className="border border-amber-200 bg-amber-50 rounded-xl p-4 flex flex-wrap items-center gap-3"><p className="text-sm flex-1">Clear instructions, source material, and previous results?</p><button onClick={() => setShowResetConfirm(false)} className="text-sm px-3 py-2">Cancel</button><button onClick={executeResetChat} disabled={isLoading} className="text-sm bg-slate-900 text-white px-3 py-2 rounded-lg disabled:opacity-40">Clear workspace</button></div>}
+            {showResetConfirm && <div role="alertdialog" aria-label="Clear Keeper conversation" className="border border-amber-200 bg-amber-50 rounded-xl p-4 flex flex-wrap items-center gap-3"><p className="text-sm flex-1">Clear instructions and conversation? Attached files and inspection findings will remain.</p><button onClick={() => setShowResetConfirm(false)} className="text-sm px-3 py-2">Cancel</button><button onClick={executeResetChat} disabled={isLoading} className="text-sm bg-slate-900 text-white px-3 py-2 rounded-lg disabled:opacity-40">Clear conversation</button></div>}
             <div className="grid xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] gap-6 items-start">
                 <section className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-                    <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between"><div><p className="text-[10px] uppercase tracking-widest font-bold text-indigo-500">01 / Prepare</p><h2 className="font-semibold text-slate-900 mt-1">Task workspace</h2></div><button onClick={() => setShowResetConfirm(true)} disabled={isLoading} className="text-xs text-slate-500 hover:text-slate-900 disabled:opacity-40 flex items-center gap-2"><RotateCcw size={14} /> Clear</button></div>
+                    <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between"><div><p className="text-[10px] uppercase tracking-widest font-bold text-indigo-500">01 / Prepare</p><h2 className="font-semibold text-slate-900 mt-1">Task workspace</h2></div><button onClick={() => setShowResetConfirm(true)} disabled={isLoading} className="text-xs text-slate-500 hover:text-slate-900 disabled:opacity-40 flex items-center gap-2"><RotateCcw size={14} /> Clear conversation</button></div>
                     <div className="p-6">
                         <label htmlFor="keeper-instructions" className="text-sm font-semibold text-slate-800">What should Keeper do?</label>
                         <p className="text-xs text-slate-500 mt-1 mb-3">Include the rules, format, or examples you want him to follow.</p>
