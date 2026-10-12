@@ -1,3 +1,5 @@
+> Historical proposal/review. Manuscript cloud-storage and durable cloud-review portions were superseded by the local-first direction. This is not the current implementation contract. See [current Keeper architecture](keeper-current-architecture.md).
+
 # Keeper tasks: foundation review and implementation contract
 
 > Architecture superseded by [keeper-local-task-plan.md](keeper-local-task-plan.md). Read-only observations remain useful, but the manuscript bucket, cloud extraction and cloud job proposals below must not be implemented.

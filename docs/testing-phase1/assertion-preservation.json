@@ -1,0 +1,80 @@
+{
+  "originalAssertCallSites": 1599,
+  "missing": [],
+  "additionalAssertCallSites": 0,
+  "fixtureProof": [
+    {
+      "fixture": "tests/fixtures/reference-updater-citation-protection.json",
+      "equalInputProjection": true,
+      "cases": [
+        "preserve-off-breaks-body-target",
+        "deselection-breaks-body-target",
+        "blocked-merge-retains-stale-output",
+        "undeclared-entity-emitted",
+        "namespace-wrapper-boundary"
+      ],
+      "sha256": "4a5b54f5af3dc3e1038ace27e582ba605d8f8b2eb4920cc2c26ed918e75d6d6f"
+    },
+    {
+      "fixture": "tests/fixtures/reference-updater-followup-cases.json",
+      "equalInputProjection": true,
+      "cases": [
+        "preserve-off-matched-id-collision",
+        "cross-entry-links-not-remapped",
+        "unmanaged-cross-ref-id-collision",
+        "commented-reference-emitted",
+        "candidate-switch-loses-displaced-update",
+        "split-with-deselected-shared-match",
+        "malformed-xml-still-emitted"
+      ],
+      "sha256": "fbfcdad2b91ba9af13de5417629b4a24130d98f207bf2a56e1be0966a4bcbc04"
+    }
+  ],
+  "limitations": [
+    "Static call-site preservation is not execution-count or browser-coverage proof. Scenario loops retained; execution logs recorded separately.",
+    "Private original article scenario retained externally; synthetic additional article is not claimed equivalent."
+  ],
+  "providerFixture": {
+    "matchesInitialHead": true,
+    "note": "Provider declaration fixture matched HEAD baseline block after CRLF normalization; equality assertion unchanged."
+  },
+  "productionFilesCompared": 148,
+  "productionFilesChanged": [],
+  "nonScriptPackageConfigurationUnchanged": true,
+  "assertionScopeReconciliation": {
+    "recordType": "Assertion scope reconciliation; original verification evidence retained",
+    "historicalFieldsScope": "Existing top-level counts and earlier reports describe the working tree at their recorded verification time, not the approved commit tree.",
+    "workingTree": {
+      "baselineCallSites": 1599,
+      "preserved": 1599,
+      "missing": 0
+    },
+    "approvedCommit": {
+      "applicableBaselineCallSites": 1594,
+      "preserved": 1594,
+      "missingApplicable": 0,
+      "intentionallyExcluded": 5
+    },
+    "exclusion": {
+      "file": "tests/credit-generator-safety.mjs",
+      "reason": "Five assertion call sites belong to unrelated, preexisting CRediT changes, outside the approved 52-file Phase 1 inventory. They remain in the working tree and are intentionally excluded from this commit.",
+      "assertions": [
+        "assert.deepEqual(r.authors.map(a=>a.name),['Alice','Bob'])",
+        "assert.deepEqual(r.authors[0].roles.map(role=>role.normalized),['Methodology','Software'])",
+        "assert.deepEqual(r.authors.map(a=>a.name),['José & Zoë','李明'])",
+        "assert.ok(r.bold.startsWith('<ce:para id=\"p0005\" xml:lang=\"en\">'))",
+        "assert.deepEqual(engine.generateCredit('<ce:para><![CDATA[Alice: Methodology\\nBob: Data curation.]]></ce:para>').authors.map(a=>a.name),['Alice','Bob'])"
+      ]
+    },
+    "verification": {
+      "stagedTreePortableTests": {
+        "passed": 67,
+        "total": 67,
+        "maintainedFilesChanged": 0
+      },
+      "typecheck": "PASS",
+      "originalEvidenceRewritten": false
+    },
+    "limitation": "Counts are static assertion call sites, not dynamic execution counts."
+  }
+}

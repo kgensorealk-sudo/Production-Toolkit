@@ -1,3 +1,5 @@
+> Planning/decision history. Implemented behavior and unresolved verification are recorded in [current Keeper architecture](keeper-current-architecture.md). This document is not the Portable Regression-Test Foundation plan; optional sync, revision, disclosure, and workflow proposals are not implied to be implemented.
+
 # Keeper local-first tasks
 
 Status: revised implementation plan, 2026-10-09. This supersedes the manuscript Storage, cloud extraction and durable cloud review portions of keeper-persistent-task-plan.md and keeper-task-foundation-review.md. No Drive integration. No manuscript uploads to Supabase. This document does not claim the existing application has already been converted.

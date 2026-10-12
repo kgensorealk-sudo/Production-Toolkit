@@ -1,12 +1,7 @@
-import fs from 'node:fs';import assert from 'node:assert/strict';import ts from 'typescript';
-const compile=p=>ts.transpileModule(fs.readFileSync(p,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
-const xml={};new Function('exports','require',compile('utils/referenceUpdaterXml.ts'))(xml,()=>({default:JSON.parse(fs.readFileSync('utils/referenceUpdaterEntities.json','utf8'))}));
-const e={};new Function('exports','require',compile('utils/idAuditorEngine.ts'))(e,n=>n.endsWith('.json')?{default:JSON.parse(fs.readFileSync('utils/idAuditorRules.json','utf8'))}:xml);
-const linkEdits={};new Function('exports','require',compile('utils/citationLinkerEdits.ts'))(linkEdits,n=>n.includes('idAuditor')?e:xml);
-const source=fs.readFileSync('pages/CitationLinker.tsx','utf8'),ast=ts.createSourceFile('CitationLinker.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
-const names=new Set(['normalizeCitation','extractYears','extractFirstName','runAnalysis','executeLink']),decls=[];function visit(n){if(ts.isVariableDeclaration(n)&&ts.isIdentifier(n.name)&&names.has(n.name.text))decls.push('const '+n.getText(ast)+';');ts.forEachChild(n,visit);}visit(ast);assert.equal(decls.length,names.size);
-const code=ts.transpileModule(decls.join('\n'),{compilerOptions:{target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.React}}).outputText;
-function api(input,state,options={}){const noop=()=>{};const args={repairHistory:[],analysisKeyRef:state.analysisKeyRef??={current:input},operationRef:state.operationRef??={current:0},input,resolutions:state.rows||[],cfStart:3000,cleanDoi:false,targetMissingRefid:true,targetMissingId:false,targetDuplicateId:false,analyzeIdLinks:e.analyzeIdLinks,scanReferenceXml:xml.scanReferenceXml,...linkEdits,setIsLoading:noop,setProcessLabel:noop,setDoiCount:noop,setAffectedDoiLabels:noop,setResolutions:r=>state.rows=r,setStep:noop,setToast:t=>(state.toasts??=[]).push(t),setOutput:o=>state.output=o,setDiffElements:noop,generateDiff:noop,setSuggestions:value=>state.suggestions=value,setActiveTab:noop,setTimeout:f=>f(),React:{createElement:noop},Hash:noop,LinkIcon:noop,Trash2:noop,Eraser:noop,RefreshCw:noop,Box:noop,...options};return new Function(...Object.keys(args),code+'\nreturn {runAnalysis,executeLink};')(...Object.values(args));}
+import {testOutputPath} from './test-output.mjs';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {api,xml,e} from './citation-linker-harness.mjs';
 const ref=(id,label)=>`<ce:bib-reference id="${id}"><ce:label>${label}</ce:label><ce:source-text id="se${id.slice(2)}">Work</ce:source-text></ce:bib-reference>`;
 let state={};const handoff=ref('bb3000','[1]')+'<ce:cross-ref id="cf0005" refid="bad">[1]</ce:cross-ref>';
 api(handoff,state).runAnalysis();assert.equal(state.rows.length,1);assert.equal(state.rows[0].brokenRefid,true);assert.deepEqual(state.rows[0].mappedIds,['bb3000']);await api(handoff,state).executeLink();assert.equal(state.output,handoff.replace('refid="bad"','refid="bb3000"'));
@@ -16,11 +11,11 @@ const duplicateLabels=ref('bb0005','[1]')+ref('bb0010','[1]')+'<ce:cross-ref id=
 const ambiguous=ref('bb0005','[1]')+ref('bb0005','[2]')+'<ce:cross-ref id="cf0005" refid="bb0005">[2]</ce:cross-ref>';state={};api(ambiguous,state).runAnalysis();assert.equal(state.rows[0].status,'failed');
 state={};api(handoff,state,{targetMissingRefid:false}).runAnalysis();assert.equal(state.rows,undefined);
 const grouped=ref('bb0005','[1]')+ref('bb0010','[2]')+'<ce:cross-refs id="cf0005" refid="gone">[1,2]</ce:cross-refs>';state={};api(grouped,state).runAnalysis();assert.deepEqual(state.rows[0].mappedIds,['bb0005','bb0010']);await api(grouped,state).executeLink();assert.ok(state.output.includes('refid="bb0005 bb0010"'));
-fs.mkdirSync('artifacts/id-auditor-final-verification',{recursive:true});
+fs.mkdirSync(testOutputPath('artifacts/id-auditor-final-verification'),{recursive:true});
 const n=1800;const large='<ce:bibliography id="bi0005">'+Array.from({length:n},(_,i)=>ref('bb'+String((i+1)*5).padStart(4,'0'),'['+(i+1)+']')).join('\n')+'</ce:bibliography><ce:para id="p0005">'+Array.from({length:n},(_,i)=>'<ce:cross-ref id="cf'+String((i+1)*5).padStart(4,'0')+'" refid="bb'+String((i+1)*5).padStart(4,'0')+'">['+(i+1)+']</ce:cross-ref>'+('Surrounding article text. '.repeat(20))).join('\n')+'</ce:para>';
 let t=performance.now();const rows=e.auditElementIds(large);const auditMs=performance.now()-t;t=performance.now();const qa=e.createIdQaReport(large);const qaMs=performance.now()-t;t=performance.now();assert.equal(e.repairElementIds(large).output,large);const repairMs=performance.now()-t;assert.equal(rows.length,n*3+2);assert.equal(qa.issues.length,0);
 const unresolved=large.replaceAll('refid="bb','refid="missing');t=performance.now();const brokenQa=e.createIdQaReport(unresolved);const unresolvedQaMs=performance.now()-t;assert.equal(brokenQa.issues.length,n);
-fs.writeFileSync('artifacts/id-auditor-final-verification/large-input-results.json',JSON.stringify({bytes:Buffer.byteLength(large),elements:xml.scanReferenceXml(large).nodes.length,auditRows:rows.length,auditMs,qaMs,repairMs,unresolvedQaMs},null,2));
+fs.writeFileSync(testOutputPath('artifacts/id-auditor-final-verification/large-input-results.json'),JSON.stringify({bytes:Buffer.byteLength(large),elements:xml.scanReferenceXml(large).nodes.length,auditRows:rows.length,auditMs,qaMs,repairMs,unresolvedQaMs},null,2));
 assert.equal(e.createIdQaReport('<ce:para/>\n<ce:cross-ref id="cf0005">[1]</ce:cross-ref>').issues[0].line,2);
 console.log('7 Citation Linker handoff cases and 1.3 MB large-input checks passed.');
 export {api,xml,e};

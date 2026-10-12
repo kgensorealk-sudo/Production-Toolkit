@@ -1,0 +1,11 @@
+import fs from 'node:fs';import assert from 'node:assert/strict';import ts from 'typescript';
+const compile=p=>ts.transpileModule(fs.readFileSync(p,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
+const xml={};new Function('exports','require',compile('utils/referenceUpdaterXml.ts'))(xml,()=>({default:JSON.parse(fs.readFileSync('utils/referenceUpdaterEntities.json','utf8'))}));
+const e={};new Function('exports','require',compile('utils/idAuditorEngine.ts'))(e,n=>n.endsWith('.json')?{default:JSON.parse(fs.readFileSync('utils/idAuditorRules.json','utf8'))}:xml);
+const linkEdits={};new Function('exports','require',compile('utils/citationLinkerEdits.ts'))(linkEdits,n=>n.includes('idAuditor')?e:xml);
+const source=fs.readFileSync('pages/CitationLinker.tsx','utf8'),ast=ts.createSourceFile('CitationLinker.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+const names=new Set(['normalizeCitation','extractYears','extractFirstName','runAnalysis','executeLink']),decls=[];function visit(n){if(ts.isVariableDeclaration(n)&&ts.isIdentifier(n.name)&&names.has(n.name.text))decls.push('const '+n.getText(ast)+';');ts.forEachChild(n,visit);}visit(ast);assert.equal(decls.length,names.size);
+const code=ts.transpileModule(decls.join('\n'),{compilerOptions:{target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.React}}).outputText;
+function api(input,state,options={}){const noop=()=>{};const args={repairHistory:[],analysisKeyRef:state.analysisKeyRef??={current:input},operationRef:state.operationRef??={current:0},input,resolutions:state.rows||[],cfStart:3000,cleanDoi:false,targetMissingRefid:true,targetMissingId:false,targetDuplicateId:false,analyzeIdLinks:e.analyzeIdLinks,scanReferenceXml:xml.scanReferenceXml,...linkEdits,setIsLoading:noop,setProcessLabel:noop,setDoiCount:noop,setAffectedDoiLabels:noop,setResolutions:r=>state.rows=r,setStep:noop,setToast:t=>(state.toasts??=[]).push(t),setOutput:o=>state.output=o,setDiffElements:noop,generateDiff:noop,setSuggestions:value=>state.suggestions=value,setActiveTab:noop,setTimeout:f=>f(),React:{createElement:noop},Hash:noop,LinkIcon:noop,Trash2:noop,Eraser:noop,RefreshCw:noop,Box:noop,...options};return new Function(...Object.keys(args),code+'\nreturn {runAnalysis,executeLink};')(...Object.values(args));}
+
+export {api,xml,e};

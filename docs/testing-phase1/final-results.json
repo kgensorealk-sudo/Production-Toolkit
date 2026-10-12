@@ -1,0 +1,3629 @@
+{
+  "workingTreeRun": {
+    "node": "v24.11.1",
+    "platform": "win32",
+    "results": [
+      {
+        "file": "tests/affiliation-sequencer-safety.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "52 affiliation safety checks passed.\n",
+        "ms": 1490,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/citation-linker-author-year-review.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "10 author-year review and refid-only checks passed.\n8 additional target-review and delayed-application checks passed.\n",
+        "ms": 1504,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/citation-linker-safety.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "41 additional Citation Linker safety cases passed.\n",
+        "ms": 1571,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/credit-generator-safety.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "47 CRediT safety checks passed.\n",
+        "ms": 1390,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/id-auditor-final-verification.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "7 Citation Linker handoff cases and 1.3 MB large-input checks passed.\n",
+        "ms": 1904,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/id-auditor-id-only.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "5 ID-only auditor scenarios passed.\n90 registered rule cases and generation safeguards passed.\n68 installed editor rule cases and conditional-prefix safeguards passed.\nCritical target protection and output recommendation regressions passed.\nQA report before/after evidence and recommendation cases passed.\nRepeated input, superseded work, cancellation, and stale-result checks passed.\nConfigured missing caption IDs and unconfigured QA cases passed.\nPASS Scheme preservation, linked target preservation, missing/malformed Scheme IDs, formatted labels, collisions, ordinary figures and explicit overrides\n",
+        "ms": 1513,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/keeper-activity.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS immediate complete replies and per-reply activity display with failed attempts, tool counts and overlapping timing explanation\n",
+        "ms": 307,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/keeper-answer-evidence-api.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "[AI Copilot - Vercel] Model gemini-3.8-flash (gemini) encountered error: evidence_not_retrieved\n[AI Copilot - Vercel] Model gemini-3.1-flash-lite (gemini) encountered error: evidence_not_retrieved\n[AI Copilot - Vercel] Model gemini-flash-latest (gemini) encountered error: evidence_not_retrieved\n[AI Copilot - Vercel] Model gemini-3.7-flash (gemini) encountered error: evidence_not_retrieved\n[AI Copilot - Vercel] Model gemini-3.1-pro-preview (gemini) encountered error: evidence_not_retrieved\nPASS direct count metadata, real SDK evidence-reference serialization, successful answer links, and failed-attempt coverage without false answer claims\n",
+        "ms": 1285,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/keeper-answer-evidence.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS validated citations, unread/unknown citation rejection, partial/full retrieval, source hashes and locations, safe viewer, long-text chunks, per-user persisted references after reinspection, incomplete inspection and count-only distinction\n",
+        "ms": 747,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/keeper-chat-evidence.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS user counting question returns actual tool totals without an AI call\nPASS automatic inspection produces QA without AI and requires authenticated files\nPASS cached output reused, isolated by user, and invalidated by changed content\nPASS real chat handler and Gemini SDK transport round-trip with deterministic evidence\nPASS browser evidence reaches Gemini tool loop, unavailable raw-source tool is excluded, malformed/mixed input rejected, and auth retained\nPASS authentication remains required\nPASS subscription enforcement remains required\nPASS API rejects invalid sandbox IDs\nPASS API rejects injected system roles\n[AI Copilot - Vercel] Model gemini-3.8-flash (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-3.1-flash-lite (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-flash-latest (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-3.7-flash (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-3.1-pro-preview (gemini) encountered error: empty_response\nPASS failed AI review returns per-query evidence instead of a generic retry error\n[AI Copilot - Vercel] Model gemini-3.8-flash (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-3.1-flash-lite (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-flash-latest (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-3.7-flash (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-3.1-pro-preview (gemini) encountered error: empty_response\nPASS deterministic QA remains available when provider configuration is missing\n",
+        "ms": 1338,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/keeper-evidence-report.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS verified edit inventory, included flagged/spacing counts, incomplete evidence disclosure, and PDF issue locations\n",
+        "ms": 339,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/keeper-evidence-snapshot.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS snapshot shape/identity/position/binding validation, conflicting associations and raw-source field stripping\n",
+        "ms": 228,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/keeper-evidence.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS case, intentional spaces, self closing, empty pairs, nested tags and unknown types\nPASS comments, CDATA and quoted greater-than do not produce false OPT nodes\nPASS exact lexical evidence, Unicode and source locations retained\nPASS invalid XML is disclosed rather than silently repaired\nPASS external entities are never fetched\nPASS strict valid response binding\nPASS wrong article cannot bind\nPASS duplicate XML query IDs remain ambiguous\nPASS duplicate PDF query IDs remain ambiguous\nPASS query wording mismatch remains unresolved\nPASS empty author response remains unresolved\nPASS contradictory explicit QID cannot bind\nPASS competing explicit QIDs remain ambiguous\nPASS reference DOI does not establish article identity\nPASS commented original queries preserved with explicit provenance\nPASS fused PDF next-query heading is supported\nPASS artifact validation rejects paths as IDs, duplicate IDs and oversized payload\nPASS dispatcher allowlist and arguments are enforced\nPASS bounded evidence pages and exact-ID retrieval\nPASS XML excerpt reads only supplied artifact IDs\nPASS long records are retrievable without silent truncation\nUNAVAILABLE external Stage-1 parity check; set KEEPER_STAGE1_SOURCE.\nPASS Gemini call/dispatch/result/explanation loop preserves model signatures\nPASS bounded repeated tool calls\nPASS unsupported inspection claims rejected\nPASS fallback provider also executes validated tools\nPASS PDF geometric rows ignore empty text items and preserve query heading adjacency\nPASS task-relevant kind/search filters and XML literal search stay bounded\nPASS QA component renders non-blocking issues, filenames, coverage and unresolved bindings safely\n28 Keeper evidence checks passed.\n",
+        "ms": 719,
+        "externalChecks": [
+          {
+            "id": "stage1-parity",
+            "status": "UNAVAILABLE",
+            "reason": "External source intentionally not supplied to the portable run."
+          }
+        ]
+      },
+      {
+        "file": "tests/keeper-factory-reset.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "Keeper reset checks passed: unchanged provider chain, removed offline knowledge and shortcuts, fresh history namespace.\n",
+        "ms": 1411,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/keeper-final-audit.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS negated/mixed count requests, specific-query evidence guard, and cancellable browser/provider request wiring\nPASS failed empty inspection cannot become a no-change answer, verified empty inventory requires a tool read, and mixed requests bypass count-only shortcut\n",
+        "ms": 502,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/keeper-finding-coverage.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS per-paragraph/list/row isolation, no inherited or code/image/escaped citations, full-block assessment before clipping, explicit non-semantic labels, safe UI and old-answer compatibility\n",
+        "ms": 662,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/keeper-followup-safety.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS meaningful punctuation, typography, standalone/fused boundaries, footer provenance, whole-query coverage, long-record truncation, and encoded/combined/UTF-8 payload limits\n",
+        "ms": 541,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/keeper-local-clear.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS clear retains files/findings, legacy empty task reopens with matching source scope, cleared history stays cleared, repair persists, and manual sources remain intact\n",
+        "ms": 288,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/keeper-local-lifecycle.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS task draft/history separation, account isolation and restored selection\nPASS previous account-level workspace retained through task-scoped migration\nPASS serialized same-tab writes, atomic two-tab conflict and rejected overwrite\nPASS exact cached source membership/content and legacy ID preservation\nPASS corrupt pending task does not block next task; storage-wide failure stops safely\nPASS failed storage read rejects visibly, raw import limits and persisted pasted-source wiring\n",
+        "ms": 318,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/keeper-local-privacy.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS shared local/server XML parity, local background inspection, evidence-only AI requests and scoped history and browser-only dependencies\n",
+        "ms": 245,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/keeper-local-removal.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS removal for all statuses, persisted content cleanup, account isolation, selected-task reset, stale writer/worker protection, and reimport\n",
+        "ms": 371,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/keeper-local-review-repros.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS unchanged ZIP retry retains source identity and conversation scope\nPASS 3 MB PDF accepted by raw local file limit without a server transport cap\n",
+        "ms": 540,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/keeper-local-zip.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS local ZIP role selection, nested folder, six-digit articles, missing/ambiguous files, mismatched PDF, invalid archive and size limit\n",
+        "ms": 471,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/keeper-opt-counts.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS mixed-case counts, spacing, invalid tags, inactive markup, verified zero, failed/capped inspection, missing XML, allowlist, and query-only read rejection\n",
+        "ms": 612,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/keeper-pdf-runtime.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS native Node 24 initializes canvas geometry and extracts PDF text\nPASS real PDF parsing and strict XML/PDF query-response binding\nPASS uploaded-but-failed PDF differs from missing PDF and failed inspection is not cached\n",
+        "ms": 2230,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/keeper-personal-key.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS request-local Gemini key selection, account/request isolation, server-key preservation, authentication, invalid keys, Gemini-only fallback, safe failure logging, and memory-only masked UI\n",
+        "ms": 8591,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/keeper-phase1-second-review.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS canonical task instructions, 23 bounded batches, stable cursors/global refs, full counts, omitted/search refusal, focused queries, snapshot validation and lossless advancing serialized-size slices\nPASS authenticated API large-inventory first/second batch with stable E1/E2 references and mocked Gemini SDK transport\n",
+        "ms": 14204,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/keeper-production-layouts.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS proof callouts excluded, genuine duplicates retained, punctuation spacing, semantic differences, font-split accented names, measured spaces, unknown widths and overlapping runs\n",
+        "ms": 4158,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/keeper-provider-failure.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS safe provider-failure categories without exposing raw provider messages or credentials\n",
+        "ms": 2937,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/keeper-query-provenance.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS strict query/PDF provenance, XML line/PDF page, independent answered/edit statuses, ambiguous/conflicting/missing/mismatched suppression, paged inventory and safe rendering\n",
+        "ms": 3564,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/keeper-query-review.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS 65-query batch coverage, strict binding, provenance, unknown edit status, validation, and explicit truncation\n",
+        "ms": 1578,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/keeper-review-batches.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS three resumable batches, exact coverage without skipped records, failed batch retry, source/task mismatch rejection, count-only bypass, unrelated read rejection and OPT batching\nPASS authenticated API batch/continue/final flow and stale cursor rejection with mocked provider transport\n",
+        "ms": 5503,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/keeper-review-continuity.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS independent checkpoints, interrupted/failed batch retry, durable refresh and task/user isolation, source/rule/legacy invalidation, malformed cursor rejection, completed review and save-before-request wiring\n",
+        "ms": 956,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/keeper-runtime-response.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS native Node ESM loads XML scanner and JSON entity data without a loader\nPASS plain-text, HTML, empty, invalid JSON shapes, oversized request, and timeout responses handled clearly\n",
+        "ms": 3853,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/keeper-scope.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS explicit out-of-scope and insufficient-evidence replies terminate in one model round without false reads, completion claims, or unvalidated arguments\n",
+        "ms": 1194,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/keeper-workflow-audit.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS file-scoped history, page continuations/headers, split headings, blank answers, skipped IDs, duplicate/QID/DOI ambiguity, compound fallback/coverage, and cache expiry recovery\n",
+        "ms": 1752,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/reference-updater-added-ids.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "6 added-reference ID regression scenarios passed.\n",
+        "ms": 5487,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/reference-updater-bibliography-scope.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "10 bibliography scope scenarios passed.\n",
+        "ms": 5077,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/reference-updater-citation-protection.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "UNAVAILABLE external original-article baseline: set TOOLKIT_ARTICLE_BASELINE; synthetic case is additional coverage, not equivalence.\n9 citation protection scenarios passed.\n",
+        "ms": 4454,
+        "externalChecks": [
+          {
+            "id": "original-article-baseline",
+            "status": "UNAVAILABLE",
+            "reason": "External source intentionally not supplied to the portable run."
+          }
+        ]
+      },
+      {
+        "file": "tests/reference-updater-content-match.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "6 content-match regression scenarios and Unicode/punctuation assertions passed.\n",
+        "ms": 3456,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/reference-updater-duplicate-safety.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "5 duplicate safety scenarios passed.\n",
+        "ms": 2236,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/reference-updater-duplicates.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "3 duplicate-review regression scenarios passed.\n",
+        "ms": 2153,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/reference-updater-entities.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "22 entity protection scenarios passed.\n",
+        "ms": 2096,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/reference-updater-followup-fixes.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "21 follow-up regression scenarios passed.\n",
+        "ms": 2133,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/reference-updater-full-article.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "Full article preservation, incoming-body exclusion, wrappers, additions, section ordering and collision checks passed.\n",
+        "ms": 1602,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/reference-updater-id-quotes.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "5 ID quote regression scenarios passed.\n",
+        "ms": 1681,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/reference-updater-id-range.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "3 ID range regression scenarios passed, including exhaustion.\n",
+        "ms": 2494,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/reference-updater-internal-ids.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "5 internal ID regression scenarios passed.\n",
+        "ms": 1701,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/reference-updater-internal-links.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "4 internal-link regression scenarios passed.\n",
+        "ms": 1694,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/reference-updater-link-provenance.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "9 reference ID ownership and link provenance checks passed.\n",
+        "ms": 1932,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/reference-updater-manual-full-article.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "3 full-article manual review regressions passed.\n",
+        "ms": 1650,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/reference-updater-name-date-evidence.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "4 name-date evidence regression scenarios passed.\n",
+        "ms": 1634,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/reference-updater-name-date.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "5 name-date regression scenarios passed.\n",
+        "ms": 1654,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/reference-updater-numbering-warning.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "5 numbering warning scenarios passed.\n",
+        "ms": 1674,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/reference-updater-numeric-identity.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "5 numeric identity regression scenarios passed.\n",
+        "ms": 1700,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/reference-updater-numeric-label.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "8 numeric-label regression scenarios passed.\n",
+        "ms": 1900,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/reference-updater-numeric-review.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "7 numeric review scenarios passed.\n",
+        "ms": 1867,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/reference-updater-output-safety.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "13 output safety regressions passed.\n",
+        "ms": 2330,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/reference-updater-output-validity.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "18 output validity scenarios passed.\n",
+        "ms": 2098,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/reference-updater-shared-split.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "Split order 0,1: two originals retained, one incoming addition with bb3000.\nSplit order 1,0: two originals retained, one incoming addition with bb3000.\nSplit order 0,1: two originals retained, one incoming addition with bb3005.\n",
+        "ms": 1954,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/reference-updater-stale-analysis.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "8 stale-analysis regression scenarios passed.\n",
+        "ms": 1911,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/structuralRepair.test.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "✔ duplicate label detection selects direct bibliography labels, preserving nested labels (10.7695ms)\n✔ XML sanitation retains empty labels in both equivalent forms (12.422ms)\n✔ DOM empty-element pruning preserves a required bibliography label (6.3569ms)\n✔ unparseable repair fragments return their original source and a review warning (4.1103ms)\n✔ source text emits a year-only reference once (1.8745ms)\n✔ source text keeps a host title separate from the contribution title (0.6241ms)\n✔ source text includes book edition, publisher, and location (0.5288ms)\n✔ source text retains an authored journal citation with DOI and pages (0.9403ms)\n✔ missing source text is generated after name and DOI repairs; existing content is retained (0.6963ms)\n✔ source text uses sb:author with ce name fields and excludes invalid ce:author nodes (0.7218ms)\n✔ source text preserves collaboration and individual author order using sb tags (0.3226ms)\n✔ source text keeps et-al and ellipsis markers at their original positions (0.5102ms)\n✔ source text keeps multiple hosts separate in XML order without mixing their fields (0.5108ms)\n✔ multiple hosts include contribution and reference-level comments only once (0.823ms)\n✔ source text includes contribution and host subtitles without repeating punctuation (0.2948ms)\n✔ source text retains supplied inter-ref labels and href targets, without duplicating identical URLs (0.7883ms)\n✔ source text renders identical page endpoints once and preserves real ranges (0.4531ms)\n✔ empty source generation creates no element or ID and reports a warning (7.8097ms)\n✔ sanitation preserves literal XML inside CDATA, comments, and processing instructions (6.8949ms)\n✔ sanitation preserves missing-ID empty source text and explicit spacing (7.12ms)\n✔ duplicate ID detection ignores CDATA, comments, processing instructions, and text (4.4655ms)\n✔ namespace cleanup retains original MathML bindings and CDATA namespace literals (5.1817ms)\n✔ source generation preserves consecutive commas in supplied URL paths (0.2161ms)\n✔ DOI display punctuation uses the supplied href without creating another DOI (0.2618ms)\n✔ source text normalizes DOI prefix whitespace and resolver variants (0.2998ms)\n✔ source text emits duplicate DOI nodes and links once while retaining labels and access dates (0.5379ms)\n✔ source text deduplicates link-only DOI targets and keeps distinct DOIs (0.3716ms)\n✔ source text prevents duplicate DOIs across hosts without losing host details (0.6508ms)\n✔ source text keeps editor suffixes and does not add In to a standalone edited book (0.6044ms)\n✔ source text preserves editor order and omission markers (0.3837ms)\n✔ source text associates series editors and volume with the series, separately from book editors (0.4531ms)\n✔ source text preserves book-series titles and subtitles with their volume (0.2472ms)\n✔ source text retains both issue and journal titles and associates volume with the journal (0.229ms)\n✔ source text preserves comments before, between, and after reference sections (0.3965ms)\n✔ source text keeps repeated comments at their supplied positions between multiple hosts (0.3767ms)\n✔ source text renders embedded comment links once without losing surrounding text or href targets (0.5243ms)\n✔ source text preserves supplied fields: translated-title (0.4102ms)\n✔ source text preserves supplied fields: translation-only (0.1575ms)\n✔ source text preserves supplied fields: conference (0.2021ms)\n✔ source text preserves supplied fields: multiple-publication-dates (0.193ms)\n✔ source text preserves supplied fields: multiple-access-dates (0.2754ms)\n✔ source text preserves supplied fields: version (0.4471ms)\n✔ source text preserves supplied fields: identifiers (0.3272ms)\n✔ source text preserves supplied fields: pages-and-article-number (0.2408ms)\n✔ source text preserves supplied fields: author-alt-name (0.3039ms)\n✔ source text preserves supplied fields: title-question (0.2774ms)\n✔ source text preserves supplied fields: editor-alt-name (0.279ms)\n✔ source text preserves supplied fields: title-exclamation (0.1821ms)\n✔ source text preserves supplied fields: article-number-only (0.3272ms)\n✔ restoring omission markers retains complete paired and self-closing empty elements (3.1137ms)\n✔ marker restoration ignores literal marker text inside CDATA and comments (2.0253ms)\nℹ tests 51\nℹ suites 0\nℹ pass 51\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 286.3953\n",
+        "ms": 1547,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/view-sync-safety.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "75 View Synchronizer safety cases passed.\n",
+        "ms": 1692,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/vtoolBridge.test.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "✔ bridge requires article context and blocks parsed entities (2.7456ms)\n✔ VTool report preserves error codes, positions, and full totals (1.2199ms)\n✔ bridge rejects unpaired origins, wrong pairing codes, and fragment validation (65.5338ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 80.3504\n",
+        "ms": 364,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/xmlRenumber.test.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "✔ linked WHO author-date citation follows the expanded organization reference label (12.1389ms)\n✔ renumbering a citation inside a parenthetical sentence keeps the sentence and closing parenthesis (0.9567ms)\n✔ linked author-date citations use their targets even when labels are already numbered (0.2961ms)\n✔ external author-date parentheses become one configured citation bracket pair (1.6827ms)\n✔ author-date formatting and encoded page locators survive conversion (2.9028ms)\n✔ linked Unicode names and organizations with ampersands support author-date conversion (1.3446ms)\n✔ resolved author-date citation groups and separate links follow all target numbers (0.7548ms)\n✔ author-date conversion preserves unlinked text, unresolved links, prose, and complex markup (0.8197ms)\n✔ ambiguous author-date markup does not trigger external bracket edits (0.3909ms)\n✔ invalid target counts and grouped locators preserve the entire outer citation pair (0.7251ms)\n✔ author-date citations within bibliography text retain their external parentheses (0.5093ms)\n✔ author-date conversion respects custom element and target mappings (0.3278ms)\n✔ outer citation brackets adopt configured delimiters without double wrapping (3.2932ms)\n✔ previous text affixes are inferred from original labels, never guessed from prose (0.9151ms)\n✔ existing curly-brace citations adopt the configured format and retain locators (0.8251ms)\n✔ shared outer brackets and external page locators do not acquire inner brackets (1.2681ms)\n✔ bracket detection does not cross unrelated markup or paragraph boundaries (0.3156ms)\n✔ automatic citation ID repair is optional, unique, reported, and repeatable (2.0499ms)\n✔ automatic ID repair keeps other owners and refuses ambiguous incoming links (0.6899ms)\n✔ automatic ID repair respects custom mappings and quoted attributes (0.2822ms)\n✔ duplicate bibliography citation IDs stop numbering, including collisions with other elements (0.5795ms)\n✔ repeated reference targets are allowed and unrelated duplicate IDs stay outside numbering scope (0.2862ms)\n✔ duplicate citation detection respects custom profile attribute and element mappings (0.2315ms)\n✔ configured citation affixes work on existing text and repeated output (1.7564ms)\n✔ encoded citation digits and locator whitespace renumber without losing entity spelling (0.7393ms)\n✔ a missing first label cannot steal the next label or citation mapping (1.0339ms)\n✔ a missing middle label leaves consecutive numbering of labelled references (0.3997ms)\n✔ an entirely unlabelled bibliography is preserved and reported as skipped (0.2573ms)\n✔ ordinary numbering and report remain correct (0.2912ms)\n✔ a nested label is never used as the bibliography label (0.1633ms)\n✔ grouped citation with an unresolved target is preserved and flagged (0.1956ms)\n✔ label attributes, single quotes, comments and non-bibliographic citations are preserved (0.3308ms)\n✔ custom imported profile changes only its mapped elements (1.1644ms)\n✔ rejects incompatible declared DTD, malformed profile, duplicate IDs and malformed XML (0.5305ms)\n✔ required first label is enforced and custom delimiters are XML escaped (0.2357ms)\n✔ internal subset and CDATA are preserved without resolving entities (0.178ms)\n✔ self-closing labels receive numbers but empty citations remain unchanged for review (0.2499ms)\n✔ empty bibliography citations are preserved and flagged for author-correction review (1.3455ms)\n✔ unknown prototype-property targets cannot resolve as numbers (0.2577ms)\n✔ fully resolved groups collapse ranges, sort and deduplicate numbers (0.7507ms)\n✔ missing ID appears in the QC report (0.4062ms)\n✔ fake doctype inside comment does not select a DTD (0.2814ms)\n✔ invalid and duplicate attributes stop processing (0.7155ms)\n✔ encoded IDs resolve without rewriting attribute spelling (0.4554ms)\n✔ external citation brackets are not doubled (0.388ms)\n✔ nested citations remain unchanged with issues rather than overlapping edits (0.3607ms)\n✔ nested bibliography references stop processing (0.2707ms)\n✔ skipped reference targets are preserved in grouped citations (0.2378ms)\n✔ comments in internal subsets do not corrupt tag boundaries (0.2068ms)\n✔ citation formatting and nested IDs survive renumbering (0.4105ms)\n✔ external brackets normalize without deleting citation formatting (0.22ms)\n✔ ambiguous or unsupported citation markup remains unchanged and flagged (0.5966ms)\n✔ grouped numeric citation can keep a formatting wrapper (0.2184ms)\n✔ formatting toggle defaults to retain and can remove unlinked wrappers (0.4253ms)\n✔ remove formatting protects linked IDs and leaves unrelated links alone (0.3019ms)\n✔ single-reference page locators survive renumbering and a second pass (0.7538ms)\n✔ formatted page locators survive both formatting-toggle modes (0.3037ms)\n✔ ambiguous plain text and grouped page locators are left unchanged with QC issues (0.4283ms)\n✔ label formatting defaults to retained and respects prefix and suffix (0.6893ms)\n✔ complex labels preserve their structure and citations for review (0.1955ms)\n✔ custom profiles belong to the importing administrator only (1.3933ms)\nℹ tests 61\nℹ suites 0\nℹ pass 61\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 68.8496\n",
+        "ms": 1651,
+        "externalChecks": []
+      },
+      {
+        "file": "tests/xmlRenumberUi.test.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "✔ diff line numbers do not count a phantom line after a terminal newline (1.7158ms)\n✔ diff markup escapes pasted XML (0.186ms)\n✔ copy reports asynchronous clipboard rejection instead of success (6.1749ms)\n✔ storage quota failure does not discard in-memory edits (16.092ms)\n✔ Clear cancels delayed processing and repeated keyboard processing is ignored (36.1266ms)\nℹ tests 5\nℹ suites 0\nℹ pass 5\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 69.8862\n",
+        "ms": 1455,
+        "externalChecks": []
+      }
+    ],
+    "maintainedFilesChanged": [],
+    "externalStatus": "NOT RUN; use npm run test:external. Conditional external checks are not counted as portable coverage."
+  },
+  "initialImplementationRun": {
+    "node": "v24.11.1",
+    "platform": "win32",
+    "results": [
+      {
+        "file": "tests/affiliation-sequencer-safety.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "52 affiliation safety checks passed.\n",
+        "ms": 1557
+      },
+      {
+        "file": "tests/citation-linker-author-year-review.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "10 author-year review and refid-only checks passed.\n8 additional target-review and delayed-application checks passed.\n",
+        "ms": 1476
+      },
+      {
+        "file": "tests/citation-linker-safety.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "41 additional Citation Linker safety cases passed.\n",
+        "ms": 1595
+      },
+      {
+        "file": "tests/credit-generator-safety.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "47 CRediT safety checks passed.\n",
+        "ms": 1429
+      },
+      {
+        "file": "tests/id-auditor-final-verification.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "7 Citation Linker handoff cases and 1.3 MB large-input checks passed.\n",
+        "ms": 2071
+      },
+      {
+        "file": "tests/id-auditor-id-only.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "5 ID-only auditor scenarios passed.\n90 registered rule cases and generation safeguards passed.\n68 installed editor rule cases and conditional-prefix safeguards passed.\nCritical target protection and output recommendation regressions passed.\nQA report before/after evidence and recommendation cases passed.\nRepeated input, superseded work, cancellation, and stale-result checks passed.\nConfigured missing caption IDs and unconfigured QA cases passed.\nPASS Scheme preservation, linked target preservation, missing/malformed Scheme IDs, formatted labels, collisions, ordinary figures and explicit overrides\n",
+        "ms": 1481
+      },
+      {
+        "file": "tests/keeper-activity.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS immediate complete replies and per-reply activity display with failed attempts, tool counts and overlapping timing explanation\n",
+        "ms": 286
+      },
+      {
+        "file": "tests/keeper-answer-evidence-api.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "[AI Copilot - Vercel] Model gemini-3.8-flash (gemini) encountered error: evidence_not_retrieved\n[AI Copilot - Vercel] Model gemini-3.1-flash-lite (gemini) encountered error: evidence_not_retrieved\n[AI Copilot - Vercel] Model gemini-flash-latest (gemini) encountered error: evidence_not_retrieved\n[AI Copilot - Vercel] Model gemini-3.7-flash (gemini) encountered error: evidence_not_retrieved\n[AI Copilot - Vercel] Model gemini-3.1-pro-preview (gemini) encountered error: evidence_not_retrieved\nPASS direct count metadata, real SDK evidence-reference serialization, successful answer links, and failed-attempt coverage without false answer claims\n",
+        "ms": 1232
+      },
+      {
+        "file": "tests/keeper-answer-evidence.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS validated citations, unread/unknown citation rejection, partial/full retrieval, source hashes and locations, safe viewer, long-text chunks, per-user persisted references after reinspection, incomplete inspection and count-only distinction\n",
+        "ms": 715
+      },
+      {
+        "file": "tests/keeper-chat-evidence.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS user counting question returns actual tool totals without an AI call\nPASS automatic inspection produces QA without AI and requires authenticated files\nPASS cached output reused, isolated by user, and invalidated by changed content\nPASS real chat handler and Gemini SDK transport round-trip with deterministic evidence\nPASS browser evidence reaches Gemini tool loop, unavailable raw-source tool is excluded, malformed/mixed input rejected, and auth retained\nPASS authentication remains required\nPASS subscription enforcement remains required\nPASS API rejects invalid sandbox IDs\nPASS API rejects injected system roles\n[AI Copilot - Vercel] Model gemini-3.8-flash (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-3.1-flash-lite (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-flash-latest (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-3.7-flash (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-3.1-pro-preview (gemini) encountered error: empty_response\nPASS failed AI review returns per-query evidence instead of a generic retry error\n[AI Copilot - Vercel] Model gemini-3.8-flash (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-3.1-flash-lite (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-flash-latest (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-3.7-flash (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-3.1-pro-preview (gemini) encountered error: empty_response\nPASS deterministic QA remains available when provider configuration is missing\n",
+        "ms": 1239
+      },
+      {
+        "file": "tests/keeper-evidence-report.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS verified edit inventory, included flagged/spacing counts, incomplete evidence disclosure, and PDF issue locations\n",
+        "ms": 308
+      },
+      {
+        "file": "tests/keeper-evidence-snapshot.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS snapshot shape/identity/position/binding validation, conflicting associations and raw-source field stripping\n",
+        "ms": 208
+      },
+      {
+        "file": "tests/keeper-evidence.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS case, intentional spaces, self closing, empty pairs, nested tags and unknown types\nPASS comments, CDATA and quoted greater-than do not produce false OPT nodes\nPASS exact lexical evidence, Unicode and source locations retained\nPASS invalid XML is disclosed rather than silently repaired\nPASS external entities are never fetched\nPASS strict valid response binding\nPASS wrong article cannot bind\nPASS duplicate XML query IDs remain ambiguous\nPASS duplicate PDF query IDs remain ambiguous\nPASS query wording mismatch remains unresolved\nPASS empty author response remains unresolved\nPASS contradictory explicit QID cannot bind\nPASS competing explicit QIDs remain ambiguous\nPASS reference DOI does not establish article identity\nPASS commented original queries preserved with explicit provenance\nPASS fused PDF next-query heading is supported\nPASS artifact validation rejects paths as IDs, duplicate IDs and oversized payload\nPASS dispatcher allowlist and arguments are enforced\nPASS bounded evidence pages and exact-ID retrieval\nPASS XML excerpt reads only supplied artifact IDs\nPASS long records are retrievable without silent truncation\nUNAVAILABLE external Stage-1 parity check; set KEEPER_STAGE1_SOURCE.\nPASS Gemini call/dispatch/result/explanation loop preserves model signatures\nPASS bounded repeated tool calls\nPASS unsupported inspection claims rejected\nPASS fallback provider also executes validated tools\nPASS PDF geometric rows ignore empty text items and preserve query heading adjacency\nPASS task-relevant kind/search filters and XML literal search stay bounded\nPASS QA component renders non-blocking issues, filenames, coverage and unresolved bindings safely\n28 Keeper evidence checks passed.\n",
+        "ms": 714
+      },
+      {
+        "file": "tests/keeper-factory-reset.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "Keeper reset checks passed: unchanged provider chain, removed offline knowledge and shortcuts, fresh history namespace.\n",
+        "ms": 1227
+      },
+      {
+        "file": "tests/keeper-final-audit.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS negated/mixed count requests, specific-query evidence guard, and cancellable browser/provider request wiring\nPASS failed empty inspection cannot become a no-change answer, verified empty inventory requires a tool read, and mixed requests bypass count-only shortcut\n",
+        "ms": 581
+      },
+      {
+        "file": "tests/keeper-finding-coverage.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS per-paragraph/list/row isolation, no inherited or code/image/escaped citations, full-block assessment before clipping, explicit non-semantic labels, safe UI and old-answer compatibility\n",
+        "ms": 636
+      },
+      {
+        "file": "tests/keeper-followup-safety.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS meaningful punctuation, typography, standalone/fused boundaries, footer provenance, whole-query coverage, long-record truncation, and encoded/combined/UTF-8 payload limits\n",
+        "ms": 620
+      },
+      {
+        "file": "tests/keeper-local-clear.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS clear retains files/findings, legacy empty task reopens with matching source scope, cleared history stays cleared, repair persists, and manual sources remain intact\n",
+        "ms": 301
+      },
+      {
+        "file": "tests/keeper-local-lifecycle.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS task draft/history separation, account isolation and restored selection\nPASS previous account-level workspace retained through task-scoped migration\nPASS serialized same-tab writes, atomic two-tab conflict and rejected overwrite\nPASS exact cached source membership/content and legacy ID preservation\nPASS corrupt pending task does not block next task; storage-wide failure stops safely\nPASS failed storage read rejects visibly, raw import limits and persisted pasted-source wiring\n",
+        "ms": 290
+      },
+      {
+        "file": "tests/keeper-local-privacy.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS shared local/server XML parity, local background inspection, evidence-only AI requests and scoped history and browser-only dependencies\n",
+        "ms": 228
+      },
+      {
+        "file": "tests/keeper-local-removal.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS removal for all statuses, persisted content cleanup, account isolation, selected-task reset, stale writer/worker protection, and reimport\n",
+        "ms": 270
+      },
+      {
+        "file": "tests/keeper-local-review-repros.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS unchanged ZIP retry retains source identity and conversation scope\nPASS 3 MB PDF accepted by raw local file limit without a server transport cap\n",
+        "ms": 416
+      },
+      {
+        "file": "tests/keeper-local-zip.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS local ZIP role selection, nested folder, six-digit articles, missing/ambiguous files, mismatched PDF, invalid archive and size limit\n",
+        "ms": 444
+      },
+      {
+        "file": "tests/keeper-opt-counts.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS mixed-case counts, spacing, invalid tags, inactive markup, verified zero, failed/capped inspection, missing XML, allowlist, and query-only read rejection\n",
+        "ms": 562
+      },
+      {
+        "file": "tests/keeper-pdf-runtime.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS native Node 24 initializes canvas geometry and extracts PDF text\nPASS real PDF parsing and strict XML/PDF query-response binding\nPASS uploaded-but-failed PDF differs from missing PDF and failed inspection is not cached\n",
+        "ms": 2222
+      },
+      {
+        "file": "tests/keeper-personal-key.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS request-local Gemini key selection, account/request isolation, server-key preservation, authentication, invalid keys, Gemini-only fallback, safe failure logging, and memory-only masked UI\n",
+        "ms": 1424
+      },
+      {
+        "file": "tests/keeper-phase1-second-review.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS canonical task instructions, 23 bounded batches, stable cursors/global refs, full counts, omitted/search refusal, focused queries, snapshot validation and lossless advancing serialized-size slices\nPASS authenticated API large-inventory first/second batch with stable E1/E2 references and mocked Gemini SDK transport\n",
+        "ms": 1806
+      },
+      {
+        "file": "tests/keeper-production-layouts.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS proof callouts excluded, genuine duplicates retained, punctuation spacing, semantic differences, font-split accented names, measured spaces, unknown widths and overlapping runs\n",
+        "ms": 497
+      },
+      {
+        "file": "tests/keeper-provider-failure.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS safe provider-failure categories without exposing raw provider messages or credentials\n",
+        "ms": 172
+      },
+      {
+        "file": "tests/keeper-query-provenance.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS strict query/PDF provenance, XML line/PDF page, independent answered/edit statuses, ambiguous/conflicting/missing/mismatched suppression, paged inventory and safe rendering\n",
+        "ms": 568
+      },
+      {
+        "file": "tests/keeper-query-review.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS 65-query batch coverage, strict binding, provenance, unknown edit status, validation, and explicit truncation\n",
+        "ms": 224
+      },
+      {
+        "file": "tests/keeper-review-batches.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS three resumable batches, exact coverage without skipped records, failed batch retry, source/task mismatch rejection, count-only bypass, unrelated read rejection and OPT batching\nPASS authenticated API batch/continue/final flow and stale cursor rejection with mocked provider transport\n",
+        "ms": 1234
+      },
+      {
+        "file": "tests/keeper-review-continuity.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS independent checkpoints, interrupted/failed batch retry, durable refresh and task/user isolation, source/rule/legacy invalidation, malformed cursor rejection, completed review and save-before-request wiring\n",
+        "ms": 327
+      },
+      {
+        "file": "tests/keeper-runtime-response.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS native Node ESM loads XML scanner and JSON entity data without a loader\nPASS plain-text, HTML, empty, invalid JSON shapes, oversized request, and timeout responses handled clearly\n",
+        "ms": 1411
+      },
+      {
+        "file": "tests/keeper-scope.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS explicit out-of-scope and insufficient-evidence replies terminate in one model round without false reads, completion claims, or unvalidated arguments\n",
+        "ms": 472
+      },
+      {
+        "file": "tests/keeper-workflow-audit.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "PASS file-scoped history, page continuations/headers, split headings, blank answers, skipped IDs, duplicate/QID/DOI ambiguity, compound fallback/coverage, and cache expiry recovery\n",
+        "ms": 493
+      },
+      {
+        "file": "tests/reference-updater-added-ids.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "6 added-reference ID regression scenarios passed.\n",
+        "ms": 1696
+      },
+      {
+        "file": "tests/reference-updater-bibliography-scope.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "10 bibliography scope scenarios passed.\n",
+        "ms": 1662
+      },
+      {
+        "file": "tests/reference-updater-citation-protection.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "UNAVAILABLE external original-article baseline: set TOOLKIT_ARTICLE_BASELINE; synthetic case is additional coverage, not equivalence.\n9 citation protection scenarios passed.\n",
+        "ms": 1757
+      },
+      {
+        "file": "tests/reference-updater-content-match.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "6 content-match regression scenarios and Unicode/punctuation assertions passed.\n",
+        "ms": 1727
+      },
+      {
+        "file": "tests/reference-updater-duplicate-safety.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "5 duplicate safety scenarios passed.\n",
+        "ms": 1683
+      },
+      {
+        "file": "tests/reference-updater-duplicates.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "3 duplicate-review regression scenarios passed.\n",
+        "ms": 1673
+      },
+      {
+        "file": "tests/reference-updater-entities.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "22 entity protection scenarios passed.\n",
+        "ms": 1830
+      },
+      {
+        "file": "tests/reference-updater-followup-fixes.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "21 follow-up regression scenarios passed.\n",
+        "ms": 2082
+      },
+      {
+        "file": "tests/reference-updater-full-article.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "Full article preservation, incoming-body exclusion, wrappers, additions, section ordering and collision checks passed.\n",
+        "ms": 1569
+      },
+      {
+        "file": "tests/reference-updater-id-quotes.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "5 ID quote regression scenarios passed.\n",
+        "ms": 1710
+      },
+      {
+        "file": "tests/reference-updater-id-range.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "3 ID range regression scenarios passed, including exhaustion.\n",
+        "ms": 2487
+      },
+      {
+        "file": "tests/reference-updater-internal-ids.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "5 internal ID regression scenarios passed.\n",
+        "ms": 1747
+      },
+      {
+        "file": "tests/reference-updater-internal-links.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "4 internal-link regression scenarios passed.\n",
+        "ms": 1876
+      },
+      {
+        "file": "tests/reference-updater-link-provenance.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "9 reference ID ownership and link provenance checks passed.\n",
+        "ms": 2048
+      },
+      {
+        "file": "tests/reference-updater-manual-full-article.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "3 full-article manual review regressions passed.\n",
+        "ms": 1655
+      },
+      {
+        "file": "tests/reference-updater-name-date-evidence.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "4 name-date evidence regression scenarios passed.\n",
+        "ms": 1644
+      },
+      {
+        "file": "tests/reference-updater-name-date.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "5 name-date regression scenarios passed.\n",
+        "ms": 1691
+      },
+      {
+        "file": "tests/reference-updater-numbering-warning.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "5 numbering warning scenarios passed.\n",
+        "ms": 1647
+      },
+      {
+        "file": "tests/reference-updater-numeric-identity.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "5 numeric identity regression scenarios passed.\n",
+        "ms": 1774
+      },
+      {
+        "file": "tests/reference-updater-numeric-label.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "8 numeric-label regression scenarios passed.\n",
+        "ms": 1924
+      },
+      {
+        "file": "tests/reference-updater-numeric-review.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "7 numeric review scenarios passed.\n",
+        "ms": 1842
+      },
+      {
+        "file": "tests/reference-updater-output-safety.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "13 output safety regressions passed.\n",
+        "ms": 1879
+      },
+      {
+        "file": "tests/reference-updater-output-validity.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "18 output validity scenarios passed.\n",
+        "ms": 1897
+      },
+      {
+        "file": "tests/reference-updater-shared-split.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "Split order 0,1: two originals retained, one incoming addition with bb3000.\nSplit order 1,0: two originals retained, one incoming addition with bb3000.\nSplit order 0,1: two originals retained, one incoming addition with bb3005.\n",
+        "ms": 1793
+      },
+      {
+        "file": "tests/reference-updater-stale-analysis.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "8 stale-analysis regression scenarios passed.\n",
+        "ms": 1757
+      },
+      {
+        "file": "tests/structuralRepair.test.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "✔ duplicate label detection selects direct bibliography labels, preserving nested labels (10.7749ms)\n✔ XML sanitation retains empty labels in both equivalent forms (10.5596ms)\n✔ DOM empty-element pruning preserves a required bibliography label (5.4147ms)\n✔ unparseable repair fragments return their original source and a review warning (3.5418ms)\n✔ source text emits a year-only reference once (1.6742ms)\n✔ source text keeps a host title separate from the contribution title (0.6157ms)\n✔ source text includes book edition, publisher, and location (0.4665ms)\n✔ source text retains an authored journal citation with DOI and pages (0.8426ms)\n✔ missing source text is generated after name and DOI repairs; existing content is retained (0.4664ms)\n✔ source text uses sb:author with ce name fields and excludes invalid ce:author nodes (0.5528ms)\n✔ source text preserves collaboration and individual author order using sb tags (0.3456ms)\n✔ source text keeps et-al and ellipsis markers at their original positions (0.8883ms)\n✔ source text keeps multiple hosts separate in XML order without mixing their fields (0.6671ms)\n✔ multiple hosts include contribution and reference-level comments only once (0.8525ms)\n✔ source text includes contribution and host subtitles without repeating punctuation (0.2829ms)\n✔ source text retains supplied inter-ref labels and href targets, without duplicating identical URLs (0.4395ms)\n✔ source text renders identical page endpoints once and preserves real ranges (0.291ms)\n✔ empty source generation creates no element or ID and reports a warning (6.8658ms)\n✔ sanitation preserves literal XML inside CDATA, comments, and processing instructions (6.1585ms)\n✔ sanitation preserves missing-ID empty source text and explicit spacing (6.3956ms)\n✔ duplicate ID detection ignores CDATA, comments, processing instructions, and text (4.6437ms)\n✔ namespace cleanup retains original MathML bindings and CDATA namespace literals (3.6491ms)\n✔ source generation preserves consecutive commas in supplied URL paths (0.1633ms)\n✔ DOI display punctuation uses the supplied href without creating another DOI (0.1675ms)\n✔ source text normalizes DOI prefix whitespace and resolver variants (0.1888ms)\n✔ source text emits duplicate DOI nodes and links once while retaining labels and access dates (0.3422ms)\n✔ source text deduplicates link-only DOI targets and keeps distinct DOIs (0.2827ms)\n✔ source text prevents duplicate DOIs across hosts without losing host details (0.2735ms)\n✔ source text keeps editor suffixes and does not add In to a standalone edited book (0.3867ms)\n✔ source text preserves editor order and omission markers (0.3143ms)\n✔ source text associates series editors and volume with the series, separately from book editors (0.3329ms)\n✔ source text preserves book-series titles and subtitles with their volume (0.2032ms)\n✔ source text retains both issue and journal titles and associates volume with the journal (0.2061ms)\n✔ source text preserves comments before, between, and after reference sections (0.3425ms)\n✔ source text keeps repeated comments at their supplied positions between multiple hosts (0.3422ms)\n✔ source text renders embedded comment links once without losing surrounding text or href targets (0.3489ms)\n✔ source text preserves supplied fields: translated-title (0.2992ms)\n✔ source text preserves supplied fields: translation-only (0.1998ms)\n✔ source text preserves supplied fields: conference (0.1756ms)\n✔ source text preserves supplied fields: multiple-publication-dates (0.1533ms)\n✔ source text preserves supplied fields: multiple-access-dates (0.1577ms)\n✔ source text preserves supplied fields: version (0.2438ms)\n✔ source text preserves supplied fields: identifiers (0.235ms)\n✔ source text preserves supplied fields: pages-and-article-number (0.3451ms)\n✔ source text preserves supplied fields: author-alt-name (0.3098ms)\n✔ source text preserves supplied fields: title-question (0.1834ms)\n✔ source text preserves supplied fields: editor-alt-name (0.26ms)\n✔ source text preserves supplied fields: title-exclamation (0.1532ms)\n✔ source text preserves supplied fields: article-number-only (0.1768ms)\n✔ restoring omission markers retains complete paired and self-closing empty elements (3.1395ms)\n✔ marker restoration ignores literal marker text inside CDATA and comments (2.1806ms)\nℹ tests 51\nℹ suites 0\nℹ pass 51\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 227.008\n",
+        "ms": 1347
+      },
+      {
+        "file": "tests/view-sync-safety.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "75 View Synchronizer safety cases passed.\n",
+        "ms": 1525
+      },
+      {
+        "file": "tests/vtoolBridge.test.mjs",
+        "kinds": [
+          "behavioral"
+        ],
+        "status": "FAIL",
+        "code": 1,
+        "signal": null,
+        "timedOut": false,
+        "log": "✔ bridge requires article context and blocks parsed entities (2.8849ms)\n✔ VTool report preserves error codes, positions, and full totals (0.7746ms)\n✖ bridge rejects unpaired origins, wrong pairing codes, and fragment validation (53.1489ms)\nℹ tests 3\nℹ suites 0\nℹ pass 2\nℹ fail 1\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 65.6841\n\n✖ failing tests:\n\ntest at tests\\vtoolBridge.test.mjs:21:1\n✖ bridge rejects unpaired origins, wrong pairing codes, and fragment validation (53.1489ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  \n  403 !== 401\n  \n      at TestContext.<anonymous> (file:///[LOCAL_USER_HOME]/Desktop/Workflow%20Suite%20Browser/tests/vtoolBridge.test.mjs:26:16)\n      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n      at async Test.run (node:internal/test_runner/test:1113:7)\n      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: 403,\n    expected: 401,\n    operator: 'strictEqual',\n    diff: 'simple'\n  }\n",
+        "ms": 302
+      },
+      {
+        "file": "tests/xmlRenumber.test.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "✔ linked WHO author-date citation follows the expanded organization reference label (10.5184ms)\n✔ renumbering a citation inside a parenthetical sentence keeps the sentence and closing parenthesis (0.8783ms)\n✔ linked author-date citations use their targets even when labels are already numbered (0.2989ms)\n✔ external author-date parentheses become one configured citation bracket pair (1.2117ms)\n✔ author-date formatting and encoded page locators survive conversion (2.4938ms)\n✔ linked Unicode names and organizations with ampersands support author-date conversion (0.9832ms)\n✔ resolved author-date citation groups and separate links follow all target numbers (0.8121ms)\n✔ author-date conversion preserves unlinked text, unresolved links, prose, and complex markup (0.7158ms)\n✔ ambiguous author-date markup does not trigger external bracket edits (0.3909ms)\n✔ invalid target counts and grouped locators preserve the entire outer citation pair (0.6448ms)\n✔ author-date citations within bibliography text retain their external parentheses (0.3159ms)\n✔ author-date conversion respects custom element and target mappings (0.2335ms)\n✔ outer citation brackets adopt configured delimiters without double wrapping (2.9406ms)\n✔ previous text affixes are inferred from original labels, never guessed from prose (1.0021ms)\n✔ existing curly-brace citations adopt the configured format and retain locators (0.7089ms)\n✔ shared outer brackets and external page locators do not acquire inner brackets (0.8757ms)\n✔ bracket detection does not cross unrelated markup or paragraph boundaries (0.1893ms)\n✔ automatic citation ID repair is optional, unique, reported, and repeatable (1.7789ms)\n✔ automatic ID repair keeps other owners and refuses ambiguous incoming links (0.73ms)\n✔ automatic ID repair respects custom mappings and quoted attributes (0.4093ms)\n✔ duplicate bibliography citation IDs stop numbering, including collisions with other elements (0.7397ms)\n✔ repeated reference targets are allowed and unrelated duplicate IDs stay outside numbering scope (0.2379ms)\n✔ duplicate citation detection respects custom profile attribute and element mappings (0.2213ms)\n✔ configured citation affixes work on existing text and repeated output (1.9817ms)\n✔ encoded citation digits and locator whitespace renumber without losing entity spelling (0.6515ms)\n✔ a missing first label cannot steal the next label or citation mapping (0.9049ms)\n✔ a missing middle label leaves consecutive numbering of labelled references (0.3488ms)\n✔ an entirely unlabelled bibliography is preserved and reported as skipped (0.2511ms)\n✔ ordinary numbering and report remain correct (0.2621ms)\n✔ a nested label is never used as the bibliography label (0.1238ms)\n✔ grouped citation with an unresolved target is preserved and flagged (0.1522ms)\n✔ label attributes, single quotes, comments and non-bibliographic citations are preserved (0.3015ms)\n✔ custom imported profile changes only its mapped elements (1.3963ms)\n✔ rejects incompatible declared DTD, malformed profile, duplicate IDs and malformed XML (0.4664ms)\n✔ required first label is enforced and custom delimiters are XML escaped (0.2059ms)\n✔ internal subset and CDATA are preserved without resolving entities (0.1397ms)\n✔ self-closing labels receive numbers but empty citations remain unchanged for review (0.1867ms)\n✔ empty bibliography citations are preserved and flagged for author-correction review (0.6992ms)\n✔ unknown prototype-property targets cannot resolve as numbers (0.1925ms)\n✔ fully resolved groups collapse ranges, sort and deduplicate numbers (0.4412ms)\n✔ missing ID appears in the QC report (0.2107ms)\n✔ fake doctype inside comment does not select a DTD (0.2176ms)\n✔ invalid and duplicate attributes stop processing (0.6137ms)\n✔ encoded IDs resolve without rewriting attribute spelling (0.2839ms)\n✔ external citation brackets are not doubled (0.3879ms)\n✔ nested citations remain unchanged with issues rather than overlapping edits (0.2558ms)\n✔ nested bibliography references stop processing (0.284ms)\n✔ skipped reference targets are preserved in grouped citations (0.2493ms)\n✔ comments in internal subsets do not corrupt tag boundaries (0.1651ms)\n✔ citation formatting and nested IDs survive renumbering (0.4268ms)\n✔ external brackets normalize without deleting citation formatting (0.1571ms)\n✔ ambiguous or unsupported citation markup remains unchanged and flagged (0.5248ms)\n✔ grouped numeric citation can keep a formatting wrapper (0.1774ms)\n✔ formatting toggle defaults to retain and can remove unlinked wrappers (0.3314ms)\n✔ remove formatting protects linked IDs and leaves unrelated links alone (0.2309ms)\n✔ single-reference page locators survive renumbering and a second pass (0.6928ms)\n✔ formatted page locators survive both formatting-toggle modes (0.2557ms)\n✔ ambiguous plain text and grouped page locators are left unchanged with QC issues (0.4073ms)\n✔ label formatting defaults to retained and respects prefix and suffix (0.6636ms)\n✔ complex labels preserve their structure and citations for review (0.2128ms)\n✔ custom profiles belong to the importing administrator only (1.5138ms)\nℹ tests 61\nℹ suites 0\nℹ pass 61\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 59.8035\n",
+        "ms": 1463
+      },
+      {
+        "file": "tests/xmlRenumberUi.test.mjs",
+        "kinds": [
+          "behavioral",
+          "source-contract/static"
+        ],
+        "status": "PASS",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "log": "✔ diff line numbers do not count a phantom line after a terminal newline (1.1198ms)\n✔ diff markup escapes pasted XML (0.3092ms)\n✔ copy reports asynchronous clipboard rejection instead of success (9.1907ms)\n✔ storage quota failure does not discard in-memory edits (18.8033ms)\n✔ Clear cancels delayed processing and repeated keyboard processing is ignored (33.8841ms)\nℹ tests 5\nℹ suites 0\nℹ pass 5\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 72.5095\n",
+        "ms": 1264
+      }
+    ],
+    "maintainedFilesChanged": [
+      "docs\\testing-phase1\\assertion-preservation.json"
+    ],
+    "externalStatus": "NOT RUN; use npm run test:external. Conditional external checks are not counted as portable coverage."
+  },
+  "initialFailureResolution": "Port 0 caused bridge Host validation 403 instead of existing expected 401; test now selects actual available port. No assertion weakened. The one changed file was an audit report written by the agent during that initial run, not a test output.",
+  "typecheck": {
+    "command": "npm run lint",
+    "exit": 0
+  },
+  "externalConfigured": {
+    "results": [
+      {
+        "id": "stage1-parity",
+        "status": "PASS",
+        "detail": "Exit 0; original conditional assertions retained."
+      },
+      {
+        "id": "original-article-baseline",
+        "status": "PASS",
+        "detail": "Exit 0; original conditional assertions retained."
+      },
+      {
+        "id": "vtool",
+        "status": "UNAVAILABLE",
+        "detail": "Set VTOOL_JAR and TOOLKIT_VALIDATION_XML. No manuscript or publisher validator is bundled."
+      },
+      {
+        "id": "independent-dtd",
+        "status": "UNAVAILABLE",
+        "detail": "No independent portable DTD adapter configured. VTool results are not a second independent DTD validation. Historical PowerShell/Python scripts remain separately inventoried."
+      }
+    ],
+    "reportContainsLocalEvidence": true
+  },
+  "externalUnconfigured": {
+    "results": [
+      {
+        "id": "stage1-parity",
+        "status": "UNAVAILABLE",
+        "detail": "Set KEEPER_STAGE1_SOURCE to an existing locally authorized source."
+      },
+      {
+        "id": "original-article-baseline",
+        "status": "UNAVAILABLE",
+        "detail": "Set TOOLKIT_ARTICLE_BASELINE to an existing locally authorized source."
+      },
+      {
+        "id": "vtool",
+        "status": "UNAVAILABLE",
+        "detail": "Set VTOOL_JAR and TOOLKIT_VALIDATION_XML. No manuscript or publisher validator is bundled."
+      },
+      {
+        "id": "independent-dtd",
+        "status": "UNAVAILABLE",
+        "detail": "No independent portable DTD adapter configured. VTool results are not a second independent DTD validation. Historical PowerShell/Python scripts remain separately inventoried."
+      }
+    ],
+    "reportContainsLocalEvidence": true
+  },
+  "cleanInstall": {
+    "command": "npm ci --no-audit --no-fund",
+    "exit": 0,
+    "packages": 753,
+    "sourceSnapshot": "Current working tree, without .git, artifacts, output, dotenv files or existing node_modules. Fresh dependency installation; not a committed release checkout."
+  },
+  "cleanRuns": [
+    {
+      "node": "v24.11.1",
+      "platform": "win32",
+      "results": [
+        {
+          "file": "tests/affiliation-sequencer-safety.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "52 affiliation safety checks passed.\n",
+          "ms": 1701,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/citation-linker-author-year-review.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "10 author-year review and refid-only checks passed.\n8 additional target-review and delayed-application checks passed.\n",
+          "ms": 1704,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/citation-linker-safety.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "41 additional Citation Linker safety cases passed.\n",
+          "ms": 1663,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/credit-generator-safety.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "47 CRediT safety checks passed.\n",
+          "ms": 1564,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/id-auditor-final-verification.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "7 Citation Linker handoff cases and 1.3 MB large-input checks passed.\n",
+          "ms": 2149,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/id-auditor-id-only.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "5 ID-only auditor scenarios passed.\n90 registered rule cases and generation safeguards passed.\n68 installed editor rule cases and conditional-prefix safeguards passed.\nCritical target protection and output recommendation regressions passed.\nQA report before/after evidence and recommendation cases passed.\nRepeated input, superseded work, cancellation, and stale-result checks passed.\nConfigured missing caption IDs and unconfigured QA cases passed.\nPASS Scheme preservation, linked target preservation, missing/malformed Scheme IDs, formatted labels, collisions, ordinary figures and explicit overrides\n",
+          "ms": 1664,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-activity.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS immediate complete replies and per-reply activity display with failed attempts, tool counts and overlapping timing explanation\n",
+          "ms": 388,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-answer-evidence-api.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "[AI Copilot - Vercel] Model gemini-3.8-flash (gemini) encountered error: evidence_not_retrieved\n[AI Copilot - Vercel] Model gemini-3.1-flash-lite (gemini) encountered error: evidence_not_retrieved\n[AI Copilot - Vercel] Model gemini-flash-latest (gemini) encountered error: evidence_not_retrieved\n[AI Copilot - Vercel] Model gemini-3.7-flash (gemini) encountered error: evidence_not_retrieved\n[AI Copilot - Vercel] Model gemini-3.1-pro-preview (gemini) encountered error: evidence_not_retrieved\nPASS direct count metadata, real SDK evidence-reference serialization, successful answer links, and failed-attempt coverage without false answer claims\n",
+          "ms": 1567,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-answer-evidence.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS validated citations, unread/unknown citation rejection, partial/full retrieval, source hashes and locations, safe viewer, long-text chunks, per-user persisted references after reinspection, incomplete inspection and count-only distinction\n",
+          "ms": 872,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-chat-evidence.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS user counting question returns actual tool totals without an AI call\nPASS automatic inspection produces QA without AI and requires authenticated files\nPASS cached output reused, isolated by user, and invalidated by changed content\nPASS real chat handler and Gemini SDK transport round-trip with deterministic evidence\nPASS browser evidence reaches Gemini tool loop, unavailable raw-source tool is excluded, malformed/mixed input rejected, and auth retained\nPASS authentication remains required\nPASS subscription enforcement remains required\nPASS API rejects invalid sandbox IDs\nPASS API rejects injected system roles\n[AI Copilot - Vercel] Model gemini-3.8-flash (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-3.1-flash-lite (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-flash-latest (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-3.7-flash (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-3.1-pro-preview (gemini) encountered error: empty_response\nPASS failed AI review returns per-query evidence instead of a generic retry error\n[AI Copilot - Vercel] Model gemini-3.8-flash (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-3.1-flash-lite (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-flash-latest (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-3.7-flash (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-3.1-pro-preview (gemini) encountered error: empty_response\nPASS deterministic QA remains available when provider configuration is missing\n",
+          "ms": 1294,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-evidence-report.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS verified edit inventory, included flagged/spacing counts, incomplete evidence disclosure, and PDF issue locations\n",
+          "ms": 399,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-evidence-snapshot.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS snapshot shape/identity/position/binding validation, conflicting associations and raw-source field stripping\n",
+          "ms": 222,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-evidence.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS case, intentional spaces, self closing, empty pairs, nested tags and unknown types\nPASS comments, CDATA and quoted greater-than do not produce false OPT nodes\nPASS exact lexical evidence, Unicode and source locations retained\nPASS invalid XML is disclosed rather than silently repaired\nPASS external entities are never fetched\nPASS strict valid response binding\nPASS wrong article cannot bind\nPASS duplicate XML query IDs remain ambiguous\nPASS duplicate PDF query IDs remain ambiguous\nPASS query wording mismatch remains unresolved\nPASS empty author response remains unresolved\nPASS contradictory explicit QID cannot bind\nPASS competing explicit QIDs remain ambiguous\nPASS reference DOI does not establish article identity\nPASS commented original queries preserved with explicit provenance\nPASS fused PDF next-query heading is supported\nPASS artifact validation rejects paths as IDs, duplicate IDs and oversized payload\nPASS dispatcher allowlist and arguments are enforced\nPASS bounded evidence pages and exact-ID retrieval\nPASS XML excerpt reads only supplied artifact IDs\nPASS long records are retrievable without silent truncation\nUNAVAILABLE external Stage-1 parity check; set KEEPER_STAGE1_SOURCE.\nPASS Gemini call/dispatch/result/explanation loop preserves model signatures\nPASS bounded repeated tool calls\nPASS unsupported inspection claims rejected\nPASS fallback provider also executes validated tools\nPASS PDF geometric rows ignore empty text items and preserve query heading adjacency\nPASS task-relevant kind/search filters and XML literal search stay bounded\nPASS QA component renders non-blocking issues, filenames, coverage and unresolved bindings safely\n28 Keeper evidence checks passed.\n",
+          "ms": 622,
+          "externalChecks": [
+            {
+              "id": "stage1-parity",
+              "status": "UNAVAILABLE",
+              "reason": "External source intentionally not supplied to the portable run."
+            }
+          ]
+        },
+        {
+          "file": "tests/keeper-factory-reset.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "Keeper reset checks passed: unchanged provider chain, removed offline knowledge and shortcuts, fresh history namespace.\n",
+          "ms": 1200,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-final-audit.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS negated/mixed count requests, specific-query evidence guard, and cancellable browser/provider request wiring\nPASS failed empty inspection cannot become a no-change answer, verified empty inventory requires a tool read, and mixed requests bypass count-only shortcut\n",
+          "ms": 479,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-finding-coverage.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS per-paragraph/list/row isolation, no inherited or code/image/escaped citations, full-block assessment before clipping, explicit non-semantic labels, safe UI and old-answer compatibility\n",
+          "ms": 616,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-followup-safety.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS meaningful punctuation, typography, standalone/fused boundaries, footer provenance, whole-query coverage, long-record truncation, and encoded/combined/UTF-8 payload limits\n",
+          "ms": 636,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-local-clear.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS clear retains files/findings, legacy empty task reopens with matching source scope, cleared history stays cleared, repair persists, and manual sources remain intact\n",
+          "ms": 357,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-local-lifecycle.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS task draft/history separation, account isolation and restored selection\nPASS previous account-level workspace retained through task-scoped migration\nPASS serialized same-tab writes, atomic two-tab conflict and rejected overwrite\nPASS exact cached source membership/content and legacy ID preservation\nPASS corrupt pending task does not block next task; storage-wide failure stops safely\nPASS failed storage read rejects visibly, raw import limits and persisted pasted-source wiring\n",
+          "ms": 396,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-local-privacy.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS shared local/server XML parity, local background inspection, evidence-only AI requests and scoped history and browser-only dependencies\n",
+          "ms": 212,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-local-removal.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS removal for all statuses, persisted content cleanup, account isolation, selected-task reset, stale writer/worker protection, and reimport\n",
+          "ms": 275,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-local-review-repros.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS unchanged ZIP retry retains source identity and conversation scope\nPASS 3 MB PDF accepted by raw local file limit without a server transport cap\n",
+          "ms": 506,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-local-zip.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS local ZIP role selection, nested folder, six-digit articles, missing/ambiguous files, mismatched PDF, invalid archive and size limit\n",
+          "ms": 432,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-opt-counts.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS mixed-case counts, spacing, invalid tags, inactive markup, verified zero, failed/capped inspection, missing XML, allowlist, and query-only read rejection\n",
+          "ms": 549,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-pdf-runtime.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS native Node 24 initializes canvas geometry and extracts PDF text\nPASS real PDF parsing and strict XML/PDF query-response binding\nPASS uploaded-but-failed PDF differs from missing PDF and failed inspection is not cached\n",
+          "ms": 1969,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-personal-key.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS request-local Gemini key selection, account/request isolation, server-key preservation, authentication, invalid keys, Gemini-only fallback, safe failure logging, and memory-only masked UI\n",
+          "ms": 1214,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-phase1-second-review.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS canonical task instructions, 23 bounded batches, stable cursors/global refs, full counts, omitted/search refusal, focused queries, snapshot validation and lossless advancing serialized-size slices\nPASS authenticated API large-inventory first/second batch with stable E1/E2 references and mocked Gemini SDK transport\n",
+          "ms": 1850,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-production-layouts.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS proof callouts excluded, genuine duplicates retained, punctuation spacing, semantic differences, font-split accented names, measured spaces, unknown widths and overlapping runs\n",
+          "ms": 491,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-provider-failure.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS safe provider-failure categories without exposing raw provider messages or credentials\n",
+          "ms": 174,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-query-provenance.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS strict query/PDF provenance, XML line/PDF page, independent answered/edit statuses, ambiguous/conflicting/missing/mismatched suppression, paged inventory and safe rendering\n",
+          "ms": 700,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-query-review.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS 65-query batch coverage, strict binding, provenance, unknown edit status, validation, and explicit truncation\n",
+          "ms": 224,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-review-batches.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS three resumable batches, exact coverage without skipped records, failed batch retry, source/task mismatch rejection, count-only bypass, unrelated read rejection and OPT batching\nPASS authenticated API batch/continue/final flow and stale cursor rejection with mocked provider transport\n",
+          "ms": 1224,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-review-continuity.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS independent checkpoints, interrupted/failed batch retry, durable refresh and task/user isolation, source/rule/legacy invalidation, malformed cursor rejection, completed review and save-before-request wiring\n",
+          "ms": 424,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-runtime-response.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS native Node ESM loads XML scanner and JSON entity data without a loader\nPASS plain-text, HTML, empty, invalid JSON shapes, oversized request, and timeout responses handled clearly\n",
+          "ms": 1443,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-scope.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS explicit out-of-scope and insufficient-evidence replies terminate in one model round without false reads, completion claims, or unvalidated arguments\n",
+          "ms": 490,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-workflow-audit.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS file-scoped history, page continuations/headers, split headings, blank answers, skipped IDs, duplicate/QID/DOI ambiguity, compound fallback/coverage, and cache expiry recovery\n",
+          "ms": 566,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-added-ids.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "6 added-reference ID regression scenarios passed.\n",
+          "ms": 1900,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-bibliography-scope.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "10 bibliography scope scenarios passed.\n",
+          "ms": 1835,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-citation-protection.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "UNAVAILABLE external original-article baseline: set TOOLKIT_ARTICLE_BASELINE; synthetic case is additional coverage, not equivalence.\n9 citation protection scenarios passed.\n",
+          "ms": 1846,
+          "externalChecks": [
+            {
+              "id": "original-article-baseline",
+              "status": "UNAVAILABLE",
+              "reason": "External source intentionally not supplied to the portable run."
+            }
+          ]
+        },
+        {
+          "file": "tests/reference-updater-content-match.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "6 content-match regression scenarios and Unicode/punctuation assertions passed.\n",
+          "ms": 1740,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-duplicate-safety.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "5 duplicate safety scenarios passed.\n",
+          "ms": 1676,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-duplicates.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "3 duplicate-review regression scenarios passed.\n",
+          "ms": 1655,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-entities.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "22 entity protection scenarios passed.\n",
+          "ms": 1908,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-followup-fixes.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "21 follow-up regression scenarios passed.\n",
+          "ms": 2159,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-full-article.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "Full article preservation, incoming-body exclusion, wrappers, additions, section ordering and collision checks passed.\n",
+          "ms": 1637,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-id-quotes.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "5 ID quote regression scenarios passed.\n",
+          "ms": 1915,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-id-range.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "3 ID range regression scenarios passed, including exhaustion.\n",
+          "ms": 2459,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-internal-ids.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "5 internal ID regression scenarios passed.\n",
+          "ms": 1741,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-internal-links.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "4 internal-link regression scenarios passed.\n",
+          "ms": 1752,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-link-provenance.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "9 reference ID ownership and link provenance checks passed.\n",
+          "ms": 1825,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-manual-full-article.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "3 full-article manual review regressions passed.\n",
+          "ms": 1732,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-name-date-evidence.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "4 name-date evidence regression scenarios passed.\n",
+          "ms": 1628,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-name-date.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "5 name-date regression scenarios passed.\n",
+          "ms": 1684,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-numbering-warning.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "5 numbering warning scenarios passed.\n",
+          "ms": 1669,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-numeric-identity.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "5 numeric identity regression scenarios passed.\n",
+          "ms": 1785,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-numeric-label.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "8 numeric-label regression scenarios passed.\n",
+          "ms": 1979,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-numeric-review.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "7 numeric review scenarios passed.\n",
+          "ms": 1878,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-output-safety.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "13 output safety regressions passed.\n",
+          "ms": 1887,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-output-validity.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "18 output validity scenarios passed.\n",
+          "ms": 1939,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-shared-split.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "Split order 0,1: two originals retained, one incoming addition with bb3000.\nSplit order 1,0: two originals retained, one incoming addition with bb3000.\nSplit order 0,1: two originals retained, one incoming addition with bb3005.\n",
+          "ms": 1828,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-stale-analysis.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "8 stale-analysis regression scenarios passed.\n",
+          "ms": 1902,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/structuralRepair.test.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "✔ duplicate label detection selects direct bibliography labels, preserving nested labels (9.5693ms)\n✔ XML sanitation retains empty labels in both equivalent forms (13.8977ms)\n✔ DOM empty-element pruning preserves a required bibliography label (7.5832ms)\n✔ unparseable repair fragments return their original source and a review warning (5.3865ms)\n✔ source text emits a year-only reference once (2.4673ms)\n✔ source text keeps a host title separate from the contribution title (0.9564ms)\n✔ source text includes book edition, publisher, and location (0.9077ms)\n✔ source text retains an authored journal citation with DOI and pages (1.5618ms)\n✔ missing source text is generated after name and DOI repairs; existing content is retained (0.7333ms)\n✔ source text uses sb:author with ce name fields and excludes invalid ce:author nodes (0.9831ms)\n✔ source text preserves collaboration and individual author order using sb tags (0.4956ms)\n✔ source text keeps et-al and ellipsis markers at their original positions (0.6694ms)\n✔ source text keeps multiple hosts separate in XML order without mixing their fields (0.5161ms)\n✔ multiple hosts include contribution and reference-level comments only once (1.0964ms)\n✔ source text includes contribution and host subtitles without repeating punctuation (0.4923ms)\n✔ source text retains supplied inter-ref labels and href targets, without duplicating identical URLs (0.6749ms)\n✔ source text renders identical page endpoints once and preserves real ranges (7.2253ms)\n✔ empty source generation creates no element or ID and reports a warning (5.1591ms)\n✔ sanitation preserves literal XML inside CDATA, comments, and processing instructions (9.4593ms)\n✔ sanitation preserves missing-ID empty source text and explicit spacing (10.7606ms)\n✔ duplicate ID detection ignores CDATA, comments, processing instructions, and text (8.1802ms)\n✔ namespace cleanup retains original MathML bindings and CDATA namespace literals (5.7402ms)\n✔ source generation preserves consecutive commas in supplied URL paths (0.2976ms)\n✔ DOI display punctuation uses the supplied href without creating another DOI (0.3211ms)\n✔ source text normalizes DOI prefix whitespace and resolver variants (0.3718ms)\n✔ source text emits duplicate DOI nodes and links once while retaining labels and access dates (0.6188ms)\n✔ source text deduplicates link-only DOI targets and keeps distinct DOIs (0.4102ms)\n✔ source text prevents duplicate DOIs across hosts without losing host details (0.567ms)\n✔ source text keeps editor suffixes and does not add In to a standalone edited book (0.7041ms)\n✔ source text preserves editor order and omission markers (0.5779ms)\n✔ source text associates series editors and volume with the series, separately from book editors (0.6618ms)\n✔ source text preserves book-series titles and subtitles with their volume (0.4337ms)\n✔ source text retains both issue and journal titles and associates volume with the journal (0.3549ms)\n✔ source text preserves comments before, between, and after reference sections (0.6624ms)\n✔ source text keeps repeated comments at their supplied positions between multiple hosts (0.6316ms)\n✔ source text renders embedded comment links once without losing surrounding text or href targets (0.6707ms)\n✔ source text preserves supplied fields: translated-title (0.5196ms)\n✔ source text preserves supplied fields: translation-only (0.2951ms)\n✔ source text preserves supplied fields: conference (0.2972ms)\n✔ source text preserves supplied fields: multiple-publication-dates (0.2577ms)\n✔ source text preserves supplied fields: multiple-access-dates (0.2976ms)\n✔ source text preserves supplied fields: version (0.3776ms)\n✔ source text preserves supplied fields: identifiers (0.4814ms)\n✔ source text preserves supplied fields: pages-and-article-number (0.432ms)\n✔ source text preserves supplied fields: author-alt-name (0.5541ms)\n✔ source text preserves supplied fields: title-question (0.2954ms)\n✔ source text preserves supplied fields: editor-alt-name (0.4256ms)\n✔ source text preserves supplied fields: title-exclamation (0.1881ms)\n✔ source text preserves supplied fields: article-number-only (0.2975ms)\n✔ restoring omission markers retains complete paired and self-closing empty elements (3.8953ms)\n✔ marker restoration ignores literal marker text inside CDATA and comments (2.5512ms)\nℹ tests 51\nℹ suites 0\nℹ pass 51\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 271.1778\n",
+          "ms": 1718,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/view-sync-safety.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "75 View Synchronizer safety cases passed.\n",
+          "ms": 1687,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/vtoolBridge.test.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "✔ bridge requires article context and blocks parsed entities (1.7342ms)\n✔ VTool report preserves error codes, positions, and full totals (0.7437ms)\n✔ bridge rejects unpaired origins, wrong pairing codes, and fragment validation (60.1715ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 71.7106\n",
+          "ms": 299,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/xmlRenumber.test.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "✔ linked WHO author-date citation follows the expanded organization reference label (14.3134ms)\n✔ renumbering a citation inside a parenthetical sentence keeps the sentence and closing parenthesis (1.0775ms)\n✔ linked author-date citations use their targets even when labels are already numbered (0.422ms)\n✔ external author-date parentheses become one configured citation bracket pair (1.7529ms)\n✔ author-date formatting and encoded page locators survive conversion (2.174ms)\n✔ linked Unicode names and organizations with ampersands support author-date conversion (1.0244ms)\n✔ resolved author-date citation groups and separate links follow all target numbers (0.7238ms)\n✔ author-date conversion preserves unlinked text, unresolved links, prose, and complex markup (1.2271ms)\n✔ ambiguous author-date markup does not trigger external bracket edits (0.4198ms)\n✔ invalid target counts and grouped locators preserve the entire outer citation pair (0.6951ms)\n✔ author-date citations within bibliography text retain their external parentheses (0.2538ms)\n✔ author-date conversion respects custom element and target mappings (0.2949ms)\n✔ outer citation brackets adopt configured delimiters without double wrapping (2.8943ms)\n✔ previous text affixes are inferred from original labels, never guessed from prose (1.695ms)\n✔ existing curly-brace citations adopt the configured format and retain locators (1.5566ms)\n✔ shared outer brackets and external page locators do not acquire inner brackets (1.2646ms)\n✔ bracket detection does not cross unrelated markup or paragraph boundaries (0.2514ms)\n✔ automatic citation ID repair is optional, unique, reported, and repeatable (1.2725ms)\n✔ automatic ID repair keeps other owners and refuses ambiguous incoming links (0.4661ms)\n✔ automatic ID repair respects custom mappings and quoted attributes (0.2659ms)\n✔ duplicate bibliography citation IDs stop numbering, including collisions with other elements (0.502ms)\n✔ repeated reference targets are allowed and unrelated duplicate IDs stay outside numbering scope (0.2259ms)\n✔ duplicate citation detection respects custom profile attribute and element mappings (0.213ms)\n✔ configured citation affixes work on existing text and repeated output (1.3885ms)\n✔ encoded citation digits and locator whitespace renumber without losing entity spelling (0.9249ms)\n✔ a missing first label cannot steal the next label or citation mapping (1.1771ms)\n✔ a missing middle label leaves consecutive numbering of labelled references (0.3558ms)\n✔ an entirely unlabelled bibliography is preserved and reported as skipped (0.1641ms)\n✔ ordinary numbering and report remain correct (0.2053ms)\n✔ a nested label is never used as the bibliography label (0.1243ms)\n✔ grouped citation with an unresolved target is preserved and flagged (0.1572ms)\n✔ label attributes, single quotes, comments and non-bibliographic citations are preserved (0.2533ms)\n✔ custom imported profile changes only its mapped elements (1.2072ms)\n✔ rejects incompatible declared DTD, malformed profile, duplicate IDs and malformed XML (0.4782ms)\n✔ required first label is enforced and custom delimiters are XML escaped (0.2182ms)\n✔ internal subset and CDATA are preserved without resolving entities (0.1495ms)\n✔ self-closing labels receive numbers but empty citations remain unchanged for review (0.5578ms)\n✔ empty bibliography citations are preserved and flagged for author-correction review (1.4579ms)\n✔ unknown prototype-property targets cannot resolve as numbers (0.2483ms)\n✔ fully resolved groups collapse ranges, sort and deduplicate numbers (0.4702ms)\n✔ missing ID appears in the QC report (0.2017ms)\n✔ fake doctype inside comment does not select a DTD (0.197ms)\n✔ invalid and duplicate attributes stop processing (0.4272ms)\n✔ encoded IDs resolve without rewriting attribute spelling (0.2157ms)\n✔ external citation brackets are not doubled (0.2306ms)\n✔ nested citations remain unchanged with issues rather than overlapping edits (0.2116ms)\n✔ nested bibliography references stop processing (0.2126ms)\n✔ skipped reference targets are preserved in grouped citations (0.1693ms)\n✔ comments in internal subsets do not corrupt tag boundaries (0.1694ms)\n✔ citation formatting and nested IDs survive renumbering (0.2902ms)\n✔ external brackets normalize without deleting citation formatting (0.1571ms)\n✔ ambiguous or unsupported citation markup remains unchanged and flagged (0.5956ms)\n✔ grouped numeric citation can keep a formatting wrapper (0.2185ms)\n✔ formatting toggle defaults to retain and can remove unlinked wrappers (0.3346ms)\n✔ remove formatting protects linked IDs and leaves unrelated links alone (0.2293ms)\n✔ single-reference page locators survive renumbering and a second pass (0.6475ms)\n✔ formatted page locators survive both formatting-toggle modes (0.3901ms)\n✔ ambiguous plain text and grouped page locators are left unchanged with QC issues (0.415ms)\n✔ label formatting defaults to retained and respects prefix and suffix (0.6508ms)\n✔ complex labels preserve their structure and citations for review (0.1596ms)\n✔ custom profiles belong to the importing administrator only (1.2844ms)\nℹ tests 61\nℹ suites 0\nℹ pass 61\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 69.6012\n",
+          "ms": 1437,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/xmlRenumberUi.test.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "✔ diff line numbers do not count a phantom line after a terminal newline (1.3238ms)\n✔ diff markup escapes pasted XML (0.2012ms)\n✔ copy reports asynchronous clipboard rejection instead of success (5.0804ms)\n✔ storage quota failure does not discard in-memory edits (14.5828ms)\n✔ Clear cancels delayed processing and repeated keyboard processing is ignored (33.722ms)\nℹ tests 5\nℹ suites 0\nℹ pass 5\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 64.9942\n",
+          "ms": 1365,
+          "externalChecks": []
+        }
+      ],
+      "maintainedFilesChanged": [],
+      "externalStatus": "NOT RUN; use npm run test:external. Conditional external checks are not counted as portable coverage."
+    },
+    {
+      "node": "v24.11.1",
+      "platform": "win32",
+      "results": [
+        {
+          "file": "tests/affiliation-sequencer-safety.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "52 affiliation safety checks passed.\n",
+          "ms": 1637,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/citation-linker-author-year-review.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "10 author-year review and refid-only checks passed.\n8 additional target-review and delayed-application checks passed.\n",
+          "ms": 1684,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/citation-linker-safety.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "41 additional Citation Linker safety cases passed.\n",
+          "ms": 1539,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/credit-generator-safety.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "47 CRediT safety checks passed.\n",
+          "ms": 1363,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/id-auditor-final-verification.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "7 Citation Linker handoff cases and 1.3 MB large-input checks passed.\n",
+          "ms": 2000,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/id-auditor-id-only.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "5 ID-only auditor scenarios passed.\n90 registered rule cases and generation safeguards passed.\n68 installed editor rule cases and conditional-prefix safeguards passed.\nCritical target protection and output recommendation regressions passed.\nQA report before/after evidence and recommendation cases passed.\nRepeated input, superseded work, cancellation, and stale-result checks passed.\nConfigured missing caption IDs and unconfigured QA cases passed.\nPASS Scheme preservation, linked target preservation, missing/malformed Scheme IDs, formatted labels, collisions, ordinary figures and explicit overrides\n",
+          "ms": 1473,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-activity.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS immediate complete replies and per-reply activity display with failed attempts, tool counts and overlapping timing explanation\n",
+          "ms": 270,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-answer-evidence-api.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "[AI Copilot - Vercel] Model gemini-3.8-flash (gemini) encountered error: evidence_not_retrieved\n[AI Copilot - Vercel] Model gemini-3.1-flash-lite (gemini) encountered error: evidence_not_retrieved\n[AI Copilot - Vercel] Model gemini-flash-latest (gemini) encountered error: evidence_not_retrieved\n[AI Copilot - Vercel] Model gemini-3.7-flash (gemini) encountered error: evidence_not_retrieved\n[AI Copilot - Vercel] Model gemini-3.1-pro-preview (gemini) encountered error: evidence_not_retrieved\nPASS direct count metadata, real SDK evidence-reference serialization, successful answer links, and failed-attempt coverage without false answer claims\n",
+          "ms": 1253,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-answer-evidence.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS validated citations, unread/unknown citation rejection, partial/full retrieval, source hashes and locations, safe viewer, long-text chunks, per-user persisted references after reinspection, incomplete inspection and count-only distinction\n",
+          "ms": 719,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-chat-evidence.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS user counting question returns actual tool totals without an AI call\nPASS automatic inspection produces QA without AI and requires authenticated files\nPASS cached output reused, isolated by user, and invalidated by changed content\nPASS real chat handler and Gemini SDK transport round-trip with deterministic evidence\nPASS browser evidence reaches Gemini tool loop, unavailable raw-source tool is excluded, malformed/mixed input rejected, and auth retained\nPASS authentication remains required\nPASS subscription enforcement remains required\nPASS API rejects invalid sandbox IDs\nPASS API rejects injected system roles\n[AI Copilot - Vercel] Model gemini-3.8-flash (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-3.1-flash-lite (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-flash-latest (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-3.7-flash (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-3.1-pro-preview (gemini) encountered error: empty_response\nPASS failed AI review returns per-query evidence instead of a generic retry error\n[AI Copilot - Vercel] Model gemini-3.8-flash (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-3.1-flash-lite (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-flash-latest (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-3.7-flash (gemini) encountered error: empty_response\n[AI Copilot - Vercel] Model gemini-3.1-pro-preview (gemini) encountered error: empty_response\nPASS deterministic QA remains available when provider configuration is missing\n",
+          "ms": 1292,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-evidence-report.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS verified edit inventory, included flagged/spacing counts, incomplete evidence disclosure, and PDF issue locations\n",
+          "ms": 316,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-evidence-snapshot.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS snapshot shape/identity/position/binding validation, conflicting associations and raw-source field stripping\n",
+          "ms": 209,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-evidence.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS case, intentional spaces, self closing, empty pairs, nested tags and unknown types\nPASS comments, CDATA and quoted greater-than do not produce false OPT nodes\nPASS exact lexical evidence, Unicode and source locations retained\nPASS invalid XML is disclosed rather than silently repaired\nPASS external entities are never fetched\nPASS strict valid response binding\nPASS wrong article cannot bind\nPASS duplicate XML query IDs remain ambiguous\nPASS duplicate PDF query IDs remain ambiguous\nPASS query wording mismatch remains unresolved\nPASS empty author response remains unresolved\nPASS contradictory explicit QID cannot bind\nPASS competing explicit QIDs remain ambiguous\nPASS reference DOI does not establish article identity\nPASS commented original queries preserved with explicit provenance\nPASS fused PDF next-query heading is supported\nPASS artifact validation rejects paths as IDs, duplicate IDs and oversized payload\nPASS dispatcher allowlist and arguments are enforced\nPASS bounded evidence pages and exact-ID retrieval\nPASS XML excerpt reads only supplied artifact IDs\nPASS long records are retrievable without silent truncation\nUNAVAILABLE external Stage-1 parity check; set KEEPER_STAGE1_SOURCE.\nPASS Gemini call/dispatch/result/explanation loop preserves model signatures\nPASS bounded repeated tool calls\nPASS unsupported inspection claims rejected\nPASS fallback provider also executes validated tools\nPASS PDF geometric rows ignore empty text items and preserve query heading adjacency\nPASS task-relevant kind/search filters and XML literal search stay bounded\nPASS QA component renders non-blocking issues, filenames, coverage and unresolved bindings safely\n28 Keeper evidence checks passed.\n",
+          "ms": 606,
+          "externalChecks": [
+            {
+              "id": "stage1-parity",
+              "status": "UNAVAILABLE",
+              "reason": "External source intentionally not supplied to the portable run."
+            }
+          ]
+        },
+        {
+          "file": "tests/keeper-factory-reset.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "Keeper reset checks passed: unchanged provider chain, removed offline knowledge and shortcuts, fresh history namespace.\n",
+          "ms": 1228,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-final-audit.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS negated/mixed count requests, specific-query evidence guard, and cancellable browser/provider request wiring\nPASS failed empty inspection cannot become a no-change answer, verified empty inventory requires a tool read, and mixed requests bypass count-only shortcut\n",
+          "ms": 504,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-finding-coverage.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS per-paragraph/list/row isolation, no inherited or code/image/escaped citations, full-block assessment before clipping, explicit non-semantic labels, safe UI and old-answer compatibility\n",
+          "ms": 717,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-followup-safety.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS meaningful punctuation, typography, standalone/fused boundaries, footer provenance, whole-query coverage, long-record truncation, and encoded/combined/UTF-8 payload limits\n",
+          "ms": 561,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-local-clear.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS clear retains files/findings, legacy empty task reopens with matching source scope, cleared history stays cleared, repair persists, and manual sources remain intact\n",
+          "ms": 267,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-local-lifecycle.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS task draft/history separation, account isolation and restored selection\nPASS previous account-level workspace retained through task-scoped migration\nPASS serialized same-tab writes, atomic two-tab conflict and rejected overwrite\nPASS exact cached source membership/content and legacy ID preservation\nPASS corrupt pending task does not block next task; storage-wide failure stops safely\nPASS failed storage read rejects visibly, raw import limits and persisted pasted-source wiring\n",
+          "ms": 293,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-local-privacy.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS shared local/server XML parity, local background inspection, evidence-only AI requests and scoped history and browser-only dependencies\n",
+          "ms": 242,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-local-removal.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS removal for all statuses, persisted content cleanup, account isolation, selected-task reset, stale writer/worker protection, and reimport\n",
+          "ms": 318,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-local-review-repros.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS unchanged ZIP retry retains source identity and conversation scope\nPASS 3 MB PDF accepted by raw local file limit without a server transport cap\n",
+          "ms": 409,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-local-zip.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS local ZIP role selection, nested folder, six-digit articles, missing/ambiguous files, mismatched PDF, invalid archive and size limit\n",
+          "ms": 480,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-opt-counts.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS mixed-case counts, spacing, invalid tags, inactive markup, verified zero, failed/capped inspection, missing XML, allowlist, and query-only read rejection\n",
+          "ms": 597,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-pdf-runtime.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS native Node 24 initializes canvas geometry and extracts PDF text\nPASS real PDF parsing and strict XML/PDF query-response binding\nPASS uploaded-but-failed PDF differs from missing PDF and failed inspection is not cached\n",
+          "ms": 1981,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-personal-key.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS request-local Gemini key selection, account/request isolation, server-key preservation, authentication, invalid keys, Gemini-only fallback, safe failure logging, and memory-only masked UI\n",
+          "ms": 1227,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-phase1-second-review.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS canonical task instructions, 23 bounded batches, stable cursors/global refs, full counts, omitted/search refusal, focused queries, snapshot validation and lossless advancing serialized-size slices\nPASS authenticated API large-inventory first/second batch with stable E1/E2 references and mocked Gemini SDK transport\n",
+          "ms": 1810,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-production-layouts.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS proof callouts excluded, genuine duplicates retained, punctuation spacing, semantic differences, font-split accented names, measured spaces, unknown widths and overlapping runs\n",
+          "ms": 503,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-provider-failure.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS safe provider-failure categories without exposing raw provider messages or credentials\n",
+          "ms": 173,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-query-provenance.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS strict query/PDF provenance, XML line/PDF page, independent answered/edit statuses, ambiguous/conflicting/missing/mismatched suppression, paged inventory and safe rendering\n",
+          "ms": 578,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-query-review.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS 65-query batch coverage, strict binding, provenance, unknown edit status, validation, and explicit truncation\n",
+          "ms": 222,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-review-batches.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS three resumable batches, exact coverage without skipped records, failed batch retry, source/task mismatch rejection, count-only bypass, unrelated read rejection and OPT batching\nPASS authenticated API batch/continue/final flow and stale cursor rejection with mocked provider transport\n",
+          "ms": 1201,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-review-continuity.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS independent checkpoints, interrupted/failed batch retry, durable refresh and task/user isolation, source/rule/legacy invalidation, malformed cursor rejection, completed review and save-before-request wiring\n",
+          "ms": 312,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-runtime-response.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS native Node ESM loads XML scanner and JSON entity data without a loader\nPASS plain-text, HTML, empty, invalid JSON shapes, oversized request, and timeout responses handled clearly\n",
+          "ms": 1428,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-scope.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS explicit out-of-scope and insufficient-evidence replies terminate in one model round without false reads, completion claims, or unvalidated arguments\n",
+          "ms": 466,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-workflow-audit.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "PASS file-scoped history, page continuations/headers, split headings, blank answers, skipped IDs, duplicate/QID/DOI ambiguity, compound fallback/coverage, and cache expiry recovery\n",
+          "ms": 493,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-added-ids.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "6 added-reference ID regression scenarios passed.\n",
+          "ms": 1658,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-bibliography-scope.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "10 bibliography scope scenarios passed.\n",
+          "ms": 1702,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-citation-protection.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "UNAVAILABLE external original-article baseline: set TOOLKIT_ARTICLE_BASELINE; synthetic case is additional coverage, not equivalence.\n9 citation protection scenarios passed.\n",
+          "ms": 1789,
+          "externalChecks": [
+            {
+              "id": "original-article-baseline",
+              "status": "UNAVAILABLE",
+              "reason": "External source intentionally not supplied to the portable run."
+            }
+          ]
+        },
+        {
+          "file": "tests/reference-updater-content-match.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "6 content-match regression scenarios and Unicode/punctuation assertions passed.\n",
+          "ms": 1732,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-duplicate-safety.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "5 duplicate safety scenarios passed.\n",
+          "ms": 1704,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-duplicates.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "3 duplicate-review regression scenarios passed.\n",
+          "ms": 1651,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-entities.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "22 entity protection scenarios passed.\n",
+          "ms": 1846,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-followup-fixes.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "21 follow-up regression scenarios passed.\n",
+          "ms": 2227,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-full-article.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "Full article preservation, incoming-body exclusion, wrappers, additions, section ordering and collision checks passed.\n",
+          "ms": 1778,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-id-quotes.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "5 ID quote regression scenarios passed.\n",
+          "ms": 1790,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-id-range.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "3 ID range regression scenarios passed, including exhaustion.\n",
+          "ms": 2748,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-internal-ids.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "5 internal ID regression scenarios passed.\n",
+          "ms": 1702,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-internal-links.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "4 internal-link regression scenarios passed.\n",
+          "ms": 1682,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-link-provenance.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "9 reference ID ownership and link provenance checks passed.\n",
+          "ms": 1821,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-manual-full-article.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "3 full-article manual review regressions passed.\n",
+          "ms": 1658,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-name-date-evidence.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "4 name-date evidence regression scenarios passed.\n",
+          "ms": 1641,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-name-date.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "5 name-date regression scenarios passed.\n",
+          "ms": 1697,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-numbering-warning.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "5 numbering warning scenarios passed.\n",
+          "ms": 1748,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-numeric-identity.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "5 numeric identity regression scenarios passed.\n",
+          "ms": 1804,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-numeric-label.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "8 numeric-label regression scenarios passed.\n",
+          "ms": 1903,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-numeric-review.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "7 numeric review scenarios passed.\n",
+          "ms": 1775,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-output-safety.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "13 output safety regressions passed.\n",
+          "ms": 1845,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-output-validity.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "18 output validity scenarios passed.\n",
+          "ms": 1938,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-shared-split.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "Split order 0,1: two originals retained, one incoming addition with bb3000.\nSplit order 1,0: two originals retained, one incoming addition with bb3000.\nSplit order 0,1: two originals retained, one incoming addition with bb3005.\n",
+          "ms": 1726,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-stale-analysis.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "8 stale-analysis regression scenarios passed.\n",
+          "ms": 1696,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/structuralRepair.test.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "✔ duplicate label detection selects direct bibliography labels, preserving nested labels (9.2726ms)\n✔ XML sanitation retains empty labels in both equivalent forms (9.668ms)\n✔ DOM empty-element pruning preserves a required bibliography label (5.7592ms)\n✔ unparseable repair fragments return their original source and a review warning (2.9775ms)\n✔ source text emits a year-only reference once (1.4668ms)\n✔ source text keeps a host title separate from the contribution title (0.5894ms)\n✔ source text includes book edition, publisher, and location (0.477ms)\n✔ source text retains an authored journal citation with DOI and pages (0.7942ms)\n✔ missing source text is generated after name and DOI repairs; existing content is retained (0.4669ms)\n✔ source text uses sb:author with ce name fields and excludes invalid ce:author nodes (0.5953ms)\n✔ source text preserves collaboration and individual author order using sb tags (0.2747ms)\n✔ source text keeps et-al and ellipsis markers at their original positions (0.4096ms)\n✔ source text keeps multiple hosts separate in XML order without mixing their fields (0.4555ms)\n✔ multiple hosts include contribution and reference-level comments only once (1.1799ms)\n✔ source text includes contribution and host subtitles without repeating punctuation (0.3603ms)\n✔ source text retains supplied inter-ref labels and href targets, without duplicating identical URLs (0.5119ms)\n✔ source text renders identical page endpoints once and preserves real ranges (4.8765ms)\n✔ empty source generation creates no element or ID and reports a warning (2.9835ms)\n✔ sanitation preserves literal XML inside CDATA, comments, and processing instructions (6.568ms)\n✔ sanitation preserves missing-ID empty source text and explicit spacing (7.4026ms)\n✔ duplicate ID detection ignores CDATA, comments, processing instructions, and text (5.9341ms)\n✔ namespace cleanup retains original MathML bindings and CDATA namespace literals (3.3506ms)\n✔ source generation preserves consecutive commas in supplied URL paths (0.2819ms)\n✔ DOI display punctuation uses the supplied href without creating another DOI (0.1609ms)\n✔ source text normalizes DOI prefix whitespace and resolver variants (0.1807ms)\n✔ source text emits duplicate DOI nodes and links once while retaining labels and access dates (0.3816ms)\n✔ source text deduplicates link-only DOI targets and keeps distinct DOIs (0.2172ms)\n✔ source text prevents duplicate DOIs across hosts without losing host details (0.2834ms)\n✔ source text keeps editor suffixes and does not add In to a standalone edited book (0.3641ms)\n✔ source text preserves editor order and omission markers (0.2874ms)\n✔ source text associates series editors and volume with the series, separately from book editors (0.3384ms)\n✔ source text preserves book-series titles and subtitles with their volume (0.2027ms)\n✔ source text retains both issue and journal titles and associates volume with the journal (0.1918ms)\n✔ source text preserves comments before, between, and after reference sections (0.3403ms)\n✔ source text keeps repeated comments at their supplied positions between multiple hosts (0.3002ms)\n✔ source text renders embedded comment links once without losing surrounding text or href targets (0.3778ms)\n✔ source text preserves supplied fields: translated-title (0.2855ms)\n✔ source text preserves supplied fields: translation-only (0.136ms)\n✔ source text preserves supplied fields: conference (0.1688ms)\n✔ source text preserves supplied fields: multiple-publication-dates (0.1314ms)\n✔ source text preserves supplied fields: multiple-access-dates (0.1624ms)\n✔ source text preserves supplied fields: version (0.2099ms)\n✔ source text preserves supplied fields: identifiers (0.2508ms)\n✔ source text preserves supplied fields: pages-and-article-number (0.1734ms)\n✔ source text preserves supplied fields: author-alt-name (0.3262ms)\n✔ source text preserves supplied fields: title-question (0.134ms)\n✔ source text preserves supplied fields: editor-alt-name (0.3484ms)\n✔ source text preserves supplied fields: title-exclamation (0.2419ms)\n✔ source text preserves supplied fields: article-number-only (0.1804ms)\n✔ restoring omission markers retains complete paired and self-closing empty elements (2.7777ms)\n✔ marker restoration ignores literal marker text inside CDATA and comments (2.2224ms)\nℹ tests 51\nℹ suites 0\nℹ pass 51\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 225.4616\n",
+          "ms": 1402,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/view-sync-safety.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "75 View Synchronizer safety cases passed.\n",
+          "ms": 1523,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/vtoolBridge.test.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "✔ bridge requires article context and blocks parsed entities (1.8306ms)\n✔ VTool report preserves error codes, positions, and full totals (1.0894ms)\n✔ bridge rejects unpaired origins, wrong pairing codes, and fragment validation (64.0174ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 76.3502\n",
+          "ms": 317,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/xmlRenumber.test.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "✔ linked WHO author-date citation follows the expanded organization reference label (10.7033ms)\n✔ renumbering a citation inside a parenthetical sentence keeps the sentence and closing parenthesis (0.9968ms)\n✔ linked author-date citations use their targets even when labels are already numbered (0.3291ms)\n✔ external author-date parentheses become one configured citation bracket pair (1.3249ms)\n✔ author-date formatting and encoded page locators survive conversion (2.5776ms)\n✔ linked Unicode names and organizations with ampersands support author-date conversion (0.9992ms)\n✔ resolved author-date citation groups and separate links follow all target numbers (0.7308ms)\n✔ author-date conversion preserves unlinked text, unresolved links, prose, and complex markup (0.7134ms)\n✔ ambiguous author-date markup does not trigger external bracket edits (0.4017ms)\n✔ invalid target counts and grouped locators preserve the entire outer citation pair (0.7357ms)\n✔ author-date citations within bibliography text retain their external parentheses (0.2833ms)\n✔ author-date conversion respects custom element and target mappings (0.2387ms)\n✔ outer citation brackets adopt configured delimiters without double wrapping (2.7171ms)\n✔ previous text affixes are inferred from original labels, never guessed from prose (1.3147ms)\n✔ existing curly-brace citations adopt the configured format and retain locators (0.9192ms)\n✔ shared outer brackets and external page locators do not acquire inner brackets (1.1036ms)\n✔ bracket detection does not cross unrelated markup or paragraph boundaries (0.231ms)\n✔ automatic citation ID repair is optional, unique, reported, and repeatable (1.9704ms)\n✔ automatic ID repair keeps other owners and refuses ambiguous incoming links (0.7008ms)\n✔ automatic ID repair respects custom mappings and quoted attributes (0.3743ms)\n✔ duplicate bibliography citation IDs stop numbering, including collisions with other elements (0.5615ms)\n✔ repeated reference targets are allowed and unrelated duplicate IDs stay outside numbering scope (0.255ms)\n✔ duplicate citation detection respects custom profile attribute and element mappings (0.2816ms)\n✔ configured citation affixes work on existing text and repeated output (1.7546ms)\n✔ encoded citation digits and locator whitespace renumber without losing entity spelling (0.7083ms)\n✔ a missing first label cannot steal the next label or citation mapping (1.0868ms)\n✔ a missing middle label leaves consecutive numbering of labelled references (0.4005ms)\n✔ an entirely unlabelled bibliography is preserved and reported as skipped (0.2532ms)\n✔ ordinary numbering and report remain correct (0.3142ms)\n✔ a nested label is never used as the bibliography label (0.1512ms)\n✔ grouped citation with an unresolved target is preserved and flagged (0.1969ms)\n✔ label attributes, single quotes, comments and non-bibliographic citations are preserved (0.2888ms)\n✔ custom imported profile changes only its mapped elements (1.2674ms)\n✔ rejects incompatible declared DTD, malformed profile, duplicate IDs and malformed XML (0.5292ms)\n✔ required first label is enforced and custom delimiters are XML escaped (0.2198ms)\n✔ internal subset and CDATA are preserved without resolving entities (0.1538ms)\n✔ self-closing labels receive numbers but empty citations remain unchanged for review (0.255ms)\n✔ empty bibliography citations are preserved and flagged for author-correction review (0.7778ms)\n✔ unknown prototype-property targets cannot resolve as numbers (0.5745ms)\n✔ fully resolved groups collapse ranges, sort and deduplicate numbers (0.7949ms)\n✔ missing ID appears in the QC report (0.2885ms)\n✔ fake doctype inside comment does not select a DTD (0.2611ms)\n✔ invalid and duplicate attributes stop processing (0.5094ms)\n✔ encoded IDs resolve without rewriting attribute spelling (0.2591ms)\n✔ external citation brackets are not doubled (0.2303ms)\n✔ nested citations remain unchanged with issues rather than overlapping edits (0.1782ms)\n✔ nested bibliography references stop processing (0.3235ms)\n✔ skipped reference targets are preserved in grouped citations (0.176ms)\n✔ comments in internal subsets do not corrupt tag boundaries (0.2486ms)\n✔ citation formatting and nested IDs survive renumbering (0.3004ms)\n✔ external brackets normalize without deleting citation formatting (0.1656ms)\n✔ ambiguous or unsupported citation markup remains unchanged and flagged (0.5474ms)\n✔ grouped numeric citation can keep a formatting wrapper (0.1798ms)\n✔ formatting toggle defaults to retain and can remove unlinked wrappers (0.3408ms)\n✔ remove formatting protects linked IDs and leaves unrelated links alone (0.268ms)\n✔ single-reference page locators survive renumbering and a second pass (0.6492ms)\n✔ formatted page locators survive both formatting-toggle modes (0.3203ms)\n✔ ambiguous plain text and grouped page locators are left unchanged with QC issues (0.4126ms)\n✔ label formatting defaults to retained and respects prefix and suffix (0.6963ms)\n✔ complex labels preserve their structure and citations for review (0.1654ms)\n✔ custom profiles belong to the importing administrator only (1.728ms)\nℹ tests 61\nℹ suites 0\nℹ pass 61\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 62.8306\n",
+          "ms": 1413,
+          "externalChecks": []
+        },
+        {
+          "file": "tests/xmlRenumberUi.test.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "log": "✔ diff line numbers do not count a phantom line after a terminal newline (2.1417ms)\n✔ diff markup escapes pasted XML (0.292ms)\n✔ copy reports asynchronous clipboard rejection instead of success (6.7994ms)\n✔ storage quota failure does not discard in-memory edits (14.8465ms)\n✔ Clear cancels delayed processing and repeated keyboard processing is ignored (38.889ms)\nℹ tests 5\nℹ suites 0\nℹ pass 5\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 74.2556\n",
+          "ms": 1358,
+          "externalChecks": []
+        }
+      ],
+      "maintainedFilesChanged": [],
+      "externalStatus": "NOT RUN; use npm run test:external. Conditional external checks are not counted as portable coverage."
+    }
+  ],
+  "strictUnavailable": {
+    "command": "npm run test:external -- --require-available",
+    "exit": 1,
+    "expected": true
+  },
+  "runnerGuards": {
+    "mutation": {
+      "exit": 1,
+      "detected": true
+    },
+    "unknown": {
+      "exit": 1,
+      "detected": true
+    },
+    "isolatedHarness": true
+  },
+  "commit": null,
+  "environmentLimitations": [
+    "Windows x64 / Node 24.11.1 only; Linux/macOS and other Node major versions not verified.",
+    "No live authenticated browser/provider/privacy verification in this phase.",
+    "Real VTool and independent DTD not run; UNAVAILABLE. VTool adapter real-runtime branch remains unverified.",
+    "Clean snapshot used identical portable entry points/runner/fixtures; later external-adapter safety and classification-only metadata changes did not change portable execution."
+  ],
+  "privacySanitization": {
+    "personalHomePaths": "Replaced by [LOCAL_USER_HOME]",
+    "privateArticleIdentifiers": "Replaced by [PRIVATE_ARTICLE]",
+    "rawEvidence": "Preserved unchanged outside the repository; raw hash recorded in privacy-review.json."
+  }
+}

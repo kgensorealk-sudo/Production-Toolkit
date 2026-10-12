@@ -1,3 +1,4 @@
+import {testOutputPath} from './test-output.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {engine,a,corrected} from './reference-updater-harness.mjs';
@@ -25,6 +26,6 @@ await check('added-internal-element',['ir5','ir10'],['ir900','ir905','ir3000'],i
 await check('removed-internal-element',['ir5','ir10'],['ir900'],ids=>assert.deepEqual(ids,['ir5']));
 await check('custom-original-ids',['first-link','second-link'],['ir900','ir905'],ids=>assert.deepEqual(ids,['first-link','second-link']));
 await check('unchanged-internal-count',[],[],ids=>assert.deepEqual(ids,[]));
-fs.mkdirSync('artifacts/reference-updater-internal-id-fix',{recursive:true});
-fs.writeFileSync('artifacts/reference-updater-internal-id-fix/results.json',JSON.stringify(results,null,2));
+fs.mkdirSync(testOutputPath('artifacts/reference-updater-internal-id-fix'),{recursive:true});
+fs.writeFileSync(testOutputPath('artifacts/reference-updater-internal-id-fix/results.json'),JSON.stringify(results,null,2));
 console.log('5 internal ID regression scenarios passed.');

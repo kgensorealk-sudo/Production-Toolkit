@@ -1,3 +1,5 @@
+> Planning/decision history. Implemented behavior and unresolved verification are recorded in [current Keeper architecture](keeper-current-architecture.md). This document is not the Portable Regression-Test Foundation plan; optional sync, revision, disclosure, and workflow proposals are not implied to be implemented.
+
 # Keeper Phase 1 — evidence links and coverage
 
 Approved scope: the existing read-only Keeper sandbox. No XML mutation, policy retrieval, new storage service, or change to provider credentials.

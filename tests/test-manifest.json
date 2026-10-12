@@ -1,0 +1,1683 @@
+{
+  "version": 1,
+  "runtime": "Node 24; verified locally with 24.11.1 on Windows x64",
+  "entries": [
+    {
+      "file": "tests/affiliation-sequencer-safety.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import fs from 'node:fs';import assert from 'node:assert/strict';import ts from 'typescript';",
+        "const compile=p=>ts.transpileModule(fs.readFileSync(p,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;",
+        "new Function('exports','require',compile('utils/referenceUpdaterXml.ts'))(scanner,()=>({default:JSON.parse(fs.readFileSync('utils/referenceUpdaterEntities.json','utf8'))}));",
+        "new Function('exports','require',compile('utils/affiliationSequencerEngine.ts'))(engine,()=>scanner);",
+        "new Function('exports','require',compile('utils/affiliationSequencerLogic.ts'))(logic,n=>n.includes('Engine')?engine:scanner);",
+        "const pageSource=fs.readFileSync('pages/AffiliationSequencer.tsx','utf8'),ast=ts.createSourceFile('page.tsx',pageSource,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);let processBody;",
+        "function component(input){const state={Output:'previous output'},args={input,output:'previous output',lastProcessedInput:'old',report:[],syncLog:null,sequenceAffiliations:engine.sequenceAffiliations,generateSuggestions:()=>[]};for(const name of ['IsProcessing','RollbackState','Output','LastProcessedInput','Report','SyncLog','Issues','Suggestions','Toast','ActiveTab'])args['set'+name]=v=>state[name]=v;new Function(...Object.keys(args),ts.transpileModule('return ('+processBody+');',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText)(...Object.values(args))();return state;}"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/citation-linker-author-year-review.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import fs from 'node:fs';",
+        "import ts from 'typescript';",
+        "import assert from 'node:assert/strict';",
+        "import {api,xml} from './id-auditor-final-verification.mjs';",
+        "const review={};new Function('exports','require',ts.transpileModule(fs.readFileSync('utils/citationLinkerReview.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText)(review,()=>xml);",
+        "const source=fs.readFileSync('pages/CitationLinker.tsx','utf8');assert.ok(!source.includes('id=\"toggle-id\"'));assert.ok(!source.includes('id=\"toggle-dup\"'));assert.ok(source.includes('const targetMissingId = false'));"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/citation-linker-safety.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import fs from 'node:fs';import ts from 'typescript';",
+        "import {api,xml,e} from './id-auditor-final-verification.mjs';",
+        "const editApi={};new Function('exports','require',ts.transpileModule(fs.readFileSync('utils/citationLinkerEdits.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText)(editApi,n=>n.includes('idAuditor')?e:xml);"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/credit-generator-safety.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import fs from 'node:fs';",
+        "import assert from 'node:assert/strict';",
+        "import ts from 'typescript';",
+        "const compile=p=>ts.transpileModule(fs.readFileSync(p,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;",
+        "new Function('exports',compile('constants.ts'))(db);",
+        "new Function('exports','require',compile('utils/creditLogic.ts'))(logic,()=>db);",
+        "new Function('exports','require',compile('utils/referenceUpdaterXml.ts'))(scanner,()=>({default:JSON.parse(fs.readFileSync('utils/referenceUpdaterEntities.json','utf8'))}));",
+        "new Function('exports','require',compile('utils/creditGeneratorEngine.ts'))(engine,n=>n.includes('creditLogic')?logic:scanner);",
+        "const page=fs.readFileSync('pages/CreditGenerator.tsx','utf8');",
+        "const ast=ts.createSourceFile('CreditGenerator.tsx',page,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);",
+        " const fn=new Function(...Object.keys(args),ts.transpileModule('return ('+generator+');',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText)(...Object.values(args));"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/id-auditor-final-verification.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import fs from 'node:fs';import assert from 'node:assert/strict';import ts from 'typescript';",
+        "const compile=p=>ts.transpileModule(fs.readFileSync(p,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;",
+        "const xml={};new Function('exports','require',compile('utils/referenceUpdaterXml.ts'))(xml,()=>({default:JSON.parse(fs.readFileSync('utils/referenceUpdaterEntities.json','utf8'))}));",
+        "const e={};new Function('exports','require',compile('utils/idAuditorEngine.ts'))(e,n=>n.endsWith('.json')?{default:JSON.parse(fs.readFileSync('utils/idAuditorRules.json','utf8'))}:xml);",
+        "const linkEdits={};new Function('exports','require',compile('utils/citationLinkerEdits.ts'))(linkEdits,n=>n.includes('idAuditor')?e:xml);",
+        "const source=fs.readFileSync('pages/CitationLinker.tsx','utf8'),ast=ts.createSourceFile('CitationLinker.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);",
+        "function api(input,state,options={}){const noop=()=>{};const args={repairHistory:[],analysisKeyRef:state.analysisKeyRef??={current:input},operationRef:state.operationRef??={current:0},input,resolutions:state.rows||[],cfStart:3000,cleanDoi:false,targetMissingRefid:true,targetMissingId:false,targetDuplicateId:false,analyzeIdLinks:e.analyzeIdLinks,scanReferenceXml:xml.scanReferenceXml,...linkEdits,setIsLoading:noop,setProcessLabel:noop,setDoiCount:noop,setAffectedDoiLabels:noop,setResolutions:r=>state.rows=r,setStep:noop,setToast:t=>(state.toasts??=[]).push(t),setOutput:o=>state.output=o,setDiffElements:noop,generateDiff:noop,setSuggestions:value=>state.suggestions=value,setActiveTab:noop,setTimeout:f=>f(),React:{createElement:noop},Hash:noop,LinkIcon:noop,Trash2:noop,Eraser:noop,RefreshCw:noop,Box:noop,...options};return new Function(...Object.keys(args),code+'\\nreturn {runAnalysis,executeLink};')(...Object.values(args));}",
+        "fs.mkdirSync('artifacts/id-auditor-final-verification',{recursive:true});",
+        "fs.writeFileSync('artifacts/id-auditor-final-verification/large-input-results.json',JSON.stringify({bytes:Buffer.byteLength(large),elements:xml.scanReferenceXml(large).nodes.length,auditRows:rows.length,auditMs,qaMs,repairMs,unresolvedQaMs},null,2));"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/id-auditor-id-only.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import fs from 'node:fs';",
+        "import ts from 'typescript';",
+        "new Function('exports','require',ts.transpileModule(fs.readFileSync('utils/referenceUpdaterXml.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText)(xmlExports,()=>({default:JSON.parse(fs.readFileSync('utils/referenceUpdaterEntities.json','utf8'))}));",
+        "new Function('exports','require',ts.transpileModule(fs.readFileSync('utils/idAuditorEngine.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText)(idExports,name=>name.endsWith('.json')?{default:JSON.parse(fs.readFileSync('utils/idAuditorRules.json','utf8'))}:xmlExports);",
+        "const source=fs.readFileSync('pages/IdAuditor.tsx','utf8');",
+        "const ast=ts.createSourceFile('IdAuditor.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);",
+        "    return new Function(...Object.keys(args),compiled+'\\nreturn {invalidateGeneratedResult,runAudit,executeFix};')(...Object.values(args));",
+        "const editorRules=JSON.parse(fs.readFileSync('tests/fixtures/id-auditor-editor-prefixes.json','utf8')).rules;"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/keeper-activity.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import React from 'react';",
+        "import {renderToStaticMarkup} from 'react-dom/server';",
+        "import fs from 'node:fs';",
+        "import KeeperActivityReport from '../components/KeeperActivityReport.tsx';",
+        "const ui=fs.readFileSync('components/KeeperSandbox.tsx','utf8');assert.ok(!ui.includes('startTypingSimulation'));"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/keeper-answer-evidence-api.mjs",
+      "kinds": [
+        "behavioral"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import handler from '../utils/chatHandler.ts';",
+        "import {buildKeeperEvidence} from '../utils/keeperEvidence.ts';",
+        "const originalFetch=globalThis.fetch,oldKey=process.env.GEMINI_API_KEY,oldOpenai=process.env.OPENAI_API_KEY;",
+        "process.env.GEMINI_API_KEY='synthetic-key';delete process.env.OPENAI_API_KEY;",
+        "}finally{globalThis.fetch=originalFetch;if(oldKey===undefined)delete process.env.GEMINI_API_KEY;else process.env.GEMINI_API_KEY=oldKey;if(oldOpenai===undefined)delete process.env.OPENAI_API_KEY;else process.env.OPENAI_API_KEY=oldOpenai;}"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/keeper-answer-evidence.mjs",
+      "kinds": [
+        "behavioral"
+      ],
+      "baselineDependencies": [
+        "import 'fake-indexeddb/auto';",
+        "import assert from 'node:assert/strict';",
+        "import React from 'react';",
+        "import {renderToStaticMarkup} from 'react-dom/server';",
+        "import {buildKeeperEvidence} from '../utils/keeperEvidence.ts';",
+        "import {runKeeperToolLoop} from '../utils/keeperToolRunner.ts';",
+        "import {buildKeeperAnswerEvidence,linkKeeperEvidenceCitations,keeperAnswerSourcesMatch,resolveKeeperAnswerReference,keeperEvidenceTextSlice} from '../utils/keeperAnswerEvidence.ts';",
+        "import KeeperAnswerEvidencePanel from '../components/KeeperAnswerEvidence.tsx';",
+        "import {KeeperWorkspaceWriter,readKeeperTaskWorkspace} from '../utils/keeperLocalStore.ts';",
+        "import {planKeeperReviewBatch,keeperBatchProgress} from '../utils/keeperReviewBatch.ts';"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/keeper-chat-evidence.mjs",
+      "kinds": [
+        "behavioral"
+      ],
+      "baselineDependencies": [
+        "import assert from \"node:assert/strict\";",
+        "import handler from \"../utils/chatHandler.ts\";",
+        "const priorGemini = process.env.GEMINI_API_KEY,",
+        "  priorOpenai = process.env.OPENAI_API_KEY;",
+        "process.env.GEMINI_API_KEY = \"synthetic-test-key\";",
+        "delete process.env.OPENAI_API_KEY;",
+        "  delete process.env.GEMINI_API_KEY;",
+        "  if (priorGemini === undefined) delete process.env.GEMINI_API_KEY;",
+        "  else process.env.GEMINI_API_KEY = priorGemini;",
+        "  if (priorOpenai === undefined) delete process.env.OPENAI_API_KEY;",
+        "  else process.env.OPENAI_API_KEY = priorOpenai;"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/keeper-evidence-report.mjs",
+      "kinds": [
+        "behavioral"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import React from 'react';",
+        "import {renderToStaticMarkup} from 'react-dom/server';",
+        "import KeeperEvidenceReport from '../components/KeeperEvidenceReport.tsx';",
+        "import {buildKeeperEvidence,evidenceSummary} from '../utils/keeperEvidence.ts';"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/keeper-evidence-snapshot.mjs",
+      "kinds": [
+        "behavioral"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import {buildKeeperEvidence} from '../utils/keeperEvidence.ts';",
+        "import {validateKeeperEvidenceSnapshot} from '../utils/keeperEvidenceSnapshot.ts';"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/keeper-evidence.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from \"node:assert/strict\";",
+        "import fs from \"node:fs\";",
+        "import vm from \"node:vm\";",
+        "import {",
+        "import React from \"react\";",
+        "import { renderToStaticMarkup } from \"react-dom/server\";",
+        "import KeeperEvidenceReport from \"../components/KeeperEvidenceReport.tsx\";",
+        "import { runKeeperToolLoop } from \"../utils/keeperToolRunner.ts\";",
+        "    dispatchKeeperTool(e, \"inspect_sandbox_evidence\", { path: \"C:/secret\" })",
+        "    dispatchKeeperTool(e, \"read_sandbox_xml\", { artifactId: \"C:/secret\" }, [a])",
+        "  process.env.KEEPER_STAGE1_SOURCE ||",
+        "  \"[LOCAL_USER_HOME]/Desktop/FL-Xtools/s100-s200-query-documentation-generator/src/assets/query-generator.html\";",
+        "  const stageSource = fs.readFileSync(stagePath, \"utf8\");"
+      ],
+      "externalChecks": [
+        "stage1-parity"
+      ],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable + conditional external validation"
+    },
+    {
+      "file": "tests/keeper-factory-reset.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import fs from 'node:fs';",
+        "import assert from 'node:assert/strict';",
+        "import ts from 'typescript';",
+        "import {execFileSync} from 'node:child_process';",
+        "const source=fs.readFileSync('utils/keeperEngine.ts','utf8');",
+        "new Function('exports',ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText)(runtime);",
+        "const prior=execFileSync('git',['show','HEAD:utils/keeperEngine.ts'],{encoding:'utf8'});",
+        "const handler=fs.readFileSync('utils/chatHandler.ts','utf8');",
+        "const ui=fs.readFileSync('components/KeeperSandbox.tsx','utf8');"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "environment-dependent"
+    },
+    {
+      "file": "tests/keeper-final-audit.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import fs from 'node:fs';",
+        "import {keeperOptReviewKinds} from '../utils/keeperReviewScope.ts';",
+        "import {isOptCountRequest,requestsOptTagCounts} from '../utils/keeperOptSummary.ts';",
+        "import {runKeeperToolLoop} from '../utils/keeperToolRunner.ts';",
+        "const ui=fs.readFileSync('components/KeeperSandbox.tsx','utf8');",
+        "const server=fs.readFileSync('utils/chatHandler.ts','utf8');assert.ok(server.includes('abortSignal:modelController.signal'));assert.ok(server.includes('{signal:modelController.signal}'));"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/keeper-finding-coverage.mjs",
+      "kinds": [
+        "behavioral"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import React from 'react';",
+        "import {renderToStaticMarkup} from 'react-dom/server';",
+        "import {buildKeeperEvidence} from '../utils/keeperEvidence.ts';",
+        "import {linkKeeperEvidenceCitations,buildKeeperAnswerEvidence} from '../utils/keeperAnswerEvidence.ts';",
+        "import Panel from '../components/KeeperAnswerEvidence.tsx';"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/keeper-followup-safety.mjs",
+      "kinds": [
+        "behavioral"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import {inspectKeeperXml,inspectKeeperPdf,bindKeeperQueries} from '../utils/keeperEvidence.ts';",
+        "import {runKeeperToolLoop} from '../utils/keeperToolRunner.ts';",
+        "import {encodeKeeperRequest} from '../utils/keeperPayload.ts';"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/keeper-local-clear.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import 'fake-indexeddb/auto';",
+        "import assert from 'node:assert/strict';",
+        "import fs from 'node:fs';",
+        "import {KeeperWorkspaceWriter,readKeeperTaskWorkspace,localTaskRecords} from '../utils/keeperLocalStore.ts';",
+        "import {keeperRestoredSources,keeperArtifactScope} from '../utils/keeperConversationScope.ts';",
+        "const ui=fs.readFileSync('components/KeeperSandbox.tsx','utf8');"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/keeper-local-lifecycle.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import 'fake-indexeddb/auto';",
+        "import assert from 'node:assert/strict';",
+        "import fs from 'node:fs';",
+        "import {KeeperWorkspaceWriter,KeeperWorkspaceConflict,readKeeperTaskWorkspace,keeperSelectedTask} from '../utils/keeperLocalStore.ts';",
+        "import {keeperSameSources,keeperRetainSourceIds} from '../utils/keeperConversationScope.ts';",
+        "import {resumeKeeperTaskQueue} from '../utils/keeperLocalRecovery.ts';",
+        "import {validateKeeperLocalSources} from '../utils/keeperLocalLimits.ts';",
+        "const ui=fs.readFileSync('components/KeeperSandbox.tsx','utf8');",
+        "console.log('PASS failed storage read rejects visibly, raw import limits and persisted pasted-source wiring');"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/keeper-local-privacy.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import fs from 'node:fs';",
+        "import {buildKeeperEvidence as core} from '../utils/keeperEvidenceCore.ts';",
+        "import {buildKeeperEvidence as server} from '../utils/keeperEvidence.ts';",
+        "import {createHash} from 'node:crypto';",
+        "const ui=fs.readFileSync('components/KeeperSandbox.tsx','utf8');",
+        "const engine=fs.readFileSync('utils/keeperEvidenceCore.ts','utf8');assert.ok(!/node:|Buffer\\.|fetch\\(/.test(engine));",
+        "assert.ok(!fs.readFileSync('utils/keeperLocalStore.ts','utf8').includes('supabase'));"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/keeper-local-removal.mjs",
+      "kinds": [
+        "behavioral"
+      ],
+      "baselineDependencies": [
+        "import 'fake-indexeddb/auto';",
+        "import assert from 'node:assert/strict';",
+        "import {localTaskRecords,removeKeeperLocalTask,KeeperWorkspaceWriter,KeeperWorkspaceConflict,readKeeperTaskWorkspace,keeperSelectedTask} from '../utils/keeperLocalStore.ts';"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/keeper-local-review-repros.mjs",
+      "kinds": [
+        "behavioral"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import {ZipWriter,BlobWriter,TextReader} from '@zip.js/zip.js';",
+        "import {unpackKeeperZip} from '../utils/keeperLocalZip.ts';",
+        "import {keeperArtifactScope,keeperScopedMessages} from '../utils/keeperConversationScope.ts';",
+        "import {validateKeeperLocalSources} from '../utils/keeperLocalLimits.ts';"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/keeper-local-zip.mjs",
+      "kinds": [
+        "behavioral"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import {ZipWriter,BlobWriter,TextReader} from '@zip.js/zip.js';",
+        "import {unpackKeeperZip} from '../utils/keeperLocalZip.ts';"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/keeper-opt-counts.mjs",
+      "kinds": [
+        "behavioral"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import {buildKeeperEvidence,dispatchKeeperTool,evidenceSummary} from '../utils/keeperEvidence.ts';",
+        "import {summarizeOptChanges,renderOptCounts,isOptCountRequest} from '../utils/keeperOptSummary.ts';",
+        "import {runKeeperToolLoop} from '../utils/keeperToolRunner.ts';"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/keeper-pdf-runtime.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import {spawnSync} from 'node:child_process';",
+        "import {buildKeeperEvidence} from '../utils/keeperEvidence.ts';",
+        "import {getKeeperEvidence} from '../utils/keeperEvidenceCache.ts';",
+        "import {readFile} from 'node:fs/promises';",
+        "const config=JSON.parse(await readFile(new URL('../vercel.json',import.meta.url),'utf8'));",
+        "const native=spawnSync(process.execPath,['--input-type=module','-e',\"import {loadKeeperPdfRuntime} from './utils/keeperPdfRuntime.ts'; const {getDocument}=await loadKeeperPdfRuntime(); const chunks=[]; for await(const c of process.stdin) chunks.push(c);const doc=await getDocument({data:new Uint8Array(Buffer.concat(chunks)),isEvalSupported:false}).promise;const page=await doc.getPage(1);const text=await page.getTextContent();if(!text.items.some(i=>i.str.includes('Please use italics')))process.exit(2);await doc.destroy();\"],{cwd:new URL('..',import.meta.url),input:Buffer.from(source),encoding:'utf8'});"
+      ],
+      "environmentNotes": "Node 24; installed native canvas and PDF.js; real synthetic-PDF extraction.",
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "environment-dependent"
+    },
+    {
+      "file": "tests/keeper-personal-key.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import fs from 'node:fs';",
+        "import handler from '../utils/chatHandler.ts';",
+        "const oldFetch=globalThis.fetch,oldGemini=process.env.GEMINI_API_KEY,oldOpenai=process.env.OPENAI_API_KEY,oldWarn=console.warn;",
+        "process.env.GEMINI_API_KEY='server-key';process.env.OPENAI_API_KEY='server-openai';",
+        "  assert.equal((await request()).status,200);assert.equal(used.at(-1),'server-key');assert.equal(process.env.GEMINI_API_KEY,'server-key');",
+        "  const ui=fs.readFileSync('components/KeeperSandbox.tsx','utf8');assert.match(ui,/type=\"password\" autoComplete=\"off\"/);assert.match(ui,/personalGemini.owner===user\\?\\.id/);assert.match(ui,/useEffect\\(\\(\\)=>setPersonalGemini\\(\\{owner:user\\?\\.id\\|\\|'',key:''\\}\\),\\[user\\?\\.id\\]\\)/);assert.ok(!ui.includes('personalGeminiKey,'));",
+        "}finally{globalThis.fetch=oldFetch;console.warn=oldWarn;if(oldGemini===undefined)delete process.env.GEMINI_API_KEY;else process.env.GEMINI_API_KEY=oldGemini;if(oldOpenai===undefined)delete process.env.OPENAI_API_KEY;else process.env.OPENAI_API_KEY=oldOpenai;}"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/keeper-phase1-second-review.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import fs from 'node:fs';",
+        "import {buildKeeperEvidence,dispatchKeeperTool} from '../utils/keeperEvidence.ts';",
+        "import {planKeeperReviewBatch,keeperBatchProgress} from '../utils/keeperReviewBatch.ts';",
+        "import {prepareKeeperRequestEvidence,keeperTaskQuestion} from '../utils/keeperRequestEvidence.ts';",
+        "import {validateKeeperEvidenceSnapshot} from '../utils/keeperEvidenceSnapshot.ts';",
+        "import {summarizeOptChanges} from '../utils/keeperOptSummary.ts';",
+        "import {keeperEvidenceRef} from '../utils/keeperAnswerEvidence.ts';",
+        "import handler from '../utils/chatHandler.ts';",
+        "const ui=fs.readFileSync('components/KeeperSandbox.tsx','utf8');assert.ok(ui.includes('question:requestQuestion'));assert.ok(ui.includes('evidenceSnapshot:requestEvidence'));assert.ok(ui.includes('planKeeperReviewBatch(evidenceSnapshot,requestQuestion,reviewCursor)'));",
+        "const oldFetch=globalThis.fetch,oldKey=process.env.GEMINI_API_KEY;process.env.GEMINI_API_KEY='synthetic-key';let round=0;",
+        "}finally{globalThis.fetch=oldFetch;if(oldKey===undefined)delete process.env.GEMINI_API_KEY;else process.env.GEMINI_API_KEY=oldKey;}"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/keeper-production-layouts.mjs",
+      "kinds": [
+        "behavioral"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import {inspectKeeperXml,inspectKeeperPdf,bindKeeperQueries,keeperPdfLines,validateArtifacts} from '../utils/keeperEvidence.ts';",
+        "import {requestsOptTagCounts,isOptCountRequest} from '../utils/keeperOptSummary.ts';",
+        "import {keeperOptReviewKinds} from '../utils/keeperReviewScope.ts';",
+        "import {keeperFallbackReport} from '../utils/keeperQueryReport.ts';",
+        "import {runKeeperToolLoop} from '../utils/keeperToolRunner.ts';",
+        "import {keeperPastedXmlArtifact} from '../utils/keeperConversationScope.ts';"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/keeper-provider-failure.mjs",
+      "kinds": [
+        "behavioral"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import {keeperProviderFailure as classify} from '../utils/keeperProviderFailure.ts';"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/keeper-query-provenance.mjs",
+      "kinds": [
+        "behavioral"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import React from 'react';",
+        "import {renderToStaticMarkup} from 'react-dom/server';",
+        "import {inspectKeeperXml,inspectKeeperPdf,bindKeeperQueries} from '../utils/keeperEvidence.ts';",
+        "import {keeperQueryProvenance} from '../utils/keeperQueryProvenance.ts';",
+        "import Panel from '../components/KeeperQueryProvenance.tsx';"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/keeper-query-review.mjs",
+      "kinds": [
+        "behavioral"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import {dispatchKeeperTool} from '../utils/keeperEvidence.ts';",
+        "import {keeperQueryReport} from '../utils/keeperQueryReport.ts';"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/keeper-review-batches.mjs",
+      "kinds": [
+        "behavioral"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import {buildKeeperEvidence} from '../utils/keeperEvidence.ts';",
+        "import {planKeeperReviewBatch,keeperBatchProgress} from '../utils/keeperReviewBatch.ts';",
+        "import {runKeeperToolLoop} from '../utils/keeperToolRunner.ts';",
+        "import handler from '../utils/chatHandler.ts';",
+        "const originalFetch=globalThis.fetch,originalKey=process.env.GEMINI_API_KEY;",
+        "process.env.GEMINI_API_KEY='synthetic-key';",
+        "}finally{globalThis.fetch=originalFetch;if(originalKey===undefined)delete process.env.GEMINI_API_KEY;else process.env.GEMINI_API_KEY=originalKey;}"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/keeper-review-continuity.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import 'fake-indexeddb/auto';",
+        "import assert from 'node:assert/strict';",
+        "import fs from 'node:fs';",
+        "import {buildKeeperEvidence} from '../utils/keeperEvidence.ts';",
+        "import {planKeeperReviewBatch,keeperBatchProgress} from '../utils/keeperReviewBatch.ts';",
+        "import {keeperReviewContinuity} from '../utils/keeperReviewContinuity.ts';",
+        "import {keeperArtifactScope} from '../utils/keeperConversationScope.ts';",
+        "import {KeeperWorkspaceWriter,readKeeperTaskWorkspace} from '../utils/keeperLocalStore.ts';",
+        "const ui=fs.readFileSync('components/KeeperSandbox.tsx','utf8');assert.ok(ui.indexOf('await requestWriter.save')<ui.indexOf(\"fetch('/api/ai/chat'\"));assert.ok(ui.includes('messages:[...newMessages,assistantMessage]'));assert.ok(!ui.includes('lastAssistantMessage?.reviewBatch &&'));"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/keeper-runtime-response.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import { mkdtemp, readFile, writeFile, copyFile, rm } from 'node:fs/promises';",
+        "import { tmpdir } from 'node:os';",
+        "import { join } from 'node:path';",
+        "import { spawnSync } from 'node:child_process';",
+        "import ts from 'typescript';",
+        "import { readKeeperApiResponse } from '../utils/keeperApiResponse.ts';",
+        "  const source = await readFile(new URL('../utils/referenceUpdaterXml.ts', import.meta.url), 'utf8');",
+        "  const result = spawnSync(process.execPath,['--input-type=module','-e',\"import {scanReferenceXml} from './scanner.mjs'; if(scanReferenceXml('<article/>').nodes.length!==1) process.exit(2);\"],{cwd:folder,encoding:'utf8'});"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/keeper-scope.mjs",
+      "kinds": [
+        "behavioral"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import {dispatchKeeperTool} from '../utils/keeperEvidence.ts';",
+        "import {runKeeperToolLoop} from '../utils/keeperToolRunner.ts';"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/keeper-workflow-audit.mjs",
+      "kinds": [
+        "behavioral"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import {keeperArtifactScope,keeperScopedMessages} from '../utils/keeperConversationScope.ts';",
+        "import {inspectKeeperXml,inspectKeeperPdf,bindKeeperQueries,buildKeeperEvidence} from '../utils/keeperEvidence.ts';",
+        "import {keeperFallbackReport} from '../utils/keeperQueryReport.ts';",
+        "import {runKeeperToolLoop} from '../utils/keeperToolRunner.ts';",
+        "import {getKeeperEvidence} from '../utils/keeperEvidenceCache.ts';"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/reference-updater-added-ids.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import {engine,a,ref,book,sourceText} from './reference-updater-harness.mjs';"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable",
+      "sourceContractNote": "Behavioral scenarios execute functions extracted by reference-updater-harness.mjs; not browser interaction coverage."
+    },
+    {
+      "file": "tests/reference-updater-bibliography-scope.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import fs from 'node:fs';",
+        "import {engine,a,b,corrected} from './reference-updater-harness.mjs';",
+        "fs.mkdirSync('artifacts/reference-updater-bibliography-scope',{recursive:true});",
+        "fs.writeFileSync('artifacts/reference-updater-bibliography-scope/results.json',JSON.stringify([{name:'scoped-extraction',original,updated,output:state.output}],null,2));"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable",
+      "sourceContractNote": "Behavioral scenarios execute functions extracted by reference-updater-harness.mjs; not browser interaction coverage."
+    },
+    {
+      "file": "tests/reference-updater-citation-protection.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import fs from 'node:fs';",
+        "import {engine} from './reference-updater-harness.mjs';",
+        "const fixtures=JSON.parse(fs.readFileSync('artifacts/reference-updater-severe-audit/results.json','utf8'));",
+        "const baseline=fs.readFileSync('[LOCAL_USER_HOME]/AppData/Local/Temp/xml-renumber-author-date-h7oB4w/baseline.xml','utf8');",
+        "fs.mkdirSync('artifacts/reference-updater-citation-protection',{recursive:true});",
+        "fs.writeFileSync('artifacts/reference-updater-citation-protection/results.json',JSON.stringify([{name:'matched-id-protected',original,updated,output}],null,2));"
+      ],
+      "externalChecks": [
+        "original-article-baseline"
+      ],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "environment-dependent",
+      "sourceContractNote": "Behavioral scenarios execute functions extracted by reference-updater-harness.mjs; not browser interaction coverage."
+    },
+    {
+      "file": "tests/reference-updater-content-match.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import fs from 'node:fs';",
+        "import {engine,ref,book,sourceText,a} from './reference-updater-harness.mjs';",
+        "fs.mkdirSync('artifacts/reference-updater-content-fix',{recursive:true});",
+        "fs.writeFileSync('artifacts/reference-updater-content-fix/results.json',JSON.stringify(results,null,2));"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable",
+      "sourceContractNote": "Behavioral scenarios execute functions extracted by reference-updater-harness.mjs; not browser interaction coverage."
+    },
+    {
+      "file": "tests/reference-updater-duplicate-safety.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import fs from 'node:fs';",
+        "import {engine,a,corrected,ref,book,sourceText} from './reference-updater-harness.mjs';",
+        "fs.mkdirSync('artifacts/reference-updater-duplicate-safety',{recursive:true});",
+        "fs.writeFileSync('artifacts/reference-updater-duplicate-safety/results.json',JSON.stringify([{name:'repeated-correction',original:a,updated,output:repeated.output}],null,2));"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable",
+      "sourceContractNote": "Behavioral scenarios execute functions extracted by reference-updater-harness.mjs; not browser interaction coverage."
+    },
+    {
+      "file": "tests/reference-updater-duplicates.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import fs from 'node:fs';",
+        "import {engine,ref,book,sourceText} from './reference-updater-harness.mjs';",
+        "fs.mkdirSync('artifacts/reference-updater-duplicate-fix',{recursive:true});",
+        "fs.writeFileSync('artifacts/reference-updater-duplicate-fix/results.json',JSON.stringify([{name:'duplicate-review',original,updated,output:state.output}],null,2));"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable",
+      "sourceContractNote": "Behavioral scenarios execute functions extracted by reference-updater-harness.mjs; not browser interaction coverage."
+    },
+    {
+      "file": "tests/reference-updater-entities.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import fs from 'node:fs';",
+        "import {engine,ref,book,sourceText} from './reference-updater-harness.mjs';",
+        "fs.mkdirSync('artifacts/reference-updater-entity-protection',{recursive:true});",
+        "fs.writeFileSync('artifacts/reference-updater-entity-protection/results.json',JSON.stringify(results,null,2));"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable",
+      "sourceContractNote": "Behavioral scenarios execute functions extracted by reference-updater-harness.mjs; not browser interaction coverage."
+    },
+    {
+      "file": "tests/reference-updater-followup-fixes.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import fs from 'node:fs';",
+        "import {engine,a,b,corrected,ref,book,sourceText} from './reference-updater-harness.mjs';",
+        "const old=JSON.parse(fs.readFileSync('artifacts/reference-updater-followup-audit/results.json','utf8'));",
+        "fs.mkdirSync('artifacts/reference-updater-followup-fixes',{recursive:true});",
+        "fs.writeFileSync('artifacts/reference-updater-followup-fixes/results.json',JSON.stringify(results,null,2));"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "environment-dependent",
+      "sourceContractNote": "Behavioral scenarios execute functions extracted by reference-updater-harness.mjs; not browser interaction coverage."
+    },
+    {
+      "file": "tests/reference-updater-full-article.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import fs from 'node:fs';",
+        "import assert from 'node:assert/strict';",
+        "import ts from 'typescript';",
+        "import {engine,a,b,corrected} from './reference-updater-harness.mjs';",
+        "const compile=p=>ts.transpileModule(fs.readFileSync(p,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;",
+        "new Function('exports','require',compile('utils/referenceUpdaterXml.ts'))(xml,()=>({default:JSON.parse(fs.readFileSync('utils/referenceUpdaterEntities.json','utf8'))}));",
+        "new Function('exports','require',compile('utils/referenceUpdaterOutput.ts'))(output,()=>xml);",
+        "fs.mkdirSync('artifacts/reference-updater-full-article',{recursive:true});",
+        "fs.writeFileSync('artifacts/reference-updater-full-article/result.xml',state.output);"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable",
+      "sourceContractNote": "Behavioral scenarios execute functions extracted by reference-updater-harness.mjs; not browser interaction coverage."
+    },
+    {
+      "file": "tests/reference-updater-id-quotes.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import fs from 'node:fs';",
+        "import {engine,a,corrected,ref} from './reference-updater-harness.mjs';",
+        "fs.mkdirSync('artifacts/reference-updater-id-quotes-fix',{recursive:true});",
+        "fs.writeFileSync('artifacts/reference-updater-id-quotes-fix/results.json',JSON.stringify(results.map(r=>({...r,original:r.original.replaceAll('bb5','bb0005'),updated:r.updated,output:r.output.replaceAll('bb5','bb0005')})),null,2));"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable",
+      "sourceContractNote": "Behavioral scenarios execute functions extracted by reference-updater-harness.mjs; not browser interaction coverage."
+    },
+    {
+      "file": "tests/reference-updater-id-range.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import {engine,a,corrected} from './reference-updater-harness.mjs';"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable",
+      "sourceContractNote": "Behavioral scenarios execute functions extracted by reference-updater-harness.mjs; not browser interaction coverage."
+    },
+    {
+      "file": "tests/reference-updater-internal-ids.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import fs from 'node:fs';",
+        "import {engine,a,corrected} from './reference-updater-harness.mjs';",
+        "fs.mkdirSync('artifacts/reference-updater-internal-id-fix',{recursive:true});",
+        "fs.writeFileSync('artifacts/reference-updater-internal-id-fix/results.json',JSON.stringify(results,null,2));"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable",
+      "sourceContractNote": "Behavioral scenarios execute functions extracted by reference-updater-harness.mjs; not browser interaction coverage."
+    },
+    {
+      "file": "tests/reference-updater-internal-links.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import fs from 'node:fs';",
+        "import {engine,ref} from './reference-updater-harness.mjs';",
+        "fs.mkdirSync('artifacts/reference-updater-internal-link-fix',{recursive:true});",
+        "fs.writeFileSync('artifacts/reference-updater-internal-link-fix/results.json',JSON.stringify([{name:'internal-link-remap',original,updated:validUpdated,output:validOutput}],null,2));"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable",
+      "sourceContractNote": "Behavioral scenarios execute functions extracted by reference-updater-harness.mjs; not browser interaction coverage."
+    },
+    {
+      "file": "tests/reference-updater-link-provenance.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import {engine,a,b,corrected,ref} from './reference-updater-harness.mjs';"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable",
+      "sourceContractNote": "Behavioral scenarios execute functions extracted by reference-updater-harness.mjs; not browser interaction coverage."
+    },
+    {
+      "file": "tests/reference-updater-manual-full-article.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import {engine,a,b,corrected} from './reference-updater-harness.mjs';"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable",
+      "sourceContractNote": "Behavioral scenarios execute functions extracted by reference-updater-harness.mjs; not browser interaction coverage."
+    },
+    {
+      "file": "tests/reference-updater-name-date-evidence.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import fs from 'node:fs';",
+        "import {engine,ref,book,sourceText} from './reference-updater-harness.mjs';",
+        "fs.mkdirSync('artifacts/reference-updater-name-date-evidence',{recursive:true});",
+        "fs.writeFileSync('artifacts/reference-updater-name-date-evidence/results.json',JSON.stringify([{name:'title-author-review',original,updated:bad+good,output:state.output}],null,2));"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable",
+      "sourceContractNote": "Behavioral scenarios execute functions extracted by reference-updater-harness.mjs; not browser interaction coverage."
+    },
+    {
+      "file": "tests/reference-updater-name-date.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import fs from 'node:fs';",
+        "import {engine,ref,book,sourceText} from './reference-updater-harness.mjs';",
+        "fs.mkdirSync('artifacts/reference-updater-name-date-fix',{recursive:true});",
+        "fs.writeFileSync('artifacts/reference-updater-name-date-fix/results.json',JSON.stringify([{name:'doi-name-date',original:originalDoi,updated:updatedDoi,output:exact.output}],null,2));"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable",
+      "sourceContractNote": "Behavioral scenarios execute functions extracted by reference-updater-harness.mjs; not browser interaction coverage."
+    },
+    {
+      "file": "tests/reference-updater-numbering-warning.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import {engine,a,corrected,ref,book} from './reference-updater-harness.mjs';"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable",
+      "sourceContractNote": "Behavioral scenarios execute functions extracted by reference-updater-harness.mjs; not browser interaction coverage."
+    },
+    {
+      "file": "tests/reference-updater-numeric-identity.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import fs from 'node:fs';",
+        "import {engine,a,corrected} from './reference-updater-harness.mjs';",
+        "fs.mkdirSync('artifacts/reference-updater-numeric-identity',{recursive:true});",
+        "fs.writeFileSync('artifacts/reference-updater-numeric-identity/results.json',JSON.stringify(results,null,2));"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable",
+      "sourceContractNote": "Behavioral scenarios execute functions extracted by reference-updater-harness.mjs; not browser interaction coverage."
+    },
+    {
+      "file": "tests/reference-updater-numeric-label.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import fs from 'node:fs';",
+        "import {engine,ref,book,sourceText,a,corrected} from './reference-updater-harness.mjs';",
+        "fs.mkdirSync('artifacts/reference-updater-numeric-label-fix',{recursive:true});",
+        "fs.writeFileSync('artifacts/reference-updater-numeric-label-fix/results.json',JSON.stringify(results,null,2));"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable",
+      "sourceContractNote": "Behavioral scenarios execute functions extracted by reference-updater-harness.mjs; not browser interaction coverage."
+    },
+    {
+      "file": "tests/reference-updater-numeric-review.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import fs from 'node:fs';",
+        "import {engine,ref,book} from './reference-updater-harness.mjs';"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable",
+      "sourceContractNote": "Behavioral scenarios execute functions extracted by reference-updater-harness.mjs; not browser interaction coverage."
+    },
+    {
+      "file": "tests/reference-updater-output-safety.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import {engine,a,corrected,ref,book,sourceText} from './reference-updater-harness.mjs';"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable",
+      "sourceContractNote": "Behavioral scenarios execute functions extracted by reference-updater-harness.mjs; not browser interaction coverage."
+    },
+    {
+      "file": "tests/reference-updater-output-validity.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import {engine,a,b,corrected} from './reference-updater-harness.mjs';"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable",
+      "sourceContractNote": "Behavioral scenarios execute functions extracted by reference-updater-harness.mjs; not browser interaction coverage."
+    },
+    {
+      "file": "tests/reference-updater-shared-split.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import {engine,ref,book,sourceText} from './reference-updater-harness.mjs';"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable",
+      "sourceContractNote": "Behavioral scenarios execute functions extracted by reference-updater-harness.mjs; not browser interaction coverage."
+    },
+    {
+      "file": "tests/reference-updater-stale-analysis.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import assert from 'node:assert/strict';",
+        "import fs from 'node:fs';",
+        "import {engine,a,b,corrected} from './reference-updater-harness.mjs';",
+        "fs.mkdirSync('artifacts/reference-updater-stale-analysis-fix',{recursive:true});",
+        "fs.writeFileSync('artifacts/reference-updater-stale-analysis-fix/results.json',JSON.stringify([{name:'fresh-analysis',original:a,updated:corrected,output:state.output}],null,2));"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable",
+      "sourceContractNote": "Behavioral scenarios execute functions extracted by reference-updater-harness.mjs; not browser interaction coverage."
+    },
+    {
+      "file": "tests/structuralRepair.test.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import { readFileSync } from 'node:fs';",
+        "import assert from 'node:assert/strict';",
+        "import { test } from 'node:test';",
+        "import ts from 'typescript';",
+        "const source = readFileSync(new URL('../pages/StructuralNodeArchitect.tsx', import.meta.url), 'utf8').replace(/\\r\\n/g, '\\n');",
+        "    const directLabels = new Function(compile(line) + '\\nreturn directLabels;')();",
+        "    const sanitize = new Function(helper('sanitizeXmlTags'))();",
+        "    const prune = new Function(helper('pruneEmptyElements'))();",
+        "    const run = new Function('parser', 'wrappedBlock', 'fullBlock', 'refId', 'refLabel', 'finalAudit', 'refIndex', code);",
+        "const generateSourceText = new Function(helper('generateSourceText'))();",
+        "    const run = new Function('generateSourceText', 'sbRef', 'fragmentDoc', 'trimmedInput', 'getNextId', 'ref', 'finalAudit', 'refId', 'refLabel', 'sourceText', code);",
+        "    const sanitize = new Function(helper('sanitizeXmlTags'))();",
+        "    const sanitize = new Function(helper('sanitizeXmlTags'))();",
+        "    const find = new Function(helper('findDuplicateIds'))();",
+        "    const clean = new Function(helper('removeInjectedNamespaces'))();",
+        "const validatedGenerationCases = JSON.parse(readFileSync(new URL('./fixtures/sourceTextGeneration.json', import.meta.url), 'utf8'));",
+        "    const restore = new Function(helper('restoreEmptyMarkerForms'))();",
+        "    const restore = new Function(helper('restoreEmptyMarkerForms'))();"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/view-sync-safety.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import fs from 'node:fs';import assert from 'node:assert/strict';import ts from 'typescript';",
+        "const compile=p=>ts.transpileModule(fs.readFileSync(p,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;",
+        "const scanner={},engine={};const rules=JSON.parse(fs.readFileSync('utils/idAuditorRules.json','utf8'));",
+        "new Function('exports','require',compile('utils/referenceUpdaterXml.ts'))(scanner,()=>({default:JSON.parse(fs.readFileSync('utils/referenceUpdaterEntities.json','utf8'))}));",
+        "new Function('exports','require',compile('utils/viewSyncEngine.ts'))(engine,n=>n.includes('idAuditor')?{ID_RULES:rules}:scanner);",
+        "const source=fs.readFileSync('pages/ViewSync.tsx','utf8'),ast=ts.createSourceFile('ViewSync.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);",
+        " return {...new Function(...Object.keys(args),code+'\\nreturn {'+[...names].join(',')+'};')(...Object.values(args)),queue,args,state};"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/vtoolBridge.test.mjs",
+      "kinds": [
+        "behavioral"
+      ],
+      "baselineDependencies": [
+        "import { test } from 'node:test';",
+        "import assert from 'node:assert/strict';",
+        "import { parseReport, checkInput, startBridge } from '../agent/vtool-bridge/bridge.mjs';"
+      ],
+      "environmentNotes": "Loopback bridge simulation only; no real VTool invocation.",
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/xmlRenumber.test.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import { readFileSync } from 'node:fs';",
+        "import assert from 'node:assert/strict';",
+        "import { test } from 'node:test';",
+        "import ts from 'typescript';",
+        "const source = readFileSync(new URL('../utils/xmlRenumberProfile.ts', import.meta.url), 'utf8');",
+        "    const profile = parseRenumberProfile(readFileSync(new URL('../public/profiles/custom-example.json', import.meta.url), 'utf8'));",
+        "    const custom = parseRenumberProfile(readFileSync(new URL('../public/profiles/custom-example.json', import.meta.url), 'utf8'));"
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/xmlRenumberUi.test.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [
+        "import { readFileSync } from 'node:fs';",
+        "import assert from 'node:assert/strict';",
+        "import { test } from 'node:test';",
+        "import ts from 'typescript';",
+        "const source = readFileSync(new URL('../pages/XmlRenumber.tsx', import.meta.url), 'utf8');",
+        "const buildLines = new Function('escapeHtml', transpile(source.slice(start, end) + 'return buildLines;'))(",
+        "    const copy = new Function('navigator', 'output', 'setToast', transpile(source.slice(start, end) + 'return copyOutput;'))(",
+        "    const hookSource = readFileSync(new URL('../hooks/useSessionStorage.ts', import.meta.url), 'utf8');",
+        "    const code = transpile(hookSource.replace(/^import .*?;\\s*/m, '').replace('export default useSessionStorage;', 'return useSessionStorage;'));",
+        "    const hook = new Function('useState', 'useCallback', 'useEffect', 'window', 'console', code)(",
+        "    const actions = new Function(...names, 'clearTimeout', 'processingRef', 'operationRef', 'timerRef', 'input', 'activeProfile', 'prefix', 'suffix', 'currentSettings', 'renumberWithProfile', 'sessionStorage', 'retainCitationFormatting', 'retainLabelFormatting', 'fixDuplicateCitationIds', code)("
+      ],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "portable"
+    },
+    {
+      "file": "tests/external-validation-status.test.mjs",
+      "kinds": [
+        "behavioral"
+      ],
+      "baselineDependencies": [],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "New Phase 1 correction regression; not one of the original 66 entries."
+    }
+  ],
+  "helpers": [
+    "reference-updater-harness.mjs",
+    "citation-linker-harness.mjs",
+    "test-output.mjs",
+    "run-tests.mjs",
+    "external-validation.mjs",
+    "external-validation-protocol.mjs"
+  ],
+  "externalChecks": [
+    {
+      "id": "stage1-parity",
+      "classification": "external validation",
+      "entry": "tests/keeper-evidence.mjs",
+      "requires": "KEEPER_STAGE1_SOURCE"
+    },
+    {
+      "id": "original-article-baseline",
+      "classification": "environment-dependent",
+      "entry": "tests/reference-updater-citation-protection.mjs",
+      "requires": "TOOLKIT_ARTICLE_BASELINE",
+      "limitation": "Synthetic portable case is not equivalent to the original full manuscript scenario."
+    },
+    {
+      "id": "vtool",
+      "classification": "external validation",
+      "requires": [
+        "VTOOL_JAR",
+        "TOOLKIT_VALIDATION_XML",
+        "Java"
+      ]
+    },
+    {
+      "id": "independent-dtd",
+      "classification": "external validation",
+      "requires": "Separately configured validator; historical scripts not automatically executed."
+    }
+  ],
+  "historicalInvestigations": [
+    {
+      "file": "artifacts/affiliation-followup-audit/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/affiliation-followup-fix/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/affiliation-mismatch-review/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/affiliation-sequencer-audit/fix-native.mjs",
+      "classification": "environment-dependent",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/affiliation-sequencer-audit/followup-native.mjs",
+      "classification": "environment-dependent",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/affiliation-sequencer-audit/prepare-native.mjs",
+      "classification": "environment-dependent",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/affiliation-sequencer-audit/update-page.mjs",
+      "classification": "environment-dependent",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/affiliation-sequencer-audit/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/citation-linker-audit/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/citation-linker-doi-native/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/citation-linker-local-uri/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/credit-tagging-audit/prepare-native.mjs",
+      "classification": "environment-dependent",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/credit-tagging-audit/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/id-auditor-configured-generation/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/id-auditor-critical-audit/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/id-auditor-critical-fixes/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/id-auditor-critical-fixes/verify-results.mjs",
+      "classification": "environment-dependent",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/id-auditor-editor-rules/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/id-auditor-final-verification/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/id-auditor-generation/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/keeper-workflow-audit/scan-local-corpus.mjs",
+      "classification": "environment-dependent",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/keeper-workflow-audit/scan-local-opt.mjs",
+      "classification": "environment-dependent",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/reference-updater-audit/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/reference-updater-citation-protection/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/reference-updater-content-fix/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/reference-updater-duplicate-fix/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/reference-updater-duplicate-safety/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/reference-updater-entity-protection/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/reference-updater-followup-audit/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/reference-updater-followup-fixes/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/reference-updater-full-article/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/reference-updater-id-quotes-fix/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/reference-updater-internal-id-fix/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/reference-updater-internal-link-fix/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/reference-updater-manual-review/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/reference-updater-name-date-evidence/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/reference-updater-name-date-fix/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/reference-updater-numbering-warning/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/reference-updater-numeric-identity/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/reference-updater-numeric-label-fix/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/reference-updater-severe-audit/audit.mjs",
+      "classification": "environment-dependent",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/reference-updater-severe-audit/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/reference-updater-stale-analysis-fix/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/reference-updater-user-[PRIVATE_ARTICLE]/validate-after-fix.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/reference-updater-user-[PRIVATE_ARTICLE]/validate-current.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/sa-affiliation-audit/inspect.mjs",
+      "classification": "environment-dependent",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/sa-affiliation-audit/prepare-native.mjs",
+      "classification": "environment-dependent",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/sa-affiliation-audit/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/source-text-final-validation/validate-dtd.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/source-text-final-validation/validate.py",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/source-text-repair-validation/validate-dtd.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/source-text-repair-validation/validate.py",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/view-sync-audit/prepare-native.mjs",
+      "classification": "environment-dependent",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/view-sync-audit/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/view-sync-fixes/prepare-native.mjs",
+      "classification": "environment-dependent",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/view-sync-fixes/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/xml-renumber-author-date-validation/prepare.mjs",
+      "classification": "environment-dependent",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    },
+    {
+      "file": "artifacts/xml-renumber-author-date-validation/validate.ps1",
+      "classification": "external validation",
+      "status": "EXCLUDED from portable command; historical script requires explicit review/configuration",
+      "maintained": false
+    }
+  ],
+  "helperDetails": {
+    "reference-updater-harness.mjs": "Source extraction; not a test entry point.",
+    "citation-linker-harness.mjs": "Source extraction; no inherited test execution.",
+    "test-output.mjs": "Temporary output isolation.",
+    "run-tests.mjs": "Runner, discovery and maintained-file guards.",
+    "external-validation.mjs": "Explicit environment-dependent and external validation dispatch.",
+    "external-validation-protocol.mjs": "Completion contract for explicitly executed external assertions; no production imports."
+  },
+  "privacySanitization": {
+    "personalHomePaths": "Replaced by [LOCAL_USER_HOME]",
+    "privateArticleIdentifiers": "Replaced by [PRIVATE_ARTICLE]",
+    "rawEvidence": "Preserved unchanged outside the repository; raw hash recorded in privacy-review.json."
+  }
+}

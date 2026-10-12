@@ -1,0 +1,1373 @@
+{
+  "schema": 1,
+  "originalEntryPoints": 66,
+  "newRegressionEntryPoints": 1,
+  "runs": [
+    {
+      "node": "v24.11.1",
+      "platform": "win32",
+      "passed": 67,
+      "total": 67,
+      "failures": [],
+      "maintainedFilesChanged": [],
+      "results": [
+        {
+          "file": "tests/affiliation-sequencer-safety.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/citation-linker-author-year-review.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/citation-linker-safety.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/credit-generator-safety.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/id-auditor-final-verification.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/id-auditor-id-only.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-activity.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-answer-evidence-api.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-answer-evidence.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-chat-evidence.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-evidence-report.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-evidence-snapshot.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-evidence.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": [
+            {
+              "id": "stage1-parity",
+              "status": "UNAVAILABLE",
+              "reason": "External source intentionally not supplied to the portable run."
+            }
+          ]
+        },
+        {
+          "file": "tests/keeper-factory-reset.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-final-audit.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-finding-coverage.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-followup-safety.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-local-clear.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-local-lifecycle.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-local-privacy.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-local-removal.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-local-review-repros.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-local-zip.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-opt-counts.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-pdf-runtime.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-personal-key.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-phase1-second-review.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-production-layouts.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-provider-failure.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-query-provenance.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-query-review.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-review-batches.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-review-continuity.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-runtime-response.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-scope.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-workflow-audit.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-added-ids.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-bibliography-scope.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-citation-protection.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": [
+            {
+              "id": "original-article-baseline",
+              "status": "UNAVAILABLE",
+              "reason": "External source intentionally not supplied to the portable run."
+            }
+          ]
+        },
+        {
+          "file": "tests/reference-updater-content-match.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-duplicate-safety.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-duplicates.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-entities.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-followup-fixes.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-full-article.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-id-quotes.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-id-range.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-internal-ids.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-internal-links.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-link-provenance.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-manual-full-article.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-name-date-evidence.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-name-date.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-numbering-warning.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-numeric-identity.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-numeric-label.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-numeric-review.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-output-safety.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-output-validity.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-shared-split.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-stale-analysis.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/structuralRepair.test.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/view-sync-safety.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/vtoolBridge.test.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/xmlRenumber.test.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/xmlRenumberUi.test.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/external-validation-status.test.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        }
+      ]
+    },
+    {
+      "node": "v24.11.1",
+      "platform": "win32",
+      "passed": 67,
+      "total": 67,
+      "failures": [],
+      "maintainedFilesChanged": [],
+      "results": [
+        {
+          "file": "tests/affiliation-sequencer-safety.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/citation-linker-author-year-review.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/citation-linker-safety.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/credit-generator-safety.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/id-auditor-final-verification.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/id-auditor-id-only.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-activity.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-answer-evidence-api.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-answer-evidence.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-chat-evidence.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-evidence-report.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-evidence-snapshot.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-evidence.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": [
+            {
+              "id": "stage1-parity",
+              "status": "UNAVAILABLE",
+              "reason": "External source intentionally not supplied to the portable run."
+            }
+          ]
+        },
+        {
+          "file": "tests/keeper-factory-reset.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-final-audit.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-finding-coverage.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-followup-safety.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-local-clear.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-local-lifecycle.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-local-privacy.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-local-removal.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-local-review-repros.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-local-zip.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-opt-counts.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-pdf-runtime.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-personal-key.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-phase1-second-review.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-production-layouts.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-provider-failure.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-query-provenance.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-query-review.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-review-batches.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-review-continuity.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-runtime-response.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-scope.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/keeper-workflow-audit.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-added-ids.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-bibliography-scope.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-citation-protection.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": [
+            {
+              "id": "original-article-baseline",
+              "status": "UNAVAILABLE",
+              "reason": "External source intentionally not supplied to the portable run."
+            }
+          ]
+        },
+        {
+          "file": "tests/reference-updater-content-match.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-duplicate-safety.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-duplicates.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-entities.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-followup-fixes.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-full-article.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-id-quotes.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-id-range.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-internal-ids.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-internal-links.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-link-provenance.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-manual-full-article.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-name-date-evidence.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-name-date.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-numbering-warning.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-numeric-identity.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-numeric-label.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-numeric-review.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-output-safety.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-output-validity.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-shared-split.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/reference-updater-stale-analysis.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/structuralRepair.test.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/view-sync-safety.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/vtoolBridge.test.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/xmlRenumber.test.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/xmlRenumberUi.test.mjs",
+          "kinds": [
+            "behavioral",
+            "source-contract/static"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        },
+        {
+          "file": "tests/external-validation-status.test.mjs",
+          "kinds": [
+            "behavioral"
+          ],
+          "status": "PASS",
+          "externalChecks": []
+        }
+      ]
+    }
+  ],
+  "assertions": {
+    "originalAssertionCallSites": 1599,
+    "missing": [],
+    "additionalAssertionCallSites": 15,
+    "originalEntries": 66
+  },
+  "falsePassReproduction": {
+    "relativeSourceExistsInCaller": true,
+    "childExit": 0,
+    "childReportedUnavailable": true,
+    "originalExitOnlyDecision": "PASS",
+    "fixedExit": 1,
+    "fixedReportedFail": true,
+    "fixedReportedPass": false
+  },
+  "historicalEvidence": [
+    {
+      "file": "docs/testing-phase1/baseline.json",
+      "equalsRawExceptDeclaredRedactions": true
+    },
+    {
+      "file": "docs/testing-phase1/final-results.json",
+      "equalsRawExceptDeclaredRedactions": true
+    }
+  ],
+  "externalValidation": {
+    "stage1Parity": {
+      "status": "PASS",
+      "completed": 4
+    },
+    "originalArticle": {
+      "status": "PASS",
+      "completed": 1
+    },
+    "vtool": {
+      "status": "UNAVAILABLE"
+    },
+    "independentDtd": {
+      "status": "UNAVAILABLE"
+    }
+  },
+  "unrelatedFilesChanged": [],
+  "correctionFiles": [
+    "tests/external-validation.mjs",
+    "tests/external-validation-protocol.mjs",
+    "tests/external-validation-status.test.mjs",
+    "tests/keeper-evidence.mjs",
+    "tests/reference-updater-citation-protection.mjs",
+    "tests/run-tests.mjs",
+    "tests/test-manifest.json",
+    "docs/testing.md",
+    "docs/testing-phase1/baseline.json",
+    "docs/testing-phase1/final-results.json",
+    "docs/testing-phase1/classification-reconciliation.json",
+    "docs/testing-phase1/privacy-review.json",
+    "docs/testing-phase1/changed-files.json",
+    "docs/testing-phase1/correction-results.json",
+    "docs/testing-phase1/correction-report.md"
+  ],
+  "proposedCommitScope": {
+    "created": [
+      "docs/keeper-current-architecture.md",
+      "docs/testing-phase1/assertion-preservation.json",
+      "docs/testing-phase1/baseline.json",
+      "docs/testing-phase1/changed-files.json",
+      "docs/testing-phase1/final-results.json",
+      "docs/testing-phase1/implementation-report.md",
+      "docs/testing-phase1/runner-guards.json",
+      "docs/testing.md",
+      "tests/citation-linker-harness.mjs",
+      "tests/external-validation.mjs",
+      "tests/fixtures/keeper-provider-chain.txt",
+      "tests/fixtures/reference-updater-citation-protection.json",
+      "tests/fixtures/reference-updater-followup-cases.json",
+      "tests/run-tests.mjs",
+      "tests/test-manifest.json",
+      "tests/test-output.mjs",
+      "tests/external-validation-protocol.mjs",
+      "tests/external-validation-status.test.mjs",
+      "docs/testing-phase1/classification-reconciliation.json",
+      "docs/testing-phase1/privacy-review.json",
+      "docs/testing-phase1/correction-results.json",
+      "docs/testing-phase1/correction-report.md"
+    ],
+    "modified": [
+      "DEPLOY_VERCEL.md",
+      "README.md",
+      "docs/keeper-local-implementation-status.md",
+      "docs/keeper-local-task-plan.md",
+      "docs/keeper-persistent-task-plan.md",
+      "docs/keeper-phase1-plan.md",
+      "docs/keeper-task-foundation-review.md",
+      "package.json",
+      "tests/citation-linker-author-year-review.mjs",
+      "tests/citation-linker-safety.mjs",
+      "tests/id-auditor-final-verification.mjs",
+      "tests/keeper-evidence.mjs",
+      "tests/keeper-factory-reset.mjs",
+      "tests/reference-updater-bibliography-scope.mjs",
+      "tests/reference-updater-citation-protection.mjs",
+      "tests/reference-updater-content-match.mjs",
+      "tests/reference-updater-duplicate-safety.mjs",
+      "tests/reference-updater-duplicates.mjs",
+      "tests/reference-updater-entities.mjs",
+      "tests/reference-updater-followup-fixes.mjs",
+      "tests/reference-updater-full-article.mjs",
+      "tests/reference-updater-id-quotes.mjs",
+      "tests/reference-updater-internal-ids.mjs",
+      "tests/reference-updater-internal-links.mjs",
+      "tests/reference-updater-name-date-evidence.mjs",
+      "tests/reference-updater-name-date.mjs",
+      "tests/reference-updater-numeric-identity.mjs",
+      "tests/reference-updater-numeric-label.mjs",
+      "tests/reference-updater-stale-analysis.mjs",
+      "tests/vtoolBridge.test.mjs"
+    ],
+    "deleted": []
+  },
+  "stagedFiles": [],
+  "commit": null,
+  "assertionScopeReconciliation": {
+    "recordType": "Assertion scope reconciliation; original verification evidence retained",
+    "historicalFieldsScope": "Existing top-level counts and earlier reports describe the working tree at their recorded verification time, not the approved commit tree.",
+    "workingTree": {
+      "baselineCallSites": 1599,
+      "preserved": 1599,
+      "missing": 0
+    },
+    "approvedCommit": {
+      "applicableBaselineCallSites": 1594,
+      "preserved": 1594,
+      "missingApplicable": 0,
+      "intentionallyExcluded": 5
+    },
+    "exclusion": {
+      "file": "tests/credit-generator-safety.mjs",
+      "reason": "Five assertion call sites belong to unrelated, preexisting CRediT changes, outside the approved 52-file Phase 1 inventory. They remain in the working tree and are intentionally excluded from this commit.",
+      "assertions": [
+        "assert.deepEqual(r.authors.map(a=>a.name),['Alice','Bob'])",
+        "assert.deepEqual(r.authors[0].roles.map(role=>role.normalized),['Methodology','Software'])",
+        "assert.deepEqual(r.authors.map(a=>a.name),['José & Zoë','李明'])",
+        "assert.ok(r.bold.startsWith('<ce:para id=\"p0005\" xml:lang=\"en\">'))",
+        "assert.deepEqual(engine.generateCredit('<ce:para><![CDATA[Alice: Methodology\\nBob: Data curation.]]></ce:para>').authors.map(a=>a.name),['Alice','Bob'])"
+      ]
+    },
+    "verification": {
+      "stagedTreePortableTests": {
+        "passed": 67,
+        "total": 67,
+        "maintainedFilesChanged": 0
+      },
+      "typecheck": "PASS",
+      "originalEvidenceRewritten": false
+    },
+    "limitation": "Counts are static assertion call sites, not dynamic execution counts."
+  }
+}

@@ -1,3 +1,4 @@
+import {testOutputPath} from './test-output.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {engine,ref,book,sourceText} from './reference-updater-harness.mjs';
@@ -18,6 +19,6 @@ assert.equal(conflicting.scanResults[0].status,'conflict');
 const multiple={scanResults:[]};engine(old,updated+updated.replace(/900/g,'905'),multiple).runAnalysis();
 await engine(old,updated+updated.replace(/900/g,'905'),multiple,{autoUpdateSmartMatch:true}).initiateUpdate();
 assert.ok(!multiple.output);
-fs.mkdirSync('artifacts/reference-updater-name-date-fix',{recursive:true});
-fs.writeFileSync('artifacts/reference-updater-name-date-fix/results.json',JSON.stringify([{name:'doi-name-date',original:originalDoi,updated:updatedDoi,output:exact.output}],null,2));
+fs.mkdirSync(testOutputPath('artifacts/reference-updater-name-date-fix'),{recursive:true});
+fs.writeFileSync(testOutputPath('artifacts/reference-updater-name-date-fix/results.json'),JSON.stringify([{name:'doi-name-date',original:originalDoi,updated:updatedDoi,output:exact.output}],null,2));
 console.log('5 name-date regression scenarios passed.');

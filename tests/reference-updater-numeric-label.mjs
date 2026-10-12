@@ -1,3 +1,4 @@
+import {testOutputPath} from './test-output.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {engine,ref,book,sourceText,a,corrected} from './reference-updater-harness.mjs';
@@ -47,6 +48,6 @@ results.push({name:'genuine-doi-correction',original:a,updated:corrected,output:
 const descriptive=await merge(a.replace('[1]','Smith, 2020'),corrected.replace('[1]','Smith, 2020').replace('10.1234/alpha','10.1234/corrected'));
 assert.equal(descriptive.scanResults[0].matchType,'Label');
 
-fs.mkdirSync('artifacts/reference-updater-numeric-label-fix',{recursive:true});
-fs.writeFileSync('artifacts/reference-updater-numeric-label-fix/results.json',JSON.stringify(results,null,2));
+fs.mkdirSync(testOutputPath('artifacts/reference-updater-numeric-label-fix'),{recursive:true});
+fs.writeFileSync(testOutputPath('artifacts/reference-updater-numeric-label-fix/results.json'),JSON.stringify(results,null,2));
 console.log('8 numeric-label regression scenarios passed.');

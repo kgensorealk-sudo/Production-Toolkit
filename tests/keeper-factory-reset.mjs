@@ -1,11 +1,10 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import ts from 'typescript';
-import {execFileSync} from 'node:child_process';
 const source=fs.readFileSync('utils/keeperEngine.ts','utf8');
 const runtime={};
 new Function('exports',ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText)(runtime);
-const prior=execFileSync('git',['show','HEAD:utils/keeperEngine.ts'],{encoding:'utf8'});
+const prior=fs.readFileSync('tests/fixtures/keeper-provider-chain.txt','utf8');
 const modelBlock=text=>text.slice(text.indexOf('export const CANDIDATE_MODELS'),text.indexOf('\n];',text.indexOf('export const CANDIDATE_MODELS'))+3);
 assert.equal(modelBlock(source).replaceAll('\r\n','\n'),modelBlock(prior).replaceAll('\r\n','\n'),'Provider chain must remain unchanged');
 assert.equal(runtime.generateOfflineKeeperResponse,undefined);

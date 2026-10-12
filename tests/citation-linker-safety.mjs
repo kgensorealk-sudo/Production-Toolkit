@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';import ts from 'typescript';
-import {api,xml,e} from './id-auditor-final-verification.mjs';
+import {api,xml,e} from './citation-linker-harness.mjs';
 const editApi={};new Function('exports','require',ts.transpileModule(fs.readFileSync('utils/citationLinkerEdits.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText)(editApi,n=>n.includes('idAuditor')?e:xml);
 let count=0;
 async function check(input,expect,options={}){const state={};api(input,state,options).runAnalysis();await api(input,state,options).executeLink();expect(state);count++;return state;}

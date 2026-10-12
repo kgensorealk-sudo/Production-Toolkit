@@ -1,3 +1,4 @@
+import {testOutputPath} from './test-output.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {engine,a,corrected,ref} from './reference-updater-harness.mjs';
@@ -20,7 +21,7 @@ const linked={scanResults:[]};engine(oldOther,newOther,linked).runAnalysis();
 engine(oldOther,newOther,linked).mergeDuplicate(linked.scanResults[0].uid,0);
 await engine(oldOther,newOther,linked).initiateUpdate();
 assert.ok(linked.output.includes('id="tr0005"'));assert.ok(linked.output.includes("refid='tr0005'"));
-fs.mkdirSync('artifacts/reference-updater-id-quotes-fix',{recursive:true});
+fs.mkdirSync(testOutputPath('artifacts/reference-updater-id-quotes-fix'),{recursive:true});
 // Full article body citations target bb0005; use that ID consistently in fixture copies.
-fs.writeFileSync('artifacts/reference-updater-id-quotes-fix/results.json',JSON.stringify(results.map(r=>({...r,original:r.original.replaceAll('bb5','bb0005'),updated:r.updated,output:r.output.replaceAll('bb5','bb0005')})),null,2));
+fs.writeFileSync(testOutputPath('artifacts/reference-updater-id-quotes-fix/results.json'),JSON.stringify(results.map(r=>({...r,original:r.original.replaceAll('bb5','bb0005'),updated:r.updated,output:r.output.replaceAll('bb5','bb0005')})),null,2));
 console.log('5 ID quote regression scenarios passed.');

@@ -1,3 +1,4 @@
+import {testOutputPath} from './test-output.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {engine,ref,book,sourceText,a} from './reference-updater-harness.mjs';
@@ -50,6 +51,6 @@ approved.scanResults[0]={...approved.scanResults[0],reviewed:true,status:'smart_
 await engine(doiOriginal,doiUpdated,approved).initiateUpdate();
 assert.ok(approved.output.includes('10.1234/ab'));
 assert.ok(approved.output.includes('id="bb5"'));
-fs.mkdirSync('artifacts/reference-updater-content-fix',{recursive:true});
-fs.writeFileSync('artifacts/reference-updater-content-fix/results.json',JSON.stringify(results,null,2));
+fs.mkdirSync(testOutputPath('artifacts/reference-updater-content-fix'),{recursive:true});
+fs.writeFileSync(testOutputPath('artifacts/reference-updater-content-fix/results.json'),JSON.stringify(results,null,2));
 console.log('6 content-match regression scenarios and Unicode/punctuation assertions passed.');

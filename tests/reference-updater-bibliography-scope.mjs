@@ -1,3 +1,4 @@
+import {testOutputPath} from './test-output.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {engine,a,b,corrected} from './reference-updater-harness.mjs';
@@ -19,6 +20,6 @@ assert.equal(state.scanResults.length,1);await engine(original,updated,state).in
 assert.ok(state.output.includes('Corrected Alpha evidence'));assert.ok(state.output.includes('Unrelated Beta study')); // Original body is preserved.
 const absent={scanResults:[]};engine(original,article(b,''),absent).runAnalysis();
 assert.deepEqual(absent.scanResults,[]);assert.ok(absent.toasts.some(t=>t.type==='error'&&t.msg.includes('must contain bibliography references')));
-fs.mkdirSync('artifacts/reference-updater-bibliography-scope',{recursive:true});
-fs.writeFileSync('artifacts/reference-updater-bibliography-scope/results.json',JSON.stringify([{name:'scoped-extraction',original,updated,output:state.output}],null,2));
+fs.mkdirSync(testOutputPath('artifacts/reference-updater-bibliography-scope'),{recursive:true});
+fs.writeFileSync(testOutputPath('artifacts/reference-updater-bibliography-scope/results.json'),JSON.stringify([{name:'scoped-extraction',original,updated,output:state.output}],null,2));
 console.log('10 bibliography scope scenarios passed.');

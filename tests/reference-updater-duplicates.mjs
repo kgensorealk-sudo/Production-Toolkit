@@ -1,3 +1,4 @@
+import {testOutputPath} from './test-output.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {engine,ref,book,sourceText} from './reference-updater-harness.mjs';
@@ -24,6 +25,6 @@ engine(original,updated,second).mergeDuplicate('incoming',0);
 assert.equal(second.scanResults.length,1);assert.equal(second.scanResults[0].uid,'owner');assert.equal(second.scanResults[0].updatedIndex,1);
 const split={scanResults:[secondary,owner]};engine(original,updated,split).splitMatch(secondary);
 assert.equal(split.scanResults.length,2);assert.equal(split.scanResults[0].originalIndex,null);assert.equal(split.scanResults[1].status,'unchanged');
-fs.mkdirSync('artifacts/reference-updater-duplicate-fix',{recursive:true});
-fs.writeFileSync('artifacts/reference-updater-duplicate-fix/results.json',JSON.stringify([{name:'duplicate-review',original,updated,output:state.output}],null,2));
+fs.mkdirSync(testOutputPath('artifacts/reference-updater-duplicate-fix'),{recursive:true});
+fs.writeFileSync(testOutputPath('artifacts/reference-updater-duplicate-fix/results.json'),JSON.stringify([{name:'duplicate-review',original,updated,output:state.output}],null,2));
 console.log('3 duplicate-review regression scenarios passed.');

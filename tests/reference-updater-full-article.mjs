@@ -1,3 +1,4 @@
+import {testOutputPath} from './test-output.mjs';
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import ts from 'typescript';
@@ -25,6 +26,6 @@ assert.equal(assemble(original,[],[]),prefix+'<!-- between entries -->'+suffix);
 const example='<ce:para>'+b+'</ce:para>';
 const scoped='<article><body>'+example+'</body><ce:bibliography>'+a+'</ce:bibliography></article>';
 assert.equal(assemble(scoped,[corrected],[0]),scoped.replace(a,corrected));
-fs.mkdirSync('artifacts/reference-updater-full-article',{recursive:true});
-fs.writeFileSync('artifacts/reference-updater-full-article/result.xml',state.output);
+fs.mkdirSync(testOutputPath('artifacts/reference-updater-full-article'),{recursive:true});
+fs.writeFileSync(testOutputPath('artifacts/reference-updater-full-article/result.xml'),state.output);
 console.log('Full article preservation, incoming-body exclusion, wrappers, additions, section ordering and collision checks passed.');

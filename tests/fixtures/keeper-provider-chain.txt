@@ -1,0 +1,11 @@
+export const CANDIDATE_MODELS: { provider: 'gemini' | 'openai' | 'anthropic'; model: string }[] = [
+  { provider: 'gemini', model: 'gemini-3.8-flash' },      // Official default text model (fast & robust)
+  { provider: 'gemini', model: 'gemini-3.1-flash-lite' },  // Ultra-fast lightweight Gemini model
+  { provider: 'gemini', model: 'gemini-flash-latest' },   // Always-updated Flash alias
+  { provider: 'gemini', model: 'gemini-3.7-flash' },      // Gemini 3.7 reasoning model
+  { provider: 'gemini', model: 'gemini-3.1-pro-preview' }, // High-capability pro model
+  { provider: 'anthropic', model: 'claude-3-7-sonnet-20250219' }, // Anthropic Claude 3.7 Sonnet
+  { provider: 'anthropic', model: 'claude-3-5-haiku-20241022' },  // Fast Anthropic Claude 3.5 Haiku
+  { provider: 'openai', model: 'gpt-4o-mini' },           // OpenAI fallback when credits/key available
+  { provider: 'openai', model: 'gpt-4o' },                // OpenAI high-intelligence fallback
+];

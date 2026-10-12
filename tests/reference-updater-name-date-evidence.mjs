@@ -1,3 +1,4 @@
+import {testOutputPath} from './test-output.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {engine,ref,book,sourceText} from './reference-updater-harness.mjs';
@@ -18,6 +19,6 @@ assert.equal(list.scanResults[0].updatedIndex,1);assert.ok(list.scanResults[0].c
 const parsed=engine('','').parseReferences(original)[0];assert.deepEqual(parsed.rawAuthors,['A. Smith','Jones','Lee']);
 const partial=good.replace('</sb:authors>','<sb:et-al/></sb:authors>');
 const truncated={scanResults:[]};engine(original,partial,truncated).runAnalysis();assert.ok(truncated.scanResults[0].matchScore<100);
-fs.mkdirSync('artifacts/reference-updater-name-date-evidence',{recursive:true});
-fs.writeFileSync('artifacts/reference-updater-name-date-evidence/results.json',JSON.stringify([{name:'title-author-review',original,updated:bad+good,output:state.output}],null,2));
+fs.mkdirSync(testOutputPath('artifacts/reference-updater-name-date-evidence'),{recursive:true});
+fs.writeFileSync(testOutputPath('artifacts/reference-updater-name-date-evidence/results.json'),JSON.stringify([{name:'title-author-review',original,updated:bad+good,output:state.output}],null,2));
 console.log('4 name-date evidence regression scenarios passed.');

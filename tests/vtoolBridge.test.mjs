@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import net from 'node:net';
 import { parseReport, checkInput, startBridge } from '../agent/vtool-bridge/bridge.mjs';
 
 const doctype = '<!DOCTYPE article PUBLIC "-//ES//DTD journal article DTD version 5.7.0//EN//XML" "art570.dtd">';
@@ -19,9 +20,15 @@ test('VTool report preserves error codes, positions, and full totals', () => {
 });
 
 test('bridge rejects unpaired origins, wrong pairing codes, and fragment validation', async () => {
-    const bridge = await startBridge({ port: 43129, token: 'test-pairing-code', origin: 'http://localhost:3001' });
+    // The bridge validates Host against its configured port, so pass the actual
+    // available port rather than 0. No production bridge behavior is changed.
+    const reservation = net.createServer();
+    await new Promise((resolve,reject)=>{reservation.once('error',reject);reservation.listen(0,'127.0.0.1',resolve);});
+    const port = reservation.address().port;
+    await new Promise(resolve=>reservation.close(resolve));
+    const bridge = await startBridge({ port, token: 'test-pairing-code', origin: 'http://localhost:3001' });
     try {
-        const url = 'http://127.0.0.1:43129';
+        const url = `http://127.0.0.1:${bridge.server.address().port}`;
         assert.equal((await fetch(url + '/status', { headers: { Origin: 'https://unpaired.example' } })).status, 403);
         assert.equal((await fetch(url + '/status', { headers: { Origin: bridge.origin, 'X-Bridge-Token': 'wrong' } })).status, 401);
         const preflight = await fetch(url + '/validate', { method: 'OPTIONS', headers: { Origin: bridge.origin } });

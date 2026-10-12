@@ -1,0 +1,11 @@
+{
+  "mutation": {
+    "exit": 1,
+    "detected": true
+  },
+  "unknown": {
+    "exit": 1,
+    "detected": true
+  },
+  "isolatedHarness": true
+}

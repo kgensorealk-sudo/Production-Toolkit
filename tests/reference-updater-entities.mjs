@@ -1,3 +1,4 @@
+import {testOutputPath} from './test-output.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {engine,ref,book,sourceText} from './reference-updater-harness.mjs';
@@ -37,6 +38,6 @@ for(const [name,incoming] of [['dtd-character-entities',title('Caf&eacute; &alph
     assert.ok(state.output.includes('Café α evidence'));assert.ok(!/&(?:eacute|alpha|term);/.test(state.output));
     results.push({name,original,updated:incoming,output:state.output});
 }
-fs.mkdirSync('artifacts/reference-updater-entity-protection',{recursive:true});
-fs.writeFileSync('artifacts/reference-updater-entity-protection/results.json',JSON.stringify(results,null,2));
+fs.mkdirSync(testOutputPath('artifacts/reference-updater-entity-protection'),{recursive:true});
+fs.writeFileSync(testOutputPath('artifacts/reference-updater-entity-protection/results.json'),JSON.stringify(results,null,2));
 console.log('22 entity protection scenarios passed.');

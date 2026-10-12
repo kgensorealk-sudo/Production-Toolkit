@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import ts from 'typescript';
 import assert from 'node:assert/strict';
-import {api,xml} from './id-auditor-final-verification.mjs';
+import {api,xml} from './citation-linker-harness.mjs';
 const review={};new Function('exports','require',ts.transpileModule(fs.readFileSync('utils/citationLinkerReview.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText)(review,()=>xml);
 const ref=(id,label,title)=>`<ce:bib-reference id="${id}"><ce:label>${label}</ce:label><ce:other-ref><ce:textref>${title}</ce:textref></ce:other-ref></ce:bib-reference>`;
 const original=ref('bb0005','World Health Organization, 2020','Health report')+'<ce:cross-ref>WHO, 2020</ce:cross-ref>';

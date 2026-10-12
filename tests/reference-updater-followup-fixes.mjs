@@ -1,7 +1,8 @@
+import {testOutputPath} from './test-output.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {engine,a,b,corrected,ref,book,sourceText} from './reference-updater-harness.mjs';
-const old=JSON.parse(fs.readFileSync('artifacts/reference-updater-followup-audit/results.json','utf8'));
+const old=JSON.parse(fs.readFileSync('tests/fixtures/reference-updater-followup-cases.json','utf8'));
 const results=[];
 async function merge(name,options={}) {
     const fixture=old.find(x=>x.name===name),state={scanResults:[]};
@@ -83,6 +84,6 @@ const requested=repeatedSplit.scanResults[0];engine(a,corrected,repeatedSplit).s
 engine(a,corrected,repeatedSplit).splitMatch(requested);
 assert.equal(repeatedSplit.scanResults.length,2);assert.equal(repeatedSplit.scanResults.filter(x=>x.originalIndex===null).length,1);
 await engine(a,corrected,repeatedSplit).initiateUpdate();assert.ok(repeatedSplit.output.includes('bb3000'));
-fs.mkdirSync('artifacts/reference-updater-followup-fixes',{recursive:true});
-fs.writeFileSync('artifacts/reference-updater-followup-fixes/results.json',JSON.stringify(results,null,2));
+fs.mkdirSync(testOutputPath('artifacts/reference-updater-followup-fixes'),{recursive:true});
+fs.writeFileSync(testOutputPath('artifacts/reference-updater-followup-fixes/results.json'),JSON.stringify(results,null,2));
 console.log('21 follow-up regression scenarios passed.');

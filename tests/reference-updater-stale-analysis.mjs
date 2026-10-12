@@ -1,3 +1,4 @@
+import {testOutputPath} from './test-output.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {engine,a,b,corrected} from './reference-updater-harness.mjs';
@@ -20,6 +21,6 @@ await engine(a,corrected,restored).initiateUpdate();assert.ok(!restored.output);
 const duringMerge={scanResults:[]};engine(a,corrected,duringMerge).runAnalysis();
 await engine(a,corrected,duringMerge,{setTimeout:fn=>{duringMerge.analysisKeyRef.current='changed';fn();}}).initiateUpdate();
 assert.ok(!duringMerge.output);
-fs.mkdirSync('artifacts/reference-updater-stale-analysis-fix',{recursive:true});
-fs.writeFileSync('artifacts/reference-updater-stale-analysis-fix/results.json',JSON.stringify([{name:'fresh-analysis',original:a,updated:corrected,output:state.output}],null,2));
+fs.mkdirSync(testOutputPath('artifacts/reference-updater-stale-analysis-fix'),{recursive:true});
+fs.writeFileSync(testOutputPath('artifacts/reference-updater-stale-analysis-fix/results.json'),JSON.stringify([{name:'fresh-analysis',original:a,updated:corrected,output:state.output}],null,2));
 console.log('8 stale-analysis regression scenarios passed.');

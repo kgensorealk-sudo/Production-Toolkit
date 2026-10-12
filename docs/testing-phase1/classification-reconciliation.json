@@ -1,0 +1,255 @@
+{
+  "schema": 1,
+  "historicalRecordsPreserved": true,
+  "affectedEntryPoints": 22,
+  "appliesTo": [
+    "workingTreeRun",
+    "initialImplementationRun",
+    "cleanRuns[0]",
+    "cleanRuns[1]"
+  ],
+  "corrections": [
+    {
+      "file": "tests/reference-updater-added-ids.mjs",
+      "historicalKinds": [
+        "behavioral"
+      ],
+      "correctedKinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "reason": "Initial source-contract detection examined direct source reads only. These behavioral tests also execute extracted component functions through reference-updater-harness.mjs. Manifest annotation corrected after these runs; execution/assertion results are unchanged."
+    },
+    {
+      "file": "tests/reference-updater-bibliography-scope.mjs",
+      "historicalKinds": [
+        "behavioral"
+      ],
+      "correctedKinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "reason": "Initial source-contract detection examined direct source reads only. These behavioral tests also execute extracted component functions through reference-updater-harness.mjs. Manifest annotation corrected after these runs; execution/assertion results are unchanged."
+    },
+    {
+      "file": "tests/reference-updater-content-match.mjs",
+      "historicalKinds": [
+        "behavioral"
+      ],
+      "correctedKinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "reason": "Initial source-contract detection examined direct source reads only. These behavioral tests also execute extracted component functions through reference-updater-harness.mjs. Manifest annotation corrected after these runs; execution/assertion results are unchanged."
+    },
+    {
+      "file": "tests/reference-updater-duplicate-safety.mjs",
+      "historicalKinds": [
+        "behavioral"
+      ],
+      "correctedKinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "reason": "Initial source-contract detection examined direct source reads only. These behavioral tests also execute extracted component functions through reference-updater-harness.mjs. Manifest annotation corrected after these runs; execution/assertion results are unchanged."
+    },
+    {
+      "file": "tests/reference-updater-duplicates.mjs",
+      "historicalKinds": [
+        "behavioral"
+      ],
+      "correctedKinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "reason": "Initial source-contract detection examined direct source reads only. These behavioral tests also execute extracted component functions through reference-updater-harness.mjs. Manifest annotation corrected after these runs; execution/assertion results are unchanged."
+    },
+    {
+      "file": "tests/reference-updater-entities.mjs",
+      "historicalKinds": [
+        "behavioral"
+      ],
+      "correctedKinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "reason": "Initial source-contract detection examined direct source reads only. These behavioral tests also execute extracted component functions through reference-updater-harness.mjs. Manifest annotation corrected after these runs; execution/assertion results are unchanged."
+    },
+    {
+      "file": "tests/reference-updater-id-quotes.mjs",
+      "historicalKinds": [
+        "behavioral"
+      ],
+      "correctedKinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "reason": "Initial source-contract detection examined direct source reads only. These behavioral tests also execute extracted component functions through reference-updater-harness.mjs. Manifest annotation corrected after these runs; execution/assertion results are unchanged."
+    },
+    {
+      "file": "tests/reference-updater-id-range.mjs",
+      "historicalKinds": [
+        "behavioral"
+      ],
+      "correctedKinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "reason": "Initial source-contract detection examined direct source reads only. These behavioral tests also execute extracted component functions through reference-updater-harness.mjs. Manifest annotation corrected after these runs; execution/assertion results are unchanged."
+    },
+    {
+      "file": "tests/reference-updater-internal-ids.mjs",
+      "historicalKinds": [
+        "behavioral"
+      ],
+      "correctedKinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "reason": "Initial source-contract detection examined direct source reads only. These behavioral tests also execute extracted component functions through reference-updater-harness.mjs. Manifest annotation corrected after these runs; execution/assertion results are unchanged."
+    },
+    {
+      "file": "tests/reference-updater-internal-links.mjs",
+      "historicalKinds": [
+        "behavioral"
+      ],
+      "correctedKinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "reason": "Initial source-contract detection examined direct source reads only. These behavioral tests also execute extracted component functions through reference-updater-harness.mjs. Manifest annotation corrected after these runs; execution/assertion results are unchanged."
+    },
+    {
+      "file": "tests/reference-updater-link-provenance.mjs",
+      "historicalKinds": [
+        "behavioral"
+      ],
+      "correctedKinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "reason": "Initial source-contract detection examined direct source reads only. These behavioral tests also execute extracted component functions through reference-updater-harness.mjs. Manifest annotation corrected after these runs; execution/assertion results are unchanged."
+    },
+    {
+      "file": "tests/reference-updater-manual-full-article.mjs",
+      "historicalKinds": [
+        "behavioral"
+      ],
+      "correctedKinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "reason": "Initial source-contract detection examined direct source reads only. These behavioral tests also execute extracted component functions through reference-updater-harness.mjs. Manifest annotation corrected after these runs; execution/assertion results are unchanged."
+    },
+    {
+      "file": "tests/reference-updater-name-date-evidence.mjs",
+      "historicalKinds": [
+        "behavioral"
+      ],
+      "correctedKinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "reason": "Initial source-contract detection examined direct source reads only. These behavioral tests also execute extracted component functions through reference-updater-harness.mjs. Manifest annotation corrected after these runs; execution/assertion results are unchanged."
+    },
+    {
+      "file": "tests/reference-updater-name-date.mjs",
+      "historicalKinds": [
+        "behavioral"
+      ],
+      "correctedKinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "reason": "Initial source-contract detection examined direct source reads only. These behavioral tests also execute extracted component functions through reference-updater-harness.mjs. Manifest annotation corrected after these runs; execution/assertion results are unchanged."
+    },
+    {
+      "file": "tests/reference-updater-numbering-warning.mjs",
+      "historicalKinds": [
+        "behavioral"
+      ],
+      "correctedKinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "reason": "Initial source-contract detection examined direct source reads only. These behavioral tests also execute extracted component functions through reference-updater-harness.mjs. Manifest annotation corrected after these runs; execution/assertion results are unchanged."
+    },
+    {
+      "file": "tests/reference-updater-numeric-identity.mjs",
+      "historicalKinds": [
+        "behavioral"
+      ],
+      "correctedKinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "reason": "Initial source-contract detection examined direct source reads only. These behavioral tests also execute extracted component functions through reference-updater-harness.mjs. Manifest annotation corrected after these runs; execution/assertion results are unchanged."
+    },
+    {
+      "file": "tests/reference-updater-numeric-label.mjs",
+      "historicalKinds": [
+        "behavioral"
+      ],
+      "correctedKinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "reason": "Initial source-contract detection examined direct source reads only. These behavioral tests also execute extracted component functions through reference-updater-harness.mjs. Manifest annotation corrected after these runs; execution/assertion results are unchanged."
+    },
+    {
+      "file": "tests/reference-updater-numeric-review.mjs",
+      "historicalKinds": [
+        "behavioral"
+      ],
+      "correctedKinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "reason": "Initial source-contract detection examined direct source reads only. These behavioral tests also execute extracted component functions through reference-updater-harness.mjs. Manifest annotation corrected after these runs; execution/assertion results are unchanged."
+    },
+    {
+      "file": "tests/reference-updater-output-safety.mjs",
+      "historicalKinds": [
+        "behavioral"
+      ],
+      "correctedKinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "reason": "Initial source-contract detection examined direct source reads only. These behavioral tests also execute extracted component functions through reference-updater-harness.mjs. Manifest annotation corrected after these runs; execution/assertion results are unchanged."
+    },
+    {
+      "file": "tests/reference-updater-output-validity.mjs",
+      "historicalKinds": [
+        "behavioral"
+      ],
+      "correctedKinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "reason": "Initial source-contract detection examined direct source reads only. These behavioral tests also execute extracted component functions through reference-updater-harness.mjs. Manifest annotation corrected after these runs; execution/assertion results are unchanged."
+    },
+    {
+      "file": "tests/reference-updater-shared-split.mjs",
+      "historicalKinds": [
+        "behavioral"
+      ],
+      "correctedKinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "reason": "Initial source-contract detection examined direct source reads only. These behavioral tests also execute extracted component functions through reference-updater-harness.mjs. Manifest annotation corrected after these runs; execution/assertion results are unchanged."
+    },
+    {
+      "file": "tests/reference-updater-stale-analysis.mjs",
+      "historicalKinds": [
+        "behavioral"
+      ],
+      "correctedKinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "reason": "Initial source-contract detection examined direct source reads only. These behavioral tests also execute extracted component functions through reference-updater-harness.mjs. Manifest annotation corrected after these runs; execution/assertion results are unchanged."
+    }
+  ]
+}

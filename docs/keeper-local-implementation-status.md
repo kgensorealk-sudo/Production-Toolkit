@@ -1,3 +1,5 @@
+> Dated implementation record (2026-10-09). Its remaining-work list is historical and must not be treated as a current completion checklist. See [current Keeper architecture](keeper-current-architecture.md) and [test foundation report](testing-phase1/implementation-report.md). No new live-browser privacy verification was performed in this phase.
+
 # Local Keeper implementation status
 
 2026-10-09. Updated Keeper interpretation workflow; ZIP storage and background inspection remain local.

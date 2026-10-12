@@ -1,13 +1,13 @@
 # Production Toolkit Pro
 
-Editorial workflow suite built with React, TypeScript, Vite, and Supabase. Includes XML, reference, citation, table, and affiliation tools, plus the Keeper AI assistant.
+Editorial workflow suite built with React, TypeScript, Vite, and Supabase. Includes XML, reference, citation, table, and affiliation tools, plus a dedicated Keeper sandbox.
 
 ## Local development
 
 Requires Node.js and npm.
 
 1. Run `npm ci`.
-2. Copy `.env.example` to `.env.local` and configure `GEMINI_API_KEY` and optionally `OPENAI_API_KEY` for live AI responses. Without keys, the AI handlers use their offline rules engines.
+2. Copy `.env.example` to `.env.local` and configure `GEMINI_API_KEY` and optionally `OPENAI_API_KEY` for live AI responses. Without usable provider credentials, AI interpretation may be unavailable; deterministic evidence reports are distinct from an AI answer.
 3. Load the environment into the server process (for example, with PowerShell environment variables) and run `npm run dev`.
 4. Open `http://localhost:3000`.
 
@@ -31,3 +31,7 @@ The frontend currently uses the Supabase project configured in `supabaseClient.t
 - `agent/`, `prompts/`: Production QA agent documentation.
 
 Keep API keys in local environment files or deployment secrets. Local environment files, dependencies, and build outputs are ignored by Git.
+
+## Regression foundation
+
+Use Node 24 and `npm ci`, then `npm test`. See [testing](docs/testing.md) for portable/external classifications and [current Keeper architecture](docs/keeper-current-architecture.md) for implemented versus planned behavior. No production API keys are required for the portable suite.

@@ -1,3 +1,4 @@
+import {testOutputPath} from './test-output.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {engine,a,corrected} from './reference-updater-harness.mjs';
@@ -23,6 +24,6 @@ assert.equal(sameNumber.scanResults[0].matchType,'DOI');
 const forced={scanResults:[]};engine(a,corrected.replace('[1]','[99]'),forced).runAnalysis();
 forced.scanResults=[{...forced.scanResults[0],status:'update',updatedIndex:0,reviewed:true}];
 await engine(a,corrected.replace('[1]','[99]'),forced).initiateUpdate();assert.ok(!forced.output);
-fs.mkdirSync('artifacts/reference-updater-numeric-identity',{recursive:true});
-fs.writeFileSync('artifacts/reference-updater-numeric-identity/results.json',JSON.stringify(results,null,2));
+fs.mkdirSync(testOutputPath('artifacts/reference-updater-numeric-identity'),{recursive:true});
+fs.writeFileSync(testOutputPath('artifacts/reference-updater-numeric-identity/results.json'),JSON.stringify(results,null,2));
 console.log('5 numeric identity regression scenarios passed.');

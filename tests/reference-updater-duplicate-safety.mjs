@@ -1,3 +1,4 @@
+import {testOutputPath} from './test-output.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {engine,a,corrected,ref,book,sourceText} from './reference-updater-harness.mjs';
@@ -31,6 +32,6 @@ const additions={scanResults:[]};engine(a,incoming+incoming.replace(/0900/g,'090
 assert.equal(additions.scanResults.filter(r=>r.incomingDuplicates?.length).length,2);
 await engine(a,incoming+incoming.replace(/0900/g,'0905'),additions,{autoUpdateSmartMatch:true}).initiateUpdate();
 assert.ok(!additions.output);
-fs.mkdirSync('artifacts/reference-updater-duplicate-safety',{recursive:true});
-fs.writeFileSync('artifacts/reference-updater-duplicate-safety/results.json',JSON.stringify([{name:'repeated-correction',original:a,updated,output:repeated.output}],null,2));
+fs.mkdirSync(testOutputPath('artifacts/reference-updater-duplicate-safety'),{recursive:true});
+fs.writeFileSync(testOutputPath('artifacts/reference-updater-duplicate-safety/results.json'),JSON.stringify([{name:'repeated-correction',original:a,updated,output:repeated.output}],null,2));
 console.log('5 duplicate safety scenarios passed.');

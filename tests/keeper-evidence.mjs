@@ -1,3 +1,4 @@
+import {reportExternalExecution} from './external-validation-protocol.mjs';
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
@@ -280,9 +281,8 @@ check("long records are retrievable without silent truncation", () => {
 });
 // Compare the adapted matcher with actual Stage-1 matchQ on equivalent records.
 const stagePath =
-  process.env.KEEPER_STAGE1_SOURCE ||
-  "C:/Users/Kevin/Desktop/FL-Xtools/s100-s200-query-documentation-generator/src/assets/query-generator.html";
-if (fs.existsSync(stagePath)) {
+  process.env.KEEPER_STAGE1_SOURCE;
+if (stagePath && fs.existsSync(stagePath)) {
   const stageSource = fs.readFileSync(stagePath, "utf8");
   const stageMatch = stageSource.slice(
     stageSource.indexOf("function matchQ("),
@@ -291,6 +291,7 @@ if (fs.existsSync(stagePath)) {
       stageSource.indexOf("function matchQ("),
     ),
   );
+  let externalCasesCompleted=0;
   check(
     "Stage-1 parity for established, mismatch, duplicate and missing-answer cases",
     () => {
@@ -334,13 +335,17 @@ if (fs.existsSync(stagePath)) {
             : []),
         ]);
         assert.equal(bind(query(), p)[0].binding.state, expected);
+        externalCasesCompleted++;
       }
     },
   );
-} else
+  reportExternalExecution('stage1-parity','PASS',externalCasesCompleted,stagePath);
+} else {
+  reportExternalExecution('stage1-parity','UNAVAILABLE',0);
   console.log(
-    "SKIP optional external Stage-1 parity check; set KEEPER_STAGE1_SOURCE.",
+    "UNAVAILABLE external Stage-1 parity check; set KEEPER_STAGE1_SOURCE.",
   );
+}
 let captured = [];
 let count = 0;
 const modelContent = {

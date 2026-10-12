@@ -24,11 +24,15 @@ Production Toolkit Pro is fully configured to deploy to **Vercel** as a high-per
 | Component | Path | Architecture |
 |---|---|---|
 | **Frontend UI** | `/` | Vite React SPA deployed to Vercel's global Edge CDN |
-| **Keeper AI Chat** | `/api/ai/chat` & `/api/chat` | Serverless Function with model failover and 1024MB RAM |
+| **Keeper Sandbox** | `/api/ai/chat` & `/api/chat` | Serverless Function with model failover and 1024MB RAM |
 | **Health Check** | `/api/health` | Instant zero-latency serverless endpoint |
 
 ### Keeper Features on Vercel:
-- **Automatic Model Failover**: Fast-path response via `gemini-3.1-flash-lite`, with seamless fallback to `gemini-flash-latest` and `gemini-3.7-flash`.
-- **Offline Editorial Rules Engine**: Even if the API key is missing or Google's API undergoes high demand, Keeper still answers inquiries, generates standardized JM queries, and navigates editorial tools without errors.
+- **Provider failover**: The configured candidate chain is maintained in `utils/keeperEngine.ts`. Configuration is not proof of model availability.
+- **Evidence versus interpretation**: Deterministic inventory/report paths remain distinct from provider interpretation. The former offline editorial assistant has been removed; a failed provider request must not be described as a successful AI review.
 - **Enterprise Security**: Configured with strict security headers (`nosniff`, `SAMEORIGIN`, `strict-origin-when-cross-origin`).
 - **CORS Preflight Support**: Full support for cross-origin preview URLs and staging environments.
+
+## Verification limits
+
+The configured Vercel build is `vite build`; it does not automatically run the portable regression command or the repository TypeScript check. This Phase 1 change does not alter deployment configuration. See `docs/testing.md`. Historical verification reports are dated evidence, not a guarantee of the current deployed release.

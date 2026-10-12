@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "rawEvidenceOutsideRepository": true,
+  "rawArchives": [
+    {
+      "file": "docs/testing-phase1/baseline.json",
+      "rawSha256": "ade567723b61b65ae57bff9c387bb57a7f1a3af5df5e79962a4da2757b16f100"
+    },
+    {
+      "file": "docs/testing-phase1/final-results.json",
+      "rawSha256": "da557a5da48cb6adced0983f598351d36f2baacf5451505bd503d805066f51c4"
+    },
+    {
+      "file": "tests/test-manifest.json",
+      "rawSha256": "ea6e6286fd15f9d369f889bc19e7bca02851f1c4618414c16f534133525ab792"
+    }
+  ],
+  "personalPathStringsSanitized": 5,
+  "privateIdentifierStringsSanitized": 2,
+  "meaningfulAssertionsAndResultsPreserved": true,
+  "confidentialSourceFilesCopiedToRepository": false,
+  "finalScan": {
+    "files": 52,
+    "patterns": [
+      "personalPaths",
+      "privateIdentifiers",
+      "email",
+      "googleKey",
+      "privateKey",
+      "jwt"
+    ],
+    "findings": [],
+    "syntheticFixturesReviewed": [
+      "tests/fixtures/reference-updater-citation-protection.json",
+      "tests/fixtures/reference-updater-followup-cases.json",
+      "tests/fixtures/keeper-provider-chain.txt"
+    ],
+    "limitation": "Pattern scanning is not proof that every possible confidential string is absent."
+  }
+}

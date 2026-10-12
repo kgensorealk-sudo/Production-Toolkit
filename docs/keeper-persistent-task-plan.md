@@ -1,3 +1,5 @@
+> Historical proposal/review. Manuscript cloud-storage and durable cloud-review portions were superseded by the local-first direction. This is not the current implementation contract. See [current Keeper architecture](keeper-current-architecture.md).
+
 # Keeper persistent ZIP tasks — implementation plan
 
 > Superseded for storage and processing: follow [keeper-local-task-plan.md](keeper-local-task-plan.md). Manuscripts and detailed evidence must remain local; the cloud bucket/worker proposals below are historical and must not be applied.

@@ -1,3 +1,4 @@
+import {testOutputPath} from './test-output.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {engine,ref} from './reference-updater-harness.mjs';
@@ -21,10 +22,10 @@ assert.ok(untouched.includes('id="tr0900"'));assert.ok(untouched.includes('refid
 const added=await merge(original,updated.replace('</ce:textref>','<ce:inter-ref id="ir0905" xlink:href="#ir0900">another</ce:inter-ref></ce:textref>'));
 const target=added.match(/<ce:inter-ref id="([^"]+)"/)[1];
 assert.ok(added.includes(`xlink:href="#${target}"`));
-fs.mkdirSync('artifacts/reference-updater-internal-link-fix',{recursive:true});
+fs.mkdirSync(testOutputPath('artifacts/reference-updater-internal-link-fix'),{recursive:true});
 // VTool disallows fragment-only URIs on ce:inter-ref; the full article fixture
 // uses an allowed external URI and validates the ce:cross-ref target remapping.
 const validUpdated=updated.replace('xlink:href="#tr0900"','xlink:href="https://example.org/details"');
 const validOutput=await merge(original,validUpdated);
-fs.writeFileSync('artifacts/reference-updater-internal-link-fix/results.json',JSON.stringify([{name:'internal-link-remap',original,updated:validUpdated,output:validOutput}],null,2));
+fs.writeFileSync(testOutputPath('artifacts/reference-updater-internal-link-fix/results.json'),JSON.stringify([{name:'internal-link-remap',original,updated:validUpdated,output:validOutput}],null,2));
 console.log('4 internal-link regression scenarios passed.');
