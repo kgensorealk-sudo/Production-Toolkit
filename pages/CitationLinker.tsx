@@ -6,14 +6,15 @@ import LoadingOverlay from '../components/LoadingOverlay';
 import Switch from '../components/Switch';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 import { scanReferenceXml } from '../utils/referenceUpdaterXml';
-import { applyCitationLinks, cleanupCitationDois } from '../utils/citationLinkerEdits';
-import { citationReviewCandidates, reviewCitationTarget } from '../utils/citationLinkerReview';
+import { applyCitationLinks, cleanupCitationDois, citationTargetContext, citationNumericCandidates, citationTargetType, type CitationTargetType } from '../utils/citationLinkerEdits';
+import { citationReviewCandidates, numericReviewCandidates, reviewCitationTarget } from '../utils/citationLinkerReview';
 import { analyzeIdLinks } from '../utils/idAuditorEngine';
 import { ChevronUp, ChevronDown, GitCompare, Lightbulb, ArrowRight, Link as LinkIcon, Eraser, Hash, Trash2, RefreshCw, Box } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SmartSuggestion, ToolId } from '../types';
 
 interface ResolutionItem {
+    targetType?: CitationTargetType;
     manualTarget?: string;
     start: number;
     existingHref: string;
@@ -361,7 +362,6 @@ const CitationLinker: React.FC = () => {
                 const structure = scanReferenceXml(input, {allowDuplicateIds:true});
                 const duplicateLabels = new Set<string>();
                 const labelMap = new Map<string, string>();
-                const bibliographyNumbers=new Map<string,string>(),duplicateBibliographyNumbers=new Set<string>();
                 const nameDateIndex: BibIndex[] = []; 
 
                 const addLabel = (label:string,id:string) => {
@@ -376,10 +376,10 @@ const CitationLinker: React.FC = () => {
                 for(const node of structure.references){
                     const id=node.attributes.id;if(!id)continue;
                     const labelText=childLabel(node).replace(/[\[\]]/g,'').trim();
-                    if(/^\d+$/.test(labelText)){if(bibliographyNumbers.has(labelText)&&bibliographyNumbers.get(labelText)!==id)duplicateBibliographyNumbers.add(labelText);bibliographyNumbers.set(labelText,id);addLabel(labelText,id);}
-                    else for(const year of extractYears(labelText))nameDateIndex.push({id,normalized:normalizeCitation(labelText),firstName:extractFirstName(labelText),year});
+                    // Numeric labels are indexed separately by semantic type in citationNumericCandidates.
+                    if(!/^\d+$/.test(labelText))for(const year of extractYears(labelText))nameDateIndex.push({id,normalized:normalizeCitation(labelText),firstName:extractFirstName(labelText),year});
                 }
-                // Object labels share the same collision checks as bibliography labels.
+                // Object labels never share the bibliography numeric namespace.
                 for(const node of structure.nodes.filter(node=>['ce:figure','ce:table','ce:display-formula','ce:textbox','ce:footnote','ce:section'].includes(node.name))){
                     const id=node.attributes.id;if(!id)continue;
                     const label=childLabel(node)||(node.name==='ce:section'?childLabel(node,'ce:section-title'):'');
@@ -430,20 +430,28 @@ const CitationLinker: React.FC = () => {
                     let status: 'resolved' | 'failed' | 'ignored' = 'failed';
 
                     let incomplete=false, ambiguous=ambiguousRefid;
+                    const semanticContext=citationTargetContext(structure,parsedNode);
+                    let targetType:CitationTargetType|undefined=semanticContext.affiliation?'affiliation':semanticContext.bracketed?'bibliography':undefined;
                     if (missingRefid && (!isInterRef || localHref)) {
                         const detectedIds = new Set<string>();
                         const readableText=structure.textContent(parsedNode);
                         const normWhole = normalizeCitation(readableText);
                         const wholeMatches = nameDateIndex.filter(b => b.normalized === normWhole);
                         
-                        if (wholeMatches.length > 0) {
+                        if (wholeMatches.length > 0 && !semanticContext.affiliation) {
+                            targetType='bibliography';
                             if(new Set(wholeMatches.map(m=>m.id)).size!==1)ambiguous=true;
                             wholeMatches.forEach(m => detectedIds.add(m.id));
                         } else {
-                            const isNumeric = /^\s*\[?\s*\d+(?:\s*(?:[,;–—-]|\band\b)\s*\d+)*\s*\]?\s*$/.test(readableText);
-                            const bibliographyContext=existingRefid.split(/\s+/).some(id=>/^bb\d{4}$/.test(id));
-                            const numericLabels=bibliographyContext?bibliographyNumbers:labelMap;
-                            const numericDuplicates=bibliographyContext?duplicateBibliographyNumbers:duplicateLabels;
+                            const isNumeric = semanticContext.numeric;
+                            const resolveNumber=(number:string)=>{
+                                const candidates=citationNumericCandidates(structure,parsedNode,number);
+                                // N1: no preference between an unbracketed bibliography number and an object marker.
+                                if(candidates.length!==1){if(candidates.length>1)ambiguous=true;incomplete=true;return false;}
+                                const candidate=candidates[0];
+                                if(targetType&&targetType!==candidate.type){ambiguous=true;return false;}
+                                targetType=candidate.type;detectedIds.add(candidate.id);return true;
+                            };
                             const parts = isNumeric ? readableText.split(/[,;]|\band\b/i) : readableText.split(/;/);
 
                             parts.forEach(part => {
@@ -453,27 +461,26 @@ const CitationLinker: React.FC = () => {
                                 let partMatched=false;
                                 if (!trimmed) return;
 
-                                if (/[\-–—]/.test(trimmed) && /^\d+[\-–—]\d+$/.test(trimmed)) {
+                                if (isNumeric && /[\-–—]/.test(trimmed) && /^\d+[\-–—]\d+$/.test(trimmed)) {
                                     const rangeParts = trimmed.split(/[\-–—]/);
                                     const start = parseInt(rangeParts[0].replace(/\D/g, ''));
                                     const end = parseInt(rangeParts[1].replace(/\D/g, ''));
                                     if (!isNaN(start) && !isNaN(end) && start<=end && end-start<10000) {
                                         for (let n = start; n <= end; n++) {
-                                            const id = numericLabels.get(n.toString());
-                                            if (id&&!numericDuplicates.has(normalizeCitation(n.toString()))){detectedIds.add(id);partMatched=true;}else incomplete=true;
+                                            if(resolveNumber(n.toString()))partMatched=true;
                                         }
                                     } else incomplete=true;
                                 } 
                                 else if (/^\d+$/.test(trimmed)) {
-                                    const id = numericLabels.get(normalizeCitation(trimmed));
-                                    if (id&&!numericDuplicates.has(normalizeCitation(trimmed))){detectedIds.add(id);partMatched=true;}else incomplete=true;
+                                    if(isNumeric)partMatched=resolveNumber(trimmed);
+                                    else incomplete=true;
                                 }
                                 else {
                                     const normOrphan = normalizeCitation(trimmed);
                                     
                                     // Check labelMap for direct matches (floats or specific labels)
                                     const directMatchId = labelMap.get(normOrphan);
-                                    if (directMatchId) {
+                                    if (directMatchId && !semanticContext.affiliation) {
                                         partMatched=true;
                                         if(duplicateLabels.has(normOrphan))ambiguous=true;
                                         detectedIds.add(directMatchId);
@@ -484,11 +491,13 @@ const CitationLinker: React.FC = () => {
                                         const citedAuthors=authorWords(trimmed);
 
                                         const bibMatchesWhole = nameDateIndex.filter(b => b.normalized === normOrphan);
-                                        if (bibMatchesWhole.length > 0) {
+                                        if (bibMatchesWhole.length > 0 && !semanticContext.affiliation) {
+                                            targetType='bibliography';
                                             partMatched=true;
                                             if(new Set(bibMatchesWhole.map(m=>m.id)).size!==1)ambiguous=true;
                                             bibMatchesWhole.forEach(m => detectedIds.add(m.id));
-                                        } else if (orphanFirstName && orphanYears.length > 0) {
+                                        } else if (orphanFirstName && orphanYears.length > 0 && !semanticContext.affiliation) {
+                                            targetType='bibliography';
                                             orphanYears.forEach(year => {
                                                 const matches = nameDateIndex.filter(b => 
                                                     b.firstName === orphanFirstName && 
@@ -518,6 +527,22 @@ const CitationLinker: React.FC = () => {
                         if(replacements.length&&replacements.every(Boolean)){mappedIds=[...new Set(replacements)];incomplete=false;ambiguous=false;}
                     }
                     if(localHref)mappedIds=[]; // Installed VTOOL rejects bare fragments on URI link elements; do not emit an invalid repair.
+                    // History remains advisory: it cannot override current XML context or target semantics.
+                    const mappedTypes=new Set(mappedIds.map(id=>citationTargetType(structure.nodes.find(node=>node.attributes.id===id)!)));
+                    if(mappedIds.some(id=>{
+                        const target=structure.nodes.find(node=>node.attributes.id===id);
+                        if(!target)return true;
+                        const type=citationTargetType(target);
+                        if(semanticContext.affiliation&&type!=='affiliation'||semanticContext.bracketed&&(type!=='bibliography'||!structure.references.includes(target))||!semanticContext.affiliation&&semanticContext.objectName&&target.name!==semanticContext.objectName||!semanticContext.affiliation&&semanticContext.authorYear&&(type!=='bibliography'||!structure.references.includes(target))||baseTag==='float-anchor'&&type!=='object')return true;
+                        if(semanticContext.numeric){
+                            const parts=structure.textContent(parsedNode).replace(/[\[\]]/g,'').split(/[,;]|\band\b/).map(part=>part.trim());
+                            // Group/range eligibility was established above; histories cannot revive an ambiguous numeric result.
+                            if(incomplete||ambiguous)return true;
+                            if(parts.length===1&&/^\d+$/.test(parts[0])){const eligible=citationNumericCandidates(structure,parsedNode,parts[0]);if(eligible.length!==1||eligible[0].id!==id)return true;}
+                        }
+                        return false;
+                    })||mappedTypes.size>1){mappedIds=[];incomplete=true;}
+                    if(mappedIds.length&&mappedTypes.size===1)targetType=[...mappedTypes][0];
                     const targetIsPlural = mappedIds.length > 1;
 
                     if (((!isInterRef || localHref) && missingRefid && mappedIds.length > 0) || !missingRefid || (isInterRef && !localHref)) {
@@ -525,6 +550,7 @@ const CitationLinker: React.FC = () => {
                     }
 
                     orphans.push({
+                        targetType,
                         start:parsedNode.start,existingHref,linkAttribute:localHref?'xlink:href':'refid',
                         reason:localHref?'Bare fragment URI requires link-type review. Installed VTOOL rejects it on this element; use a same-document ce:cross-ref with refid after verifying the intended target.':baseTag==='float-anchor'&&mappedIds.length?'Replacement supported by the ID Prefix Auditor change history; review before applying.':ambiguous?'Multiple possible targets; review required.':incomplete?'At least one citation part has no unique target; the whole link is preserved.':mappedIds.length?'Matching unique target(s) found.':'No unique matching target found.',
                         id: `orphan_${orphans.length}`,
@@ -846,9 +872,9 @@ const CitationLinker: React.FC = () => {
                                         </div>
                                         <p className="text-xs mt-2 text-slate-600">{res.reason}</p>
                                         {res.missingRefid && res.linkAttribute === 'refid' && ['cross-ref', 'cross-refs'].includes(res.tagType) && (res.status !== 'resolved' || res.manualTarget) && (() => {
-                                            const candidates = citationReviewCandidates(input, res.textContent);
+                                            const candidates = res.targetType==='affiliation'?numericReviewCandidates(input,res):[...numericReviewCandidates(input,res),...citationReviewCandidates(input, res.textContent)];
                                             return candidates.length > 0 ? <label className="block mt-3 text-xs text-slate-700">
-                                                Choose a verified bibliography target (no automatic abbreviation linking)
+                                                Choose an eligible target after reviewing its type and content
                                                 <select aria-label={`Review target for ${res.textContent}`} className="block mt-1 w-full border rounded p-2" value={res.manualTarget || ''} onChange={event => {
                                                     try {
                                                         const target = event.target.value;
@@ -859,7 +885,7 @@ const CitationLinker: React.FC = () => {
                                                     <option value="">Leave unresolved</option>
                                                     {candidates.map(candidate => <option key={candidate.id} value={candidate.id}>{candidate.id} — {candidate.preview}</option>)}
                                                 </select>
-                                                <span className="block mt-1">Compare the title and author list before selecting. Grouped citations require manual XML review.</span>
+                                                <span className="block mt-1">Compare the target type, label and content before selecting. Grouped citations require manual XML review.</span>
                                             </label> : null;
                                         })()}
 

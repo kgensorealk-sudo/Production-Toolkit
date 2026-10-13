@@ -1,4 +1,5 @@
 import { scanReferenceXml } from './referenceUpdaterXml';
+import {citationNumericCandidates,citationTargetType,type CitationTargetType} from './citationLinkerEdits';
 
 export function citationReviewCandidates(input: string, citation: string) {
     // A single selection cannot safely resolve a grouped citation.
@@ -23,11 +24,30 @@ export function citationReviewCandidates(input: string, citation: string) {
     });
 }
 
-export function reviewCitationTarget<T extends { start: number; originalTag: string; textContent: string; linkAttribute: string; tagType: string }>(input: string, row: T, target: string) {
+export function numericReviewCandidates(input:string,row:{start:number;originalTag:string}){
+    const parsed=scanReferenceXml(input,{allowDuplicateIds:true});
+    const node=parsed.nodes.find(node=>node.start===row.start);
+    if(!node||input.slice(node.start,node.end)!==row.originalTag)return [];
+    // A single-choice review must never truncate a group or range.
+    const number=parsed.textContent(node).trim().match(/^(?:\[\s*(\d+)\s*\]|(\d+))$/);
+    if(!number)return [];
+    return citationNumericCandidates(parsed,node,number[1]||number[2]).flatMap(candidate=>{
+        if(parsed.nodes.filter(target=>target.attributes.id===candidate.id).length!==1)return [];
+        return [{id:candidate.id,label:number[1]||number[2],preview:`${candidate.node.name} — ${parsed.textContent(candidate.node).replace(/\s+/g,' ').trim().slice(0,400)}`}];
+    });
+}
+
+export function reviewCitationTarget<T extends { start: number; originalTag: string; textContent: string; linkAttribute: string; tagType: string;targetType?:CitationTargetType }>(input: string, row: T, target: string) {
     const parsed = scanReferenceXml(input, { allowDuplicateIds: true });
     const node = parsed.nodes.find(n => n.start === row.start);
     if (!node || input.slice(node.start, node.end) !== row.originalTag) throw new Error('Citation review is stale. Analyze the current XML.');
     if (row.linkAttribute !== 'refid' || !['cross-ref', 'cross-refs'].includes(row.tagType)) throw new Error('This link type needs manual XML review.');
-    if (!citationReviewCandidates(input, row.textContent).some(c => c.id === target)) throw new Error('Select an eligible, uniquely identified bibliography target.');
-    return { ...row, mappedIds: [target], targetIsPlural: false, status: 'resolved' as const, manualTarget: target, reason: 'Bibliography target explicitly selected by the user.' };
+    const numeric=/^(?:\[\s*\d+\s*\]|\d+)$/.test(parsed.textContent(node).trim());
+    if(numeric){
+        if(!numericReviewCandidates(input,row).some(candidate=>candidate.id===target))throw Error('Select an eligible, uniquely identified numeric target.');
+        return {...row,targetType:citationTargetType(parsed.nodes.find(node=>node.attributes.id===target)),mappedIds:[target],targetIsPlural:false,status:'resolved' as const,manualTarget:target,reason:'Numeric target explicitly selected by the user.'};
+    }
+    const authorContext=parsed.nodes.some(parent=>parent.start<node.start&&parent.end>=node.end&&['ce:author-group','ce:author','ce:affiliation','ce:affiliation-group','ce:correspondence'].includes(parent.name));
+    if (authorContext||!citationReviewCandidates(input, parsed.textContent(node)).some(c => c.id === target)) throw new Error('Select an eligible, uniquely identified bibliography target.');
+    return { ...row, targetType:'bibliography' as const, mappedIds: [target], targetIsPlural: false, status: 'resolved' as const, manualTarget: target, reason: 'Bibliography target explicitly selected by the user.' };
 }

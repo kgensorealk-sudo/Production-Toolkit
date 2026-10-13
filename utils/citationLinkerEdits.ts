@@ -1,8 +1,46 @@
 import {scanReferenceXml} from './referenceUpdaterXml';
+export type CitationTargetType='bibliography'|'affiliation'|'object';
+type CitationStructure=ReturnType<typeof scanReferenceXml>;
+type CitationNode=CitationStructure['nodes'][number];
+const objectNames=new Set(['ce:figure','ce:table','ce:display-formula','ce:textbox','ce:footnote','ce:section']);
+const contextCache=new WeakMap<CitationNode,{affiliation:boolean;numeric:boolean;bracketed:boolean;objectName?:string;authorYear:boolean}>();
+const numericIndexes=new WeakMap<CitationStructure,Map<string,Array<{id:string;type:CitationTargetType;node:CitationNode}>>>();
+export function citationTargetContext(structure:CitationStructure,node:CitationNode){
+    const cached=contextCache.get(node);if(cached)return cached;
+    const affiliation=structure.nodes.some(parent=>parent.start<node.start&&parent.end>=node.end&&['ce:author-group','ce:author','ce:affiliation','ce:affiliation-group','ce:correspondence'].includes(parent.name));
+    const text=structure.textContent(node).trim();
+    const numeric=/^(?:\[\s*\d+(?:\s*(?:[,;–—-]|\band\b)\s*\d+)*\s*\]|\d+(?:\s*(?:[,;–—-]|\band\b)\s*\d+)*)$/.test(text);
+    const objectName=([
+        [/^fig(?:ure)?s?\.?\s+/i,'ce:figure'],[/^tables?\s+/i,'ce:table'],[/^(?:eq(?:uation)?s?\.?)\s+/i,'ce:display-formula'],
+        [/^(?:notes?|footnotes?)\s+/i,'ce:footnote'],[/^(?:box|boxes)\s+/i,'ce:textbox'],[/^sections?\s+/i,'ce:section']
+    ] as Array<[RegExp,string]>).find(([pattern])=>pattern.test(text))?.[1];
+    const authorYear=!numeric&&!objectName&&/[\p{L}\p{M}]/u.test(text)&&/\b(?:18|19|20)\d{2}[a-z]?\b/i.test(text);
+    const context={affiliation,numeric,bracketed:!affiliation&&numeric&&text.startsWith('['),objectName,authorYear};
+    contextCache.set(node,context);return context;
+}
+export function citationNumericCandidates(structure:CitationStructure,node:CitationNode,number:string){
+    const context=citationTargetContext(structure,node);
+    let index=numericIndexes.get(structure);
+    if(!index){index=new Map();for(const target of structure.nodes){
+        const type:CitationTargetType|undefined=target.name==='ce:bib-reference'&&structure.references.includes(target)?'bibliography':target.name==='ce:affiliation'?'affiliation':objectNames.has(target.name)?'object':undefined;
+        if(!type||!target.attributes.id)continue;
+        const label=structure.nodes.find(child=>child.name==='ce:label'&&child.start>=target.openEnd&&child.end<=target.closeStart&&!structure.nodes.some(parent=>parent!==target&&parent.start>=target.openEnd&&parent.start<child.start&&parent.end>=child.end));
+        const value=label?structure.textContent(label).replace(/[\[\]]/g,'').trim():'';
+        if(!/^\d+$/.test(value))continue;
+        const key=type+'|'+value;index.set(key,[...(index.get(key)||[]),{id:target.attributes.id,type,node:target}]);
+    }numericIndexes.set(structure,index);}
+    const types:CitationTargetType[]=context.affiliation?['affiliation']:context.bracketed?['bibliography']:['bibliography','object'];
+    return types.flatMap(type=>index!.get(type+'|'+number)||[]);
+}
+export function citationTargetType(node:CitationNode|undefined):CitationTargetType|undefined{
+    if(!node)return undefined;
+    return node.name==='ce:bib-reference'?'bibliography':node.name==='ce:affiliation'?'affiliation':objectNames.has(node.name)?'object':undefined;
+}
 export interface LinkEdit {
     start:number; originalTag:string; existingId:string; existingRefid:string; existingHref?:string;
     linkAttribute?:'refid'|'xlink:href'; mappedIds:string[]; status:string; missingId:boolean;
     missingRefid:boolean; isDuplicate:boolean; originalIsPlural:boolean; tagType:string;
+    targetType?:CitationTargetType; manualTarget?:string;
 }
 export function applyCitationLinks(input:string, rows:LinkEdit[], options:{targetMissingId:boolean;targetDuplicateId:boolean;targetMissingRefid:boolean;cfStart:number}) {
     const structure=scanReferenceXml(input,{allowDuplicateIds:true});
@@ -20,6 +58,29 @@ export function applyCitationLinks(input:string, rows:LinkEdit[], options:{targe
         };
         if(options.targetMissingRefid&&row.missingRefid&&row.status==='resolved'){
             if(!row.mappedIds.length||row.mappedIds.some(id=>structure.nodes.filter(n=>n.attributes.id===id).length!==1))throw Error('A proposed target is missing or ambiguous. Re-analyze the XML.');
+            const context=citationTargetContext(structure,node);
+            // Validate a numeric group once, before planning any edits for this row.
+            if(context.numeric){
+                const numbers=structure.textContent(node).replace(/[\[\]]/g,'').trim().split(/[,;]|\band\b/).flatMap(part=>{
+                    const range=part.trim().match(/^(\d+)[–—-](\d+)$/);
+                    if(!range)return [part.trim()];
+                    const a=Number(range[1]),b=Number(range[2]);
+                    if(a>b||b-a>=10000)throw Error('Unsupported numeric range. Re-analyze the XML.');
+                    return Array.from({length:b-a+1},(_,index)=>String(a+index));
+                });
+                const eligible=numbers.map(number=>citationNumericCandidates(structure,node,number));
+                const manual=row.manualTarget===row.mappedIds[0]&&row.mappedIds.length===1&&numbers.length===1;
+                if(row.mappedIds.some(id=>!eligible.some(list=>list.some(candidate=>candidate.id===id)))||eligible.some(list=>list.length!==1)&&!manual)throw Error('Numeric target is ineligible or ambiguous; manual review required.');
+                if(!manual){
+                    const candidates=eligible.flat(),expected=new Set(candidates.map(candidate=>candidate.id));
+                    if(new Set(candidates.map(candidate=>candidate.type)).size!==1||expected.size!==new Set(row.mappedIds).size||row.mappedIds.some(mapped=>!expected.has(mapped)))throw Error('Incomplete or mixed-type numeric target group; manual XML review required.');
+                }
+            }
+            for(const id of row.mappedIds){
+                const target=structure.nodes.find(n=>n.attributes.id===id)!;
+                const type=citationTargetType(target);
+                if((row.targetType&&row.targetType!==type)||(context.affiliation&&type!=='affiliation')||(context.bracketed&&(type!=='bibliography'||!structure.references.includes(target)))||(!context.affiliation&&context.objectName&&target.name!==context.objectName)||(!context.affiliation&&context.authorYear&&(type!=='bibliography'||!structure.references.includes(target)))||(node.name==='ce:float-anchor'&&type!=='object'))throw Error('Proposed target has an incompatible citation semantic type. Re-analyze the XML.');
+            }
             if(row.linkAttribute==='xlink:href')setAttribute('xlink:href','#'+row.mappedIds[0]);
             else {
                 setAttribute('refid',row.mappedIds.join(' '));
