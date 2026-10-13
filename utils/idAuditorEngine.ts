@@ -1,5 +1,6 @@
 import rules from './idAuditorRules.json';
 import {scanReferenceXml} from './referenceUpdaterXml';
+import {synchronizeXmlIds,xmlReferenceTargets,validateXmlIdRepairEvidence,type XmlIdChange,type XmlReferenceQa,type XmlReferenceChange,type XmlIdRepairEvidence,type XmlIdRepairOrigin} from './xmlIdIntegrity';
 
 export const ID_RULES = rules;
 export interface IdAuditItem {
@@ -49,6 +50,7 @@ function targetIds(nodes: ReturnType<typeof scanReferenceXml>['nodes']): Set<str
         for (const id of (node.attributes.refid || '').split(/\s+/).filter(Boolean)) targets.add(id);
         const fragment = fragmentTarget(node.attributes['xlink:href'] || '');
         if (fragment) targets.add(fragment);
+        if(node.attributes.biographyid)targets.add(node.attributes.biographyid);
     }
     return targets;
 }
@@ -90,13 +92,13 @@ export function auditElementIds(xml: string, overrides: PrefixOverrides = {}): I
             isLengthViolation,isDuplicate,prefixSource:Object.prototype.hasOwnProperty.call(overrides,node.name)?'custom':node.name==='ce:figure'&&expectedPrefix==='sch'?'workflow':rule?.source||'unconfigured',needsReview,needsPrefix,reason,preview:structure.metadataXml.slice(node.openEnd,node.closeStart).replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,100),fullTag:xml.slice(node.start,node.openEnd)}];
     });
 }
-export function repairElementIds(xml: string, overrides: PrefixOverrides = {}): {output:string;changed:number} {
+export function repairElementIds(xml: string, overrides: PrefixOverrides = {}) {
     const structure=scanReferenceXml(xml,{allowDuplicateIds:true});
     const schemes=schemeFigures(structure);
     const rows=auditElementIds(xml,overrides);
     const ambiguous = rows.find(row => row.needsReview);
     if (ambiguous) throw new Error(`Linked duplicate ID ${ambiguous.originalId} is ambiguous. Review its owners and citation targets in the original XML before fixing IDs. No output was generated.`);
-    const occupied=new Set([...structure.ids, ...targetIds(structure.nodes)]), retained=new Set<string>(), counters=new Map<string,number>();
+    const occupied=new Set([...structure.ids, ...xmlReferenceTargets(xml,structure)]), retained=new Set<string>(), counters=new Map<string,number>();
     for(const node of structure.nodes) if(node.attributes.id && !/^[a-z]+$/.test(resolvePrefix(node.name,node.attributes,overrides))) retained.add(node.attributes.id);
     const allocate=(prefix:string)=>{
         for(let attempt=0;attempt<1999;attempt++) {
@@ -107,21 +109,17 @@ export function repairElementIds(xml: string, overrides: PrefixOverrides = {}): 
         }
         throw new Error(`No available ${prefix} ID in 0005–9995. No output was generated.`);
     };
-    const edits: Array<{start:number;end:number;text:string}>=[];
-    for(const node of structure.nodes) {
+    const idChanges:XmlIdChange[]=[];
+    for(const [nodeIndex,node] of structure.nodes.entries()) {
         const oldId=node.attributes.id||'';
         const prefix=resolvePrefix(node.name, node.attributes, overrides, schemes.has(node.start));
         if(!/^[a-z]+$/.test(prefix))continue;
         if(validId(oldId,prefix)&&!retained.has(oldId)){retained.add(oldId);continue;}
         const id=allocate(prefix);retained.add(id);
-        const range=node.attributeRanges.id;
-        if(range)edits.push({start:range.valueStart,end:range.valueEnd,text:id});
-        else {const at=node.start+1+node.name.length;edits.push({start:at,end:at,text:` id="${id}"`});}
+        idChanges.push({nodeIndex,tag:node.name,before:oldId,after:id,reason:!oldId?'Generated a missing configured ID.':'Corrected an invalid or unreferenced duplicate ID.'});
     }
-    let output=xml;
-    for(const edit of edits.reverse())output=output.slice(0,edit.start)+edit.text+output.slice(edit.end);
-    scanReferenceXml(output, {allowDuplicateIds:true}); // Preserve unresolved IDs on unconfigured elements; allocations remain unique.
-    return {output,changed:edits.length};
+    const result=synchronizeXmlIds(xml,idChanges);
+    return {...result,changed:idChanges.length};
 }
 
 export interface IdQaIssue {
@@ -133,8 +131,11 @@ export interface IdQaIssue {
 export interface IdQaReport {
     stage: 'audit' | 'repair'; issues: IdQaIssue[];
     changes: Array<{tag:string;line:number;before:string;after:string;reason:string}>;
+    idChanges:XmlIdChange[]; referenceChanges:XmlReferenceChange[]; referenceQa:XmlReferenceQa;
+    repairEvidence?:XmlIdRepairEvidence;
+    originVerified:boolean;
 }
-export function createIdQaReport(original: string, output?: string): IdQaReport {
+export function createIdQaReport(original: string, output?: string, trustedOrigin?:XmlIdRepairOrigin): IdQaReport {
     const before = scanReferenceXml(original, {allowDuplicateIds:true});
     const currentXml = output ?? original;
     const current = scanReferenceXml(currentXml, {allowDuplicateIds:true});
@@ -179,5 +180,14 @@ export function createIdQaReport(original: string, output?: string): IdQaReport 
             issues.push({kind:now.length>1?'ambiguous-target':'missing-target',tag:node.name,elementId:node.attributes.id || '(missing)',line:line(node.start),target,text:preview(node,current.metadataXml),before:was.length===0?'No target element.':`${was.length} target element(s).`,after:now.length===0?'No target element.':`${now.length} target element(s).`,reason,action:now.length>1?'Review the listed owners in the original XML and resolve their IDs and citation intent before re-running this auditor.':'Verify the intended reference or object using the citation context. Review the affected links in Citation Linker Pro; no replacement target has been selected automatically.',owners:(now.length?now:was).map(owner=>`${owner.name} id="${owner.attributes.id}": ${preview(owner,now.length?current.metadataXml:before.metadataXml)}`)});
         }
     }
-    return {stage:output===undefined?'audit':'repair',issues,changes};
+    const idChanges:XmlIdChange[]=current.nodes.flatMap((node,nodeIndex)=>{
+        const old=before.nodes[nodeIndex];return output!==undefined&&old&&old.attributes.id!==node.attributes.id?[{nodeIndex,tag:node.name,before:old.attributes.id||'',after:node.attributes.id||'',reason:changes.find(c=>c.after===node.attributes.id)?.reason||'ID repair.'}]:[];
+    });
+    const integrity=synchronizeXmlIds(original,idChanges);
+    if(integrity.output!==currentXml)throw Error('QA output does not match an atomic ID/reference transformation.');
+    const repairEvidence:XmlIdRepairEvidence|undefined=output===undefined?undefined:{version:1,originalXml:original,outputXml:currentXml,idChanges,referenceChanges:integrity.referenceChanges,...(trustedOrigin?{originId:trustedOrigin.id}:{})};
+    // Legacy two-argument QA remains diagnostic, never authoritative origin proof.
+    const originVerified=!!repairEvidence&&!!trustedOrigin&&validateXmlIdRepairEvidence(repairEvidence,currentXml,trustedOrigin).originVerified;
+    return {stage:output===undefined?'audit':'repair',issues,changes,idChanges,referenceChanges:integrity.referenceChanges,referenceQa:integrity.referenceQa,originVerified,
+        ...(repairEvidence?{repairEvidence}:{})};
 }

@@ -4,7 +4,9 @@ import ts from 'typescript';
 const xmlExports={};
 new Function('exports','require',ts.transpileModule(fs.readFileSync('utils/referenceUpdaterXml.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText)(xmlExports,()=>({default:JSON.parse(fs.readFileSync('utils/referenceUpdaterEntities.json','utf8'))}));
 const idExports={};
-new Function('exports','require',ts.transpileModule(fs.readFileSync('utils/idAuditorEngine.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText)(idExports,name=>name.endsWith('.json')?{default:JSON.parse(fs.readFileSync('utils/idAuditorRules.json','utf8'))}:xmlExports);
+const integrityExports={};
+new Function('exports','require',ts.transpileModule(fs.readFileSync('utils/xmlIdIntegrity.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText)(integrityExports,()=>xmlExports);
+new Function('exports','require',ts.transpileModule(fs.readFileSync('utils/idAuditorEngine.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText)(idExports,name=>name.endsWith('.json')?{default:JSON.parse(fs.readFileSync('utils/idAuditorRules.json','utf8'))}:name.includes('xmlIdIntegrity')?integrityExports:xmlExports);
 const source=fs.readFileSync('pages/IdAuditor.tsx','utf8');
 const ast=ts.createSourceFile('IdAuditor.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
 const names=new Set(['ID_CONFIG','invalidateGeneratedResult','runAudit','executeFix']);const declarations={};
@@ -13,7 +15,7 @@ assert.equal(Object.keys(declarations).length,names.size);
 const compiled=ts.transpileModule(Object.values(declarations).join('\n'),{compilerOptions:{target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.React}}).outputText;
 function engine(input,state={},options={}){
     const noop=()=>{};
-    const args={...idExports, prefixOverrides:{},auditResults:state.results||[],inputKeyRef:state.inputKeyRef??={current:input},operationRef:state.operationRef??={current:0},input,setTimeout:fn=>fn(),setToast:t=>(state.toasts??=[]).push(t),setIsLoading:value=>state.loading=value,setSuggestions:s=>state.suggestions=typeof s==='function'?s(state.suggestions||[]):s,setAuditResults:r=>state.results=r,setQaReport:r=>state.qaReport=r,setDiffElements:value=>state.diffElements=value,setStep:noop,setActiveTab:noop,setOutput:o=>state.output=o,generateDiff:(a,b)=>state.diff=[a,b],React:{createElement:()=>({})},Hash:noop,LinkIcon:noop,Trash2:noop,Eraser:noop,RefreshCw:noop,Box:noop,...options};
+    const args={...idExports,captureXmlIdRepairOrigin:integrityExports.captureXmlIdRepairOrigin, prefixOverrides:{},auditResults:state.results||[],inputKeyRef:state.inputKeyRef??={current:input},operationRef:state.operationRef??={current:0},input,setTimeout:fn=>fn(),setToast:t=>(state.toasts??=[]).push(t),setIsLoading:value=>state.loading=value,setSuggestions:s=>state.suggestions=typeof s==='function'?s(state.suggestions||[]):s,setAuditResults:r=>state.results=r,setQaReport:r=>state.qaReport=r,setDiffElements:value=>state.diffElements=value,setStep:noop,setActiveTab:noop,setOutput:o=>state.output=o,generateDiff:(a,b)=>state.diff=[a,b],React:{createElement:()=>({})},Hash:noop,LinkIcon:noop,Trash2:noop,Eraser:noop,RefreshCw:noop,Box:noop,...options};
     return new Function(...Object.keys(args),compiled+'\nreturn {invalidateGeneratedResult,runAudit,executeFix};')(...Object.values(args));
 }
 const valid='<ce:bib-reference id="bb0005"><ce:other-ref id="or0005"><ce:textref id="tr0005"><ce:given-name>A B</ce:given-name> text</ce:textref></ce:other-ref></ce:bib-reference>';
@@ -23,7 +25,8 @@ api.executeFix();assert.equal(state.output,valid);
 const changed='<ce:author-group><ce:author><ce:given-name>C D</ce:given-name></ce:author></ce:author-group><ce:bib-reference id="bad"><sb:reference id="wrong"><sb:author><ce:given-name>A. B.</ce:given-name></sb:author></sb:reference><ce:source-text id="text">unchanged content</ce:source-text></ce:bib-reference><ce:cross-refs id="link" refid="bad wrong">[1]</ce:cross-refs><ce:inter-ref id="external" xlink:href="#bad">web</ce:inter-ref>';
 state={};api=engine(changed,state);api.runAudit();api.executeFix();
 const stripIds=xml=>xml.replace(/\s+id="[^"]*"/g,'');
-assert.equal(stripIds(state.output),stripIds(changed));assert.ok(state.output.includes('refid="bad wrong"'));assert.ok(state.output.includes('xlink:href="#bad"'));
+// Unit A supersedes ID-only link preservation, while preserving all other bytes.
+assert.equal(stripIds(state.output),stripIds(changed.replace('refid="bad wrong"','refid="bb3000 rf3000"').replace('xlink:href="#bad"','xlink:href="#bb3000"')));assert.ok(state.output.includes('refid="bb3000 rf3000"'));assert.ok(state.output.includes('xlink:href="#bb3000"'));
 assert.ok(state.output.includes('id="bb3000"'));assert.deepEqual(state.diff,[changed,state.output]);
 state={};api=engine('<ce:para>Plain text</ce:para>',state);api.runAudit();api.executeFix();assert.equal(state.output,'<ce:para id="p3000">Plain text</ce:para>');
 state={};api=engine('<ce:para id="p0005">First</ce:para><ce:para id="p0005">Second</ce:para>',state);api.runAudit();assert.ok(state.results.every(r=>r.isDuplicate));api.executeFix();assert.equal(new Set([...state.output.matchAll(/id="([^"]+)"/g)].map(m=>m[1])).size,2);
@@ -74,8 +77,11 @@ for(const rule of editorRules){
  assert.equal(idExports.repairElementIds(damaged).output,damaged.replace('id="wrong"',`id="${prefix}3000"`));
 }
 const mixed='<ce:inter-ref type="code" id="ir0005" xlink:href="https://example.test/code">A</ce:inter-ref><ce:inter-refs id="qr0005">B</ce:inter-refs><ce:inter-ref type="code" id="qr3000">C</ce:inter-ref><ce:cross-ref id="cf0005" refid="ir0005 qr0005">D</ce:cross-ref>';
-const mixedFixed=idExports.repairElementIds(mixed).output;
-assert.equal(mixedFixed,mixed.replace('id="ir0005"','id="qr3005"').replace('id="qr0005"','id="ir3000"'));
+// The original singular IDREF contains two targets: Unit A must fail atomically.
+assert.throws(()=>idExports.repairElementIds(mixed),/single IDREF/);
+const mixedPlural=mixed.replaceAll('ce:cross-ref','ce:cross-refs');
+const mixedFixed=idExports.repairElementIds(mixedPlural).output;
+assert.equal(mixedFixed,mixedPlural.replace('id="ir0005"','id="qr3005"').replace('id="qr0005"','id="ir3000"').replace('refid="ir0005 qr0005"','refid="qr3005 ir3000"'));
 assert.equal(idExports.repairElementIds(mixedFixed).changed,0);
 assert.equal(idExports.auditElementIds('<ce:inter-ref type="&#99;ode" id="qr0005"/>')[0].status,'valid');
 assert.equal(idExports.auditElementIds('<ce:inter-ref type="Code" id="ir0005"/>')[0].status,'valid');
@@ -110,8 +116,8 @@ assert.equal(idExports.analyzeIdLinks(grouped).uncitedCount,0);
 state={};api=engine(grouped,state);api.runAudit();api.executeFix();assert.ok(!state.suggestions.some(s=>s.id==='uncited-cleaner'));
 const brokenAfter='<ce:bib-reference id="bad"/><ce:cross-ref id="cf0005" refid="bad"/> ';
 state={};api=engine(brokenAfter,state);api.runAudit();assert.ok(!state.suggestions.some(s=>s.id==='citation-linker'));api.executeFix();
-assert.ok(state.suggestions.some(s=>s.id==='citation-linker'));assert.ok(!state.suggestions.some(s=>s.id==='uncited-cleaner'));assert.equal(state.toasts.at(-1).type,'warn');
-assert.equal(idExports.analyzeIdLinks(state.output).brokenTargets,1);
+assert.ok(!state.suggestions.some(s=>s.id==='citation-linker'));assert.ok(!state.suggestions.some(s=>s.id==='uncited-cleaner'));assert.equal(state.toasts.at(-1).type,'success');
+assert.equal(idExports.analyzeIdLinks(state.output).brokenTargets,0);
 state={};api=engine('<ce:bib-reference id="bb0005"/><ce:bib-reference id="bb0010"/><ce:cross-ref id="cf0005" refid="bb0005"/>',state);api.runAudit();assert.ok(state.suggestions.find(s=>s.id==='uncited-cleaner').description.includes('1 reference(s)'));
 assert.equal(idExports.analyzeIdLinks('<ce:bib-reference id="bb0005"/><ce:cross-ref id="cf0005" refid="bb&#48;005"/>').uncitedCount,0);
 assert.equal(idExports.analyzeIdLinks('<!-- <ce:cross-ref refid="bb0005"/> --><ce:bib-reference id="bb0005"/>').uncitedCount,1);
@@ -124,8 +130,8 @@ assert.ok(qaCapture.issues[0].reason.includes('already absent'));
 assert.ok(qaCapture.issues[0].reason.includes('reserved'));
 assert.equal(qaCapture.changes[0].after,'bb3005');
 const qaChanged=idExports.createIdQaReport(brokenAfter,idExports.repairElementIds(brokenAfter).output);
-assert.ok(qaChanged.issues[0].reason.includes('bad to bb3000'));
-assert.ok(qaChanged.issues[0].owners[0].includes('id="bad"'));
+assert.equal(qaChanged.referenceChanges[0].before,'bad');
+assert.equal(qaChanged.referenceChanges[0].after,'bb3000');
 const qaDup=idExports.createIdQaReport('<ce:bib-reference id="bb0005">First work</ce:bib-reference><ce:bib-reference id="bb0005">Second work</ce:bib-reference><ce:cross-ref id="cf0005" refid="bb0005">[2]</ce:cross-ref>');
 assert.equal(qaDup.issues[0].kind,'ambiguous-target');assert.equal(qaDup.issues[0].owners.length,2);assert.equal(qaDup.issues[0].text,'[2]');
 assert.equal(idExports.createIdQaReport(grouped).issues.length,0);
@@ -133,7 +139,7 @@ assert.equal(idExports.createIdQaReport('<ce:cross-ref id="cf0005">Smith, 2020</
 console.log('QA report before/after evidence and recommendation cases passed.');
 
 assert.ok(idExports.createIdQaReport('<ce:para id="p0005"/><ce:cross-ref id="cf0005" xlink:href="#p0005"/>').issues.some(issue=>issue.kind==='missing-refid'));
-state={};api=engine(brokenAfter,state);api.runAudit();assert.equal(state.qaReport.issues.length,0);api.executeFix();assert.equal(state.qaReport.issues[0].target,'bad');assert.equal(state.qaReport.changes[0].after,'bb3000');
+state={};api=engine(brokenAfter,state);api.runAudit();assert.equal(state.qaReport.issues.length,0);api.executeFix();assert.equal(state.qaReport.referenceChanges[0].before,'bad');assert.equal(state.qaReport.changes[0].after,'bb3000');
 assert.ok(source.includes("if (sug.id === 'citation-linker')"));
 
 const timers=[];state={};api=engine(changed,state,{setTimeout:fn=>timers.push(fn)});
@@ -170,3 +176,16 @@ assert.equal(idExports.repairElementIds(ordinary).output,ordinary);
 assert.equal(idExports.auditElementIds('<ce:figure><ce:label>Scheme 1</ce:label></ce:figure>',{'ce:figure':'custom'})[0].expectedPrefix,'custom');
 assert.throws(()=>idExports.repairElementIds(schemeXml+'<ce:figure id="sch0005"/>'),/Linked duplicate/);
 console.log('PASS Scheme preservation, linked target preservation, missing/malformed Scheme IDs, formatted labels, collisions, ordinary figures and explicit overrides');
+
+// R1 lifecycle: execute the actual component body and real origin/QA helpers.
+const originInput='<ce:para id="oldA">First owner</ce:para><ce:para id="oldB">Second owner</ce:para><ce:cross-ref id="cf0005" refid="oldB">See B</ce:cross-ref>';
+const originTimers=[];let capturedOriginal;
+state={};api=engine(originInput,state,{setTimeout:fn=>originTimers.push(fn),captureXmlIdRepairOrigin:xml=>{capturedOriginal=xml;return integrityExports.captureXmlIdRepairOrigin(xml);}});
+api.executeFix();assert.equal(capturedOriginal,originInput);assert.equal(originTimers.length,1);assert.equal(state.output,undefined);
+originTimers.shift()();assert.equal(state.qaReport.originVerified,true);assert.equal(state.qaReport.repairEvidence.originalXml,originInput);assert.ok(state.output.includes('refid="p3005"'));
+const substitutedOriginal='<ce:para id="oldB">First owner</ce:para><ce:para id="oldA">Second owner</ce:para><ce:cross-ref id="cf0005" refid="oldA">See B</ce:cross-ref>';
+const substitutedOutput=idExports.repairElementIds(substitutedOriginal).output;
+assert.equal(substitutedOutput,state.output);
+state={output:'previous output'};api=engine(originInput,state,{createIdQaReport:(_original,_output,origin)=>idExports.createIdQaReport(substitutedOriginal,substitutedOutput,origin)});
+api.executeFix();assert.equal(state.output,'');assert.equal(state.qaReport,null);assert.equal(state.diffElements,null);assert.equal(state.toasts.at(-1).type,'error');assert.match(state.toasts.at(-1).msg,/independently captured original/);
+console.log('PASS R1 independent application snapshot capture and forged-owner failure before output publication');

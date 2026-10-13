@@ -9,6 +9,7 @@ import LoadingOverlay from '../components/LoadingOverlay';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 
 import { ID_RULES, auditElementIds, repairElementIds, analyzeIdLinks, createIdQaReport, IdQaReport, IdAuditItem, PrefixOverrides } from '../utils/idAuditorEngine';
+import {captureXmlIdRepairOrigin} from '../utils/xmlIdIntegrity';
 type AuditItem = IdAuditItem;
 const ID_CONFIG = ID_RULES;
 
@@ -40,8 +41,9 @@ const IdAuditor: React.FC = () => {
     const [auditPage, setAuditPage] = useState(0);
     const [qaChangesPage, setQaChangesPage] = useState(0);
     const [qaIssuesPage, setQaIssuesPage] = useState(0);
+    const [qaReferencesPage,setQaReferencesPage]=useState(0);
     useEffect(() => setAuditPage(0), [auditResults, filterInvalidOnly]);
-    useEffect(() => { setQaChangesPage(0); setQaIssuesPage(0); }, [qaReport]);
+    useEffect(() => { setQaChangesPage(0); setQaIssuesPage(0); setQaReferencesPage(0); }, [qaReport]);
 
     const escapeHtml = (unsafe: string) => unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -344,13 +346,16 @@ const IdAuditor: React.FC = () => {
     const executeFix = () => {
         const snapshot = inputKeyRef.current;
         const operation = ++operationRef.current;
+        // Application input, captured before repair and outside any evidence envelope.
+        const originalXml=input;
+        const trustedOrigin=captureXmlIdRepairOrigin(originalXml);
         setIsLoading(true);
         setTimeout(() => {
             if (operation !== operationRef.current || snapshot !== inputKeyRef.current) return;
             try {
-                const {output: processedXml} = repairElementIds(input, prefixOverrides);
+                const {output: processedXml} = repairElementIds(originalXml, prefixOverrides);
                 const links = analyzeIdLinks(processedXml);
-                setQaReport(createIdQaReport(input, processedXml));
+                setQaReport(createIdQaReport(originalXml, processedXml,trustedOrigin));
                 // Refresh only link-related recommendations against the actual output.
                 setSuggestions(previous => {
                     const updated = previous.filter(item => item.id !== 'citation-linker' && item.id !== 'uncited-cleaner');
@@ -362,13 +367,14 @@ const IdAuditor: React.FC = () => {
                     return updated;
                 });
                 setOutput(processedXml);
-                generateDiff(input, processedXml);
+                generateDiff(originalXml, processedXml);
                 setActiveTab('xml');
                 setStep('result');
                 setToast(auditResults.some(row => row.needsPrefix) ? {msg:"Configured IDs corrected. Unconfigured elements were preserved; see the QA Report.", type:"warn"} : links.unlinkedCitations || links.brokenTargets ? {msg:"IDs corrected. Some citation or local link targets require review with Citation Linker Pro.", type:"warn"} : {msg:"IDs corrected.", type:"success"});
                 setIsLoading(false);
             } catch (err) {
                 setOutput('');
+                setQaReport(null);
                 setDiffElements(null);
                 setToast({ msg: err instanceof Error ? err.message : "ID correction failed.", type: "error" });
                 setIsLoading(false);
@@ -391,7 +397,7 @@ const IdAuditor: React.FC = () => {
                 <section id="id-qa-report" className="p-6 bg-white rounded-2xl">
                     <h3 className="font-bold text-lg text-slate-900">QA Report — {qaReport.changes.length} ID changes; {qaReport.issues.length} link issues</h3>
                     <div className="mt-4 space-y-4">
-                        <p className="text-sm text-slate-600">Review what happened and the affected targets before using another tool. Citation and link attributes remain unchanged.</p>
+                        <p className="text-sm text-slate-600">Review ID mappings and reference ownership before using another tool. Supported references follow uniquely identified renamed targets; unresolved and unsupported links require review.</p>
                         {auditResults.some(row => row.needsPrefix) && <div className="bg-sky-50 border border-sky-200 p-4 rounded-lg text-sky-900 space-y-3">
                             <h3 className="font-semibold">Unconfigured prefixes — skipped elements</h3>
                             <p className="text-sm">These tags have no configured prefix. Existing IDs are preserved and missing IDs remain missing. IDs are generated for configured tags. Set a prefix and re-audit to include the skipped elements.</p>
@@ -405,7 +411,14 @@ const IdAuditor: React.FC = () => {
                         {qaReport.changes.length > 0 && <div className="overflow-auto"><table className="w-full text-sm text-left"><thead><tr><th>Element / line</th><th>Before ID</th><th>After ID</th><th>Why changed</th></tr></thead><tbody>{qaReport.changes.slice(qaChangesPage * 50, (qaChangesPage + 1) * 50).map((change,index) => <tr key={index} className="border-t"><td className="p-2">{change.tag} / {change.line}</td><td className="p-2 font-mono">{change.before}</td><td className="p-2 font-mono">{change.after}</td><td className="p-2">{change.reason}</td></tr>)}</tbody></table>
                             {qaReport.changes.length > 50 && <div className="flex gap-3 items-center p-2"><button disabled={qaChangesPage===0} onClick={()=>setQaChangesPage(page=>page-1)}>Previous ID changes</button><span>Page {qaChangesPage+1} of {Math.ceil(qaReport.changes.length/50)}</span><button disabled={(qaChangesPage+1)*50>=qaReport.changes.length} onClick={()=>setQaChangesPage(page=>page+1)}>Next ID changes</button></div>}
                         </div>}
-                        {qaReport.issues.length === 0 ? <p className="text-sm text-emerald-700">No unresolved or ambiguous citation/local-link targets were found. Citation Linker Pro is not recommended by this check.</p> : <>
+                        <div className="space-y-2"><h3 className="font-semibold">Reference ownership QA</h3>
+                            <p className="text-sm">{qaReport.originVerified?'Original snapshot verified against application input captured before this repair.':'Diagnostic report only: an independently captured repair origin is unavailable.'}</p>
+                            <p className="text-sm">Updated: {qaReport.referenceQa.updated} · Unchanged: {qaReport.referenceQa.unchanged} · Ambiguous: {qaReport.referenceQa.ambiguous} · Unresolved: {qaReport.referenceQa.unresolved} · Unsupported: {qaReport.referenceQa.unsupported}</p>
+                            <p className="text-xs text-slate-600">Updates retain the original target element, not merely an existing ID. Labels and text are preserved. Unsupported mechanisms are not rewritten. This is not DTD/VTOOL validation.</p>
+                            <div className="overflow-auto"><table className="w-full text-sm text-left"><thead><tr><th>Reference</th><th>Before target</th><th>After target</th><th>Outcome / original owner</th></tr></thead><tbody>{qaReport.referenceQa.outcomes.slice(qaReferencesPage*50,(qaReferencesPage+1)*50).map((item,index)=><tr className="border-t" key={index}><td className="p-2">{item.tag} / {item.attribute}</td><td className="p-2 font-mono">{item.target||'(missing)'}</td><td className="p-2 font-mono">{item.after||'(missing)'}</td><td className="p-2">{item.status} / {item.targetNodeIndex===undefined?'unproven':`node ${item.targetNodeIndex+1}`}</td></tr>)}</tbody></table></div>
+                            {qaReport.referenceQa.outcomes.length>50&&<div className="flex gap-3"><button disabled={qaReferencesPage===0} onClick={()=>setQaReferencesPage(page=>page-1)}>Previous references</button><span>Page {qaReferencesPage+1} of {Math.ceil(qaReport.referenceQa.outcomes.length/50)}</span><button disabled={(qaReferencesPage+1)*50>=qaReport.referenceQa.outcomes.length} onClick={()=>setQaReferencesPage(page=>page+1)}>Next references</button></div>}
+                        </div>
+                        {qaReport.issues.length === 0 ? <p className="text-sm text-emerald-700">No unresolved or ambiguous citation/local-link targets were found by the existing link scan. Check reference ownership QA above for other mechanisms.</p> : <>
                             <h3 className="font-semibold">Why link review is recommended</h3>
                             {qaReport.issues.slice(qaIssuesPage * 50, (qaIssuesPage + 1) * 50).map((issue,index) => <article key={index} className="p-4 border border-amber-200 bg-amber-50 rounded-xl text-sm space-y-2">
                                 <p className="font-semibold">{issue.tag} · ID {issue.elementId} · line {issue.line} · target {issue.target}</p>
@@ -416,7 +429,7 @@ const IdAuditor: React.FC = () => {
                                 <p className="font-semibold">Recommended action: {issue.action}</p>
                             </article>)}
                             {qaReport.issues.length > 50 && <div className="flex gap-3 items-center"><button disabled={qaIssuesPage===0} onClick={()=>setQaIssuesPage(page=>page-1)}>Previous link issues</button><span>Page {qaIssuesPage+1} of {Math.ceil(qaReport.issues.length/50)}</span><button disabled={(qaIssuesPage+1)*50>=qaReport.issues.length} onClick={()=>setQaIssuesPage(page=>page+1)}>Next link issues</button></div>}
-                            {!qaReport.issues.some(issue => issue.kind === 'ambiguous-target') && <button onClick={() => navigate('/citationLinker', {state:{transferredXml:step === 'result' ? output : input,sourceTool:'ID Prefix Auditor',idChanges:step === 'result' ? qaReport.changes : []}})} className="px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold">Open Citation Linker Pro with this XML</button>}
+                            {!qaReport.issues.some(issue => issue.kind === 'ambiguous-target') && <button onClick={() => navigate('/citationLinker', {state:{transferredXml:step === 'result' ? output : input,sourceTool:'ID Prefix Auditor',idChanges:step === 'result' ? qaReport.changes : [],idRepairEvidence:step === 'result'?qaReport.repairEvidence:undefined}})} className="px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold">Open Citation Linker Pro with this XML</button>}
                         </>}
                     </div>
                 </section>

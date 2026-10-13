@@ -1,7 +1,8 @@
 import fs from 'node:fs';import assert from 'node:assert/strict';import ts from 'typescript';
 const compile=p=>ts.transpileModule(fs.readFileSync(p,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
 const xml={};new Function('exports','require',compile('utils/referenceUpdaterXml.ts'))(xml,()=>({default:JSON.parse(fs.readFileSync('utils/referenceUpdaterEntities.json','utf8'))}));
-const e={};new Function('exports','require',compile('utils/idAuditorEngine.ts'))(e,n=>n.endsWith('.json')?{default:JSON.parse(fs.readFileSync('utils/idAuditorRules.json','utf8'))}:xml);
+const integrity={};new Function('exports','require',compile('utils/xmlIdIntegrity.ts'))(integrity,()=>xml);
+const e={};new Function('exports','require',compile('utils/idAuditorEngine.ts'))(e,n=>n.endsWith('.json')?{default:JSON.parse(fs.readFileSync('utils/idAuditorRules.json','utf8'))}:n.includes('xmlIdIntegrity')?integrity:xml);
 const linkEdits={};new Function('exports','require',compile('utils/citationLinkerEdits.ts'))(linkEdits,n=>n.includes('idAuditor')?e:xml);
 const source=fs.readFileSync('pages/CitationLinker.tsx','utf8'),ast=ts.createSourceFile('CitationLinker.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
 const names=new Set(['normalizeCitation','extractYears','extractFirstName','runAnalysis','executeLink']),decls=[];function visit(n){if(ts.isVariableDeclaration(n)&&ts.isIdentifier(n.name)&&names.has(n.name.text))decls.push('const '+n.getText(ast)+';');ts.forEachChild(n,visit);}visit(ast);assert.equal(decls.length,names.size);

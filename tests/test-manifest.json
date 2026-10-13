@@ -3,6 +3,15 @@
   "runtime": "Node 24; verified locally with 24.11.1 on Windows x64",
   "entries": [
     {
+      "file": "tests/id-auditor-referential-integrity.mjs",
+      "kinds": ["behavioral", "source-contract/static"],
+      "baselineDependencies": [],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineClassification": "new Unit A regression"
+    },
+    {
       "file": "tests/affiliation-sequencer-safety.mjs",
       "kinds": [
         "behavioral",
