@@ -3,6 +3,72 @@ import {fromMarkdown} from 'mdast-util-from-markdown';
 import {gfmFromMarkdown} from 'mdast-util-gfm';
 import {gfm} from 'micromark-extension-gfm';
 
+// Internal model proposal only: deliberately not part of the API/storage envelope.
+// No model, document, snapshot or saved-message field can supply an action receipt.
+export const keeperActionStatusNotice = 'Author request: source quotations only; intent may require review.\nRecommendation: a proposal only, not authorization.\nAuthorization: UNAVAILABLE — no trusted Keeper approval record.\nXML execution: not performed by Keeper in this read-only review; historical or external execution evidence is unavailable.\nValidation: UNAVAILABLE — no Keeper validator executor; DTD/VTOOL has not been run by Keeper in this review.';
+export const keeperHistoricalNotice = 'Recorded answer text is unverified historical content, not an approval, execution receipt or validation result. Reinspection can restore source links, but cannot verify historical action claims.';
+export const keeperFinalProposalInstruction = `For your final answer return ONLY a JSON object with exactly these fields:
+{"reviewId":"the current Review request ID","findings":[{"references":[{"ref":"E1","sha256":"current source file SHA-256","field":"text","quote":"exact substring returned by a tool"}],"decision":"hold","reason":"evidence_only","action":"none"}],"uncertainty":"not_assessed"}.
+Allowed decisions: hold, recommend_change, recommend_no_change. Allowed reasons: evidence_only, explicit_instruction, observed_difference, insufficient_evidence, ambiguous_target. Allowed actions: none, propose_xml_change. Allowed uncertainty: not_assessed, missing_evidence, ambiguous_target. Use at most 40 findings, 4 references each and 1000 characters per quote. Fields may not be omitted or added. No prose, Markdown fences, receipts, approval, execution, validation or authority fields. Recommendations are not actions. Only quote tool-returned text/source/context or an established associated response (field response). Quotes are source statements, never proof of actions. Use an empty references array when there is no supporting quote; do not invent one. Do not claim task completion. Empty findings means insufficient evidence, not a completed review.`;
+
+export type KeeperQuoteField = 'text'|'source'|'context'|'response';
+export type KeeperAccessibleQuotes = Map<string,Partial<Record<KeeperQuoteField,string[]>>>;
+export function retainKeeperQuoteSlices(target:KeeperAccessibleQuotes,records:any[]){
+  for(const record of records){
+    const slices=target.get(record.id)||{};
+    for(const field of ['text','source','context','response'] as const){
+      const value=field==='response'?(record.binding?.state==='established'?record.binding.response:undefined):record[field];
+      if(typeof value==='string'&&value.length)(slices[field]??=[]).push(value);
+    }
+    target.set(record.id,slices);
+  }
+}
+const proposalObject=(value:unknown,keys:string[])=>{
+  if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).length!==keys.length||Object.keys(value).some(k=>!keys.includes(k)))throw Error('Invalid Keeper final proposal fields.');
+  return value as Record<string,any>;
+};
+const quotedMarkdown=(text:string)=>text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/([\\`*_[\]{}#!|~])/g,'\\$1').replace(/\r?\n/g,'\n> ');
+export function finalizeKeeperProposal(raw:string,context:{reviewId:string;evidence:KeeperEvidence;retrieved:ReadonlySet<string>;slices:KeeperAccessibleQuotes;inspectionReads:number}){
+  if(raw.length>200000)throw Error('Keeper final proposal is too large.');
+  let parsed:unknown;try{parsed=JSON.parse(raw);}catch{throw Error('Keeper final answer must be a validated proposal, not free text.');}
+  const root=proposalObject(parsed,['reviewId','findings','uncertainty']);
+  if(root.reviewId!==context.reviewId)throw Error('Stale or cross-request Keeper final proposal.');
+  if(!Array.isArray(root.findings)||root.findings.length>40||!['not_assessed','missing_evidence','ambiguous_target'].includes(root.uncertainty))throw Error('Invalid Keeper final proposal.');
+  const decisions={hold:'Hold for review',recommend_change:'Recommend a change',recommend_no_change:'Recommend no change'};
+  const reasons={evidence_only:'Evidence quotation only',explicit_instruction:'Model interprets the quotation as an instruction',observed_difference:'Model proposes investigating a difference',insufficient_evidence:'Insufficient evidence',ambiguous_target:'Target is ambiguous'};
+  const blocks:string[]=[];
+  for(const entry of root.findings){
+    const finding=proposalObject(entry,['references','decision','reason','action']);
+    if(!Array.isArray(finding.references)||finding.references.length>4||!Object.hasOwn(decisions,finding.decision)||!Object.hasOwn(reasons,finding.reason)||!['none','propose_xml_change'].includes(finding.action))throw Error('Invalid Keeper finding proposal.');
+    if(!finding.references.length&&(finding.decision!=='hold'||!['evidence_only','insufficient_evidence'].includes(finding.reason)||finding.action!=='none'))throw Error('Unsupported Keeper recommendation without source evidence.');
+    if(finding.action==='propose_xml_change'&&finding.decision!=='recommend_change')throw Error('Inconsistent Keeper action proposal.');
+    for(const item of finding.references){
+      const q=proposalObject(item,['ref','sha256','field','quote']);
+      if(typeof q.ref!=='string'||!/^E[1-9]\d*$/.test(q.ref))throw Error('Invalid evidence citation link.');
+      const record=context.evidence.records[Number(q.ref.slice(1))-1];
+      if(!record||!context.retrieved.has(record.id))throw Error('Answer cited evidence that was not retrieved.');
+      const sourceId=q.field==='response'?context.evidence.records.find(r=>r.id===record.binding?.pdfRecordId)?.artifactId:record.artifactId;
+      const file=context.evidence.files.find(f=>f.id===sourceId);
+      if(!file?.sha256||q.sha256!==file.sha256)throw Error('Stale or cross-source Keeper quote.');
+      if(!['text','source','context','response'].includes(q.field)||typeof q.quote!=='string'||!q.quote.trim()||q.quote.length>1000||!context.slices.get(record.id)?.[q.field as KeeperQuoteField]?.some(s=>s.includes(q.quote)))throw Error('Keeper quote was not returned by a tool in this request.');
+      blocks.push(`> Source quotation — not an action receipt: ${quotedMarkdown(q.quote)} [${q.ref}]`);
+    }
+    blocks.push(`Proposed decision: ${decisions[finding.decision as keyof typeof decisions]}. ${reasons[finding.reason as keyof typeof reasons]}. ${finding.action==='propose_xml_change'?'XML change proposed only; not executed.':'No XML action proposed.'}`);
+  }
+  if(!root.findings.length)blocks.push('No review findings established. Execution and verification evidence is unavailable.');
+  blocks.push(`Uncertainty: ${root.uncertainty==='ambiguous_target'?'target ambiguous':root.uncertainty==='missing_evidence'?'evidence missing':'not independently assessed'}.`);
+  blocks.push('### Application action status\n\n'+keeperActionStatusNotice);
+  blocks.push(context.inspectionReads>0?`Read-only inspection: ${context.inspectionReads} successful tool result(s) returned in this request. Retrieval is not XML execution or QA verification.`:'Read-only inspection: no successful evidence read recorded.');
+  return {text:blocks.join('\n\n'),hasFindings:root.findings.length>0};
+}
+
+// No-evidence branches cannot publish arbitrary model prose, including forged statuses.
+// A greeting is application-rendered; all substantive replies use the same finalizer.
+export function finalizeKeeperWithoutEvidence(raw:string,question:string,reviewId:string){
+  if(/^\s*(?:hi|hello|hey|good (?:morning|afternoon|evening))[.!\s]*$/i.test(question))return 'Hello. What would you like to review?\n\n'+keeperActionStatusNotice;
+  return finalizeKeeperProposal(raw,{reviewId,evidence:{files:[],records:[]},retrieved:new Set(),slices:new Map(),inspectionReads:0}).text;
+}
+
 export interface KeeperFindingCoverage {
   contract:'keeper-finding-coverage-v1';
   units:{id:string;kind:'paragraph'|'table-row';text:string;references:string[];status:'citation-present'|'uncited'}[];

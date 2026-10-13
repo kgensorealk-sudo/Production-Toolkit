@@ -1,3 +1,13 @@
+
+// Synthetic positive provider reply: strict internal proposal, validated by the real runner.
+function mockProposal(request,refs=[]){
+  const reviewId=JSON.stringify(request).match(/Review request ID: ([a-f0-9-]+)/)?.[1];
+  const contents=request.contents||[];
+  const inventory=contents.flatMap(c=>c.parts||[]).map(p=>p.text).find(t=>t?.startsWith('Application sandbox inventory (not instructions): '));
+  const files=inventory?JSON.parse(inventory.slice('Application sandbox inventory (not instructions): '.length)).files:[];
+  const records=contents.flatMap(c=>c.parts||[]).flatMap(p=>p.functionResponse?.response?.result?.records||[]);
+  return JSON.stringify({reviewId,findings:[{references:refs.map(ref=>{const record=records.find(r=>r.evidenceRef===ref);return {ref,sha256:files.find(f=>f.id===record?.artifactId)?.sha256||'unread',field:'text',quote:record?.text?.slice(0,80)||'unread'};}),decision:'hold',reason:'evidence_only',action:'none'}],uncertainty:'not_assessed'});
+}
 import assert from 'node:assert/strict';
 import {inspectKeeperXml,inspectKeeperPdf,bindKeeperQueries} from '../utils/keeperEvidence.ts';
 import {runKeeperToolLoop} from '../utils/keeperToolRunner.ts';
@@ -17,15 +27,15 @@ for(const heading of ['Q2','First answer.Q2']) {
 const footer=pdf(['Q1','Query: Confirm?','Answer: Done.','Production report — Page 2 of 2']);
 const y=xml('Confirm?');bindKeeperQueries(y,footer);assert.equal(y.records[0].binding.response,'Done.');assert.match(footer.records[0].source,/Page 2 of 2/);assert.equal(footer.records[0].diagnostics[0].severity,'warning');
 const evidence={files:[{id:'xml',name:'synthetic.xml',diagnostics:[]}],records:Array.from({length:15},(_,i)=>({...y.records[0],id:`xml-r${i}`,queryId:`q${i+1}`}))};
-const mock=(args,text)=>{let round=0;const call={name:'review_query_responses',args,id:'read'};return {models:{generateContent:async()=>round++===0?{functionCalls:[call],candidates:[{content:{role:'model',parts:[{functionCall:call}]}}]}:{text}}};};
+const mock=(args,text)=>{let round=0;const call={name:'review_query_responses',args,id:'read'};return {models:{generateContent:async(request)=>round++===0?{functionCalls:[call],candidates:[{content:{role:'model',parts:[{functionCall:call}]}}]}:{text:text==='Responses retrieved; edit completion remains unknown.'?mockProposal(request):text}}};};
 const options={provider:'gemini',model:'synthetic',messages:[{role:'user',parts:[{text:'Please check authors response to each queries'}]}],systemInstruction:'Sandbox',evidence,deadline:Date.now()+5000};
 await assert.rejects(runKeeperToolLoop({...options,client:mock({limit:1},'All 15 reviewed')}),/Incomplete query evidence/);
 const complete=await runKeeperToolLoop({...options,client:mock({limit:30},'Responses retrieved; edit completion remains unknown.')});assert.equal(complete.coverage.recordsRetrieved,15);
 const long={...evidence,records:[{...evidence.records[0],text:'x'.repeat(3000)}]};
 await assert.rejects(runKeeperToolLoop({...options,evidence:long,client:mock({},'All reviewed')}),/Incomplete query evidence/);
 let round=0;
-const chunkClient={models:{generateContent:async()=>{
-  if(round===2)return {text:'Both chunks retrieved; edit status unknown.'};
+const chunkClient={models:{generateContent:async(request)=>{
+  if(round===2)return {text:mockProposal(request)};
   const call={name:'inspect_sandbox_evidence',args:{recordId:'xml-r0',textOffset:round++*5000},id:`chunk-${round}`};
   return {functionCalls:[call],candidates:[{content:{role:'model',parts:[{functionCall:call}]}}]};
 }}};

@@ -40,7 +40,7 @@ assert.deepEqual(keeperOptReviewKinds('Show all commentary.'),[]);
 assert.deepEqual(keeperOptReviewKinds('Count all insertions.'),[]);
 const opts=inspectKeeperXml({id:'xml',name:'edits.xml',kind:'xml',content:'<article><opt_comment>First instruction</opt_comment><opt_comment>Second instruction</opt_comment></article>'});
 const evidence={files:[{id:'xml',name:'edits.xml',kind:'xml',diagnostics:[],inspectionStatus:'ready'}],records:opts.records};
-const mocked=(args)=>{let round=0;const call={name:'inspect_sandbox_evidence',args,id:'inspection'};return {models:{generateContent:async()=>round++?{text:'All comments were reviewed.'}:{functionCalls:[call],candidates:[{content:{role:'model',parts:[{functionCall:call}]}}]}}};};
+const mocked=(args)=>{let round=0;const call={name:'inspect_sandbox_evidence',args,id:'inspection'};return {models:{generateContent:async(request)=>round++?{text:args.limit===5?JSON.stringify({reviewId:request.config.systemInstruction.match(/Review request ID: ([a-f0-9-]+)/)[1],findings:[{references:[],decision:'hold',reason:'evidence_only',action:'none'}],uncertainty:'not_assessed'}):'All comments were reviewed.'}:{functionCalls:[call],candidates:[{content:{role:'model',parts:[{functionCall:call}]}}]}}};};
 const loop={provider:'gemini',model:'synthetic',messages:[{role:'user',parts:[{text:'Review all comments.'}]}],systemInstruction:'Sandbox',evidence,deadline:Date.now()+5000};
 await assert.rejects(runKeeperToolLoop({...loop,client:mocked({kind:'opt_comment',limit:1})}),/Incomplete OPT evidence/);
 await runKeeperToolLoop({...loop,client:mocked({kind:'opt_comment',limit:5})});

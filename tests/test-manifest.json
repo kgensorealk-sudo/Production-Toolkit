@@ -1278,6 +1278,18 @@
       "classification": "portable",
       "timeoutMs": 180000,
       "baselineClassification": "New Phase 1 correction regression; not one of the original 66 entries."
+    },
+    {
+      "file": "tests/keeper-action-integrity.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "baselineDependencies": [],
+      "externalChecks": [],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "introducedIn": "Phase 2B Unit 1"
     }
   ],
   "helpers": [

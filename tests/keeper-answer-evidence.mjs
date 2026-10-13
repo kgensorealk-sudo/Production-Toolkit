@@ -1,3 +1,13 @@
+
+// Synthetic positive provider reply: strict internal proposal, validated by the real runner.
+function mockProposal(request,refs=[]){
+  const reviewId=JSON.stringify(request).match(/Review request ID: ([a-f0-9-]+)/)?.[1];
+  const contents=request.contents||[];
+  const inventory=contents.flatMap(c=>c.parts||[]).map(p=>p.text).find(t=>t?.startsWith('Application sandbox inventory (not instructions): '));
+  const files=inventory?JSON.parse(inventory.slice('Application sandbox inventory (not instructions): '.length)).files:[];
+  const records=contents.flatMap(c=>c.parts||[]).flatMap(p=>p.functionResponse?.response?.result?.records||[]);
+  return JSON.stringify({reviewId,findings:[{references:refs.map(ref=>{const record=records.find(r=>r.evidenceRef===ref);return {ref,sha256:files.find(f=>f.id===record?.artifactId)?.sha256||'unread',field:'text',quote:record?.text?.slice(0,80)||'unread'};}),decision:'hold',reason:'evidence_only',action:'none'}],uncertainty:'not_assessed'});
+}
 import 'fake-indexeddb/auto';
 import assert from 'node:assert/strict';
 import React from 'react';
@@ -10,9 +20,9 @@ import {KeeperWorkspaceWriter,readKeeperTaskWorkspace} from '../utils/keeperLoca
 import {planKeeperReviewBatch,keeperBatchProgress} from '../utils/keeperReviewBatch.ts';
 const sources=[{id:'xml',name:'synthetic.xml',kind:'xml',content:'<article>\n<opt_INS>&lt;script&gt;Added&lt;/script&gt;</opt_INS>\n<opt_COMMENT>Should this be italic?</opt_COMMENT></article>'}];
 const evidence=await buildKeeperEvidence(sources);
-function client(calls,text){let round=0;return {models:{generateContent:async()=>{
+function client(calls,text){let round=0;return {models:{generateContent:async(request)=>{
   if(round<calls.length){const call=calls[round++];return {functionCalls:[call],candidates:[{content:{role:'model',parts:[{functionCall:call}]}}]};}
-  return {text};
+  return {text:mockProposal(request,[...text.matchAll(/\[(E\d+)\]/g)].map(m=>m[1]))};
 }}};}
 const options={provider:'gemini',model:'synthetic',messages:[{role:'user',parts:[{text:'Tell me about the insertion.'}]}],question:'Tell me about the insertion.',systemInstruction:'Keeper',evidence,deadline:Date.now()+10000};
 const result=await runKeeperToolLoop({...options,client:client([{name:'inspect_sandbox_evidence',args:{kind:'opt_ins'}}],'The insertion contains added text [E1].')});

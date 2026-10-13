@@ -4,7 +4,7 @@ import type {KeeperReviewBatch,KeeperReviewCursor} from '../utils/keeperReviewBa
 import {planKeeperReviewBatch,keeperBatchProgress} from '../utils/keeperReviewBatch';
 import {keeperReviewContinuity} from '../utils/keeperReviewContinuity';
 import {keeperTaskQuestion,prepareKeeperRequestEvidence} from '../utils/keeperRequestEvidence';
-import KeeperAnswerEvidencePanel from './KeeperAnswerEvidence';
+import KeeperAnswerEvidencePanel,{KeeperRecordedAnswer} from './KeeperAnswerEvidence';
 import KeeperQueryProvenance from './KeeperQueryProvenance';
 import type {KeeperAnswerEvidence} from '../utils/keeperAnswerEvidence';
 import React, { useState, useRef, useEffect } from 'react';
@@ -35,6 +35,7 @@ import {
     Paperclip
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import {keeperActionStatusNotice,keeperHistoricalNotice} from '../utils/keeperAnswerEvidence';
 import remarkGfm from 'remark-gfm';
 import { ToolId } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -289,6 +290,8 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
 
     // Chat messages - starts empty by default so user sees the clean centered Keeper welcome hero profile
     const [messages,setMessages]=useState<Message[]>([]);
+    // Ephemeral presentation identity only; never persisted as approval/execution evidence.
+    const [liveAnswerId,setLiveAnswerId]=useState<string|null>(null);
     const [restoredOwner,setRestoredOwner]=useState<string|null>(null);
     const [activeTask,setActiveTask]=useState('scratch');
     const [restoreError,setRestoreError]=useState('');
@@ -299,7 +302,7 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
     const ownerGeneration=useRef(0);
     const applyWorkspace=(saved:any,artifacts:typeof sandboxArtifacts=[])=>{
         const restored=keeperRestoredSources(saved,artifacts);
-        setSandboxArtifacts(restored.artifacts);setMessages(saved?.messages||[]);
+        setLiveAnswerId(null);setSandboxArtifacts(restored.artifacts);setMessages(saved?.messages||[]);
         setInputPrompt(saved?.inputPrompt||'');setTaskInstructions(saved?.taskInstructions||'');
         setActiveScope(restored.activeScope);
         localEvidence.current=null;localEvidenceSources.current=null;pastedArtifactRef.current=null;
@@ -446,7 +449,7 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
         responseVersion.current++;setActiveScope(keeperArtifactScope(sandboxArtifacts));
         typingControllerRef.current?.stop();
         setCurrentlyTypingId(null);
-        setMessages([]);
+        setLiveAnswerId(null);setMessages([]);
         setShowResetConfirm(false);
         setInputPrompt('');
         setTaskInstructions('');
@@ -676,6 +679,7 @@ ${userAuthContext}`;
 
             const assistantMessageId = `ast-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
 
+            setLiveAnswerId(assistantMessageId);
             const assistantMessage: Message = {
                 artifactScope:scope,id:assistantMessageId,role:'assistant',content:sanitizedContent,
                 timestamp:Date.now(),modelUsed:responseData.modelUsed,
@@ -771,9 +775,9 @@ ${userAuthContext}`;
                     <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-3"><span className="text-xs text-slate-400">{(inputPrompt.length + taskInstructions.length).toLocaleString()} characters</span><button onClick={() => handleSendMessage()} disabled={(!inputPrompt.trim() && !taskInstructions.trim() && !sandboxArtifacts.length) || isLoading || isImporting || inspectionStatus === 'running' || inspectionStatus === 'error' || Boolean(currentlyTypingId)} className="inline-flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl font-semibold text-sm disabled:opacity-40 hover:bg-indigo-700 transition-colors">{isLoading ? 'Working…' : currentlyTypingId ? 'Preparing result…' : 'Run task'}<ArrowRight size={16} /></button></div>
                 </section>
                 <section className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-                    <div className="px-6 py-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3"><div><p className="text-[10px] uppercase tracking-widest font-bold text-indigo-500">02 / Review</p><h2 className="font-semibold text-slate-900 mt-1">Result</h2></div><div className="flex items-center gap-3">{currentlyTypingId && <button onClick={handleSkipTyping} className="text-xs text-indigo-600">Show full result</button>}{lastAssistantMessage && <button onClick={() => copyToClipboard(lastAssistantMessage.content, lastAssistantMessage.id)} className="inline-flex items-center gap-2 text-xs text-slate-600 border border-slate-200 rounded-lg px-3 py-2"><Copy size={13} />{copiedId === lastAssistantMessage.id ? 'Copied' : 'Copy result'}</button>}</div></div>
+                    <div className="px-6 py-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3"><div><p className="text-[10px] uppercase tracking-widest font-bold text-indigo-500">02 / Review</p><h2 className="font-semibold text-slate-900 mt-1">Result</h2></div><div className="flex items-center gap-3">{currentlyTypingId && <button onClick={handleSkipTyping} className="text-xs text-indigo-600">Show full result</button>}{lastAssistantMessage && <button onClick={() => copyToClipboard((liveAnswerId===lastAssistantMessage.id?'':keeperHistoricalNotice+'\n\n'+keeperActionStatusNotice+'\n\n')+lastAssistantMessage.content, lastAssistantMessage.id)} className="inline-flex items-center gap-2 text-xs text-slate-600 border border-slate-200 rounded-lg px-3 py-2"><Copy size={13} />{copiedId === lastAssistantMessage.id ? 'Copied' : 'Copy result'}</button>}</div></div>
                     <div ref={messagesContainerRef} aria-live="polite" aria-busy={isLoading || Boolean(currentlyTypingId)} className="min-h-[550px] max-h-[800px] overflow-y-auto p-6">
-                        {lastAssistantMessage ? <div className="prose prose-sm max-w-none text-slate-800 break-words"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{a: ({children,href}) => {const ref=href?.match(/^#keeper-evidence-(E[1-9]\d*)$/)?.[1];return ref&&lastAssistantMessage.answerEvidence?.references.some(r=>r.ref===ref&&r.cited)?<button className="text-indigo-700 underline" onClick={()=>setSelectedEvidenceRef(ref)} aria-label={`Open evidence ${ref}`}>{children}</button>:<span>{children}</span>;}, img: ({alt}) => <span>{alt || 'Image omitted in local report'}</span>}}>{lastAssistantMessage.content}</ReactMarkdown></div> : <div className="min-h-[500px] flex flex-col justify-center items-center text-center"><div className="bg-indigo-50 text-indigo-400 rounded-2xl p-5 mb-5"><FileText size={30} strokeWidth={1.4} /></div><h3 className="font-semibold text-slate-700">A blank canvas</h3><p className="text-sm text-slate-400 mt-2 max-w-[260px] leading-relaxed">Your result will appear here. Start with a task and any material Keeper needs.</p></div>}
+                        {lastAssistantMessage ? <div className="prose prose-sm max-w-none text-slate-800 break-words"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{a: ({children,href}) => {const ref=href?.match(/^#keeper-evidence-(E[1-9]\d*)$/)?.[1];return ref&&lastAssistantMessage.answerEvidence?.references.some(r=>r.ref===ref&&r.cited)?<button className="text-indigo-700 underline" onClick={()=>setSelectedEvidenceRef(ref)} aria-label={`Open evidence ${ref}`}>{children}</button>:<span>{children}</span>;}, img: ({alt}) => <span>{alt || 'Image omitted in local report'}</span>}}>{liveAnswerId===lastAssistantMessage.id?lastAssistantMessage.content:''}</ReactMarkdown>{liveAnswerId!==lastAssistantMessage.id&&<KeeperRecordedAnswer content={lastAssistantMessage.content}/>} </div> : <div className="min-h-[500px] flex flex-col justify-center items-center text-center"><div className="bg-indigo-50 text-indigo-400 rounded-2xl p-5 mb-5"><FileText size={30} strokeWidth={1.4} /></div><h3 className="font-semibold text-slate-700">A blank canvas</h3><p className="text-sm text-slate-400 mt-2 max-w-[260px] leading-relaxed">Your result will appear here. Start with a task and any material Keeper needs.</p></div>}
                     </div>
                     <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-between text-xs text-slate-400"><span>{lastAssistantMessage ? lastModelBadge.label : 'Ready when you are'}</span><span>Results stay in this sandbox</span></div>
                 </section>
@@ -787,7 +791,7 @@ ${userAuthContext}`;
             </section>}
             {evidenceReport && <KeeperEvidenceReport report={evidenceReport} />}
             {inspectionStatus==='ready'&&localEvidence.current&&<KeeperQueryProvenance evidence={localEvidence.current}/>}
-            {messages.some(message => message.role === 'assistant') && <details className="border border-slate-200 rounded-xl bg-white p-5"><summary className="text-sm font-semibold text-slate-600 cursor-pointer">Session history</summary><div className="space-y-4 mt-4">{messages.map(message => <div key={message.id} className="border-t border-slate-100 pt-4"><p className="text-xs font-semibold text-slate-400 mb-2">{message.role === 'user' ? 'Your input' : 'Keeper result'} · {new Date(message.timestamp).toLocaleString()}</p><pre className="text-sm whitespace-pre-wrap break-words font-sans text-slate-700">{message.content}</pre></div>)}</div></details>}
+            {messages.some(message => message.role === 'assistant') && <details className="border border-slate-200 rounded-xl bg-white p-5"><summary className="text-sm font-semibold text-slate-600 cursor-pointer">Session history</summary><div className="space-y-4 mt-4">{messages.map(message => <div key={message.id} className="border-t border-slate-100 pt-4"><p className="text-xs font-semibold text-slate-400 mb-2">{message.role === 'user' ? 'Your input' : 'Keeper recorded answer · unverified'} · {new Date(message.timestamp).toLocaleString()}</p>{message.role==='assistant'?<KeeperRecordedAnswer content={message.content}/>:<pre className="text-sm whitespace-pre-wrap break-words font-sans text-slate-700">{message.content}</pre>}</div>)}</div></details>}
         </section>
     );
 };

@@ -1,5 +1,5 @@
 import type {KeeperActivity} from './keeperActivity.js';
-import {buildKeeperAnswerEvidence,keeperEvidenceRef,linkKeeperEvidenceCitations,type KeeperAnswerEvidence} from './keeperAnswerEvidence.js';
+import {buildKeeperAnswerEvidence,keeperEvidenceRef,linkKeeperEvidenceCitations,finalizeKeeperProposal,keeperFinalProposalInstruction,retainKeeperQuoteSlices,type KeeperAccessibleQuotes,type KeeperAnswerEvidence} from './keeperAnswerEvidence.js';
 import {renderKeeperScope} from './keeperScope.js';
 import {
   dispatchKeeperTool,
@@ -29,6 +29,8 @@ export async function runKeeperToolLoop(options: {
   onActivity?:(event:NonNullable<KeeperActivity['events']>[number])=>void;
 }) {
   const { provider, client, model, evidence } = options;
+  const reviewId=globalThis.crypto.randomUUID();
+  const quoteSlices:KeeperAccessibleQuotes=new Map();
   const inventory=options.countEvidence||evidence;
   // An empty failed inventory is unavailable evidence, never a verified absence.
   if (!evidence.records.length && evidence.files.some(f=>f.inspectionStatus==='failed' || f.diagnostics.length>0)) {
@@ -36,6 +38,7 @@ export async function runKeeperToolLoop(options: {
   }
   const instruction =
     options.systemInstruction + "\n" + keeperEvidenceInstruction + '\nWhen asked to check author responses to each query, prefer review_query_responses to retrieve compact batches instead of unrelated OPT records. Cover each query individually: question, verified response or unresolved reason, and any evidence needed to assess implementation. Follow nextOffset and disclose truncated records. Never describe retrieval alone as a completed editorial review. Tool records include application-assigned evidenceRef values such as E1. Cite observed facts using [E1] immediately beside the relevant statement. Use only references returned by tools in this request, never references from conversation history. Keep observed evidence, your interpretation, and any suggested response distinct. A citation establishes provenance, not that a correction was implemented.';
+  const finalInstruction='\n'+keeperFinalProposalInstruction+'\nReview request ID: '+reviewId;
   const summary = JSON.stringify(evidenceSummary(evidence));
   const findingInstruction='\nKeep one finding per paragraph or table row. Cite each observed finding within that same paragraph or row; citations in neighboring findings do not carry over. Separate observed evidence from interpretation, suggestions, and limitations. Do not claim a citation proves the entire paragraph or verifies an edit.';
   const wholeOptInstruction = findingInstruction+'\nFor a review of all OPT comments, insertions, deletions or changes, retrieve every relevant record and all text continuations before claiming complete coverage. Counts alone do not establish that the records were reviewed. If the request exceeds the bounded retrieval budget, disclose the limit.';
@@ -57,7 +60,7 @@ export async function runKeeperToolLoop(options: {
           },
         ]
       : [
-          { role: "system", content: instruction + fileStatusInstruction + countInstruction + wholeOptInstruction },
+          { role: "system", content: instruction + fileStatusInstruction + countInstruction + wholeOptInstruction + finalInstruction },
           ...options.messages,
           {
             role: "user",
@@ -119,7 +122,7 @@ export async function runKeeperToolLoop(options: {
               model,
               contents,
               config: {
-                systemInstruction: instruction + fileStatusInstruction + countInstruction + wholeOptInstruction,
+                systemInstruction: instruction + fileStatusInstruction + countInstruction + wholeOptInstruction + finalInstruction,
                 tools,
                 abortSignal: controller.signal,
               },
@@ -166,8 +169,9 @@ export async function runKeeperToolLoop(options: {
       if ((allQueriesRequested || claimsAllQueries) && evidence.records.some(r=>r.kind==='query' && !fullyRetrieved.has(r.id))) throw new Error('Incomplete query evidence retrieval; refusing a whole-query review claim.');
       const optKinds=[...keeperOptReviewKinds(task),...keeperOptReviewKinds(text)];
       if(evidence.records.some(r=>keeperRecordInOptReview(r.kind,optKinds)&&!fullyRetrieved.has(r.id)))throw new Error('Incomplete OPT evidence retrieval; refusing a whole-inventory review claim.');
-      const linked=linkKeeperEvidenceCitations(text,inventory,retrieved);
-      return { text:requestsOptTagCounts(task) && optCountResult ? renderOptCounts(optCountResult)+'\n\n'+linked.text : linked.text, trace, coverage: coverage(),answerEvidence:{...answerEvidence('interpretation',linked.cited),findingCoverage:linked.findingCoverage} };
+      const finalized=finalizeKeeperProposal(text,{reviewId,evidence:inventory,retrieved,slices:quoteSlices,inspectionReads:successfulReads});
+      const linked=linkKeeperEvidenceCitations(finalized.text,inventory,retrieved);
+      return { text:requestsOptTagCounts(task) && optCountResult ? renderOptCounts(optCountResult)+'\n\n'+linked.text : linked.text, trace, coverage: coverage(),answerEvidence:{...answerEvidence(finalized.hasFindings?'interpretation':'scope',linked.cited),findingCoverage:linked.findingCoverage} };
     }
     if (round === 5 || callsUsed + calls.length > 8)
       throw new Error(
@@ -202,8 +206,9 @@ export async function runKeeperToolLoop(options: {
         name: String(name),
         ...(result.error ? { error: result.error } : {}),
       });
-      if(!result.error && name==='report_scope_limit')return {text:renderKeeperScope(result),trace,coverage:coverage(),answerEvidence:answerEvidence('scope')};
+      if(!result.error && name==='report_scope_limit')return {text:renderKeeperScope(result,false),trace,coverage:coverage(),answerEvidence:answerEvidence('scope')};
       if (!result.error) successfulReads++;
+      if(!result.error&&Array.isArray(result.records))retainKeeperQuoteSlices(quoteSlices,result.records);
       if(!result.error && name==='summarize_opt_changes') {readOptCounts=true;optCountResult=result;}
       for (const record of result.records || []) {
         retrieved.add(record.id);

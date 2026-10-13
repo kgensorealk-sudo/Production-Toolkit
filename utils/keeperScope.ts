@@ -9,7 +9,7 @@ export function keeperScopeResult(args:unknown){
   if(Object.keys(a).some(k=>!['status','reason','suggestedAction'].includes(k))||!['out_of_scope','insufficient_evidence'].includes(String(a.status))||typeof a.reason!=='string'||!a.reason.trim()||a.reason.length>1000||a.suggestedAction!==undefined&&(typeof a.suggestedAction!=='string'||a.suggestedAction.length>500))return {error:'Invalid scope arguments.'};
   return {status:a.status as 'out_of_scope'|'insufficient_evidence',reason:a.reason.trim(),suggestedAction:typeof a.suggestedAction==='string'?a.suggestedAction.trim():undefined};
 }
-export function renderKeeperScope(result:{status:string;reason:string;suggestedAction?:string}){
+export function renderKeeperScope(result:{status:string;reason:string;suggestedAction?:string},applicationReason=true){
   const plain=(s:string)=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/([\\`*_[\]{}])/g,'\\$1');
-  return (result.status==='out_of_scope'?'This request is outside my available sandbox tools.':'I cannot establish this from the available evidence.')+'\n\n'+plain(result.reason)+(result.suggestedAction?'\n\nSuggested next step: '+plain(result.suggestedAction):'')+'\n\nThe requested action has not been completed.';
+  return (result.status==='out_of_scope'?'This request is outside my available sandbox tools.':'I cannot establish this from the available evidence.')+(applicationReason?'\n\n'+plain(result.reason)+(result.suggestedAction?'\n\nSuggested next step: '+plain(result.suggestedAction):''):'\n\nThe model reported a scope or evidence limitation. Its free-text explanation is not an action receipt.')+'\n\nThe requested action has not been completed. No trusted approval or XML execution record is available. Validation is UNAVAILABLE; Keeper has not run DTD/VTOOL.';
 }

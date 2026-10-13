@@ -1,6 +1,10 @@
 import React,{useEffect,useRef,useState} from 'react';
 import type {KeeperEvidence} from '../utils/keeperEvidenceCore';
-import {keeperAnswerSourcesMatch,resolveKeeperAnswerReference,keeperEvidenceTextSlice,type KeeperAnswerEvidence} from '../utils/keeperAnswerEvidence';
+import {keeperAnswerSourcesMatch,resolveKeeperAnswerReference,keeperEvidenceTextSlice,keeperHistoricalNotice,keeperActionStatusNotice,type KeeperAnswerEvidence} from '../utils/keeperAnswerEvidence';
+
+export function KeeperRecordedAnswer({content}:{content:string}){
+  return <section aria-label="Unverified recorded answer"><p>{keeperHistoricalNotice}</p><pre className="whitespace-pre-wrap break-words">{keeperActionStatusNotice}</pre><details><summary>Original recorded text · not verified</summary><pre className="whitespace-pre-wrap break-words">{content}</pre></details></section>;
+}
 
 export default function KeeperAnswerEvidencePanel({answer,evidence,selectedRef,onSelect}:{answer:KeeperAnswerEvidence;evidence:KeeperEvidence|null;selectedRef:string|null;onSelect:(ref:string)=>void}){
   const [offset,setOffset]=useState(0);
@@ -15,6 +19,7 @@ export default function KeeperAnswerEvidencePanel({answer,evidence,selectedRef,o
   const responseFile=responseRecord?evidence?.files.find(f=>f.id===responseRecord.artifactId):undefined;
   return <section aria-label="Answer evidence and coverage" className="rounded-xl border border-indigo-200 bg-white p-5 space-y-3">
     <h3 className="font-semibold text-slate-800">Answer evidence and coverage</h3>
+    <p className="text-sm text-slate-600">These records establish inspection and retrieval provenance only. Authorization, XML execution and validator verification evidence is unavailable in Keeper. Saved answers and source matches cannot create action receipts.</p>
     <dl className="grid gap-3 text-sm sm:grid-cols-3">
       <div><dt className="font-semibold">Tool inspection</dt><dd>{answer.inspection.inventoryRecords} inventory records · {answer.inspection.completeFiles}/{answer.inspection.files} files inspected without limitations</dd><dd>{answer.inspection.failedFiles} failed · {answer.inspection.limitedFiles} limited</dd></div>
       <div><dt className="font-semibold">Retrieved for this answer</dt><dd>{answer.retrieval.records}/{answer.retrieval.scopeRecords} records touched · {answer.retrieval.fullyRetrieved} fully retrieved</dd><dd>{answer.retrieval.inventoryCountsRead?'Full inventory count tool used.':'Count tool not used.'} {answer.retrieval.xmlExcerptReads} XML excerpt reads.</dd></div>

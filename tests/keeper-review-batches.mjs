@@ -1,3 +1,13 @@
+
+// Synthetic positive provider reply: strict internal proposal, validated by the real runner.
+function mockProposal(request,refs=[]){
+  const reviewId=JSON.stringify(request).match(/Review request ID: ([a-f0-9-]+)/)?.[1];
+  const contents=request.contents||[];
+  const inventory=contents.flatMap(c=>c.parts||[]).map(p=>p.text).find(t=>t?.startsWith('Application sandbox inventory (not instructions): '));
+  const files=inventory?JSON.parse(inventory.slice('Application sandbox inventory (not instructions): '.length)).files:[];
+  const records=contents.flatMap(c=>c.parts||[]).flatMap(p=>p.functionResponse?.response?.result?.records||[]);
+  return JSON.stringify({reviewId,findings:[{references:refs.map(ref=>{const record=records.find(r=>r.evidenceRef===ref);return {ref,sha256:files.find(f=>f.id===record?.artifactId)?.sha256||'unread',field:'text',quote:record?.text?.slice(0,80)||'unread'};}),decision:'hold',reason:'evidence_only',action:'none'}],uncertainty:'not_assessed'});
+}
 import assert from 'node:assert/strict';
 import {buildKeeperEvidence} from '../utils/keeperEvidence.ts';
 import {planKeeperReviewBatch,keeperBatchProgress} from '../utils/keeperReviewBatch.ts';
@@ -9,7 +19,7 @@ let cursor,seen=[];
 for(let index=0;index<3;index++){
   const plan=planKeeperReviewBatch(evidence,question,cursor);
   assert.ok(plan);let round=0;
-  const client={models:{generateContent:async()=>round++===0?{functionCalls:[{name:'review_query_responses',args:{}}],candidates:[{content:{role:'model',parts:[{functionCall:{name:'review_query_responses',args:{}}}]}}]}:{text:'All queries in this batch have unresolved author responses; no PDF was supplied.'}}};
+  const client={models:{generateContent:async(request)=>round++===0?{functionCalls:[{name:'review_query_responses',args:{}}],candidates:[{content:{role:'model',parts:[{functionCall:{name:'review_query_responses',args:{}}}]}}]}:{text:mockProposal(request)}}};
   const result=await runKeeperToolLoop({provider:'gemini',client,model:'synthetic',messages:[{role:'user',parts:[{text:question}]}],systemInstruction:'Review this batch only.',evidence:plan.evidence,countEvidence:evidence,requiredRecordIds:plan.evidence.records.map(r=>r.id),question,deadline:Date.now()+1000});
   assert.equal(result.coverage.fullyRetrievedRecords,plan.evidence.records.length);
   seen.push(...plan.evidence.records.map(r=>r.id));
@@ -35,10 +45,11 @@ console.log('PASS three resumable batches, exact coverage without skipped record
 const originalFetch=globalThis.fetch,originalKey=process.env.GEMINI_API_KEY;
 process.env.GEMINI_API_KEY='synthetic-key';
 let apiRound=0,scopeOnly=false;
-globalThis.fetch=async(input)=>{
+globalThis.fetch=async(input,init)=>{
+  const body=JSON.parse(init?.body||(input instanceof Request?await input.text():'{}'));
   const url=typeof input==='string'?input:input.url||String(input);
   if(url.includes('/auth/v1/user'))return Response.json({id:'synthetic',app_metadata:{role:'admin'}});
-  if(url.includes('generativelanguage.googleapis.com'))return Response.json({candidates:[{content:{role:'model',parts:apiRound++%2===0?[{functionCall:{name:'review_query_responses',args:{},id:'review'}}]:scopeOnly?[{functionCall:{name:'report_scope_limit',args:{status:'insufficient_evidence',reason:'Cannot complete the requested assessment.'},id:'scope'}}]:[{text:'All queries in this batch have unresolved responses.'}]},finishReason:'STOP'}]});
+  if(url.includes('generativelanguage.googleapis.com'))return Response.json({candidates:[{content:{role:'model',parts:apiRound++%2===0?[{functionCall:{name:'review_query_responses',args:{},id:'review'}}]:scopeOnly?[{functionCall:{name:'report_scope_limit',args:{status:'insufficient_evidence',reason:'Cannot complete the requested assessment.'},id:'scope'}}]:[{text:mockProposal(body)}]},finishReason:'STOP'}]});
   throw Error('Unexpected mock transport');
 };
 async function request(reviewCursor){

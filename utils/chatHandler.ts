@@ -1,5 +1,5 @@
 import {keeperProviderFailure} from './keeperProviderFailure.js';
-import {buildKeeperAnswerEvidence,type KeeperAnswerEvidence} from './keeperAnswerEvidence.js';
+import {buildKeeperAnswerEvidence,finalizeKeeperWithoutEvidence,keeperFinalProposalInstruction,type KeeperAnswerEvidence} from './keeperAnswerEvidence.js';
 import {planKeeperReviewBatch,keeperBatchProgress} from './keeperReviewBatch.js';
 import type {KeeperActivity} from './keeperActivity.js';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
@@ -136,6 +136,7 @@ function getOpenAIClient(): OpenAI | null {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const noEvidenceReviewId=globalThis.crypto.randomUUID();
   const requestStarted=Date.now();
   const requestDeadline = requestStarted + 55000;
   const attempts:NonNullable<KeeperActivity['attempts']>=[],events:NonNullable<KeeperActivity['events']>=[];
@@ -277,7 +278,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             model: candidate.model,
             contents: geminiContents,
             config: {
-              systemInstruction,
+              systemInstruction:systemInstruction+'\n'+keeperFinalProposalInstruction+'\nReview request ID: '+noEvidenceReviewId,
               abortSignal:modelController.signal,
               // NOTE: temperature/top_p/top_k intentionally omitted. Gemini 3.x models
               // (gemini-3.7-flash, and gemini-flash-latest when it points at a 3.x build)
@@ -293,14 +294,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           // OpenAI provider
           const modelPromise = openaiClient!.chat.completions.create({
             model: candidate.model,
-            messages: openaiMessages,
+            messages: [...openaiMessages,{role:'system',content:keeperFinalProposalInstruction+'\nReview request ID: '+noEvidenceReviewId}],
           },{signal:modelController.signal});
           const response: any = await Promise.race([modelPromise, timeoutPromise]);
           text = response?.choices?.[0]?.message?.content || '';
         }
 
         if (text) {
-          reply = text;
+          reply = evidence?text:finalizeKeeperWithoutEvidence(text,countQuestion||'',noEvidenceReviewId);
           activeModel = candidate.model;attemptOutcome='success';
           break;
         }
