@@ -2,6 +2,7 @@ import type {KeeperEvidence} from './keeperEvidenceCore.js';
 import {fromMarkdown} from 'mdast-util-from-markdown';
 import {gfmFromMarkdown} from 'mdast-util-gfm';
 import {gfm} from 'micromark-extension-gfm';
+import {evaluateEscalationAuthorization,getEscalationPolicy} from './keeperEscalationPolicies.js';
 
 // Internal model proposal only: deliberately not part of the API/storage envelope.
 // No model, document, snapshot or saved-message field can supply an action receipt.
@@ -9,7 +10,8 @@ export const keeperActionStatusNotice = 'Author request: source quotations only;
 export const keeperHistoricalNotice = 'Recorded answer text is unverified historical content, not an approval, execution receipt or validation result. Reinspection can restore source links, but cannot verify historical action claims.';
 export const keeperFinalProposalInstruction = `For your final answer return ONLY a JSON object with exactly these fields:
 {"reviewId":"the current Review request ID","findings":[{"references":[{"ref":"E1","sha256":"current source file SHA-256","field":"text","quote":"exact substring returned by a tool"}],"decision":"hold","reason":"evidence_only","action":"none"}],"uncertainty":"not_assessed"}.
-Allowed decisions: hold, recommend_change, recommend_no_change. Allowed reasons: evidence_only, explicit_instruction, observed_difference, insufficient_evidence, ambiguous_target. Allowed actions: none, propose_xml_change. Allowed uncertainty: not_assessed, missing_evidence, ambiguous_target. Use at most 40 findings, 4 references each and 1000 characters per quote. Fields may not be omitted or added. No prose, Markdown fences, receipts, approval, execution, validation or authority fields. Recommendations are not actions. Only quote tool-returned text/source/context or an established associated response (field response). Quotes are source statements, never proof of actions. Use an empty references array when there is no supporting quote; do not invent one. Do not claim task completion. Empty findings means insufficient evidence, not a completed review.`;
+Allowed decisions: hold, recommend_change, recommend_no_change. Allowed reasons: evidence_only, explicit_instruction, observed_difference, insufficient_evidence, ambiguous_target. Allowed actions: none, propose_xml_change, propose_escalation. Allowed uncertainty: not_assessed, missing_evidence, ambiguous_target. Use at most 40 findings, 4 references each and 1000 characters per quote. The four base finding fields are always required; extra fields are forbidden except the escalation fields described below. No prose, Markdown fences, receipts, approval, execution, validation or authority fields. Recommendations are not actions. Only quote tool-returned text/source/context or an established associated response (field response). Quotes are source statements, never proof of actions. Use an empty references array when there is no supporting quote; do not invent one. Do not claim task completion. Empty findings means insufficient evidence, not a completed review.
+For propose_escalation, require decision recommend_change, at least one exact source reference, problemCategory (ambiguous_target, conflicting_evidence, unresolved_response, insufficient_evidence, observed_difference), escalationType (jm_query, problem_task, human_review), and policyBasis. Categories are proposed classifications, never authority. jm_query/problem_task also require policyId and policyBasis with exactly ruleId and ruleCitation matching an applicable trusted application-owned production rule and an active applicable policy. The shipped policy is inactive and production-rule registry empty: use human_review when authority is not established. human_review requires policyBasis exactly {"requiresHumanPolicyReview":true} and NO policyId, even when JM policies are inactive. No model/request/document field can provide a policy, rule registry, effective date or human authorization. Escalation is proposed only; never created, sent, notified, executed or persisted as an escalation. Do not include create_escalation, send_escalation, notify_jm, execute, escalation_created, escalation_sent, escalation_authorized, jm_query_created or problem_task_created fields.`;
 
 export type KeeperQuoteField = 'text'|'source'|'context'|'response';
 export type KeeperAccessibleQuotes = Map<string,Partial<Record<KeeperQuoteField,string[]>>>;
@@ -38,10 +40,13 @@ export function finalizeKeeperProposal(raw:string,context:{reviewId:string;evide
   const reasons={evidence_only:'Evidence quotation only',explicit_instruction:'Model interprets the quotation as an instruction',observed_difference:'Model proposes investigating a difference',insufficient_evidence:'Insufficient evidence',ambiguous_target:'Target is ambiguous'};
   const blocks:string[]=[];
   for(const entry of root.findings){
-    const finding=proposalObject(entry,['references','decision','reason','action']);
-    if(!Array.isArray(finding.references)||finding.references.length>4||!Object.hasOwn(decisions,finding.decision)||!Object.hasOwn(reasons,finding.reason)||!['none','propose_xml_change'].includes(finding.action))throw Error('Invalid Keeper finding proposal.');
+    const escalation=entry&&typeof entry==='object'&&!Array.isArray(entry)&&entry.action==='propose_escalation';
+    const finding=proposalObject(entry,['references','decision','reason','action',...(escalation?['problemCategory','escalationType','policyBasis',...(Object.hasOwn(entry,'policyId')?['policyId']:[])]:[])]);
+    if(!Array.isArray(finding.references)||finding.references.length>4||!Object.hasOwn(decisions,finding.decision)||!Object.hasOwn(reasons,finding.reason)||!['none','propose_xml_change','propose_escalation'].includes(finding.action))throw Error('Invalid Keeper finding proposal.');
     if(!finding.references.length&&(finding.decision!=='hold'||!['evidence_only','insufficient_evidence'].includes(finding.reason)||finding.action!=='none'))throw Error('Unsupported Keeper recommendation without source evidence.');
     if(finding.action==='propose_xml_change'&&finding.decision!=='recommend_change')throw Error('Inconsistent Keeper action proposal.');
+    const eligibility=escalation?evaluateEscalationAuthorization(finding as any):undefined;
+    if(eligibility&&!eligibility.eligible)throw Error(eligibility.reason);
     for(const item of finding.references){
       const q=proposalObject(item,['ref','sha256','field','quote']);
       if(typeof q.ref!=='string'||!/^E[1-9]\d*$/.test(q.ref))throw Error('Invalid evidence citation link.');
@@ -53,7 +58,16 @@ export function finalizeKeeperProposal(raw:string,context:{reviewId:string;evide
       if(!['text','source','context','response'].includes(q.field)||typeof q.quote!=='string'||!q.quote.trim()||q.quote.length>1000||!context.slices.get(record.id)?.[q.field as KeeperQuoteField]?.some(s=>s.includes(q.quote)))throw Error('Keeper quote was not returned by a tool in this request.');
       blocks.push(`> Source quotation — not an action receipt: ${quotedMarkdown(q.quote)} [${q.ref}]`);
     }
-    blocks.push(`Proposed decision: ${decisions[finding.decision as keyof typeof decisions]}. ${reasons[finding.reason as keyof typeof reasons]}. ${finding.action==='propose_xml_change'?'XML change proposed only; not executed.':'No XML action proposed.'}`);
+    if(escalation){
+      const human=finding.escalationType==='human_review';
+      blocks.push(`Proposed decision: ${decisions[finding.decision as keyof typeof decisions]}. ${reasons[finding.reason as keyof typeof reasons]}. ${human?'Human review':'Escalation'} proposed only; not created, sent, or authorized.`);
+      blocks.push(`Escalation type: ${finding.escalationType}.\nProblem category (proposed): ${finding.problemCategory}.`);
+      if(human)blocks.push('Basis: Requires human policy review (escalation authority not established).');
+      else {
+        const policy=getEscalationPolicy(finding.policyId)!;
+        blocks.push(`Policy: ${quotedMarkdown(policy.title)} (${quotedMarkdown(policy.id)}, v${quotedMarkdown(policy.version)}).\nBasis: Production rule: ${quotedMarkdown(finding.policyBasis.ruleId)} — ${quotedMarkdown(finding.policyBasis.ruleCitation)} (verified against trusted registry; proposal qualification only).`);
+      }
+    }else blocks.push(`Proposed decision: ${decisions[finding.decision as keyof typeof decisions]}. ${reasons[finding.reason as keyof typeof reasons]}. ${finding.action==='propose_xml_change'?'XML change proposed only; not executed.':'No XML action proposed.'}`);
   }
   if(!root.findings.length)blocks.push('No review findings established. Execution and verification evidence is unavailable.');
   blocks.push(`Uncertainty: ${root.uncertainty==='ambiguous_target'?'target ambiguous':root.uncertainty==='missing_evidence'?'evidence missing':'not independently assessed'}.`);
