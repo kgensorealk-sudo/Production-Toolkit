@@ -3,6 +3,15 @@
   "runtime": "Node 24; verified locally with 24.11.1 on Windows x64",
   "entries": [
     {
+      "file": "tests/keeper-production-registration.mjs",
+      "kinds": ["behavioral", "source-contract/static"],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "introducedIn": "Phase 2B Unit 3",
+      "baselineDependencies": [],
+      "externalChecks": []
+    },
+    {
       "file": "tests/id-auditor-referential-integrity.mjs",
       "kinds": ["behavioral", "source-contract/static"],
       "baselineDependencies": [],
