@@ -1,4 +1,5 @@
 import {keeperProviderFailure} from './keeperProviderFailure.js';
+import {keeperProviderDiagnosticEvents,type KeeperDiagnosticAttempt,type KeeperFailurePhase} from './keeperProviderDiagnostics.js';
 import {buildKeeperAnswerEvidence,finalizeKeeperWithoutEvidence,keeperFinalProposalInstruction,type KeeperAnswerEvidence} from './keeperAnswerEvidence.js';
 import {planKeeperReviewBatch,keeperBatchProgress} from './keeperReviewBatch.js';
 import type {KeeperActivity} from './keeperActivity.js';
@@ -243,6 +244,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let reply = '';
     let activeModel = '';
     let lastError: any = null;
+    const diagnosticAttempts:KeeperDiagnosticAttempt[]=[];
 
     for (let i = 0; i < CANDIDATE_MODELS.length; i++) {
       const candidate = CANDIDATE_MODELS[i];
@@ -255,6 +257,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (candidate.provider === 'anthropic' || Date.now() >= deadline) continue;
 
       const attemptStarted=Date.now();let attemptOutcome='failed';let failure:string|undefined;
+      let diagnosticPhase:KeeperFailurePhase='provider_request',diagnosticError:unknown;
       if(evidence)answerEvidence=buildKeeperAnswerEvidence(evidence,{kind:'unavailable',scopeRecords:reviewEvidence!.records.length});
       const modelController=new AbortController();
       let modelTimer: ReturnType<typeof setTimeout> | undefined;
@@ -269,7 +272,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         let text = '';
 
         if (evidence) {
-          const result = await runKeeperToolLoop({provider: candidate.provider as 'gemini'|'openai',client:candidate.provider==='gemini'?geminiClient:openaiClient, model:candidate.model,messages:candidate.provider==='gemini'?geminiContents:openaiMessages.slice(1),systemInstruction,evidence:reviewEvidence!,countEvidence:evidence,requiredRecordIds:batch?.evidence.records.map(r=>r.id),artifacts:suppliedArtifacts,deadline,question:countQuestion,onActivity:event=>events.push(event),onEvidenceProgress:progress=>{answerEvidence=progress;}});
+          const result = await runKeeperToolLoop({provider: candidate.provider as 'gemini'|'openai',client:candidate.provider==='gemini'?geminiClient:openaiClient, model:candidate.model,messages:candidate.provider==='gemini'?geminiContents:openaiMessages.slice(1),systemInstruction,evidence:reviewEvidence!,countEvidence:evidence,requiredRecordIds:batch?.evidence.records.map(r=>r.id),artifacts:suppliedArtifacts,deadline,question:countQuestion,onActivity:event=>events.push(event),onEvidenceProgress:progress=>{answerEvidence=progress;},onDiagnosticPhase:phase=>{diagnosticPhase=phase;}});
           text=result.text;toolTrace=result.trace;retrievalCoverage=result.coverage;
           answerEvidence=result.answerEvidence;
           batchCompleted=!!batch&&result.answerEvidence.answer.kind==='interpretation'&&result.coverage.fullyRetrievedRecords===batch.evidence.records.length;
@@ -289,6 +292,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             },
           });
           const response: any = await Promise.race([modelPromise, timeoutPromise]);
+          diagnosticPhase='response_parsing';
           text = response?.text || '';
         } else {
           // OpenAI provider
@@ -297,20 +301,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             messages: [...openaiMessages,{role:'system',content:keeperFinalProposalInstruction+'\nReview request ID: '+noEvidenceReviewId}],
           },{signal:modelController.signal});
           const response: any = await Promise.race([modelPromise, timeoutPromise]);
+          diagnosticPhase='response_parsing';
           text = response?.choices?.[0]?.message?.content || '';
         }
 
         if (text) {
+          if(!evidence)diagnosticPhase='proposal_finalization';
           reply = evidence?text:finalizeKeeperWithoutEvidence(text,countQuestion||'',noEvidenceReviewId);
           activeModel = candidate.model;attemptOutcome='success';
           break;
         }
       } catch (modelErr: any) {
-        console.warn(`[AI Copilot - Vercel] Model ${candidate.model} (${candidate.provider}) encountered error:`, keeperProviderFailure(modelErr));
+        diagnosticError=modelErr;
         lastError = modelErr;failure=keeperProviderFailure(modelErr);
         if(personalGeminiKey&&failure==='authentication_or_access')break;
-      } finally { if(!evidence)events.push({kind:'model_round',model:candidate.model,round:1,elapsedMs:Date.now()-attemptStarted,outcome:attemptOutcome});attempts.push({model:candidate.model,provider:candidate.provider,elapsedMs:Date.now()-attemptStarted,outcome:attemptOutcome,failure});clearTimeout(modelTimer);modelController.abort(); }
+      } finally { diagnosticAttempts.push({provider:candidate.provider,model:candidate.model,phase:diagnosticPhase,outcome:attemptOutcome==='success'?'success':'failed',elapsedMs:Date.now()-attemptStarted,error:diagnosticError});if(!evidence)events.push({kind:'model_round',model:candidate.model,round:1,elapsedMs:Date.now()-attemptStarted,outcome:attemptOutcome});attempts.push({model:candidate.model,provider:candidate.provider,elapsedMs:Date.now()-attemptStarted,outcome:attemptOutcome,failure});clearTimeout(modelTimer);modelController.abort(); }
     }
+    for(const diagnostic of keeperProviderDiagnosticEvents(noEvidenceReviewId,diagnosticAttempts))console.warn(JSON.stringify(diagnostic));
 
     if (!reply && localEvidence) return res.status(503).json({error:keeperProviderFailure(lastError)==='authentication_or_access'?(personalGeminiKey?'Gemini rejected your personal API key or its access. Check the key and permissions. Your local QA report is still available.':'Gemini rejected the configured API key or its access. Contact the administrator. Your local QA report is still available.'):'Keeper AI could not complete this review. Your local QA report is still available; no AI interpretation has been produced.',code:'AI_UNAVAILABLE',activity:activity(),answerEvidence,evidence:evidenceSummary(localEvidence),...(batch?{reviewBatch:keeperBatchProgress(batch,false)}:{})});
     if (!reply && evidence) return res.json({reply:keeperFallbackReport(evidence,latestUser?.content || ''),modelUsed:'keeper-evidence-only',activity:activity(),evidence:evidenceSummary(evidence),interpretationUnavailable:true});

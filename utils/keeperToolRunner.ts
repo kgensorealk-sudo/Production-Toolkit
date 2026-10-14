@@ -1,4 +1,5 @@
 import type {KeeperActivity} from './keeperActivity.js';
+import type {KeeperFailurePhase} from './keeperProviderDiagnostics.js';
 import {buildKeeperAnswerEvidence,keeperEvidenceRef,linkKeeperEvidenceCitations,finalizeKeeperProposal,keeperFinalProposalInstruction,retainKeeperQuoteSlices,type KeeperAccessibleQuotes,type KeeperAnswerEvidence} from './keeperAnswerEvidence.js';
 import {renderKeeperScope} from './keeperScope.js';
 import {
@@ -27,6 +28,7 @@ export async function runKeeperToolLoop(options: {
   requiredRecordIds?:string[];
   onEvidenceProgress?:(evidence:KeeperAnswerEvidence)=>void;
   onActivity?:(event:NonNullable<KeeperActivity['events']>[number])=>void;
+  onDiagnosticPhase?:(phase:KeeperFailurePhase)=>void;
 }) {
   const { provider, client, model, evidence } = options;
   const reviewId=globalThis.crypto.randomUUID();
@@ -108,6 +110,7 @@ export async function runKeeperToolLoop(options: {
   let optCountResult: ReturnType<typeof summarizeOptChanges> | undefined;
   const answerEvidence=(kind:KeeperAnswerEvidence['answer']['kind']='interpretation',cited?:ReadonlySet<string>)=>buildKeeperAnswerEvidence(inventory,{kind,cited,retrieved,fullyRetrieved,scopeRecords:evidence.records.length,xmlExcerptReads,inventoryCountsRead:readOptCounts});
   for (let round = 0; round < 6; round++) {
+    options.onDiagnosticPhase?.('provider_request');
     const remaining = Math.min(30000, options.deadline - Date.now());
     if (remaining <= 0)
       throw new Error("Keeper request time budget exhausted.");
@@ -147,6 +150,7 @@ export async function runKeeperToolLoop(options: {
       options.onActivity?.({kind:'model_round',model,round:round+1,elapsedMs:Date.now()-roundStarted,outcome:roundOutcome});
       clearTimeout(timer);
     }
+    options.onDiagnosticPhase?.('response_parsing');
     const calls =
       provider === "gemini"
         ? response.functionCalls || []
@@ -158,6 +162,7 @@ export async function runKeeperToolLoop(options: {
           : response.choices?.[0]?.message?.content;
       if (typeof text !== "string" || !text.trim())
         throw new Error("Empty model response.");
+      options.onDiagnosticPhase?.('evidence_validation');
       if ((evidence.records.length || evidence.files.length) && !successfulReads)
         throw new Error("Model did not inspect supplied evidence.");
       const requestedQueries=[...task.matchAll(/\bq\d+\b/gi)].map(m=>m[0].toLowerCase());
@@ -169,10 +174,12 @@ export async function runKeeperToolLoop(options: {
       if ((allQueriesRequested || claimsAllQueries) && evidence.records.some(r=>r.kind==='query' && !fullyRetrieved.has(r.id))) throw new Error('Incomplete query evidence retrieval; refusing a whole-query review claim.');
       const optKinds=[...keeperOptReviewKinds(task),...keeperOptReviewKinds(text)];
       if(evidence.records.some(r=>keeperRecordInOptReview(r.kind,optKinds)&&!fullyRetrieved.has(r.id)))throw new Error('Incomplete OPT evidence retrieval; refusing a whole-inventory review claim.');
+      options.onDiagnosticPhase?.('proposal_finalization');
       const finalized=finalizeKeeperProposal(text,{reviewId,evidence:inventory,retrieved,slices:quoteSlices,inspectionReads:successfulReads});
       const linked=linkKeeperEvidenceCitations(finalized.text,inventory,retrieved);
       return { text:requestsOptTagCounts(task) && optCountResult ? renderOptCounts(optCountResult)+'\n\n'+linked.text : linked.text, trace, coverage: coverage(),answerEvidence:{...answerEvidence(finalized.hasFindings?'interpretation':'scope',linked.cited),findingCoverage:linked.findingCoverage} };
     }
+    options.onDiagnosticPhase?.('tool_execution');
     if (round === 5 || callsUsed + calls.length > 8)
       throw new Error(
         "Keeper tool-call limit reached; narrow the task or retry.",
