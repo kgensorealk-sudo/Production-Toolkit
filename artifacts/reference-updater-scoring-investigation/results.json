@@ -1,0 +1,1274 @@
+{
+  "cases": [
+    {
+      "name": "baseline identical metadata",
+      "original": "<ce:bib-reference id=\"bb0005\"><ce:label>Smith, 2020</ce:label><sb:reference><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Effects of temperature and pressure on the stability of coastal ecosystems</sb:maintitle></sb:title></sb:contribution><sb:host><sb:journal><sb:title><sb:maintitle>Journal of Coastal Studies</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:journal></sb:host></sb:reference></ce:bib-reference>",
+      "updated": "<ce:bib-reference id=\"bb0900\"><ce:label>Smith, 2020</ce:label><sb:reference><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Effects of temperature and pressure on the stability of coastal ecosystems</sb:maintitle></sb:title></sb:contribution><sb:host><sb:journal><sb:title><sb:maintitle>Journal of Coastal Studies</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:journal></sb:host></sb:reference></ce:bib-reference>",
+      "score": 100,
+      "type": "Content",
+      "status": "update",
+      "fullTextSimilarity": 100,
+      "parsed": [
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith effects of temperature and pressure on the stability of coastal ecosystems journal of coastal studies 2020",
+          "title": "effectsoftemperatureandpressureonthestabilityofcoastalecosystems",
+          "author": "smith",
+          "authors": [
+            "Smith"
+          ],
+          "authCount": 1,
+          "year": "2020",
+          "doi": ""
+        },
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith effects of temperature and pressure on the stability of coastal ecosystems journal of coastal studies 2020",
+          "title": "effectsoftemperatureandpressureonthestabilityofcoastalecosystems",
+          "author": "smith",
+          "authors": [
+            "Smith"
+          ],
+          "authCount": 1,
+          "year": "2020",
+          "doi": ""
+        }
+      ],
+      "candidates": [],
+      "generated": {
+        "default": {
+          "produced": true,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Merge Protocol Executed. Unchanged references preserved."
+          ]
+        },
+        "autoConfirm": {
+          "produced": true,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Merge Protocol Executed. Unchanged references preserved."
+          ]
+        }
+      }
+    },
+    {
+      "name": "equivalent ampersand spellings short entry",
+      "original": "<ce:bib-reference id=\"bb0005\"><ce:label>Smith, 2020</ce:label><sb:reference><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:date>2020</sb:date><sb:title><sb:maintitle>A &amp; B</sb:maintitle></sb:title></sb:contribution></sb:reference></ce:bib-reference>",
+      "updated": "<ce:bib-reference id=\"bb0900\"><ce:label>Smith, 2020</ce:label><sb:reference><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:date>2020</sb:date><sb:title><sb:maintitle>A &#38; B</sb:maintitle></sb:title></sb:contribution></sb:reference></ce:bib-reference>",
+      "score": 76,
+      "type": "Label",
+      "status": "potential_duplicate",
+      "fullTextSimilarity": 90.63,
+      "parsed": [
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith 2020 a &amp; b",
+          "title": "aampb",
+          "author": "smith",
+          "authors": [
+            "Smith"
+          ],
+          "authCount": 1,
+          "year": "2020",
+          "doi": ""
+        },
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith 2020 a &#38; b",
+          "title": "a38b",
+          "author": "smith",
+          "authors": [
+            "Smith"
+          ],
+          "authCount": 1,
+          "year": "2020",
+          "doi": ""
+        }
+      ],
+      "candidates": [
+        {
+          "index": 0,
+          "score": 76,
+          "matchType": "Label",
+          "label": "Smith, 2020",
+          "preview": "Smith, 2020<sb:contributi"
+        }
+      ],
+      "generated": {
+        "default": {
+          "produced": false,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Review required for 1 pending items before merging."
+          ]
+        },
+        "autoConfirm": {
+          "produced": false,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Review required for 1 pending items before merging."
+          ]
+        }
+      }
+    },
+    {
+      "name": "equivalent ampersand spellings longer entry",
+      "original": "<ce:bib-reference id=\"bb0005\"><ce:label>Smith, 2020</ce:label><sb:reference><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>A &amp; B</sb:maintitle></sb:title></sb:contribution><sb:host><sb:journal><sb:title><sb:maintitle>Journal of Coastal Studies</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:journal></sb:host></sb:reference></ce:bib-reference>",
+      "updated": "<ce:bib-reference id=\"bb0900\"><ce:label>Smith, 2020</ce:label><sb:reference><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>A &#38; B</sb:maintitle></sb:title></sb:contribution><sb:host><sb:journal><sb:title><sb:maintitle>Journal of Coastal Studies</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:journal></sb:host></sb:reference></ce:bib-reference>",
+      "score": 95,
+      "type": "Full-Text",
+      "status": "smart_match",
+      "fullTextSimilarity": 94.92,
+      "parsed": [
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith a &amp; b journal of coastal studies 2020",
+          "title": "aampb",
+          "author": "smith",
+          "authors": [
+            "Smith"
+          ],
+          "authCount": 1,
+          "year": "2020",
+          "doi": ""
+        },
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith a &#38; b journal of coastal studies 2020",
+          "title": "a38b",
+          "author": "smith",
+          "authors": [
+            "Smith"
+          ],
+          "authCount": 1,
+          "year": "2020",
+          "doi": ""
+        }
+      ],
+      "candidates": [
+        {
+          "index": 0,
+          "score": 95,
+          "matchType": "Full-Text",
+          "label": "Smith, 2020",
+          "preview": "Smith, 2020<sb:contributi"
+        }
+      ],
+      "generated": {
+        "default": {
+          "produced": false,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Review required for 1 pending items before merging."
+          ]
+        },
+        "autoConfirm": {
+          "produced": true,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Merge Protocol Executed. Unchanged references preserved."
+          ]
+        }
+      }
+    },
+    {
+      "name": "equivalent accent spellings",
+      "original": "<ce:bib-reference id=\"bb0005\"><ce:label>Smith, 2020</ce:label><sb:reference><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Café coastal study</sb:maintitle></sb:title></sb:contribution><sb:host><sb:journal><sb:title><sb:maintitle>Journal of Coastal Studies</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:journal></sb:host></sb:reference></ce:bib-reference>",
+      "updated": "<ce:bib-reference id=\"bb0900\"><ce:label>Smith, 2020</ce:label><sb:reference><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Caf&#233; coastal study</sb:maintitle></sb:title></sb:contribution><sb:host><sb:journal><sb:title><sb:maintitle>Journal of Coastal Studies</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:journal></sb:host></sb:reference></ce:bib-reference>",
+      "score": 93,
+      "type": "Label",
+      "status": "potential_duplicate",
+      "fullTextSimilarity": 91.78,
+      "parsed": [
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith café coastal study journal of coastal studies 2020",
+          "title": "cafécoastalstudy",
+          "author": "smith",
+          "authors": [
+            "Smith"
+          ],
+          "authCount": 1,
+          "year": "2020",
+          "doi": ""
+        },
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith caf&#233; coastal study journal of coastal studies 2020",
+          "title": "caf233coastalstudy",
+          "author": "smith",
+          "authors": [
+            "Smith"
+          ],
+          "authCount": 1,
+          "year": "2020",
+          "doi": ""
+        }
+      ],
+      "candidates": [
+        {
+          "index": 0,
+          "score": 93,
+          "matchType": "Label",
+          "label": "Smith, 2020",
+          "preview": "Smith, 2020<sb:contributi"
+        }
+      ],
+      "generated": {
+        "default": {
+          "produced": false,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Review required for 1 pending items before merging."
+          ]
+        },
+        "autoConfirm": {
+          "produced": false,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Review required for 1 pending items before merging."
+          ]
+        }
+      }
+    },
+    {
+      "name": "equivalent literal CDATA ampersand",
+      "original": "<ce:bib-reference id=\"bb0005\"><ce:label>Smith, 2020</ce:label><ce:other-ref>Smith (2020). A &amp; B.</ce:other-ref></ce:bib-reference>",
+      "updated": "<ce:bib-reference id=\"bb0900\"><ce:label>Smith, 2020</ce:label><ce:other-ref>Smith (2020). <![CDATA[A & B.]]></ce:other-ref></ce:bib-reference>",
+      "score": 56,
+      "type": "Label",
+      "status": "potential_duplicate",
+      "fullTextSimilarity": 88.89,
+      "parsed": [
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith (2020). a &amp; b.",
+          "title": "aampb",
+          "author": "smith",
+          "authors": [],
+          "authCount": 2,
+          "year": "2020",
+          "doi": ""
+        },
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith (2020). a & b.",
+          "title": "ab",
+          "author": "smith",
+          "authors": [],
+          "authCount": 2,
+          "year": "2020",
+          "doi": ""
+        }
+      ],
+      "candidates": [
+        {
+          "index": 0,
+          "score": 56,
+          "matchType": "Label",
+          "label": "Smith, 2020",
+          "preview": "Smith, 2020Smith (2020). "
+        }
+      ],
+      "generated": {
+        "default": {
+          "produced": false,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Review required for 1 pending items before merging."
+          ]
+        },
+        "autoConfirm": {
+          "produced": false,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Review required for 1 pending items before merging."
+          ]
+        }
+      }
+    },
+    {
+      "name": "inline formatting inside word",
+      "original": "<ce:bib-reference id=\"bb0005\"><ce:label>Smith, 2020</ce:label><ce:other-ref>Smith (2020). Ecosystems.</ce:other-ref></ce:bib-reference>",
+      "updated": "<ce:bib-reference id=\"bb0900\"><ce:label>Smith, 2020</ce:label><ce:other-ref>Smith (2020). E<ce:italic>c</ce:italic>o<ce:italic>s</ce:italic>y<ce:italic>s</ce:italic>t<ce:italic>e</ce:italic>m<ce:italic>s</ce:italic>.</ce:other-ref></ce:bib-reference>",
+      "score": 80,
+      "type": "Label",
+      "status": "potential_duplicate",
+      "fullTextSimilarity": 78.72,
+      "parsed": [
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith (2020). ecosystems.",
+          "title": "ecosystems",
+          "author": "smith",
+          "authors": [],
+          "authCount": 2,
+          "year": "2020",
+          "doi": ""
+        },
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith (2020). e c o s y s t e m s .",
+          "title": "ecosystems",
+          "author": "smith",
+          "authors": [],
+          "authCount": 2,
+          "year": "2020",
+          "doi": ""
+        }
+      ],
+      "candidates": [
+        {
+          "index": 0,
+          "score": 80,
+          "matchType": "Label",
+          "label": "Smith, 2020",
+          "preview": "Smith, 2020Smith (2020). "
+        }
+      ],
+      "generated": {
+        "default": {
+          "produced": false,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Review required for 1 pending items before merging."
+          ]
+        },
+        "autoConfirm": {
+          "produced": false,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Review required for 1 pending items before merging."
+          ]
+        }
+      }
+    },
+    {
+      "name": "different visible word boundaries collapse",
+      "original": "<ce:bib-reference id=\"bb0005\"><ce:label>Smith, 2020</ce:label><ce:other-ref>Smith (2020). A<ce:italic>B</ce:italic>C.</ce:other-ref></ce:bib-reference>",
+      "updated": "<ce:bib-reference id=\"bb0900\"><ce:label>Smith, 2020</ce:label><ce:other-ref>Smith (2020). A B C.</ce:other-ref></ce:bib-reference>",
+      "score": 100,
+      "type": "Content",
+      "status": "update",
+      "fullTextSimilarity": 100,
+      "parsed": [
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith (2020). a b c.",
+          "title": "abc",
+          "author": "smith",
+          "authors": [],
+          "authCount": 2,
+          "year": "2020",
+          "doi": ""
+        },
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith (2020). a b c.",
+          "title": "abc",
+          "author": "smith",
+          "authors": [],
+          "authCount": 2,
+          "year": "2020",
+          "doi": ""
+        }
+      ],
+      "candidates": [],
+      "generated": {
+        "default": {
+          "produced": true,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Merge Protocol Executed. Unchanged references preserved."
+          ]
+        },
+        "autoConfirm": {
+          "produced": true,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Merge Protocol Executed. Unchanged references preserved."
+          ]
+        }
+      }
+    },
+    {
+      "name": "structured and plain exact flattened text",
+      "original": "<ce:bib-reference id=\"bb0005\"><ce:label>Smith, 2020</ce:label><sb:reference><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:date>2020</sb:date><sb:title><sb:maintitle>Effects of temperature and pressure on the stability of coastal ecosystems</sb:maintitle></sb:title></sb:contribution></sb:reference></ce:bib-reference>",
+      "updated": "<ce:bib-reference id=\"bb0900\"><ce:label>Smith, 2020</ce:label><ce:other-ref>Smith 2020 Effects of temperature and pressure on the stability of coastal ecosystems</ce:other-ref></ce:bib-reference>",
+      "score": 100,
+      "type": "Content",
+      "status": "update",
+      "fullTextSimilarity": 100,
+      "parsed": [
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith 2020 effects of temperature and pressure on the stability of coastal ecosystems",
+          "title": "effectsoftemperatureandpressureonthestabilityofcoastalecosystems",
+          "author": "smith",
+          "authors": [
+            "Smith"
+          ],
+          "authCount": 1,
+          "year": "2020",
+          "doi": ""
+        },
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith 2020 effects of temperature and pressure on the stability of coastal ecosystems",
+          "title": "smith2020effectsoftemperatureandpressureonthestabilityofcoastalecosystems",
+          "author": "smith",
+          "authors": [],
+          "authCount": 2,
+          "year": "2020",
+          "doi": ""
+        }
+      ],
+      "candidates": [],
+      "generated": {
+        "default": {
+          "produced": true,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Merge Protocol Executed. Unchanged references preserved."
+          ]
+        },
+        "autoConfirm": {
+          "produced": true,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Merge Protocol Executed. Unchanged references preserved."
+          ]
+        }
+      }
+    },
+    {
+      "name": "structured with source text versus plain",
+      "original": "<ce:bib-reference id=\"bb0005\"><ce:label>Smith, 2020</ce:label><sb:reference id=\"rf0005\"><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Coastal ecosystems</sb:maintitle></sb:title></sb:contribution><sb:host><sb:book><sb:title><sb:maintitle>Book</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:book></sb:host></sb:reference><ce:source-text id=\"se0005\">Smith (2020). Coastal ecosystems.</ce:source-text></ce:bib-reference>",
+      "updated": "<ce:bib-reference id=\"bb0900\"><ce:label>Smith, 2020</ce:label><ce:other-ref>Smith (2020). Coastal ecosystems.</ce:other-ref></ce:bib-reference>",
+      "score": 80,
+      "type": "Label",
+      "status": "potential_duplicate",
+      "fullTextSimilarity": 56.25,
+      "parsed": [
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith coastal ecosystems book 2020 smith (2020). coastal ecosystems.",
+          "title": "coastalecosystems",
+          "author": "smith",
+          "authors": [
+            "Smith"
+          ],
+          "authCount": 1,
+          "year": "2020",
+          "doi": ""
+        },
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith (2020). coastal ecosystems.",
+          "title": "coastalecosystems",
+          "author": "smith",
+          "authors": [],
+          "authCount": 2,
+          "year": "2020",
+          "doi": ""
+        }
+      ],
+      "candidates": [
+        {
+          "index": 0,
+          "score": 80,
+          "matchType": "Label",
+          "label": "Smith, 2020",
+          "preview": "Smith, 2020Smith (2020). "
+        }
+      ],
+      "generated": {
+        "default": {
+          "produced": false,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Review required for 1 pending items before merging."
+          ]
+        },
+        "autoConfirm": {
+          "produced": false,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Review required for 1 pending items before merging."
+          ]
+        }
+      }
+    },
+    {
+      "name": "additional source text metadata unchanged",
+      "original": "<ce:bib-reference id=\"bb0005\"><ce:label>Smith, 2020</ce:label><sb:reference><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Effects of temperature and pressure on the stability of coastal ecosystems</sb:maintitle></sb:title></sb:contribution><sb:host><sb:journal><sb:title><sb:maintitle>Journal of Coastal Studies</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:journal></sb:host></sb:reference><ce:source-text id=\"se0005\">Smith (2020). Effects of temperature and pressure on the stability of coastal ecosystems.</ce:source-text></ce:bib-reference>",
+      "updated": "<ce:bib-reference id=\"bb0900\"><ce:label>Smith, 2020</ce:label><sb:reference><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Effects of temperature and pressure on the stability of coastal ecosystems</sb:maintitle></sb:title></sb:contribution><sb:host><sb:journal><sb:title><sb:maintitle>Journal of Coastal Studies</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:journal></sb:host></sb:reference></ce:bib-reference>",
+      "score": 100,
+      "type": "Label",
+      "status": "potential_duplicate",
+      "fullTextSimilarity": 57.94,
+      "parsed": [
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith effects of temperature and pressure on the stability of coastal ecosystems journal of coastal studies 2020 smith (2020). effects of temperature and pressure on the stability of coastal ecosystems.",
+          "title": "effectsoftemperatureandpressureonthestabilityofcoastalecosystems",
+          "author": "smith",
+          "authors": [
+            "Smith"
+          ],
+          "authCount": 1,
+          "year": "2020",
+          "doi": ""
+        },
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith effects of temperature and pressure on the stability of coastal ecosystems journal of coastal studies 2020",
+          "title": "effectsoftemperatureandpressureonthestabilityofcoastalecosystems",
+          "author": "smith",
+          "authors": [
+            "Smith"
+          ],
+          "authCount": 1,
+          "year": "2020",
+          "doi": ""
+        }
+      ],
+      "candidates": [
+        {
+          "index": 0,
+          "score": 100,
+          "matchType": "Label",
+          "label": "Smith, 2020",
+          "preview": "Smith, 2020<sb:contributi"
+        }
+      ],
+      "generated": {
+        "default": {
+          "produced": false,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Review required for 1 pending items before merging."
+          ]
+        },
+        "autoConfirm": {
+          "produced": false,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Review required for 1 pending items before merging."
+          ]
+        }
+      }
+    },
+    {
+      "name": "unstructured missing parenthesized year",
+      "original": "<ce:bib-reference id=\"bb0005\"><ce:label>Smith, 2020</ce:label><sb:reference><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Effects of temperature and pressure on the stability of coastal ecosystems</sb:maintitle></sb:title></sb:contribution><sb:host><sb:journal><sb:title><sb:maintitle>Journal of Coastal Studies</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:journal></sb:host></sb:reference></ce:bib-reference>",
+      "updated": "<ce:bib-reference id=\"bb0900\"><ce:label>Smith, 2020</ce:label><ce:other-ref>Smith 2020 Effects of temperature and pressure on the stability of coastal ecosystems</ce:other-ref></ce:bib-reference>",
+      "score": 75,
+      "type": "Label",
+      "status": "potential_duplicate",
+      "fullTextSimilarity": 70.16,
+      "parsed": [
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith effects of temperature and pressure on the stability of coastal ecosystems journal of coastal studies 2020",
+          "title": "effectsoftemperatureandpressureonthestabilityofcoastalecosystems",
+          "author": "smith",
+          "authors": [
+            "Smith"
+          ],
+          "authCount": 1,
+          "year": "2020",
+          "doi": ""
+        },
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith 2020 effects of temperature and pressure on the stability of coastal ecosystems",
+          "title": "smith2020effectsoftemperatureandpressureonthestabilityofcoastalecosystems",
+          "author": "smith",
+          "authors": [],
+          "authCount": 2,
+          "year": "2020",
+          "doi": ""
+        }
+      ],
+      "candidates": [
+        {
+          "index": 0,
+          "score": 75,
+          "matchType": "Label",
+          "label": "Smith, 2020",
+          "preview": "Smith, 2020Smith 2020 Eff"
+        }
+      ],
+      "generated": {
+        "default": {
+          "produced": false,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Review required for 1 pending items before merging."
+          ]
+        },
+        "autoConfirm": {
+          "produced": false,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Review required for 1 pending items before merging."
+          ]
+        }
+      }
+    },
+    {
+      "name": "title selection depends on XML order",
+      "original": "<ce:bib-reference id=\"bb0005\"><ce:label>Smith, 2020</ce:label><sb:reference><sb:host><sb:journal><sb:title><sb:maintitle>Journal of Biology</sb:maintitle></sb:title></sb:journal></sb:host><sb:contribution><sb:title><sb:maintitle>Coastal ecosystems</sb:maintitle></sb:title></sb:contribution></sb:reference></ce:bib-reference>",
+      "updated": "<ce:bib-reference id=\"bb0900\"><ce:label>Smith, 2020</ce:label><sb:reference><sb:contribution><sb:title><sb:maintitle>Coastal ecosystems</sb:maintitle></sb:title></sb:contribution><sb:host><sb:journal><sb:title><sb:maintitle>Journal of Biology</sb:maintitle></sb:title></sb:journal></sb:host></sb:reference></ce:bib-reference>",
+      "score": 47,
+      "type": "Label",
+      "status": "potential_duplicate",
+      "fullTextSimilarity": 42.86,
+      "parsed": [
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 journal of biology coastal ecosystems",
+          "title": "journalofbiology",
+          "author": "smith",
+          "authors": [],
+          "authCount": 2,
+          "year": "2020",
+          "doi": ""
+        },
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 coastal ecosystems journal of biology",
+          "title": "coastalecosystems",
+          "author": "smith",
+          "authors": [],
+          "authCount": 2,
+          "year": "2020",
+          "doi": ""
+        }
+      ],
+      "candidates": [
+        {
+          "index": 0,
+          "score": 47,
+          "matchType": "Label",
+          "label": "Smith, 2020",
+          "preview": "Smith, 2020<sb:contributi"
+        }
+      ],
+      "generated": {
+        "default": {
+          "produced": false,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Review required for 1 pending items before merging."
+          ]
+        },
+        "autoConfirm": {
+          "produced": false,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Review required for 1 pending items before merging."
+          ]
+        }
+      }
+    },
+    {
+      "name": "DOI URL spelling same identifier",
+      "original": "<ce:bib-reference id=\"bb0005\"><ce:label>Smith, 2020</ce:label><sb:reference><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Effects of temperature and pressure on the stability of coastal ecosystems</sb:maintitle></sb:title></sb:contribution><sb:host><sb:journal><sb:title><sb:maintitle>Journal of Coastal Studies</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:journal><ce:doi>10.1234/abc</ce:doi></sb:host></sb:reference></ce:bib-reference>",
+      "updated": "<ce:bib-reference id=\"bb0900\"><ce:label>Smith, 2020</ce:label><sb:reference><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Effects of temperature and pressure on the stability of coastal ecosystems</sb:maintitle></sb:title></sb:contribution><sb:host><sb:journal><sb:title><sb:maintitle>Journal of Coastal Studies</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:journal><ce:doi>https://doi.org/10.1234/abc</ce:doi></sb:host></sb:reference></ce:bib-reference>",
+      "score": 100,
+      "type": "DOI",
+      "status": "update",
+      "fullTextSimilarity": 89.47,
+      "parsed": [
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith effects of temperature and pressure on the stability of coastal ecosystems journal of coastal studies 2020 10.1234/abc",
+          "title": "effectsoftemperatureandpressureonthestabilityofcoastalecosystems",
+          "author": "smith",
+          "authors": [
+            "Smith"
+          ],
+          "authCount": 1,
+          "year": "2020",
+          "doi": "10.1234/abc"
+        },
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith effects of temperature and pressure on the stability of coastal ecosystems journal of coastal studies 2020 https://doi.org/10.1234/abc",
+          "title": "effectsoftemperatureandpressureonthestabilityofcoastalecosystems",
+          "author": "smith",
+          "authors": [
+            "Smith"
+          ],
+          "authCount": 1,
+          "year": "2020",
+          "doi": "10.1234/abc"
+        }
+      ],
+      "candidates": [],
+      "generated": {
+        "default": {
+          "produced": true,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Merge Protocol Executed. Unchanged references preserved."
+          ]
+        },
+        "autoConfirm": {
+          "produced": true,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Merge Protocol Executed. Unchanged references preserved."
+          ]
+        }
+      }
+    },
+    {
+      "name": "DOI prefix whitespace same identifier",
+      "original": "<ce:bib-reference id=\"bb0005\"><ce:label>Smith, 2020</ce:label><sb:reference><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Short title</sb:maintitle></sb:title></sb:contribution><sb:host><sb:journal><sb:title><sb:maintitle>Journal of Coastal Studies</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:journal><ce:doi>10.1234/abc</ce:doi></sb:host></sb:reference></ce:bib-reference>",
+      "updated": "<ce:bib-reference id=\"bb0900\"><ce:label>Smith, 2020</ce:label><sb:reference><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Short title</sb:maintitle></sb:title></sb:contribution><sb:host><sb:journal><sb:title><sb:maintitle>Journal of Coastal Studies</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:journal><ce:doi>doi: 10.1234/abc</ce:doi></sb:host></sb:reference></ce:bib-reference>",
+      "score": 94,
+      "type": "Full-Text",
+      "status": "conflict",
+      "fullTextSimilarity": 93.59,
+      "parsed": [
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith short title journal of coastal studies 2020 10.1234/abc",
+          "title": "shorttitle",
+          "author": "smith",
+          "authors": [
+            "Smith"
+          ],
+          "authCount": 1,
+          "year": "2020",
+          "doi": "10.1234/abc"
+        },
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith short title journal of coastal studies 2020 doi: 10.1234/abc",
+          "title": "shorttitle",
+          "author": "smith",
+          "authors": [
+            "Smith"
+          ],
+          "authCount": 1,
+          "year": "2020",
+          "doi": " 10.1234/abc"
+        }
+      ],
+      "candidates": [
+        {
+          "index": 0,
+          "score": 94,
+          "matchType": "Full-Text",
+          "label": "Smith, 2020",
+          "preview": "Smith, 2020<sb:contributi"
+        }
+      ],
+      "generated": {
+        "default": {
+          "produced": false,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Review required for 1 pending items before merging."
+          ]
+        },
+        "autoConfirm": {
+          "produced": false,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Review required for 1 pending items before merging."
+          ]
+        }
+      }
+    },
+    {
+      "name": "full text outranks complete author conflict",
+      "original": "<ce:bib-reference id=\"bb0005\"><ce:label>Smith, 2020</ce:label><sb:reference><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author><sb:author><ce:surname>Jones</ce:surname></sb:author><sb:author><ce:surname>Lee</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Effects of temperature and pressure on the stability of coastal ecosystems</sb:maintitle></sb:title></sb:contribution><sb:host><sb:journal><sb:title><sb:maintitle>Journal of Coastal Studies</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:journal></sb:host></sb:reference></ce:bib-reference>",
+      "updated": "<ce:bib-reference id=\"bb0900\"><ce:label>Smith, 2020</ce:label><sb:reference><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author><sb:author><ce:surname>Jones</ce:surname></sb:author><sb:author><ce:surname>Brown</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Effects of temperature and pressure on the stability of coastal ecosystems</sb:maintitle></sb:title></sb:contribution><sb:host><sb:journal><sb:title><sb:maintitle>Journal of Coastal Studies</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:journal></sb:host></sb:reference></ce:bib-reference>",
+      "score": 96,
+      "type": "Full-Text",
+      "status": "smart_match",
+      "fullTextSimilarity": 96.32,
+      "parsed": [
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith jones lee effects of temperature and pressure on the stability of coastal ecosystems journal of coastal studies 2020",
+          "title": "effectsoftemperatureandpressureonthestabilityofcoastalecosystems",
+          "author": "smith",
+          "authors": [
+            "Smith",
+            "Jones",
+            "Lee"
+          ],
+          "authCount": 3,
+          "year": "2020",
+          "doi": ""
+        },
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith jones brown effects of temperature and pressure on the stability of coastal ecosystems journal of coastal studies 2020",
+          "title": "effectsoftemperatureandpressureonthestabilityofcoastalecosystems",
+          "author": "smith",
+          "authors": [
+            "Smith",
+            "Jones",
+            "Brown"
+          ],
+          "authCount": 3,
+          "year": "2020",
+          "doi": ""
+        }
+      ],
+      "candidates": [
+        {
+          "index": 0,
+          "score": 96,
+          "matchType": "Full-Text",
+          "label": "Smith, 2020",
+          "preview": "Smith, 2020<sb:contributi"
+        }
+      ],
+      "generated": {
+        "default": {
+          "produced": false,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Review required for 1 pending items before merging."
+          ]
+        },
+        "autoConfirm": {
+          "produced": true,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Merge Protocol Executed. Unchanged references preserved."
+          ]
+        }
+      }
+    },
+    {
+      "name": "full text outranks publication year change",
+      "original": "<ce:bib-reference id=\"bb0005\"><ce:label>Smith, 2020</ce:label><sb:reference><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Effects of temperature and pressure on the stability of coastal ecosystems</sb:maintitle></sb:title></sb:contribution><sb:host><sb:journal><sb:title><sb:maintitle>Journal of Coastal Studies</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:journal></sb:host></sb:reference></ce:bib-reference>",
+      "updated": "<ce:bib-reference id=\"bb0900\"><ce:label>Smith, 2020</ce:label><sb:reference><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Effects of temperature and pressure on the stability of coastal ecosystems</sb:maintitle></sb:title></sb:contribution><sb:host><sb:journal><sb:title><sb:maintitle>Journal of Coastal Studies</sb:maintitle></sb:title><sb:date>2021</sb:date></sb:journal></sb:host></sb:reference></ce:bib-reference>",
+      "score": 99,
+      "type": "Full-Text",
+      "status": "smart_match",
+      "fullTextSimilarity": 99.19,
+      "parsed": [
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith effects of temperature and pressure on the stability of coastal ecosystems journal of coastal studies 2020",
+          "title": "effectsoftemperatureandpressureonthestabilityofcoastalecosystems",
+          "author": "smith",
+          "authors": [
+            "Smith"
+          ],
+          "authCount": 1,
+          "year": "2020",
+          "doi": ""
+        },
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith effects of temperature and pressure on the stability of coastal ecosystems journal of coastal studies 2021",
+          "title": "effectsoftemperatureandpressureonthestabilityofcoastalecosystems",
+          "author": "smith",
+          "authors": [
+            "Smith"
+          ],
+          "authCount": 1,
+          "year": "2021",
+          "doi": ""
+        }
+      ],
+      "candidates": [
+        {
+          "index": 0,
+          "score": 99,
+          "matchType": "Full-Text",
+          "label": "Smith, 2020",
+          "preview": "Smith, 2020<sb:contributi"
+        }
+      ],
+      "generated": {
+        "default": {
+          "produced": false,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Review required for 1 pending items before merging."
+          ]
+        },
+        "autoConfirm": {
+          "produced": true,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Merge Protocol Executed. Unchanged references preserved."
+          ]
+        }
+      }
+    },
+    {
+      "name": "explicit DOI conflict remains blocked",
+      "original": "<ce:bib-reference id=\"bb0005\"><ce:label>Smith, 2020</ce:label><sb:reference><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Effects of temperature and pressure on the stability of coastal ecosystems</sb:maintitle></sb:title></sb:contribution><sb:host><sb:journal><sb:title><sb:maintitle>Journal of Coastal Studies</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:journal><ce:doi>10.1234/abc</ce:doi></sb:host></sb:reference></ce:bib-reference>",
+      "updated": "<ce:bib-reference id=\"bb0900\"><ce:label>Smith, 2020</ce:label><sb:reference><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Effects of temperature and pressure on the stability of coastal ecosystems</sb:maintitle></sb:title></sb:contribution><sb:host><sb:journal><sb:title><sb:maintitle>Journal of Coastal Studies</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:journal><ce:doi>10.1234/xyz</ce:doi></sb:host></sb:reference></ce:bib-reference>",
+      "score": 98,
+      "type": "Full-Text",
+      "status": "conflict",
+      "fullTextSimilarity": 97.79,
+      "parsed": [
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith effects of temperature and pressure on the stability of coastal ecosystems journal of coastal studies 2020 10.1234/abc",
+          "title": "effectsoftemperatureandpressureonthestabilityofcoastalecosystems",
+          "author": "smith",
+          "authors": [
+            "Smith"
+          ],
+          "authCount": 1,
+          "year": "2020",
+          "doi": "10.1234/abc"
+        },
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith effects of temperature and pressure on the stability of coastal ecosystems journal of coastal studies 2020 10.1234/xyz",
+          "title": "effectsoftemperatureandpressureonthestabilityofcoastalecosystems",
+          "author": "smith",
+          "authors": [
+            "Smith"
+          ],
+          "authCount": 1,
+          "year": "2020",
+          "doi": "10.1234/xyz"
+        }
+      ],
+      "candidates": [
+        {
+          "index": 0,
+          "score": 98,
+          "matchType": "Full-Text",
+          "label": "Smith, 2020",
+          "preview": "Smith, 2020<sb:contributi"
+        }
+      ],
+      "generated": {
+        "default": {
+          "produced": false,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Review required for 1 pending items before merging."
+          ]
+        },
+        "autoConfirm": {
+          "produced": false,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Review required for 1 pending items before merging."
+          ]
+        }
+      }
+    },
+    {
+      "name": "different numeric labels remain separate",
+      "original": "<ce:bib-reference id=\"bb0005\"><ce:label>[1]</ce:label><sb:reference><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Effects of temperature and pressure on the stability of coastal ecosystems</sb:maintitle></sb:title></sb:contribution><sb:host><sb:journal><sb:title><sb:maintitle>Journal of Coastal Studies</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:journal></sb:host></sb:reference></ce:bib-reference>",
+      "updated": "<ce:bib-reference id=\"bb0900\"><ce:label>[2]</ce:label><sb:reference><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Effects of temperature and pressure on the stability of coastal ecosystems</sb:maintitle></sb:title></sb:contribution><sb:host><sb:journal><sb:title><sb:maintitle>Journal of Coastal Studies</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:journal></sb:host></sb:reference></ce:bib-reference>",
+      "score": null,
+      "type": null,
+      "status": "unchanged",
+      "fullTextSimilarity": 99.14,
+      "parsed": [
+        {
+          "label": "[1]",
+          "cleanContent": "[1] smith effects of temperature and pressure on the stability of coastal ecosystems journal of coastal studies 2020",
+          "title": "effectsoftemperatureandpressureonthestabilityofcoastalecosystems",
+          "author": "smith",
+          "authors": [
+            "Smith"
+          ],
+          "authCount": 1,
+          "year": "2020",
+          "doi": ""
+        },
+        {
+          "label": "[2]",
+          "cleanContent": "[2] smith effects of temperature and pressure on the stability of coastal ecosystems journal of coastal studies 2020",
+          "title": "effectsoftemperatureandpressureonthestabilityofcoastalecosystems",
+          "author": "smith",
+          "authors": [
+            "Smith"
+          ],
+          "authCount": 1,
+          "year": "2020",
+          "doi": ""
+        }
+      ],
+      "candidates": [],
+      "generated": {
+        "default": {
+          "produced": false,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Review required for 1 pending items before merging."
+          ]
+        },
+        "autoConfirm": {
+          "produced": false,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Review required for 1 pending items before merging."
+          ]
+        }
+      }
+    },
+    {
+      "name": "missing title and authors label fallback",
+      "original": "<ce:bib-reference id=\"bb0005\"><ce:label>[1]</ce:label><ce:other-ref>short old</ce:other-ref></ce:bib-reference>",
+      "updated": "<ce:bib-reference id=\"bb0900\"><ce:label>[1]</ce:label><ce:other-ref>short new</ce:other-ref></ce:bib-reference>",
+      "score": 40,
+      "type": "Label",
+      "status": "potential_duplicate",
+      "fullTextSimilarity": 76.92,
+      "parsed": [
+        {
+          "label": "[1]",
+          "cleanContent": "[1] short old",
+          "title": "",
+          "author": "",
+          "authors": [],
+          "authCount": 1,
+          "year": "",
+          "doi": ""
+        },
+        {
+          "label": "[1]",
+          "cleanContent": "[1] short new",
+          "title": "",
+          "author": "",
+          "authors": [],
+          "authCount": 1,
+          "year": "",
+          "doi": ""
+        }
+      ],
+      "candidates": [
+        {
+          "index": 0,
+          "score": 40,
+          "matchType": "Label",
+          "label": "[1]",
+          "preview": "[1]short new</ce:other-re"
+        }
+      ],
+      "generated": {
+        "default": {
+          "produced": false,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Review required for 1 pending items before merging."
+          ]
+        },
+        "autoConfirm": {
+          "produced": false,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Review required for 1 pending items before merging."
+          ]
+        }
+      }
+    },
+    {
+      "name": "markup author list unavailable",
+      "original": "<ce:bib-reference id=\"bb0005\"><ce:label>Smith, 2020</ce:label><sb:reference><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>A &amp; B</sb:maintitle></sb:title></sb:contribution><sb:host><sb:journal><sb:title><sb:maintitle>Journal of Coastal Studies</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:journal></sb:host></sb:reference></ce:bib-reference>",
+      "updated": "<ce:bib-reference id=\"bb0900\"><ce:label>Smith, 2020</ce:label><sb:reference><sb:contribution><ce:authors><ce:author><ce:surname>Smith</ce:surname></ce:author></ce:authors><sb:title><sb:maintitle>A &#38; B</sb:maintitle></sb:title></sb:contribution><sb:host><sb:journal><sb:title><sb:maintitle>Journal of Coastal Studies</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:journal></sb:host></sb:reference></ce:bib-reference>",
+      "score": 95,
+      "type": "Full-Text",
+      "status": "smart_match",
+      "fullTextSimilarity": 94.92,
+      "parsed": [
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith a &amp; b journal of coastal studies 2020",
+          "title": "aampb",
+          "author": "smith",
+          "authors": [
+            "Smith"
+          ],
+          "authCount": 1,
+          "year": "2020",
+          "doi": ""
+        },
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith a &#38; b journal of coastal studies 2020",
+          "title": "a38b",
+          "author": "smith",
+          "authors": [],
+          "authCount": 1,
+          "year": "2020",
+          "doi": ""
+        }
+      ],
+      "candidates": [
+        {
+          "index": 0,
+          "score": 95,
+          "matchType": "Full-Text",
+          "label": "Smith, 2020",
+          "preview": "Smith, 2020<sb:contributi"
+        }
+      ],
+      "generated": {
+        "default": {
+          "produced": false,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Review required for 1 pending items before merging."
+          ]
+        },
+        "autoConfirm": {
+          "produced": true,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Merge Protocol Executed. Unchanged references preserved."
+          ]
+        }
+      }
+    },
+    {
+      "name": "early label stage suppresses stronger metadata candidate",
+      "original": "<ce:bib-reference id=\"bb0005\"><ce:label>Smith, 2020</ce:label><sb:reference><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Effects of temperature and pressure on the stability of coastal ecosystems</sb:maintitle></sb:title></sb:contribution><sb:host><sb:journal><sb:title><sb:maintitle>Journal of Coastal Studies</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:journal></sb:host></sb:reference></ce:bib-reference>",
+      "updated": "<ce:bib-reference id=\"bb0900\"><ce:label>Smith, 2020</ce:label><sb:reference><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Unrelated ocean circulation study</sb:maintitle></sb:title></sb:contribution><sb:host><sb:journal><sb:title><sb:maintitle>Journal of Coastal Studies</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:journal></sb:host></sb:reference></ce:bib-reference><ce:bib-reference id=\"bb0905\"><ce:label>Smith et al., 2020</ce:label><sb:reference><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Effects of temperature and pressure on the stability of coastal ecosystems</sb:maintitle></sb:title></sb:contribution><sb:host><sb:journal><sb:title><sb:maintitle>Coastal Studies</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:journal></sb:host></sb:reference></ce:bib-reference>",
+      "rows": [
+        {
+          "label": "Smith, 2020",
+          "id": "bb0005",
+          "status": "potential_duplicate",
+          "reviewed": false,
+          "matchType": "Label",
+          "matchScore": 69,
+          "preview": "Smith, 2020Sm...",
+          "isSynthetic": false,
+          "selected": true,
+          "sortKey": "Smith, 2020",
+          "originalIndex": 0,
+          "updatedIndex": 0,
+          "candidateSource": "updated",
+          "potentialMatches": [
+            {
+              "index": 0,
+              "score": 69,
+              "matchType": "Label",
+              "label": "Smith, 2020",
+              "preview": "Smith, 2020<sb:contributi"
+            }
+          ]
+        },
+        {
+          "label": "Smith et al., 2020",
+          "id": "bb0905",
+          "status": "potential_duplicate",
+          "preview": "Smith et al., 2020<ce:sur...",
+          "isSynthetic": false,
+          "selected": true,
+          "sortKey": "Smith et al., 2020",
+          "originalIndex": 0,
+          "updatedIndex": 1,
+          "potentialMatches": [
+            {
+              "index": 0,
+              "score": 100,
+              "matchType": "Surname-Year",
+              "label": "Smith, 2020",
+              "preview": "smith, 2020 smith effects of temperature and pressure on the"
+            }
+          ],
+          "candidateSource": "original",
+          "reviewed": false
+        }
+      ],
+      "parsed": [
+        {
+          "title": "unrelatedoceancirculationstudy",
+          "author": "smith",
+          "year": "2020",
+          "authors": [
+            "Smith"
+          ]
+        },
+        {
+          "title": "effectsoftemperatureandpressureonthestabilityofcoastalecosystems",
+          "author": "smith",
+          "year": "2020",
+          "authors": [
+            "Smith"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "stronger candidate alone control",
+      "original": "<ce:bib-reference id=\"bb0005\"><ce:label>Smith, 2020</ce:label><sb:reference><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Effects of temperature and pressure on the stability of coastal ecosystems</sb:maintitle></sb:title></sb:contribution><sb:host><sb:journal><sb:title><sb:maintitle>Journal of Coastal Studies</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:journal></sb:host></sb:reference></ce:bib-reference>",
+      "updated": "<ce:bib-reference id=\"bb0900\"><ce:label>Smith et al., 2020</ce:label><sb:reference><sb:contribution><sb:authors><sb:author><ce:surname>Smith</ce:surname></sb:author></sb:authors><sb:title><sb:maintitle>Effects of temperature and pressure on the stability of coastal ecosystems</sb:maintitle></sb:title></sb:contribution><sb:host><sb:journal><sb:title><sb:maintitle>Coastal Studies</sb:maintitle></sb:title><sb:date>2020</sb:date></sb:journal></sb:host></sb:reference></ce:bib-reference>",
+      "score": 100,
+      "type": "Surname-Year",
+      "status": "smart_match",
+      "fullTextSimilarity": 85.48,
+      "parsed": [
+        {
+          "label": "Smith, 2020",
+          "cleanContent": "smith, 2020 smith effects of temperature and pressure on the stability of coastal ecosystems journal of coastal studies 2020",
+          "title": "effectsoftemperatureandpressureonthestabilityofcoastalecosystems",
+          "author": "smith",
+          "authors": [
+            "Smith"
+          ],
+          "authCount": 1,
+          "year": "2020",
+          "doi": ""
+        },
+        {
+          "label": "Smith et al., 2020",
+          "cleanContent": "smith et al., 2020 smith effects of temperature and pressure on the stability of coastal ecosystems coastal studies 2020",
+          "title": "effectsoftemperatureandpressureonthestabilityofcoastalecosystems",
+          "author": "smith",
+          "authors": [
+            "Smith"
+          ],
+          "authCount": 1,
+          "year": "2020",
+          "doi": ""
+        }
+      ],
+      "candidates": [
+        {
+          "index": 0,
+          "score": 100,
+          "matchType": "Surname-Year",
+          "label": "Smith et al., 2020",
+          "preview": "Smith et al., 2020<sb:con"
+        }
+      ],
+      "generated": {
+        "default": {
+          "produced": false,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Review required for 1 pending items before merging."
+          ]
+        },
+        "autoConfirm": {
+          "produced": true,
+          "messages": [
+            "Analysis complete. Found 1 potential updates.",
+            "Merge Protocol Executed. Unchanged references preserved."
+          ]
+        }
+      }
+    }
+  ],
+  "real": {
+    "available": false
+  }
+}

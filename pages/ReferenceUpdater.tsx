@@ -56,6 +56,8 @@ interface RefBlock {
     authorsTruncated?: boolean;
     rawYear?: string;
     rawTitle?: string;
+    yearIsStructured?: boolean;
+    titleIsStructured?: boolean;
     subIds?: Record<string, string[]>;
 }
 
@@ -322,6 +324,27 @@ const ReferenceUpdater: React.FC = () => {
         const refs: RefBlock[] = [];
         const structure = scanReferenceXml(xml);
         if (structure.normalizedXml !== xml) return parseReferences(structure.normalizedXml);
+        const children = new Map<typeof structure.nodes[number], typeof structure.nodes>();
+        const stack: typeof structure.nodes = [];
+        for (const child of structure.nodes) {
+            while (stack.length && stack[stack.length - 1].end <= child.start) stack.pop();
+            const parent = stack[stack.length - 1];
+            if (parent) { const list = children.get(parent) || []; list.push(child); children.set(parent, list); }
+            if (child.end > child.openEnd) stack.push(child);
+        }
+        // Inline markup never adds whitespace. Structured fields do need boundaries.
+        const fieldBoundary = (name: string) => name.startsWith('sb:') ||
+            ['ce:label','ce:source-text','ce:other-ref','ce:given-name','ce:surname','ce:title','ce:year','ce:date','ce:doi'].includes(name);
+        const visibleText = (element: typeof structure.nodes[number]): string => {
+            let position = element.openEnd, text = '';
+            for (const child of children.get(element) || []) {
+                text += structure.textContent({...element, openEnd:position, closeStart:child.start});
+                const boundary = fieldBoundary(child.name) ? ' ' : '';
+                text += boundary + visibleText(child) + boundary;
+                position = child.end;
+            }
+            return text + structure.textContent({...element, openEnd:position, closeStart:element.closeStart});
+        };
         for (const node of structure.references) {
             const content = structure.metadataXml.slice(node.openEnd, node.closeStart);
             const match = [xml.slice(node.start, node.end)];
@@ -336,31 +359,36 @@ const ReferenceUpdater: React.FC = () => {
             structure.nodes.filter(child => child.start > node.start && child.end <= node.end && child.attributes.id)
                 .forEach(child => (subIds[child.name] ??= []).push(child.attributes.id));
 
-            const labelMatch = content.match(/<ce:label>(.*?)<\/ce:label>/);
-            let label = labelMatch ? labelMatch[1].trim() : '', isSynthetic = false;
+            const descendants = structure.nodes.filter(child => child.start >= node.openEnd && child.end <= node.closeStart);
+            const within = (child: typeof node, parent: typeof node) => child.start >= parent.openEnd && child.end <= parent.closeStart;
+            const contribution = descendants.find(child => child.name === 'sb:contribution');
+            const authorNodes = descendants.filter(child => ['sb:author','ce:author'].includes(child.name) &&
+                (!contribution || within(child, contribution)));
+            const nameNodes = authorNodes.flatMap(author => descendants.filter(child => within(child,author) && ['ce:surname','sb:surname'].includes(child.name)));
+            const labelNode = (children.get(node) || []).find(child => child.name === 'ce:label');
+            let label = labelNode ? visibleText(labelNode).trim() : '', isSynthetic = false;
 
-            const surnameMatches = Array.from(content.matchAll(/<(?:ce|sb):surname\b[^>]*>([\s\S]*?)<\/(?:ce|sb):surname>/gi));
-            const rawAuthors = Array.from(content.matchAll(/<sb:author\b[^>]*>([\s\S]*?)<\/sb:author>/gi), m =>
-                Array.from(m[1].matchAll(/<ce:(?:given-name|surname)\b[^>]*>([\s\S]*?)<\/ce:(?:given-name|surname)>/gi), name =>
-                    name[1].replace(/<[^>]+>/g, '').trim()).join(' ').trim()).filter(Boolean);
+            const surnameMatches = nameNodes.map(child => ['',visibleText(child).trim()]);
+            const rawAuthors = authorNodes.map(author => descendants.filter(child => within(child,author) &&
+                ['ce:given-name','ce:surname','sb:given-name','sb:surname'].includes(child.name)).map(child=>visibleText(child).trim()).join(' ').trim()).filter(Boolean);
             const authCount = surnameMatches.length;
             const author = authCount > 0 ? surnameMatches[0][1].normalize('NFC').toLowerCase().replace(/[^\p{L}\p{M}]/gu, '') : '';
 
-            const dateMatch = content.match(/<(?:ce|sb):year\b[^>]*>([\s\S]*?)<\/(?:ce|sb):year>/i) ||
-                              content.match(/<(?:ce|sb):date\b[^>]*>([\s\S]*?)<\/(?:ce|sb):date>/i);
-            const yearRaw = dateMatch ? dateMatch[1].trim() : '';
+            const dateNode = descendants.find(child => ['ce:year','sb:year','ce:date','sb:date'].includes(child.name));
+            const yearRaw = dateNode ? visibleText(dateNode).trim() : '';
             const year = yearRaw.toLowerCase().replace(/[^0-9a-z]/g, ''); // Preserve letter suffix (e.g. 2022a)
 
-            const titleMatch = content.match(/<(?:ce|sb):title\b[^>]*>([\s\S]*?)<\/(?:ce|sb):title>/i);
-            const titleRaw = titleMatch ? titleMatch[1] : '';
-            let title = titleRaw.replace(/<[^>]+>/g, '').normalize('NFC').toLowerCase().replace(/[^\p{L}\p{M}\p{N}]/gu, '');
+            const titleNode = descendants.find(child => ['ce:title','sb:title'].includes(child.name) &&
+                (contribution ? within(child,contribution) : !descendants.some(parent=>parent.name==='sb:host' && within(child,parent))));
+            const titleRaw = titleNode ? visibleText(titleNode).trim() : '';
+            let title = titleRaw.normalize('NFC').toLowerCase().replace(/[^\p{L}\p{M}\p{N}\s]/gu, '').replace(/\s+/g,' ').trim();
 
-            const doiMatch = content.match(/<(?:ce|sb):doi\b[^>]*>([\s\S]*?)<\/(?:ce|sb):doi>/i);
-            let doi = doiMatch ? doiMatch[1].replace(/<[^>]+>/g, '').trim().toLowerCase() : '';
+            const doiNode = descendants.find(child=>['ce:doi','sb:doi'].includes(child.name));
+            let doi = doiNode ? visibleText(doiNode).trim().toLowerCase() : '';
             // Normalize DOI
-            doi = doi.replace(/^(https?:\/\/)?(dx\.)?doi\.org\//, '').replace(/^doi:/, '');
+            doi = doi.replace(/^doi:\s*/, '').replace(/^(https?:\/\/)?(dx\.)?doi\.org\//, '').trim();
 
-            const cleanContent = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+            const cleanContent = visibleText(node).replace(/\s+/g, ' ').trim().normalize('NFC').toLowerCase();
             // Exact content matching must retain letters, punctuation, and word boundaries.
             const contentHash = cleanContent.normalize('NFC');
 
@@ -372,7 +400,7 @@ const ReferenceUpdater: React.FC = () => {
             let finalAuthCount = authCount;
 
             if (!finalAuthor || !finalYear || !finalTitle) {
-                const textOnly = content.replace(/<[^>]+>/g, ' ');
+                const textOnly = visibleText(node).replace(/\s+/g,' ').trim();
                 if (!finalYear) {
                     // Handle years with suffixes like 2022a
                     const yMatch = textOnly.match(/\b(19|20)\d{2}[a-z]?\b/) || label.match(/\b(19|20)\d{2}[a-z]?\b/);
@@ -414,8 +442,10 @@ const ReferenceUpdater: React.FC = () => {
                         if (label && titleProxy.startsWith(label)) {
                             titleProxy = titleProxy.substring(label.length).trim();
                         }
+                        const yearPosition = finalYear ? titleProxy.indexOf(finalYear) : -1;
+                        if (yearPosition >= 0) titleProxy = titleProxy.substring(yearPosition + finalYear.length).replace(/^[.,\s]+/,'').trim();
                     }
-                    finalTitle = titleProxy.normalize('NFC').toLowerCase().replace(/[^\p{L}\p{M}\p{N}]/gu, '').substring(0, 100);
+                    finalTitle = titleProxy.normalize('NFC').toLowerCase().replace(/[^\p{L}\p{M}\p{N}\s]/gu, '').replace(/\s+/g,' ').trim().substring(0, 100);
                 }
 
                 // For unstructured refs, try to estimate author count by common separators if it looks like a list
@@ -458,6 +488,8 @@ const ReferenceUpdater: React.FC = () => {
                     authorsTruncated: /<(?:ce|sb):et-al\b/i.test(content),
                     rawYear,
                     rawTitle,
+                    yearIsStructured: !!dateNode,
+                    titleIsStructured: !!titleNode,
                     subIds
                 });
             }
@@ -475,7 +507,13 @@ const ReferenceUpdater: React.FC = () => {
         const titleSimilarity = titlesAvailable ? getSimilarity(original.title!, updated.title!) : 0;
         // Missing metadata supplies no supporting evidence; compare every listed author in order.
         const score = 40 + (titlesAvailable ? titleSimilarity * 40 : 0) + (authorsMatch ? 20 : 0);
-        return {authorsAvailable, authorsMatch, titlesAvailable, titleSimilarity, score: Math.round(score)};
+        const conflicts = [
+            ...(authorsAvailable && !authorsMatch ? ['Author lists differ or are incomplete.'] : []),
+            ...(original.yearIsStructured && updated.yearIsStructured && original.year && updated.year && original.year !== updated.year ? ['Publication years differ.'] : []),
+            ...(original.cleanContent && updated.cleanContent && original.cleanContent!==updated.cleanContent &&
+                original.cleanContent.replace(/\s/g,'')===updated.cleanContent.replace(/\s/g,'') ? ['Word boundaries differ.'] : [])
+        ];
+        return {authorsAvailable, authorsMatch, titlesAvailable, titleSimilarity, conflicts, score: Math.round(score)};
     };
 
     const hasDifferentNumericLabels = (original: RefBlock, updated: RefBlock) => {
@@ -502,6 +540,7 @@ const ReferenceUpdater: React.FC = () => {
                 if (!origRefs.length || !updatedRefs.length) throw new Error('Both inputs must contain bibliography references.');
                 const analysis: ScanItem[] = [];
                 const usedUpdateIdx = new Set<number>();
+                const alternativeUpdateIdx = new Set<number>();
 
                 origRefs.forEach((origRef, oIdx) => {
                     const candidates: ScanCandidate[] = [];
@@ -523,9 +562,10 @@ const ReferenceUpdater: React.FC = () => {
                             }
                         });
                     }
+                    const hasExactIdentity = candidates.length > 0;
 
                     // 3. High-Confidence Full-Text Similarity
-                    if (candidates.length === 0) {
+                    if (!hasExactIdentity) {
                         eligibleUpdates.forEach(({ref: u, index: idx}) => {
                             const textSim = getSimilarity(origRef.cleanContent || '', u.cleanContent || '');
                             if (textSim > 0.92) { // Extremely high threshold for direct text match
@@ -539,7 +579,7 @@ const ReferenceUpdater: React.FC = () => {
                     const isNumericLabel = /^\s*[\[(]?\s*\d+\s*[\])]?\s*[.]?\s*$/.test(origRef.label || '');
 
                     // 4. Descriptive Label Match
-                    if (candidates.length === 0 && origRef.label && !isNumericLabel) {
+                    if (!hasExactIdentity && origRef.label && !isNumericLabel) {
                         const normOrigLabel = origRef.label.toLowerCase().replace(/['’]/g, "'").replace(/\s+/g, ' ');
                         eligibleUpdates.forEach(({ref: u, index: idx}) => {
                             const normULabel = (u.label || '').toLowerCase().replace(/['’]/g, "'").replace(/\s+/g, ' ');
@@ -552,7 +592,7 @@ const ReferenceUpdater: React.FC = () => {
                     }
 
                     // 5. Surname-Year Heuristic
-                    if (candidates.length === 0) {
+                    if (!hasExactIdentity) {
                         eligibleUpdates.forEach(({ref: u, index: idx}) => {
                             const authMatch = (origRef.author && u.author && origRef.author === u.author);
                             const yearMatch = (origRef.year && u.year && origRef.year === u.year);
@@ -607,14 +647,27 @@ const ReferenceUpdater: React.FC = () => {
                     }
 
                     if (candidates.length > 0) {
-                        // Sort candidates by score
-                        candidates.sort((a, b) => b.score - a.score);
+                        // Keep the strongest route per entry; compare all eligible entries,
+                        // rather than allowing a weak label hit to end the search.
+                        const unique = new Map<number, ScanCandidate>();
+                        for (const candidate of candidates) if (!unique.has(candidate.index)) unique.set(candidate.index,candidate);
+                        candidates.splice(0,candidates.length,...unique.values());
+                        const evidenceRank = (candidate: ScanCandidate) => {
+                            if (candidate.matchType === 'Content' || candidate.matchType === 'DOI') return 3;
+                            const u=updatedRefs[candidate.index],evidence=compareNameDateMetadata(origRef,u);
+                            return origRef.titleIsStructured && u.titleIsStructured && evidence.titleSimilarity>=0.9 &&
+                                evidence.authorsMatch && origRef.year===u.year && !evidence.conflicts.length ? 2 : 1;
+                        };
+                        const ranks = new Map(candidates.map(candidate=>[candidate.index,evidenceRank(candidate)]));
+                        candidates.sort((a, b) => ranks.get(b.index)!-ranks.get(a.index)! || b.score-a.score);
 
                         const best = candidates[0];
+                        for (const candidate of candidates) if (candidate.index!==best.index) alternativeUpdateIdx.add(candidate.index);
                         const matchedRef = updatedRefs[best.index];
                         // A DOI correction may be intentional, but always requires explicit review.
                         const hasDoiConflict = !!(origRef.doi && matchedRef.doi && origRef.doi !== matchedRef.doi);
-                        const isConflict = hasDoiConflict || (candidates.length > 1 && candidates[1].score > 90);
+                        const metadataConflicts = compareNameDateMetadata(origRef,matchedRef).conflicts;
+                        const isConflict = hasDoiConflict || (metadataConflicts.length>0 && best.matchType!=='Label') || (candidates.length > 1 && candidates[1].score > 90);
                         const isPotentialDupe = best.matchType === 'Label' || (best.matchType === 'Surname-Year' && best.score <= 85);
 
                         analysis.push({
@@ -623,6 +676,7 @@ const ReferenceUpdater: React.FC = () => {
                             id: origRef.id,
                             status: isConflict ? 'conflict' : (isPotentialDupe ? 'potential_duplicate' : (best.matchType === 'Surname-Year' && best.score > 85 ? 'smart_match' : (best.matchType === 'Fuzzy' || best.matchType === 'Full-Text' ? 'smart_match' : 'update'))),
                             reviewed: false,
+                            ownershipWarning: metadataConflicts.length ? metadataConflicts.join(' ')+' Review this correction before merging.' : undefined,
                             matchType: best.matchType as any,
                             matchScore: best.score,
                             preview: updatedRefs[best.index].content.substring(0, 100).replace(/<[^>]+>/g, '').trim() + '...',
@@ -683,7 +737,9 @@ const ReferenceUpdater: React.FC = () => {
                             uid: Math.random().toString(36).substring(2, 15),
                             label: formatLabel(val.label || 'Unlabeled'),
                             id: val.id || 'N/A',
-                            status: addOrphans ? 'add' : 'orphan',
+                            status: alternativeUpdateIdx.has(idx) ? 'conflict' : addOrphans ? 'add' : 'orphan',
+                            ownershipWarning: alternativeUpdateIdx.has(idx) ? 'This incoming entry was an alternative update candidate. Review it as a separate addition or deselect it before merging.' : undefined,
+                            reviewed: false,
                             preview: val.content.substring(0, 100).replace(/<[^>]+>/g, '').trim() + '...',
                             isSynthetic: val.isSynthetic,
                             selected: addOrphans,
@@ -696,7 +752,8 @@ const ReferenceUpdater: React.FC = () => {
 
                 // Secondary Scan: Detect potential duplicates for 'add' items
                 analysis.forEach((item, aIdx) => {
-                    if (item.status === 'add' && item.updatedIndex !== null) {
+                    if (item.updatedIndex !== null && (item.status === 'add' ||
+                        (item.originalIndex === null && item.status === 'conflict' && alternativeUpdateIdx.has(item.updatedIndex) && addOrphans))) {
                         const u = updatedRefs[item.updatedIndex];
                         const potentials: ScanCandidate[] = [];
 
@@ -834,13 +891,15 @@ const ReferenceUpdater: React.FC = () => {
         const row = prev.find(item => item.uid === reviewing.uid);
         if (!row) return;
         if (row.candidateSource === 'original') {
-            const next = {...row, originalIndex: cand.index, matchScore: cand.score, matchType: cand.matchType as ScanItem['matchType'], reviewed: false};
+            const next = {...row, originalIndex: cand.index, matchScore: cand.score, matchType: cand.matchType as ScanItem['matchType'],
+                status: 'conflict' as const, ownershipWarning:'Candidate changed. Review and confirm this mapping before merging.', reviewed: false};
             setReviewingItem(next);
             setScanResults(prev.map(item => item.uid === row.uid ? next : item));
             return;
         }
         const oldIndex = row.updatedIndex;
-        const next: ScanItem = {...row, updatedIndex: cand.index, matchScore: cand.score, matchType: cand.matchType as ScanItem['matchType'], preview: cand.preview, reviewed: false};
+        const next: ScanItem = {...row, updatedIndex: cand.index, matchScore: cand.score, matchType: cand.matchType as ScanItem['matchType'], preview: cand.preview,
+            status:'conflict', ownershipWarning:'Candidate changed. Review and confirm this mapping before merging.', reviewed: false};
         // Absorb only an incoming-only row. Never remove another original owner.
         let result = prev.filter(item => item.uid === row.uid || item.updatedIndex !== cand.index ||
             (item.originalIndex !== null && item.candidateSource !== 'original'))
@@ -1533,7 +1592,7 @@ const ReferenceUpdater: React.FC = () => {
                                                                     </div>
                                                                     {item.matchType && (
                                                                         <span className="text-[8px] text-slate-400 font-bold uppercase tracking-widest">
-                                                                            {item.matchType} ({item.matchScore}%)
+                                                                            {item.matchType} (match score {item.matchScore}/100)
                                                                         </span>
                                                                     )}
                                                                 </div>
@@ -1802,7 +1861,7 @@ const ReferenceUpdater: React.FC = () => {
                                                         }`}>
                                                             {r.status.replace('_', ' ')}
                                                         </div>
-                                                        {r.matchScore && <div className="text-[8px] font-bold text-slate-300 uppercase tracking-tighter">{r.matchType} {r.matchScore}%</div>}
+                                                        {r.matchScore !== undefined && <div className="text-[8px] font-bold text-slate-300 uppercase tracking-tighter">{r.matchType} · match score {r.matchScore}/100</div>}
                                                     </div>
                                                 </div>
                                             ))}
@@ -1924,7 +1983,7 @@ const ReferenceUpdater: React.FC = () => {
                                                 {reviewingItem.status === 'conflict' ? 'Conflict Detected' : (reviewingItem.status === 'potential_duplicate' ? 'Candidate Duplicate' : 'Smart Suggestion')}
                                             </span>
                                             <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${reviewingItem.status === 'conflict' ? 'bg-rose-100 text-rose-700' : (reviewingItem.status === 'potential_duplicate' ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-purple-700')}`}>
-                                                {reviewingItem.matchScore}% Score
+                                                Match score {reviewingItem.matchScore}/100
                                             </span>
                                         </div>
                                         <div className={`p-6 rounded-3xl border font-serif italic text-slate-700 leading-relaxed text-sm ring-1 ${reviewingItem.status === 'conflict' ? 'bg-rose-50/50 border-rose-200 ring-rose-500/5 shadow-inner' : (reviewingItem.status === 'potential_duplicate' ? 'bg-amber-50/50 border-amber-200 ring-amber-500/5 shadow-inner' : 'bg-purple-50/50 border-purple-200 ring-purple-500/5 shadow-inner')}`}>
@@ -1952,7 +2011,7 @@ const ReferenceUpdater: React.FC = () => {
                                                             </div>
                                                             <div className="flex items-center gap-3">
                                                                 <div className="flex flex-col items-end">
-                                                                    <span className="text-[10px] font-black text-indigo-600">{cand.score}%</span>
+                                                                    <span className="text-[10px] font-black text-indigo-600">{cand.score}/100</span>
                                                                     <span className="text-[7px] font-bold text-slate-300 uppercase tracking-tighter">{cand.matchType}</span>
                                                                 </div>
                                                                 {(reviewingItem.candidateSource === 'original' ? reviewingItem.originalIndex === cand.index : reviewingItem.updatedIndex === cand.index) && <div className="w-5 h-5 rounded-full bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-200"><Check size={10} className="text-white" strokeWidth={4} /></div>}
@@ -1976,12 +2035,14 @@ const ReferenceUpdater: React.FC = () => {
                                                 <span className="px-2 py-0.5 bg-indigo-400/20 text-indigo-300 rounded text-[8px] font-black uppercase tracking-widest border border-indigo-500/30">Similarity Breakdown</span>
                                             </div>
                                             <p className="text-[11px] text-slate-300 mt-2 leading-relaxed font-medium">
-                                                Algorithm: <strong>{reviewingItem.matchType || 'Heuristic'} Validation</strong> ({reviewingItem.matchScore}%).
+                                                Match score: {reviewingItem.matchScore}/100 via <strong>{reviewingItem.matchType || 'Heuristic'}</strong>. This score measures matching evidence, not a probability of identity.
+                                                {reviewingItem.originalIndex !== null && reviewingItem.updatedIndex !== null && parsedOriginalRefs[reviewingItem.originalIndex] && parsedUpdatedRefs[reviewingItem.updatedIndex] && <span className="block mt-2">Reference text similarity: {Math.round(getSimilarity(parsedOriginalRefs[reviewingItem.originalIndex].cleanContent || '',parsedUpdatedRefs[reviewingItem.updatedIndex].cleanContent || '')*100)}%. Includes structured fields and supplied source text.</span>}
                                                 {reviewingItem.ownershipWarning && <span className="block mt-2 text-amber-300">{reviewingItem.ownershipWarning}</span>}
                                                 {reviewingItem.numberingWarning && <span className="block mt-2 text-amber-300">{reviewingItem.numberingWarning}</span>}
-                                                {reviewingItem.matchType === 'Label' && reviewingItem.originalIndex !== null && reviewingItem.updatedIndex !== null && parsedOriginalRefs[reviewingItem.originalIndex] && parsedUpdatedRefs[reviewingItem.updatedIndex] && (() => {
+                                                {reviewingItem.originalIndex !== null && reviewingItem.updatedIndex !== null && parsedOriginalRefs[reviewingItem.originalIndex] && parsedUpdatedRefs[reviewingItem.updatedIndex] && (() => {
                                                     const evidence = compareNameDateMetadata(parsedOriginalRefs[reviewingItem.originalIndex], parsedUpdatedRefs[reviewingItem.updatedIndex]);
-                                                    return <span className="block mt-2">Title similarity: {evidence.titlesAvailable ? `${Math.round(evidence.titleSimilarity * 100)}%` : 'not available'}. Author list: {evidence.authorsMatch ? 'matches in full and in order' : evidence.authorsAvailable ? 'differs or is incomplete' : 'not available'}. Manual review is required.</span>;
+                                                    const inferred = !parsedOriginalRefs[reviewingItem.originalIndex].titleIsStructured || !parsedUpdatedRefs[reviewingItem.updatedIndex].titleIsStructured;
+                                                    return <span className="block mt-2">Title similarity{inferred ? ' (includes inferred title)' : ''}: {evidence.titlesAvailable ? `${Math.round(evidence.titleSimilarity * 100)}%` : 'not available'}. Author list: {evidence.authorsMatch ? 'matches in full and in order' : evidence.authorsAvailable ? 'differs or is incomplete' : 'not available'}. {evidence.conflicts.join(' ')}</span>;
                                                 })()}
                                                 {!!reviewingItem.incomingDuplicates?.length && <span className="block mt-2 text-amber-300">This entry shares a DOI or identical content with another entry in the updated list. Deselect unwanted copies, or confirm each entry you intend to retain.</span>}
                                                 {reviewingItem.status === 'potential_duplicate'
