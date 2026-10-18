@@ -180,10 +180,15 @@ function cloneBody(xml: string, parsed: ReturnType<typeof structure>, source: No
     const linkKinds=['ce:cross-ref','ce:cross-refs','ce:inter-ref','ce:intra-ref','ce:float-anchor'];
     if(target){
         const available=new Map<string,number>();
-        const identity=(n:Node)=>JSON.stringify([n.name,n.attributes['xlink:href'] || '',n.attributes.refid || '']);
-        for(const n of sourceNodes.filter(n=>['ce:inter-ref','ce:intra-ref','ce:float-anchor'].includes(n.name))){const key=identity(n);available.set(key,(available.get(key)||0)+1);}
+        const sourceLocalIds=localIds(parsed,source),targetLocalIds=localIds(parsed,target);
+        const identity=(n:Node,ids:Map<string,string>)=>{
+            const href=n.attributes['xlink:href'] || '';
+            return JSON.stringify([n.name,ids.has(fragment(href))?'#'+ids.get(fragment(href)):href,
+                (n.attributes.refid || '').split(/(\s+)/).map(id=>ids.get(id)||id).join('')]);
+        };
+        for(const n of sourceNodes.filter(n=>['ce:inter-ref','ce:intra-ref','ce:float-anchor'].includes(n.name))){const key=identity(n,sourceLocalIds);available.set(key,(available.get(key)||0)+1);}
         for(const n of targetNodes.filter(n=>['ce:inter-ref','ce:intra-ref','ce:float-anchor'].includes(n.name))){
-            const key=identity(n),count=available.get(key)||0;
+            const key=identity(n,targetLocalIds),count=available.get(key)||0;
             if(!count)throw new Error(`Target ${n.name} destination is absent from the source. Preserved the pair for link review.`);
             available.set(key,count-1);
         }
@@ -237,6 +242,10 @@ export function synchronizeViews(xml:string,direction:'compact-to-extended'|'ext
         const source=direction==='compact-to-extended'?pair.compact:pair.extended, target=direction==='compact-to-extended'?pair.extended:pair.compact;
         const paraId=target.attributes.id || '(missing ID)';
         if(canonical(audit,source,undefined,true)===canonical(audit,target,undefined,true) && !descendants(audit,pair.compact).some(supplementary) && !unlinkedSupplementary(xml,audit,pair.extended))continue;
+        // Paragraph metadata may intentionally differ by view. Do not silently
+        // leave a detected difference unresolved or overwrite its meaning.
+        const metadata=(node:Node)=>JSON.stringify(Object.entries(node.attributes).filter(([key])=>key!=='id' && key!=='view').sort(([a],[b])=>a.localeCompare(b)));
+        if(metadata(source)!==metadata(target)) {notices.push({paraId,message:'Paragraph attributes differ between views. Preserved both paragraphs; review their metadata before synchronizing.'});continue;}
         if(source.openEnd===source.end || target.openEnd===target.end) {notices.push({paraId,message:'Empty self-closing view needs a content review before synchronization.'});continue;}
         if(sensitive(audit,source)||sensitive(audit,target)) {notices.push({paraId,message:'Supplementary/display content or file links differ between views. Preserved both paragraphs; review their intended content manually.'});continue;}
         try {

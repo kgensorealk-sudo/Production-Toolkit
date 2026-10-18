@@ -86,5 +86,62 @@ test('formatted established supplementary link is not flagged unlinked',()=>{con
 for(const body of ['Fig. S1<ce:bold>B</ce:bold>.','<ce:bold>X</ce:bold>Fig. S1.'])test('inline boundary blocks partial supplementary restoration '+body,()=>{const x=pair(body,ref('cf0010','ec0005','Fig. S1'));const r=sync(x);assert.equal(r.output,x);assert.ok(r.notices.length);});
 test('equal link counts cannot remove website destination',()=>{const x=pair(ref('cf0005','bb0005')+ref('cf0010','bb0010'),ref('cf0015','bb0005')+'<ce:inter-ref id="ir0005" xlink:href="https://example.com">Website</ce:inter-ref>');const r=sync(x);assert.equal(r.output,x);assert.ok(r.notices[0].message.includes('destination'));});
 test('new website destination is reported in component log',()=>{const c=component(pair('New <ce:inter-ref id="ir0005" xlink:href="https://example.com">Website</ce:inter-ref>','Old text.'));c.processSync();c.queue[0]();assert.ok(c.state.Logs.some(l=>l.message.includes('https://example.com')));});
+for(const direction of ['compact-to-extended','extended-to-compact']) {
+ test('counterpart local URI links allow text updates '+direction,()=>{
+  const x=pair('New <ce:anchor id="an0005"/><ce:inter-ref id="ir0005" xlink:href="#an0005">here</ce:inter-ref>',
+   'Old <ce:anchor id="an0010"/><ce:inter-ref id="ir0010" xlink:href="#an0010">here</ce:inter-ref>');
+  const r=sync(x,{direction});assert.equal(r.notices.length,0);assert.equal(r.applied.length,1);
+  assert.equal(engine.viewDifferences(r.output).mismatches.length,0);
+  const p=scanner.scanReferenceXml(r.output),target=p.nodes.find(n=>n.attributes.view===(direction==='compact-to-extended'?'extended':'compact-standard'));
+  const inner=p.nodes.filter(n=>n.start>=target.openEnd && n.end<=target.closeStart);
+  assert.equal(inner.find(n=>n.name==='ce:inter-ref').attributes['xlink:href'],'#'+inner.find(n=>n.name==='ce:anchor').attributes.id);
+ });
+ test('counterpart local refid links allow text updates '+direction,()=>{
+  const x=pair('New <ce:anchor id="an0005"/><ce:intra-ref id="ir0005" refid="an0005">here</ce:intra-ref>',
+   'Old <ce:anchor id="an0010"/><ce:intra-ref id="ir0010" refid="an0010">here</ce:intra-ref>');
+  const r=sync(x,{direction});assert.equal(r.notices.length,0);assert.equal(r.applied.length,1);assert.equal(engine.viewDifferences(r.output).mismatches.length,0);
+ });
+ for(const bodies of [['New','Old'],['Same','Same']])test('paragraph metadata differences require explicit review '+direction+bodies.join(),()=>{
+  const x=para('p0005','compact-standard',bodies[0]).replace('view=','xml:lang="en" view=')+para('p0010','extended',bodies[1]).replace('view=','xml:lang="fr" view=');
+  const r=sync(x,{direction});assert.equal(r.output,x);assert.equal(r.applied.length,0);assert.ok(r.notices.some(n=>n.message.includes('Paragraph attributes differ')));
+ });
+}
+test('different external URI destinations remain protected',()=>{
+ const x=pair('<ce:inter-ref id="ir0005" xlink:href="https://example.com/a">Site</ce:inter-ref>',
+  '<ce:inter-ref id="ir0010" xlink:href="https://example.com/b">Site</ce:inter-ref>');
+ const r=sync(x);assert.equal(r.output,x);assert.ok(r.notices.some(n=>n.message.includes('destination')));
+});
+test('equivalent paragraph metadata ignores attribute order',()=>{
+ const x=para('p0005','compact-standard','New').replace('view=','xml:lang="en" role="test" view=')+para('p0010','extended','Old').replace('view=','role="test" xml:lang="en" view=');
+ const r=sync(x);assert.equal(r.notices.length,0);assert.equal(r.applied.length,1);assert.equal(engine.viewDifferences(r.output).mismatches.length,0);
+});
+for(const direction of ['compact-to-extended','extended-to-compact']) {
+ test('encoded paragraph self-links retain target ownership '+direction,()=>{
+  const x=pair('New <ce:inter-ref id="ir0005" xlink:href="#p%30005">here</ce:inter-ref>',
+   'Old <ce:inter-ref id="ir0010" xlink:href="#p%30010">here</ce:inter-ref>');
+  const r=sync(x,{direction});assert.equal(r.notices.length,0);assert.equal(r.applied.length,1);
+  assert.equal(engine.viewDifferences(r.output).mismatches.length,0);
+  const p=scanner.scanReferenceXml(r.output),target=p.nodes.find(n=>n.attributes.view===(direction==='compact-to-extended'?'extended':'compact-standard'));
+  const link=p.nodes.find(n=>n.start>=target.openEnd && n.end<=target.closeStart && n.name==='ce:inter-ref');
+  assert.equal(link.attributes['xlink:href'],'#'+target.attributes.id);
+  assert.equal(sync(r.output,{direction}).applied.length,0);
+ });
+ test('different local anchor destinations remain protected '+direction,()=>{
+  const x=pair('New <ce:anchor id="an0005"/><ce:anchor id="an0010"/><ce:inter-ref id="ir0005" xlink:href="#an0005">here</ce:inter-ref>',
+   'Old <ce:anchor id="an0015"/><ce:anchor id="an0020"/><ce:inter-ref id="ir0010" xlink:href="#an0020">here</ce:inter-ref>');
+  const r=sync(x,{direction});assert.equal(r.output,x);assert.ok(r.notices.some(n=>n.message.includes('destination')));
+ });
+ test('external incoming links retain counterpart anchor ID '+direction,()=>{
+  const x=pair('New <ce:anchor id="an0005"/><ce:inter-ref id="ir0005" xlink:href="#an0005">here</ce:inter-ref>',
+   'Old <ce:anchor id="an0010"/><ce:inter-ref id="ir0010" xlink:href="#an0010">here</ce:inter-ref>')+
+   '<ce:inter-ref xlink:href="#an0005">compact</ce:inter-ref><ce:inter-ref xlink:href="#an0010">extended</ce:inter-ref>';
+  const r=sync(x,{direction});assert.equal(r.notices.length,0);assert.equal(r.applied.length,1);
+  const p=scanner.scanReferenceXml(r.output);assert.ok(p.ids.has('an0005'));assert.ok(p.ids.has('an0010'));
+ });
+ test('missing counterpart metadata is preserved for review '+direction,()=>{
+  const x=para('p0005','compact-standard','New').replace('view=','xml:lang="en" view=')+para('p0010','extended','Old');
+  const r=sync(x,{direction});assert.equal(r.output,x);assert.equal(r.applied.length,0);assert.ok(r.notices.some(n=>n.message.includes('Paragraph attributes differ')));
+ });
+}
 console.log(`${count} View Synchronizer safety cases passed.`);
 export {engine,scanner,compile};
