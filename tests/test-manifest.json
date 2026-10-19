@@ -3,6 +3,24 @@
   "runtime": "Node 24; verified locally with 24.11.1 on Windows x64",
   "entries": [
     {
+      "file": "tests/word-to-xml-safety.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineDependencies": [
+        "pages/WordToXml.tsx",
+        "utils/wordScannerDtd.ts",
+        "utils/wordScannerHtml.ts",
+        "utils/wordScannerCe570.json",
+        "utils/wordScannerCe560.json",
+        "jsdom"
+      ],
+      "externalChecks": []
+    },
+    {
       "file": "tests/keeper-provider-diagnostics.mjs",
       "kinds": ["behavioral", "source-contract/static"],
       "classification": "portable",

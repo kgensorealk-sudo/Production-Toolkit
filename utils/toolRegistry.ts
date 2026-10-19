@@ -89,7 +89,7 @@ export const TOOL_REGISTRY: ToolInfo[] = [
     },
     {
         id: ToolId.WORD_TO_XML,
-        name: 'MS Word to XML Converter',
+        name: 'MS Word Rich Text to CE XML Scanner',
         route: '/wordToXml',
         category: 'Conversion & Utilities',
         shortDesc: 'Converts MS Word clipboard text with superscripts, subscripts, bold, italics, and paragraphs into standard Journal CE XML.',

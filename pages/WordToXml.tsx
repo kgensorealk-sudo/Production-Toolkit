@@ -33,11 +33,15 @@ import {
     Tag
 } from 'lucide-react';
 import Toast from '../components/Toast';
+import {validateWordScannerCeFragment, type WordScannerDtdVersion} from '../utils/wordScannerDtd';
+import {sanitizeWordScannerHtml} from '../utils/wordScannerHtml';
 
 type NamespaceSchema = 'elsevier' | 'jats' | 'generic';
 
 interface ConversionOptions {
     schema: NamespaceSchema;
+    dtdVersion: WordScannerDtdVersion;
+    outputScope: 'all' | 'captures';
     wrapInParagraphs: boolean;
     addParagraphIds: boolean;
     paraIdPrefix: string;
@@ -97,11 +101,13 @@ const SAMPLE_WORD_HTML = `<p>This is a text example with Research & Development,
 
 export const WordToXml: React.FC = () => {
     const editorRef = useRef<HTMLDivElement>(null);
+    const savedCaptureRangeRef = useRef<Range | null>(null);
     const [editorHtml, setEditorHtml] = useState<string>('');
     const [isHtmlMode, setIsHtmlMode] = useState<boolean>(false);
     const [rawHtmlInput, setRawHtmlInput] = useState<string>('');
     
     const [xmlOutput, setXmlOutput] = useState<string>('');
+    const [conversionError, setConversionError] = useState('');
     const [activeTab, setActiveTab] = useState<'code' | 'raw' | 'stats'>('code');
     const [toast, setToast] = useState<{ msg: string; type: 'success' | 'warn' | 'error' | 'info' } | null>(null);
     const [isCopied, setIsCopied] = useState<boolean>(false);
@@ -109,6 +115,8 @@ export const WordToXml: React.FC = () => {
 
     const [options, setOptions] = useState<ConversionOptions>({
         schema: 'elsevier',
+        dtdVersion: '5.7',
+        outputScope: 'all',
         wrapInParagraphs: false,
         addParagraphIds: true,
         paraIdPrefix: 'p',
@@ -132,7 +140,7 @@ export const WordToXml: React.FC = () => {
     // Synchronize contentEditable initial content
     useEffect(() => {
         if (editorRef.current && !isHtmlMode) {
-            editorRef.current.innerHTML = editorHtml;
+            editorRef.current.innerHTML = sanitizeWordScannerHtml(editorHtml);
         }
     }, [isHtmlMode]);
 
@@ -155,6 +163,22 @@ export const WordToXml: React.FC = () => {
             }
         }
     };
+    const handleEditorPaste = (event:React.ClipboardEvent<HTMLDivElement>) => {
+        const html=event.clipboardData.getData('text/html');
+        if(!html)return;
+        event.preventDefault();
+        const clean=sanitizeWordScannerHtml(html);
+        if(!document.execCommand('insertHTML',false,clean)){
+            const selection=window.getSelection();
+            if(!selection?.rangeCount || !editorRef.current?.contains(selection.getRangeAt(0).commonAncestorContainer))return;
+            const range=selection.getRangeAt(0);range.deleteContents();
+            const doc=new DOMParser().parseFromString(clean,'text/html');
+            const text=document.createTextNode(event.clipboardData.getData('text/plain') || doc.body.textContent || '');
+            range.insertNode(text);range.setStartAfter(text);range.collapse(true);selection.removeAllRanges();selection.addRange(range);
+            setToast({msg:'Pasted as plain text because this browser could not insert formatted HTML.',type:'warn'});
+        }
+        handleEditorInput();
+    };
 
     // Calculate accurate character count for empty or formatted editor state
     const getCharCount = () => {
@@ -166,7 +190,9 @@ export const WordToXml: React.FC = () => {
         }
 
         if (!editorHtml || editorHtml === '<br>' || editorHtml === '<p><br></p>' || editorHtml === '<div><br></div>') return 0;
-        const text = editorRef.current ? (editorRef.current.textContent || '').replace(/\u00a0/g, ' ').trim() : editorHtml.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+        const content = editorRef.current?.cloneNode(true) as HTMLElement | undefined;
+        content?.querySelectorAll('.ce-capture-badge').forEach(badge=>badge.remove());
+        const text = content ? (content.textContent || '').replace(/\u00a0/g, ' ').trim() : editorHtml.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
         const hasMedia = /<(img|table|iframe|svg)\b/i.test(editorHtml);
         if (!text && !hasMedia) return 0;
 
@@ -174,16 +200,29 @@ export const WordToXml: React.FC = () => {
     };
 
     const [isCaptureMenuOpen, setIsCaptureMenuOpen] = useState<boolean>(false);
+    useEffect(() => {
+        const rememberSelection = () => {
+            const selection=window.getSelection();
+            if(selection?.rangeCount && editorRef.current?.contains(selection.getRangeAt(0).commonAncestorContainer))
+                savedCaptureRangeRef.current=selection.getRangeAt(0).cloneRange();
+        };
+        document.addEventListener('selectionchange',rememberSelection);
+        return () => document.removeEventListener('selectionchange',rememberSelection);
+    }, []);
 
     // Capture highlighted text or section block as specific CE XML section
     const captureSelectionAs = (type: string) => {
         if (isHtmlMode || !editorRef.current) return;
 
         const selection = window.getSelection();
-        if (!selection || selection.rangeCount === 0) return;
-
-        const range = selection.getRangeAt(0);
-        if (!editorRef.current.contains(range.commonAncestorContainer)) return;
+        const current=selection?.rangeCount ? selection.getRangeAt(0) : null;
+        const range=current && editorRef.current.contains(current.commonAncestorContainer) ? current : savedCaptureRangeRef.current;
+        if (!range || !editorRef.current.contains(range.commonAncestorContainer)) {
+            setToast({msg:'Select text in the rich-text editor before capturing it.',type:'warn'});return;
+        }
+        if(type==='highlights' && (range.collapsed || !range.toString().trim())) {
+            setToast({msg:'Select the highlight text before choosing Highlights.',type:'warn'});return;
+        }
 
         if (type === 'clear') {
             let node: Node | null = range.commonAncestorContainer;
@@ -277,6 +316,9 @@ export const WordToXml: React.FC = () => {
         } else if (type === 'jel' || type === 'jel-classifications') {
             defaultTitle = 'JEL classifications';
             label = 'JEL Classifications';
+        } else if (type === 'data-availability') {
+            defaultTitle = 'Data availability';
+            label = 'Data Availability';
         }
 
         let targetBlock: HTMLElement | null = null;
@@ -317,7 +359,25 @@ export const WordToXml: React.FC = () => {
 
         let pTarget: HTMLElement | null = null;
 
-        if (targetBlock && targetBlock.parentNode && !targetBlock.hasAttribute('data-ce-type')) {
+        if (!range.collapsed) {
+            // Clone the three ranges independently. This splits boundary paragraphs
+            // and lists without placing block elements inside a new paragraph.
+            const before=document.createRange(),after=document.createRange();
+            before.selectNodeContents(editorRef.current);before.setEnd(range.startContainer,range.startOffset);
+            after.selectNodeContents(editorRef.current);after.setStart(range.endContainer,range.endOffset);
+            const prefix=before.cloneContents(),suffix=after.cloneContents();
+            let contents=range.cloneContents();
+            let context=range.commonAncestorContainer.nodeType===Node.ELEMENT_NODE ? range.commonAncestorContainer : range.commonAncestorContainer.parentNode;
+            while(context && context!==editorRef.current && context.nodeType===Node.ELEMENT_NODE &&
+                !/^(p|div|li|ul|ol|h[1-6]|table|td|th|section|article|blockquote)$/i.test((context as HTMLElement).tagName)){
+                const format=context.cloneNode(false);format.appendChild(contents);
+                contents=document.createDocumentFragment();contents.appendChild(format);context=context.parentNode;
+            }
+            if(contents.querySelector('p,div,ul,ol,li,h1,h2,h3,h4,h5,h6,table,blockquote'))wrapper.appendChild(contents);
+            else {const paragraph=document.createElement('p');paragraph.appendChild(contents);wrapper.appendChild(paragraph);}
+            editorRef.current.replaceChildren(prefix,wrapper,suffix);
+            pTarget=wrapper.querySelector('p,li') || wrapper;
+        } else if (targetBlock && targetBlock.parentNode && !targetBlock.hasAttribute('data-ce-type')) {
             targetBlock.parentNode.replaceChild(wrapper, targetBlock);
             wrapper.appendChild(targetBlock);
             pTarget = targetBlock;
@@ -345,6 +405,7 @@ export const WordToXml: React.FC = () => {
                     r.collapse(false);
                     sel.removeAllRanges();
                     sel.addRange(r);
+                    savedCaptureRangeRef.current=r.cloneRange();
                 } catch {
                     // ignore
                 }
@@ -494,6 +555,7 @@ export const WordToXml: React.FC = () => {
 
     // Clear all content
     const handleClear = () => {
+        savedCaptureRangeRef.current=null;
         setEditorHtml('');
         setRawHtmlInput('');
         if (editorRef.current) {
@@ -505,6 +567,7 @@ export const WordToXml: React.FC = () => {
 
     // Load sample content
     const handleLoadSample = () => {
+        savedCaptureRangeRef.current=null;
         setEditorHtml(SAMPLE_WORD_HTML);
         setRawHtmlInput(SAMPLE_WORD_HTML);
         if (editorRef.current) {
@@ -518,6 +581,21 @@ export const WordToXml: React.FC = () => {
      */
     const convertHtmlToXml = useCallback((html: string, opts: ConversionOptions): string => {
         if (!html || !html.trim()) return '';
+        const escapeXmlText=(text:string)=>text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/u.test(html))throw new Error('The input contains characters that XML cannot represent. Remove them before converting.');
+        if(opts.addParagraphIds && (!Number.isInteger(opts.paraIdStart) || opts.paraIdStart<0 || opts.paraIdStart>9999 || !Number.isInteger(opts.paraIdStep) || opts.paraIdStep<1))
+            throw new Error('ID start must be between 0000 and 9999, and ID step must be a positive integer.');
+        const usedIds=new Set<string>();
+        const allocateIdAttr=(prefix:string,start:number)=>{
+            if(!Number.isInteger(start) || start<0 || !Number.isInteger(opts.paraIdStep) || opts.paraIdStep<1)throw new Error('ID start and step must be valid positive-range integers.');
+            if(!/^[A-Za-z_][A-Za-z0-9_.-]*$/.test(prefix))throw new Error('ID prefixes must start with a letter or underscore and contain only XML name characters.');
+            let num=start;
+            while(num<=9999 && usedIds.has(prefix+String(num).padStart(4,'0')))num+=opts.paraIdStep;
+            if(num>9999)throw new Error('No four-digit IDs remain for this prefix. Choose a lower starting ID.');
+            const id=prefix+String(num).padStart(4,'0');usedIds.add(id);return ` id="${id}"`;
+        };
+        if(opts.wrapInRoot && !/^[A-Za-z_][A-Za-z0-9_.-]*(?::[A-Za-z_][A-Za-z0-9_.-]*)?$/.test(opts.rootTag.trim()))
+            throw new Error('Root tag must be a valid XML element name.');
 
         // Tag mappings based on selected schema
         const tagMap = {
@@ -583,8 +661,7 @@ export const WordToXml: React.FC = () => {
             const prefix = opts.paraIdPrefix || 'p';
             const num = opts.paraIdStart + paraCounter * opts.paraIdStep;
             paraCounter++;
-            const formattedNum = String(num).padStart(4, '0');
-            return ` id="${prefix}${formattedNum}"`;
+            return allocateIdAttr(prefix,num);
         };
 
         let listCounter = 0;
@@ -593,8 +670,7 @@ export const WordToXml: React.FC = () => {
             const prefix = opts.listIdPrefix || 'l';
             const num = opts.paraIdStart + listCounter * opts.paraIdStep;
             listCounter++;
-            const formattedNum = String(num).padStart(4, '0');
-            return ` id="${prefix}${formattedNum}"`;
+            return allocateIdAttr(prefix,num);
         };
 
         let listItemCounter = 0;
@@ -603,8 +679,7 @@ export const WordToXml: React.FC = () => {
             const prefix = opts.listItemIdPrefix || 'li';
             const num = opts.paraIdStart + listItemCounter * opts.paraIdStep;
             listItemCounter++;
-            const formattedNum = String(num).padStart(4, '0');
-            return ` id="${prefix}${formattedNum}"`;
+            return allocateIdAttr(prefix,num);
         };
 
         let secTitleCounter = 0;
@@ -613,24 +688,33 @@ export const WordToXml: React.FC = () => {
             const prefix = opts.sectionTitleIdPrefix || 'st';
             const num = opts.paraIdStart + secTitleCounter * opts.paraIdStep;
             secTitleCounter++;
-            const formattedNum = String(num).padStart(4, '0');
-            return ` id="${prefix}${formattedNum}"`;
+            return allocateIdAttr(prefix,num);
         };
 
         let ackCounter = 0;
         let abstractCounter = 0;
         let appendixCounter = 0;
         let coiCounter = 0;
+        let daCounter = 0;
         let secCounter = 0;
         let asCounter = 0;
         let spCounter = 0;
         let ksCounter = 0;
         let kwCounter = 0;
         let txCounter = 0;
+        let captionCounter = 0;
 
         const parser = new DOMParser();
-        const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html');
-        const container = doc.body.firstElementChild || doc.body;
+        const doc = parser.parseFromString(html, 'text/html');
+        let container:HTMLElement = doc.body;
+        if(opts.outputScope==='captures'){
+            const selected=doc.createElement('div');
+            Array.from(container.querySelectorAll('[data-ce-type]')).filter(element=>!element.parentElement?.closest('[data-ce-type]')).forEach(element=>selected.appendChild(element.cloneNode(true)));
+            if(!selected.children.length)throw new Error('Capture a section first, or choose All input to convert the pasted text.');
+            container=selected;
+        }
+        const unsupported=Array.from(container.querySelectorAll('img,svg,math,object,embed,iframe,video,audio')).find(element=>!element.closest('.ce-capture-badge'));
+        if(unsupported)throw new Error(`The selected input contains ${unsupported.tagName.toLowerCase()} content that this text scanner cannot preserve. Select text only or convert that object with its dedicated tool.`);
 
         const BLOCK_TAGS = new Set([
             'p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 
@@ -645,21 +729,14 @@ export const WordToXml: React.FC = () => {
         };
 
         // Recursive processor for inline nodes (text, b, i, sup, sub, u, span, font, etc.)
-        const processInlineNode = (node: Node): string => {
+        const processInlineNode = (node: Node, lineBreakTag?:string): string => {
             if (node.nodeType === Node.TEXT_NODE) {
                 let text = node.textContent || '';
-                text = text.replace(/[\r\n\t]+/g, ' ').replace(/\u00a0/g, ' ').replace(/&nbsp;/g, ' ');
+                text = text.replace(/[\r\n\t]+/g, ' ').replace(/\u00a0/g, ' ');
                 text = text.replace(/ {2,}/g, ' ');
-                // Always escape unescaped ampersands (&) and angle brackets (<, >) for XML compliance
-                if (opts.encodeEntities !== false) {
-                    text = text
-                        .replace(/&(?!amp;|lt;|gt;|quot;|apos;|#[0-9]+;|#x[0-9a-fA-F]+;)/g, '&amp;')
-                        .replace(/</g, '&lt;')
-                        .replace(/>/g, '&gt;');
-                } else {
-                    text = text.replace(/&(?!amp;|lt;|gt;|quot;|apos;|#[0-9]+;|#x[0-9a-fA-F]+;)/g, '&amp;');
-                }
-                return text;
+                // DOM text has already been decoded: an entity-looking sequence
+                // here is literal text and must be escaped again for XML.
+                return escapeXmlText(text);
             }
 
             if (node.nodeType !== Node.ELEMENT_NODE) {
@@ -673,28 +750,25 @@ export const WordToXml: React.FC = () => {
             if (
                 tagName === 'style' || 
                 tagName === 'script' || 
-                tagName === 'xml' || 
-                tagName.startsWith('o:') || 
-                tagName.startsWith('v:') || 
-                tagName.startsWith('w:')
+                tagName === 'xml'
             ) {
                 return '';
             }
 
             if (tagName === 'br') {
-                return ' ';
+                return lineBreakTag || ' ';
             }
 
             const style = el.getAttribute('style') || '';
             const isBold = tagName === 'b' || tagName === 'strong' || /font-weight\s*:\s*(bold|[7-9]00)/i.test(style) || /mso-bidi-font-weight\s*:\s*bold/i.test(style);
             const isItalic = tagName === 'i' || tagName === 'em' || /font-style\s*:\s*italic/i.test(style) || /mso-bidi-font-style\s*:\s*italic/i.test(style);
-            const isSup = tagName === 'sup' || /vertical-align\s*:\s*super/i.test(style) || /position\s*:\s*relative;\s*top\s*:/i.test(style);
+            const isSup = tagName === 'sup' || /vertical-align\s*:\s*super/i.test(style);
             const isSub = tagName === 'sub' || tagName === 'inf' || /vertical-align\s*:\s*sub/i.test(style);
             const isUnderline = tagName === 'u' || /text-decoration\s*:\s*underline/i.test(style);
             const isSmallCaps = /font-variant\s*:\s*small-caps/i.test(style);
 
             let inner = Array.from(el.childNodes)
-                .map(child => processInlineNode(child))
+                .map(child => processInlineNode(child,lineBreakTag))
                 .join('');
 
             if (!inner.trim()) return '';
@@ -707,7 +781,28 @@ export const WordToXml: React.FC = () => {
             if (isItalic) wrapped = `<${tagMap.italic}>${wrapped}</${tagMap.italic}>`;
             if (isBold) wrapped = `<${tagMap.bold}>${wrapped}</${tagMap.bold}>`;
 
-            return wrapped;
+            return lineBreakTag && /^(p|div|h[1-6])$/.test(tagName) ? lineBreakTag+wrapped+lineBreakTag : wrapped;
+        };
+
+        const collectInlineSegments=(root:HTMLElement):string[]=>{
+            const result:string[]=[];
+            const segment=doc.createRange();segment.setStart(root,0);segment.collapse(true);
+            const flush=(node:Node,offset:number)=>{
+                const slice=doc.createRange();slice.setStart(segment.startContainer,segment.startOffset);slice.setEnd(node,offset);
+                const text=Array.from(slice.cloneContents().childNodes).map(child=>processInlineNode(child)).join('').trim();
+                if(text)result.push(text);segment.setStart(node,offset);segment.collapse(true);
+            };
+            const visit=(node:Node)=>{
+                if(node.nodeType!==Node.ELEMENT_NODE)return;
+                const element=node as HTMLElement,parent=element.parentNode!,tag=element.tagName.toLowerCase();
+                const offset=Array.prototype.indexOf.call(parent.childNodes,element);
+                if(tag==='br'){flush(parent,offset);segment.setStart(parent,offset+1);segment.collapse(true);return;}
+                const block=BLOCK_TAGS.has(tag);
+                if(block){flush(parent,offset);segment.setStart(element,0);segment.collapse(true);}
+                Array.from(element.childNodes).forEach(visit);
+                if(block){flush(element,element.childNodes.length);segment.setStart(parent,offset+1);segment.collapse(true);}
+            };
+            Array.from(root.childNodes).forEach(visit);flush(root,root.childNodes.length);return result;
         };
 
         const LIST_MARKER_REGEX = /^(\s*(?:<[^>]+>\s*)*)(?:[•\*\-\u2013\u2014]|\d{1,3}[\.\)]|\((?:\d{1,2}|[a-zA-Z]|i{1,3}|iv|v|vi{0,3}|ix|x)\)|[a-zA-Z][\.\)])\s+/i;
@@ -733,12 +828,13 @@ export const WordToXml: React.FC = () => {
         };
 
         const processListNode = (listEl: HTMLElement, listDepth = 0, customGetParaIdAttr?: () => string): string => {
-            const getParaId = customGetParaIdAttr || getNextParaIdAttr;
+            const getParaId = opts.schema==='elsevier' ? getNextParaIdAttr : customGetParaIdAttr || getNextParaIdAttr;
             const listItemsXml: string[] = [];
             const children = Array.from(listEl.childNodes);
 
             const tagName = listEl.tagName.toLowerCase();
             const isOrdered = tagName === 'ol';
+            const rawListType = listEl.getAttribute('type') || '';
             const listTypeAttr = (listEl.getAttribute('type') || '').toLowerCase();
             const listStyle = (listEl.getAttribute('style') || '').toLowerCase();
             const isUnlabelledClass = listEl.classList.contains('unlabelled') || listEl.classList.contains('unstyled');
@@ -759,6 +855,24 @@ export const WordToXml: React.FC = () => {
 
             let category = baseCategory;
             let itemIdx = 0;
+            const reversed=listEl.hasAttribute('reversed');
+            const parsedStart=Number(listEl.getAttribute('start'));
+            let ordinal=listEl.hasAttribute('start') && Number.isInteger(parsedStart) ? parsedStart : reversed ? listEl.querySelectorAll(':scope > li').length : 1;
+            const orderedLabel=(value:number)=>{
+                if(value<1)return String(value);
+                if(rawListType==='i' || rawListType==='I' || listStyle.includes('roman')){
+                    if(value>3999)return String(value);
+                    let n=value,result='';
+                    for(const [amount,symbol] of [[1000,'M'],[900,'CM'],[500,'D'],[400,'CD'],[100,'C'],[90,'XC'],[50,'L'],[40,'XL'],[10,'X'],[9,'IX'],[5,'V'],[4,'IV'],[1,'I']] as const)
+                        while(n>=amount){result+=symbol;n-=amount;}
+                    return rawListType==='I' || listStyle.includes('upper-roman') ? result : result.toLowerCase();
+                }
+                if(baseCategory==='alpha'){
+                    let n=value,result='';while(n>0){n--;result=String.fromCharCode(97+n%26)+result;n=Math.floor(n/26);}
+                    return rawListType==='A' || listStyle.includes('upper-alpha') ? result.toUpperCase() : result;
+                }
+                return String(value);
+            };
 
             children.forEach(child => {
                 if (child.nodeType === Node.ELEMENT_NODE) {
@@ -766,6 +880,42 @@ export const WordToXml: React.FC = () => {
                     const childTag = childEl.tagName.toLowerCase();
 
                     if (childTag === 'li') {
+                        const explicitValue=Number(childEl.getAttribute('value'));
+                        if(isOrdered && childEl.hasAttribute('value') && Number.isInteger(explicitValue))ordinal=explicitValue;
+                        if(opts.schema==='elsevier'){
+                            const parts:({text:string}|{list:HTMLElement})[]=[];let buffer='';
+                            const flush=()=>{if(buffer.trim())parts.push({text:buffer.trim()});buffer='';};
+                            const collect=(parent:HTMLElement)=>Array.from(parent.childNodes).forEach(node=>{
+                                if(node.nodeType===Node.ELEMENT_NODE){
+                                    const element=node as HTMLElement,tag=element.tagName.toLowerCase();
+                                    if(tag==='ul'||tag==='ol'){flush();parts.push({list:element});return;}
+                                    if(tag==='table')throw new Error('Tables inside list items need the dedicated table tool.');
+                                    if(['p','div'].includes(tag)){
+                                        flush();if(hasBlockChildren(element))collect(element);else {const text=processInlineNode(element).trim();if(text)parts.push({text});}return;
+                                    }
+                                }
+                                buffer+=processInlineNode(node);
+                            });
+                            collect(childEl);flush();
+                            const first=parts[0] && 'text' in parts[0]?parts[0]:null;
+                            let marker=first?extractLabel(first.text):{labelVal:'',cleanText:''};
+                            if(baseCategory==='bullet' && marker.labelVal && !['•','*','-','–','—'].includes(marker.labelVal))marker={labelVal:'',cleanText:first!.text};
+                            if(first && marker.labelVal)first.text=marker.cleanText;
+                            const label=opts.addListLabels && baseCategory!=='simple' ? marker.labelVal || (baseCategory==='bullet'?'•':orderedLabel(ordinal)) : '';
+                            const paragraphs:string[]=[];
+                            for(const part of parts){
+                                if('text' in part){if(part.text)paragraphs.push(`<ce:para${getParaId()}>${part.text}</ce:para>`);}
+                                else {
+                                    const nested=processListNode(part.list,listDepth+1,customGetParaIdAttr);if(!nested)continue;
+                                    const index=paragraphs.length-1;
+                                    if(opts.embedListInPara && index>=0)paragraphs[index]=paragraphs[index].replace(/<\/ce:para>$/,nested+'</ce:para>');
+                                    else paragraphs.push(`<ce:para${getParaId()}>${nested}</ce:para>`);
+                                }
+                            }
+                            if(!paragraphs.length)paragraphs.push(`<ce:para${getParaId()}/>`);
+                            listItemsXml.push(`<ce:list-item${getNextListItemIdAttr()}>${label?`<ce:label>${label}</ce:label>`:''}${paragraphs.join('')}</ce:list-item>`);
+                            ordinal+=reversed?-1:1;return;
+                        }
                         let inlineText = '';
                         const nestedListElements: HTMLElement[] = [];
 
@@ -807,15 +957,9 @@ export const WordToXml: React.FC = () => {
                                 finalLabel = extractedLabel;
                             } else {
                                 if (category === 'number') {
-                                    finalLabel = `${itemIdx + 1}`;
+                                    finalLabel = orderedLabel(ordinal);
                                 } else if (category === 'alpha') {
-                                    if (listTypeAttr === 'a' || listTypeAttr === 'lower-alpha' || (!listTypeAttr && listDepth % 2 === 1)) {
-                                        finalLabel = String.fromCharCode(97 + (itemIdx % 26));
-                                    } else if (listTypeAttr === 'a') {
-                                        finalLabel = String.fromCharCode(65 + (itemIdx % 26));
-                                    } else {
-                                        finalLabel = String.fromCharCode(97 + (itemIdx % 26));
-                                    }
+                                    finalLabel = orderedLabel(ordinal);
                                 } else if (category === 'bullet') {
                                     finalLabel = '•';
                                 }
@@ -823,6 +967,7 @@ export const WordToXml: React.FC = () => {
                         }
 
                         itemIdx++;
+                        ordinal+=reversed?-1:1;
 
                         const paraIdAttr = getParaId();
                         const listItemIdAttr = getNextListItemIdAttr();
@@ -857,7 +1002,7 @@ export const WordToXml: React.FC = () => {
                             if (listItemsXml.length > 0) {
                                 const lastIdx = listItemsXml.length - 1;
                                 const lastItem = listItemsXml[lastIdx];
-                                if (opts.embedListInPara) {
+                                if (opts.schema==='elsevier' || opts.embedListInPara) {
                                     const paraCloseRegex = new RegExp(`</${tagMap.para}>\n</${tagMap.listItem}>$`, 'i');
                                     if (paraCloseRegex.test(lastItem)) {
                                         listItemsXml[lastIdx] = lastItem.replace(
@@ -911,28 +1056,41 @@ export const WordToXml: React.FC = () => {
         };
 
         // Recursive processor for block containers (body, div, etc.)
-        const processBlockContainer = (containerNode: Node, customGetParaIdAttr?: () => string): string[] => {
+        const processBlockContainer = (containerNode: Node, customGetParaIdAttr?: () => string, forceParagraphs=false): string[] => {
             const getParaId = customGetParaIdAttr || getNextParaIdAttr;
+            const getItemParaId = opts.schema==='elsevier' ? getNextParaIdAttr : getParaId;
+            const wrapParagraphs=forceParagraphs || opts.wrapInParagraphs!==false;
             const blocks: string[] = [];
             let inlineBuffer: string[] = [];
-            let pendingListItems: { xml: string; category: 'bullet' | 'number' | 'alpha' | 'simple' }[] = [];
+            type PendingItem={xml:string;category:'bullet'|'number'|'alpha'|'simple';level:number;listKey:string};
+            let pendingListItems:PendingItem[]=[];
 
             const flushListItems = () => {
                 if (pendingListItems.length > 0) {
-                    const listIdAttr = getNextListIdAttr();
-                    let listTypeAttrStr = '';
-                    if (opts.schema !== 'elsevier') {
-                        const cat = pendingListItems[0].category;
-                        let listTypeAttrVal = 'bullet';
-                        if (cat === 'simple') listTypeAttrVal = 'simple';
-                        else if (cat === 'number') listTypeAttrVal = opts.schema === 'jats' ? 'order' : 'number';
-                        else if (cat === 'alpha') listTypeAttrVal = opts.schema === 'jats' ? 'alpha-lower' : 'alpha';
-                        else listTypeAttrVal = 'bullet';
-                        listTypeAttrStr = ` list-type="${listTypeAttrVal}"`;
+                    type Group={level:number;listKey:string;category:PendingItem['category'];items:{xml:string;children:Group[]}[]};
+                    const roots:Group[]=[],levels:Group[]=[];
+                    for(const item of pendingListItems){
+                        while(levels.length && levels[levels.length-1].level>item.level)levels.pop();
+                        let group=levels[levels.length-1];
+                        if(group && group.level===item.level && (group.listKey!==item.listKey || group.category!==item.category)){levels.pop();group=levels[levels.length-1];}
+                        if(!group || group.level<item.level){
+                            const next:Group={level:item.level,listKey:item.listKey,category:item.category,items:[]};
+                            if(group?.items.length)group.items[group.items.length-1].children.push(next);else roots.push(next);
+                            levels.push(next);group=next;
+                        }
+                        group.items.push({xml:item.xml,children:[]});
                     }
-
-                    const itemXmls = pendingListItems.map(p => p.xml).join('\n');
-                    blocks.push(`<${tagMap.list}${listIdAttr}${listTypeAttrStr}>\n${itemXmls}\n</${tagMap.list}>`);
+                    const render=(group:Group):string=>{
+                        const items=group.items.map(item=>{
+                            const nested=item.children.map(render).join('\n');
+                            if(!nested)return item.xml;
+                            if(opts.schema==='elsevier')return item.xml.replace(new RegExp(`</${tagMap.para}>\\s*</${tagMap.listItem}>$`),`${nested}</${tagMap.para}></${tagMap.listItem}>`);
+                            return item.xml.replace(`</${tagMap.listItem}>`,`${nested}</${tagMap.listItem}>`);
+                        }).join('\n');
+                        const listType=group.category==='number' && opts.schema==='jats'?'order':group.category==='alpha' && opts.schema==='jats'?'alpha-lower':group.category;
+                        return `<${tagMap.list}${getNextListIdAttr()}${opts.schema==='elsevier'?'':` list-type="${listType}"`}>${items}</${tagMap.list}>`;
+                    };
+                    for(const root of roots){const listXml=render(root);blocks.push(forceParagraphs?`<${tagMap.para}${getParaId()}>${listXml}</${tagMap.para}>`:listXml);}
                     pendingListItems = [];
                 }
             };
@@ -964,19 +1122,19 @@ export const WordToXml: React.FC = () => {
                                 finalLabel = extractedLabel || '•';
                             }
 
-                            const paraIdAttr = getParaId();
+                            const paraIdAttr = getItemParaId();
                             const listItemIdAttr = getNextListItemIdAttr();
                             const labelXml = (opts.addListLabels && finalLabel) ? `\n<${tagMap.label}>${finalLabel}</${tagMap.label}>` : '';
-                            const itemParaContent = (opts.wrapInParagraphs !== false)
+                            const itemParaContent = (opts.schema==='elsevier' || wrapParagraphs)
                                 ? `<${tagMap.para}${paraIdAttr}>${cleanText}</${tagMap.para}>`
                                 : cleanText;
                             pendingListItems.push({
                                 xml: `<${tagMap.listItem}${listItemIdAttr}>${labelXml}\n${itemParaContent}\n</${tagMap.listItem}>`,
-                                category
+                                category,level:1,listKey:'plain'
                             });
                         } else {
                             flushListItems();
-                            if (opts.wrapInParagraphs !== false) {
+                            if (wrapParagraphs) {
                                 const idAttr = getParaId();
                                 blocks.push(`<${tagMap.para}${idAttr}>${trimmedLine}</${tagMap.para}>`);
                             } else {
@@ -988,6 +1146,11 @@ export const WordToXml: React.FC = () => {
             };
 
             Array.from(containerNode.childNodes).forEach(child => {
+                if(child.nodeType===Node.TEXT_NODE && /[\r\n]/.test(child.textContent || '')){
+                    const lines=(child.textContent || '').split(/\r\n|\r|\n/);
+                    lines.forEach((line,index)=>{inlineBuffer.push(processInlineNode(doc.createTextNode(line)));if(index<lines.length-1)flushInlineBuffer();});
+                    return;
+                }
                 if (child.nodeType === Node.ELEMENT_NODE) {
                     const el = child as HTMLElement;
                     const tagName = el.tagName.toLowerCase();
@@ -995,10 +1158,7 @@ export const WordToXml: React.FC = () => {
                     if (
                         tagName === 'style' || 
                         tagName === 'script' || 
-                        tagName === 'xml' || 
-                        tagName.startsWith('o:') || 
-                        tagName.startsWith('v:') || 
-                        tagName.startsWith('w:')
+                        tagName === 'xml'
                     ) {
                         return;
                     }
@@ -1013,27 +1173,22 @@ export const WordToXml: React.FC = () => {
                         flushListItems();
 
                         const ceType = (el.getAttribute('data-ce-type') || 'acknowledgment').toLowerCase();
+                        if(!['highlights','acknowledgment','abstract','appendix','section','conflict-of-interest','data-availability','jel','jel-classifications'].includes(ceType))throw new Error('This capture type is not supported. Choose one of the Capture as options.');
                         const titleVal = el.getAttribute('data-ce-title') || (
                             ceType === 'acknowledgment' ? 'Acknowledgements' :
                             ceType === 'abstract' ? 'Abstract' :
                             ceType === 'appendix' ? 'Appendix' :
                             ceType === 'conflict-of-interest' ? 'Declaration of competing interest' :
+                            ceType === 'data-availability' ? 'Data availability' :
                             ceType === 'highlights' ? 'Highlights' :
                             ceType === 'jel' || ceType === 'jel-classifications' ? 'JEL classifications' :
                             'Section'
                         );
 
                         const cleanEl = el.cloneNode(true) as HTMLElement;
-                        const badge = cleanEl.querySelector('.ce-capture-badge');
-                        if (badge) badge.remove();
-
-                        // Flatten any nested capture boxes inside cleanEl so section tags are never nested in XML
-                        cleanEl.querySelectorAll('[data-ce-type]').forEach(childCe => {
-                            while (childCe.firstChild) {
-                                childCe.parentNode?.insertBefore(childCe.firstChild, childCe);
-                            }
-                            childCe.remove();
-                        });
+                        cleanEl.querySelectorAll('.ce-capture-badge').forEach(badge=>badge.remove());
+                        if(cleanEl.querySelector('[data-ce-type]'))throw new Error('Captured sections cannot overlap. Remove an existing section tag before creating a new capture.');
+                        if(!cleanEl.textContent?.trim())throw new Error('This captured section has no text. Add content or remove its section tag.');
 
                         let outerTag = 'ce:section';
                         let titleTag = 'ce:section-title';
@@ -1052,8 +1207,9 @@ export const WordToXml: React.FC = () => {
                                 outerTag = 'ce:keywords';
                                 wrapperExtraAttrs = ' class="jel"';
                             }
-                            else if (ceType === 'appendix') outerTag = 'ce:appendix';
+                            else if (ceType === 'appendix') outerTag = 'ce:section';
                             else if (ceType === 'conflict-of-interest') outerTag = 'ce:conflict-of-interest';
+                            else if (ceType === 'data-availability') outerTag = 'ce:data-availability';
                             else outerTag = 'ce:section';
                             titleTag = 'ce:section-title';
                         } else if (opts.schema === 'jats') {
@@ -1086,30 +1242,35 @@ export const WordToXml: React.FC = () => {
 
                             if (ceType === 'acknowledgment') {
                                 const ackNum = opts.paraIdStart + (ackCounter++) * opts.paraIdStep;
-                                wrapperIdAttr = ` id="ac${String(ackNum).padStart(4, '0')}"`;
+                                wrapperIdAttr = allocateIdAttr('ac',ackNum);
                             } else if (ceType === 'abstract' || ceType === 'highlights') {
                                 const abNum = opts.paraIdStart + (abstractCounter++) * opts.paraIdStep;
-                                wrapperIdAttr = ` id="ab${String(abNum).padStart(4, '0')}"`;
+                                wrapperIdAttr = allocateIdAttr('ab',abNum);
                             } else if (ceType === 'jel' || ceType === 'jel-classifications') {
                                 const ksNum = opts.paraIdStart + (ksCounter++) * opts.paraIdStep;
-                                wrapperIdAttr = ` id="ks${String(ksNum).padStart(4, '0')}"`;
+                                wrapperIdAttr = allocateIdAttr('ks',ksNum);
                             } else if (ceType === 'appendix') {
                                 const apNum = opts.paraIdStart + (appendixCounter++) * opts.paraIdStep;
-                                wrapperIdAttr = ` id="ap${String(apNum).padStart(4, '0')}"`;
+                                wrapperIdAttr = allocateIdAttr('ap',apNum);
                             } else if (ceType === 'conflict-of-interest') {
                                 const coiNum = opts.paraIdStart + (coiCounter++) * opts.paraIdStep;
-                                wrapperIdAttr = ` id="coi${String(coiNum).padStart(4, '0')}"`;
+                                wrapperIdAttr = allocateIdAttr('coi',coiNum);
+                            } else if (ceType === 'data-availability') {
+                                wrapperIdAttr = allocateIdAttr('da',opts.paraIdStart+(daCounter++)*opts.paraIdStep);
                             } else {
                                 const sNum = opts.paraIdStart + (secCounter++) * opts.paraIdStep;
-                                wrapperIdAttr = ` id="s${String(sNum).padStart(4, '0')}"`;
+                                wrapperIdAttr = allocateIdAttr('s',sNum);
                             }
                         }
+                        if(opts.schema==='elsevier' && !wrapperIdAttr && ['conflict-of-interest','data-availability'].includes(ceType))
+                            wrapperIdAttr=allocateIdAttr(ceType==='data-availability'?'da':'coi',opts.paraIdStart+(ceType==='data-availability'?daCounter++:coiCounter++)*opts.paraIdStep);
 
-                        const subBlocks = processBlockContainer(cleanEl);
-                        const titleXml = `<${titleTag}${titleIdAttr}>${titleVal}</${titleTag}>`;
+                        const abstractParaId=()=>opts.addParagraphIds?allocateIdAttr('sp',opts.paraIdStart+(spCounter++)*opts.paraIdStep):'';
+                        const subBlocks = ['highlights','jel','jel-classifications'].includes(ceType) ? [] : processBlockContainer(cleanEl,ceType==='abstract' && opts.schema==='elsevier'?abstractParaId:undefined,opts.schema==='elsevier');
+                        const titleXml = `<${titleTag}${titleIdAttr}>${escapeXmlText(titleVal)}</${titleTag}>`;
                         const innerXml = subBlocks.length > 0 
                             ? subBlocks.join('\n') 
-                            : (opts.wrapInParagraphs !== false ? `<${tagMap.para}${getParaId()}></${tagMap.para}>` : '');
+                            : (wrapParagraphs ? `<${tagMap.para}${getParaId()}></${tagMap.para}>` : '');
 
                         if (ceType === 'highlights' && opts.schema === 'elsevier') {
                             let asIdAttr = '';
@@ -1117,9 +1278,9 @@ export const WordToXml: React.FC = () => {
                             let listIdAttr = '';
                             if (opts.addParagraphIds) {
                                 const asNum = opts.paraIdStart + (asCounter++) * opts.paraIdStep;
-                                asIdAttr = ` id="as${String(asNum).padStart(4, '0')}"`;
+                                asIdAttr = allocateIdAttr('as',asNum);
                                 const spNum = opts.paraIdStart + (spCounter++) * opts.paraIdStep;
-                                spIdAttr = ` id="sp${String(spNum).padStart(4, '0')}"`;
+                                spIdAttr = allocateIdAttr('sp',spNum);
                                 listIdAttr = getNextListIdAttr();
                             }
 
@@ -1138,88 +1299,36 @@ export const WordToXml: React.FC = () => {
                                 highlightItems.push(`<ce:list-item${listItemIdAttr}><ce:label>${label}</ce:label><ce:para${paraIdAttr}>${text}</ce:para></ce:list-item>`);
                             };
 
-                            const liNodes = Array.from(cleanEl.querySelectorAll('li'));
-                            if (liNodes.length > 0) {
-                                liNodes.forEach(li => {
-                                    let inlineContent = '';
-                                    Array.from(li.childNodes).forEach(child => {
-                                        if (child.nodeType === Node.ELEMENT_NODE) {
-                                            const tag = (child as HTMLElement).tagName.toLowerCase();
-                                            if (tag === 'ul' || tag === 'ol') return;
-                                        }
-                                        inlineContent += processInlineNode(child);
-                                    });
-                                    addHighlightItem(inlineContent);
-                                });
-                            } else {
-                                const blockNodes = Array.from(cleanEl.querySelectorAll('p, div')).filter(el => {
-                                    return !Array.from(el.children).some(child => {
-                                        const tag = child.tagName.toLowerCase();
-                                        return tag === 'p' || tag === 'div' || tag === 'ul' || tag === 'ol';
-                                    });
-                                });
-
-                                if (blockNodes.length > 0) {
-                                    blockNodes.forEach(block => {
-                                        const inlineContent = Array.from(block.childNodes)
-                                            .map(child => processInlineNode(child))
-                                            .join('')
-                                            .trim();
-
-                                        if (inlineContent) {
-                                            const lines = inlineContent.split(/<br\s*\/?>|\r?\n/).map(l => l.trim()).filter(Boolean);
-                                            lines.forEach(line => addHighlightItem(line));
-                                        }
-                                    });
-                                } else {
-                                    const inlineContent = Array.from(cleanEl.childNodes)
-                                        .map(child => processInlineNode(child))
-                                        .join('')
-                                        .trim();
-
-                                    if (inlineContent) {
-                                        const lines = inlineContent.split(/<br\s*\/?>|\r?\n/).map(l => l.trim()).filter(Boolean);
-                                        lines.forEach(line => addHighlightItem(line));
-                                    }
-                                }
-                            }
-
-                            if (highlightItems.length === 0) {
-                                const listItemIdAttr = getNextListItemIdAttr();
-                                const paraIdAttr = getNextParaIdAttr();
-                                highlightItems.push(`<ce:list-item${listItemIdAttr}><ce:label>•</ce:label><ce:para${paraIdAttr}></ce:para></ce:list-item>`);
-                            }
+                            // Split DOM ranges at block/line boundaries. Each cloned
+                            // range retains balanced inline formatting, even when a
+                            // <br> occurs inside bold/italic text. Mixed prose and lists
+                            // are visited in source order rather than choosing one kind.
+                            collectInlineSegments(cleanEl).forEach(addHighlightItem);
+                            if(!highlightItems.length)return;
 
                             const bodyContent = `<ce:abstract-sec${asIdAttr}>\n<ce:simple-para${spIdAttr}><ce:list${listIdAttr}>\n${highlightItems.join('\n')}\n</ce:list></ce:simple-para>\n</ce:abstract-sec>`;
                             blocks.push(`<${outerTag}${wrapperIdAttr}${wrapperExtraAttrs}>\n${titleXml}\n${bodyContent}\n</${outerTag}>`);
                         } else if ((ceType === 'jel' || ceType === 'jel-classifications') && opts.schema === 'elsevier') {
-                            let kwIdAttr = '';
-                            let txIdAttr = '';
-                            if (opts.addParagraphIds) {
-                                const kwNum = opts.paraIdStart + (kwCounter++) * opts.paraIdStep;
-                                kwIdAttr = ` id="kw${String(kwNum).padStart(4, '0')}"`;
-                                const txNum = opts.paraIdStart + (txCounter++) * opts.paraIdStep;
-                                txIdAttr = ` id="tx${String(txNum).padStart(4, '0')}"`;
-                            }
-                            let textVal = Array.from(cleanEl.childNodes)
-                                .map(child => processInlineNode(child))
-                                .join('')
-                                .replace(/<ce:para[^>]*>/gi, '')
-                                .replace(/<\/ce:para>/gi, '')
-                                .replace(/<p[^>]*>/gi, '')
-                                .replace(/<\/p>/gi, '')
-                                .trim();
-                            if (!textVal) {
-                                textVal = cleanEl.textContent?.replace(/\u00a0/g, ' ').trim() || '';
-                            }
-                            const kwXml = `<ce:keyword${kwIdAttr}><ce:text${txIdAttr}>${textVal}</ce:text></ce:keyword>`;
+                            const kwXml=collectInlineSegments(cleanEl).map(textVal=>{
+                                const kwIdAttr=opts.addParagraphIds?allocateIdAttr('kw',opts.paraIdStart+(kwCounter++)*opts.paraIdStep):'';
+                                const txIdAttr=opts.addParagraphIds?allocateIdAttr('tx',opts.paraIdStart+(txCounter++)*opts.paraIdStep):'';
+                                return `<ce:keyword${kwIdAttr}><ce:text${txIdAttr}>${textVal}</ce:text></ce:keyword>`;
+                            }).join('');
                             blocks.push(`<ce:keywords class="jel"${wrapperIdAttr}>${titleXml}${kwXml}</ce:keywords>`);
                         } else if ((ceType === 'jel' || ceType === 'jel-classifications') && opts.schema === 'jats') {
-                            let textVal = cleanEl.textContent?.replace(/\u00a0/g, ' ').trim() || '';
+                            let textVal = escapeXmlText(cleanEl.textContent?.replace(/\u00a0/g, ' ').trim() || '');
                             blocks.push(`<kwd-group kwd-group-type="jel"${wrapperIdAttr}>${titleXml}<kwd>${textVal}</kwd></kwd-group>`);
                         } else if (ceType === 'jel' || ceType === 'jel-classifications') {
-                            let textVal = cleanEl.textContent?.replace(/\u00a0/g, ' ').trim() || '';
+                            let textVal = escapeXmlText(cleanEl.textContent?.replace(/\u00a0/g, ' ').trim() || '');
                             blocks.push(`<keywords class="jel"${wrapperIdAttr}>${titleXml}<keyword>${textVal}</keyword></keywords>`);
+                        } else if(ceType==='abstract' && opts.schema==='elsevier') {
+                            const simpleParas=subBlocks.map(block=>{
+                                return block.replace(/^<ce:para\b/,'<ce:simple-para').replace(/<\/ce:para>$/,'</ce:simple-para>');
+                            }).join('\n');
+                            const id=opts.addParagraphIds?allocateIdAttr('as',opts.paraIdStart+(asCounter++)*opts.paraIdStep):'';
+                            blocks.push(`<ce:abstract${wrapperIdAttr}>${titleXml}<ce:abstract-sec${id}>${simpleParas}</ce:abstract-sec></ce:abstract>`);
+                        } else if(ceType==='appendix' && opts.schema==='elsevier') {
+                            blocks.push(`<ce:appendices><ce:section${wrapperIdAttr}>${titleXml}${innerXml}</ce:section></ce:appendices>`);
                         } else {
                             blocks.push(`<${outerTag}${wrapperIdAttr}${wrapperExtraAttrs}>\n${titleXml}\n${innerXml}\n</${outerTag}>`);
                         }
@@ -1234,10 +1343,6 @@ export const WordToXml: React.FC = () => {
                             if (content) {
                                 if (isListParagraph(el, content)) {
                                     let { labelVal: extractedLabel, cleanText } = extractLabel(content);
-                                    if (pendingListItems.length > 0 && pendingListItems[0].category === 'bullet' && extractedLabel && !['•', '*', '-', '–', '—'].includes(extractedLabel)) {
-                                        extractedLabel = '';
-                                        cleanText = content;
-                                    }
                                     let category: 'bullet' | 'number' | 'alpha' | 'simple' = 'bullet';
                                     if (/^\d+$/.test(extractedLabel)) {
                                         category = 'number';
@@ -1252,19 +1357,21 @@ export const WordToXml: React.FC = () => {
                                         finalLabel = extractedLabel || '•';
                                     }
 
-                                    const paraIdAttr = getParaId();
+                                    const paraIdAttr = getItemParaId();
                                     const listItemIdAttr = getNextListItemIdAttr();
                                     const labelXml = (opts.addListLabels && finalLabel) ? `\n<${tagMap.label}>${finalLabel}</${tagMap.label}>` : '';
-                                    const itemParaContent = (opts.wrapInParagraphs !== false)
+                                    const itemParaContent = (opts.schema==='elsevier' || wrapParagraphs)
                                         ? `<${tagMap.para}${paraIdAttr}>${cleanText}</${tagMap.para}>`
                                         : cleanText;
                                     pendingListItems.push({
                                         xml: `<${tagMap.listItem}${listItemIdAttr}>${labelXml}\n${itemParaContent}\n</${tagMap.listItem}>`,
-                                        category
+                                        category,
+                                        level:Number((el.getAttribute('style') || '').match(/\blevel(\d+)/i)?.[1] || 1),
+                                        listKey:(el.getAttribute('style') || '').match(/mso-list\s*:\s*([^\s;]+)/i)?.[1] || 'plain'
                                     });
                                 } else {
                                     flushListItems();
-                                    if (opts.wrapInParagraphs !== false) {
+                                    if (wrapParagraphs) {
                                         const idAttr = getParaId();
                                         blocks.push(`<${tagMap.para}${idAttr}>${content}</${tagMap.para}>`);
                                     } else {
@@ -1274,17 +1381,17 @@ export const WordToXml: React.FC = () => {
                             }
                         } else if ((tagName === 'div' || tagName === 'p') && hasBlockChildren(el)) {
                             flushListItems();
-                            const subBlocks = processBlockContainer(el, getParaId);
+                            const subBlocks = processBlockContainer(el, getParaId, forceParagraphs);
                             blocks.push(...subBlocks);
                         } else if (/^h[1-6]$/.test(tagName)) {
                             flushListItems();
                             const content = processInlineNode(el).trim();
                             if (content) {
-                                if (opts.convertHeadings) {
+                                if (opts.convertHeadings && !forceParagraphs) {
                                     const titleIdAttr = getNextSectionTitleIdAttr();
                                     blocks.push(`<${tagMap.title}${titleIdAttr}>${content}</${tagMap.title}>`);
                                 } else {
-                                    if (opts.wrapInParagraphs !== false) {
+                                    if (wrapParagraphs) {
                                         const idAttr = getParaId();
                                         blocks.push(`<${tagMap.para}${idAttr}><${tagMap.bold}>${content}</${tagMap.bold}></${tagMap.para}>`);
                                     } else {
@@ -1296,15 +1403,56 @@ export const WordToXml: React.FC = () => {
                             flushListItems();
                             const listXml = processListNode(el, 0, getParaId);
                             if (listXml) {
-                                blocks.push(listXml);
+                                blocks.push(forceParagraphs ? `<${tagMap.para}${getParaId()}>${listXml}</${tagMap.para}>` : listXml);
                             }
                         } else if (tagName === 'table') {
                             flushListItems();
+                            if(opts.schema==='elsevier'){
+                                if(el.querySelector('table'))throw new Error('Nested tables need the dedicated table tool. Your input is preserved; no partial XML was generated.');
+                                const rowRank=(row:Element)=>row.parentElement?.tagName.toLowerCase()==='thead'?0:row.parentElement?.tagName.toLowerCase()==='tfoot'?2:1;
+                                const sourceRows=Array.from(el.querySelectorAll('tr')).filter(row=>row.closest('table')===el).sort((a,b)=>rowRank(a)-rowRank(b));
+                                const occupied:number[]=[],rendered:{head:boolean;xml:string}[]=[];
+                                let columns=0;
+                                sourceRows.forEach((row,rowIndex)=>{
+                                    let column=0;const entries:string[]=[];
+                                    Array.from(row.children).filter(cell=>['td','th'].includes(cell.tagName.toLowerCase())).forEach(cell=>{
+                                        while((occupied[column] || 0)>rowIndex)column++;
+                                        const width=Number(cell.getAttribute('colspan') || 1),rawHeight=Number(cell.getAttribute('rowspan') || 1);
+                                        const height=rawHeight===0 ? sourceRows.filter((candidate,index)=>index>=rowIndex && candidate.parentElement===row.parentElement).length : rawHeight;
+                                        if(!Number.isInteger(width)||width<1||width>1000||!Number.isInteger(height)||height<1||height>sourceRows.length-rowIndex)
+                                            throw new Error('This table has invalid or unsupported merged-cell spans. Review its row and column structure.');
+                                        if(height>sourceRows.filter((candidate,index)=>index>=rowIndex && candidate.parentElement===row.parentElement).length)throw new Error('Merged cells cannot cross table header, body or footer groups. Review this table span.');
+                                        for(let offset=0;offset<width;offset++){
+                                            if((occupied[column+offset] || 0)>rowIndex)throw new Error('Merged table cells overlap. Review the table before converting.');
+                                            occupied[column+offset]=rowIndex+height;
+                                        }
+                                        let attributes=width>1?` namest="c${column+1}" nameend="c${column+width}"`:` colname="c${column+1}"`;
+                                        if(height>1)attributes+=` morerows="${height-1}"`;
+                                        const body=processInlineNode(cell,'<ce:br/>').trim().replace(/(?:<ce:br\/>\s*){2,}/g,'<ce:br/>').replace(/^(?:<ce:br\/>\s*)+|(?:\s*<ce:br\/>)+$/g,'');
+                                        entries.push(`<entry xmlns="http://www.elsevier.com/xml/common/dtd"${attributes}>${body}</entry>`);
+                                        column+=width;columns=Math.max(columns,column);
+                                    });
+                                    if(!entries.length)throw new Error('Empty or fully spanned table rows need review before conversion.');
+                                    rendered.push({head:row.parentElement?.tagName.toLowerCase()==='thead',xml:`<row>${entries.join('')}</row>`});
+                                });
+                                if(!rendered.length)throw new Error('This table contains no rows to convert.');
+                                const bodyRows=rendered.filter(row=>!row.head),headRows=rendered.filter(row=>row.head);
+                                const head=bodyRows.length && headRows.length?`<thead>${headRows.map(row=>row.xml).join('')}</thead>`:'';
+                                const body=(bodyRows.length?bodyRows:rendered).map(row=>row.xml).join('');
+                                const colspecs=Array.from({length:columns},(_,index)=>`<colspec colname="c${index+1}"/>`).join('');
+                                const caption=el.querySelector(':scope > caption');
+                                const captionParts=caption?collectInlineSegments(caption as HTMLElement):[];
+                                const captionId=captionParts.length && opts.addParagraphIds?allocateIdAttr('ca',opts.paraIdStart+(captionCounter++)*opts.paraIdStep):'';
+                                const captionXml=captionParts.length?`<ce:caption${captionId}>${captionParts.map(text=>`<ce:simple-para${opts.addParagraphIds?allocateIdAttr('sp',opts.paraIdStart+(spCounter++)*opts.paraIdStep):''}>${text}</ce:simple-para>`).join('')}</ce:caption>`:'';
+                                const table=`<ce:table xmlns="http://www.elsevier.com/xml/common/cals/dtd">${captionXml}<tgroup cols="${columns}">${colspecs}${head}<tbody>${body}</tbody></tgroup></ce:table>`;
+                                if(forceParagraphs)throw new Error('A table cannot be inserted directly into this captured text section. Convert it separately with the table tool.');
+                                blocks.push(table);return;
+                            }
                             const rows: string[] = [];
-                            const trElements = el.querySelectorAll('tr');
+                            const trElements = Array.from(el.querySelectorAll('tr')).filter(tr=>tr.closest('table')===el);
                             trElements.forEach(tr => {
                                 const cells: string[] = [];
-                                tr.querySelectorAll('td, th').forEach(td => {
+                                Array.from(tr.children).filter(td=>['td','th'].includes(td.tagName.toLowerCase())).forEach(td => {
                                     const cellContent = processInlineNode(td).trim();
                                     cells.push(`<${tagMap.td}>${cellContent}</${tagMap.td}>`);
                                 });
@@ -1315,9 +1463,9 @@ export const WordToXml: React.FC = () => {
                             if (rows.length > 0) {
                                 blocks.push(`<${tagMap.table}>\n<${tagMap.tbody}>\n${rows.join('\n')}\n</${tagMap.tbody}>\n</${tagMap.table}>`);
                             }
-                        } else if (tagName === 'blockquote' || tagName === 'section' || tagName === 'article') {
+                        } else if (tagName === 'blockquote' || tagName === 'section' || tagName === 'article' || tagName === 'header' || tagName === 'footer') {
                             flushListItems();
-                            const subBlocks = processBlockContainer(el, getParaId);
+                            const subBlocks = processBlockContainer(el, getParaId, forceParagraphs);
                             blocks.push(...subBlocks);
                         }
                         return;
@@ -1336,7 +1484,7 @@ export const WordToXml: React.FC = () => {
             return blocks;
         };
 
-        const parsedBlocks = processBlockContainer(container);
+        const parsedBlocks = processBlockContainer(container,undefined,opts.schema==='elsevier' && opts.wrapInRoot && opts.rootTag==='ce:sections');
 
         let mergedBlocks = parsedBlocks;
         if (opts.embedListInPara && opts.wrapInParagraphs !== false) {
@@ -1394,9 +1542,7 @@ export const WordToXml: React.FC = () => {
                 .replace(/<bold>\s*<\/bold>/gi, '')
                 .replace(/<italic>\s*<\/italic>/gi, '')
                 .replace(/<sup>\s*<\/sup>/gi, '')
-                .replace(/<sub>\s*<\/sub>/gi, '')
-                .replace(/<p>\s*<\/p>/gi, '')
-                .replace(/<ce:para>\s*<\/ce:para>/gi, '');
+                .replace(/<sub>\s*<\/sub>/gi, '');
         }
 
         // Clean carriage returns completely (\r\n -> \n, \r -> '')
@@ -1415,17 +1561,20 @@ export const WordToXml: React.FC = () => {
         // Option: Wrap in root container if requested
         if (opts.wrapInRoot && opts.rootTag) {
             const root = opts.rootTag.trim();
-            resultXml = `<${root}>\n${resultXml.split('\n').map(l => '  ' + l).join('\n')}\n</${root}>`;
+            const mixedRoot=[tagMap.para,tagMap.bold,tagMap.italic,tagMap.sup,tagMap.inf,tagMap.underline,tagMap.smallCaps,tagMap.title,tagMap.label,'ce:simple-para','ce:text'].includes(root);
+            resultXml = mixedRoot ? `<${root}>${resultXml}</${root}>` : `<${root}>\n${resultXml.split('\n').map(l => '  ' + l).join('\n')}\n</${root}>`;
         }
 
-        return resultXml.trim();
+        const output=resultXml.trim();
+        if(opts.schema==='elsevier')validateWordScannerCeFragment(output,opts.dtdVersion);
+        return output;
     }, []);
 
     // Perform scan & conversion whenever input or options change
     const handleScanAndConvert = useCallback(() => {
         const inputToUse = isHtmlMode ? rawHtmlInput : editorHtml;
-        const xml = convertHtmlToXml(inputToUse, options);
-        setXmlOutput(xml);
+        try {setXmlOutput(convertHtmlToXml(inputToUse, options));setConversionError('');}
+        catch(error){setXmlOutput('');setConversionError(error instanceof Error ? error.message : 'Unable to convert this input safely.');}
     }, [isHtmlMode, rawHtmlInput, editorHtml, options, convertHtmlToXml]);
 
     useEffect(() => {
@@ -1436,7 +1585,7 @@ export const WordToXml: React.FC = () => {
     const stats = React.useMemo(() => {
         if (!xmlOutput) return { para: 0, bold: 0, italic: 0, sup: 0, inf: 0, totalTags: 0, chars: 0 };
 
-        const paraMatch = xmlOutput.match(/<(ce:para|p)\b/gi) || [];
+        const paraMatch = xmlOutput.match(/<(ce:para|ce:simple-para|p)\b/gi) || [];
         const boldMatch = xmlOutput.match(/<(ce:bold|bold|b)\b/gi) || [];
         const italicMatch = xmlOutput.match(/<(ce:italic|italic|i)\b/gi) || [];
         const supMatch = xmlOutput.match(/<(ce:sup|sup)\b/gi) || [];
@@ -1455,12 +1604,16 @@ export const WordToXml: React.FC = () => {
     }, [xmlOutput]);
 
     // Copy XML to clipboard
-    const handleCopy = () => {
+    const handleCopy = async () => {
         if (!xmlOutput) return;
-        navigator.clipboard.writeText(xmlOutput);
-        setIsCopied(true);
-        setToast({ msg: 'XML copied to clipboard!', type: 'success' });
-        setTimeout(() => setIsCopied(false), 2000);
+        try {
+            await navigator.clipboard.writeText(xmlOutput);
+            setIsCopied(true);
+            setToast({ msg: 'XML copied to clipboard!', type: 'success' });
+            setTimeout(() => setIsCopied(false), 2000);
+        } catch {
+            setIsCopied(false);setToast({msg:'Clipboard access failed. Copy the snippet from Raw Text instead.',type:'error'});
+        }
     };
 
     // Download XML file
@@ -1470,10 +1623,11 @@ export const WordToXml: React.FC = () => {
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.setAttribute('download', `word_converted_${options.schema}.xml`);
+        link.setAttribute('download', `word_converted_${options.schema==='elsevier'?'ce':options.schema}.xml`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        URL.revokeObjectURL(url);
         setToast({ msg: 'XML file downloaded', type: 'success' });
     };
 
@@ -1562,6 +1716,7 @@ export const WordToXml: React.FC = () => {
     return (
         <div className="max-w-[1700px] mx-auto px-4 py-8 sm:px-6 lg:px-8">
             {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
+            {conversionError && <div role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">{conversionError}</div>}
 
             {/* Header Section */}
             <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -1572,10 +1727,10 @@ export const WordToXml: React.FC = () => {
                         </div>
                         <div>
                             <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase">
-                                MS Word Rich Text to <span className="text-indigo-600">Elsevier CE XML Scanner</span>
+                                MS Word Rich Text to <span className="text-indigo-600">CE XML Scanner</span>
                             </h1>
                             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-0.5">
-                                Scan superscripts, subscripts, bold, italics, paragraphs & convert to Elsevier CE XML
+                                Scan superscripts, subscripts, bold, italics, paragraphs & convert to CE XML
                             </p>
                         </div>
                     </div>
@@ -1593,6 +1748,20 @@ export const WordToXml: React.FC = () => {
                     <span>XML Tagging & ID Settings</span>
                     {showSettings ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                 </button>
+            </div>
+
+            <div className="mb-5 flex flex-wrap items-end gap-4 rounded-2xl border border-slate-200 bg-white p-4">
+                <label className="text-xs font-bold text-slate-700">CE DTD version
+                    <select aria-label="CE DTD version" value={options.dtdVersion} onChange={event=>setOptions(previous=>({...previous,dtdVersion:event.target.value as WordScannerDtdVersion}))} className="ml-2 rounded-lg border border-slate-300 bg-white px-3 py-2">
+                        <option value="5.7">5.7</option><option value="5.6">5.6</option>
+                    </select>
+                </label>
+                <label className="text-xs font-bold text-slate-700">Output content
+                    <select aria-label="Output content" value={options.outputScope} onChange={event=>setOptions(previous=>({...previous,outputScope:event.target.value as 'all'|'captures'}))} className="ml-2 rounded-lg border border-slate-300 bg-white px-3 py-2">
+                        <option value="all">All input</option><option value="captures">Captured sections only</option>
+                    </select>
+                </label>
+                <p className="text-xs text-slate-500">Captures include their required paragraph structure. No full article is needed.</p>
             </div>
 
             {/* Collapsible Top Settings Drawer */}
@@ -1633,7 +1802,7 @@ export const WordToXml: React.FC = () => {
                                 />
                                 <span className="text-xs font-black text-indigo-950 uppercase tracking-wider flex items-center gap-1.5">
                                     <Hash size={14} className="text-indigo-600" />
-                                    Auto-Add Element IDs (&lt;ce:para&gt;, &lt;ce:section-title&gt;, &lt;ce:list&gt;)
+                                    Auto-Add Optional Element IDs
                                 </span>
                             </label>
 
@@ -1793,11 +1962,11 @@ export const WordToXml: React.FC = () => {
                             <label className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-200/60 cursor-pointer hover:bg-slate-100 transition-all">
                                 <input
                                     type="checkbox"
-                                    checked={options.encodeEntities}
-                                    onChange={(e) => setOptions(prev => ({ ...prev, encodeEntities: e.target.checked }))}
+                                    checked={true}
+                                    disabled
                                     className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
                                 />
-                                <span className="text-xs font-bold text-slate-700">Encode XML Special Entities (&amp; &rarr; &amp;amp;, &lt;, &gt;)</span>
+                                <span className="text-xs font-bold text-slate-700">XML Special Characters Are Always Escaped</span>
                             </label>
 
                             <label className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-200/60 cursor-pointer hover:bg-slate-100 transition-all">
@@ -1929,6 +2098,7 @@ export const WordToXml: React.FC = () => {
                                         disabled={isHtmlMode}
                                         className="px-2.5 py-1 rounded-lg text-amber-900 bg-amber-50 hover:bg-amber-100 hover:text-amber-950 transition-colors disabled:opacity-40 text-xs font-bold flex items-center gap-1.5 border border-amber-200/80 shadow-2xs"
                                         title="Capture highlighted text or block as a specific CE XML section"
+                                        onMouseDown={(event)=>event.preventDefault()}
                                     >
                                         <Bookmark size={14} className="text-amber-600 fill-amber-500/20" />
                                         <span>Capture as...</span>
@@ -1936,7 +2106,7 @@ export const WordToXml: React.FC = () => {
                                     </button>
 
                                     {isCaptureMenuOpen && (
-                                        <div className="absolute left-0 top-full mt-1.5 w-60 bg-white rounded-2xl shadow-xl border border-slate-200 p-1.5 z-30 space-y-1">
+                                        <div onMouseDown={(event)=>event.preventDefault()} className="absolute left-0 top-full mt-1.5 w-60 bg-white rounded-2xl shadow-xl border border-slate-200 p-1.5 z-30 space-y-1">
                                             <div className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-100 flex items-center justify-between">
                                                 <span>Section Tagging</span>
                                                 <span className="text-amber-600 font-mono">CE XML</span>
@@ -1950,8 +2120,16 @@ export const WordToXml: React.FC = () => {
                                                     <Sparkles size={14} className="text-emerald-600 group-hover:scale-110 transition-transform" />
                                                     <span>Highlights</span>
                                                 </div>
-                                                <span className="text-[9px] font-mono font-bold text-emerald-700 bg-emerald-100/80 px-1.5 py-0.5 rounded">&lt;ce:abs&gt;</span>
+                                                <span className="text-[9px] font-mono font-bold text-emerald-700 bg-emerald-100/80 px-1.5 py-0.5 rounded">&lt;ce:abstract&gt;</span>
                                             </button>
+                                            {[
+                                                {type:'abstract',name:'Abstract',tag:'ce:abstract'},
+                                                {type:'section',name:'Article Section',tag:'ce:section'},
+                                                {type:'appendix',name:'Appendix',tag:'ce:appendices'},
+                                                {type:'data-availability',name:'Data Availability',tag:'ce:data-availability'}
+                                            ].map(capture=><button key={capture.type} type="button" onClick={()=>{captureSelectionAs(capture.type);setIsCaptureMenuOpen(false);}} className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-indigo-50 text-slate-800 text-xs font-semibold flex items-center justify-between gap-2">
+                                                <span>{capture.name}</span><span className="text-[9px] font-mono text-indigo-700">&lt;{capture.tag}&gt;</span>
+                                            </button>)}
                                             <button
                                                 type="button"
                                                 onClick={() => { captureSelectionAs('acknowledgment'); setIsCaptureMenuOpen(false); }}
@@ -1961,7 +2139,7 @@ export const WordToXml: React.FC = () => {
                                                     <Bookmark size={14} className="text-amber-600 group-hover:scale-110 transition-transform" />
                                                     <span>Acknowledgement</span>
                                                 </div>
-                                                <span className="text-[9px] font-mono font-bold text-amber-700 bg-amber-100/80 px-1.5 py-0.5 rounded">&lt;ce:ack&gt;</span>
+                                                <span className="text-[9px] font-mono font-bold text-amber-700 bg-amber-100/80 px-1.5 py-0.5 rounded">&lt;ce:acknowledgment&gt;</span>
                                             </button>
                                             <button
                                                 type="button"
@@ -1972,7 +2150,7 @@ export const WordToXml: React.FC = () => {
                                                     <ShieldAlert size={14} className="text-rose-600 group-hover:scale-110 transition-transform" />
                                                     <span>Conflict of Interest</span>
                                                 </div>
-                                                <span className="text-[9px] font-mono font-bold text-rose-700 bg-rose-100/80 px-1.5 py-0.5 rounded">&lt;ce:coi&gt;</span>
+                                                <span className="text-[9px] font-mono font-bold text-rose-700 bg-rose-100/80 px-1.5 py-0.5 rounded">&lt;ce:conflict-of-interest&gt;</span>
                                             </button>
                                             <button
                                                 type="button"
@@ -2056,6 +2234,7 @@ export const WordToXml: React.FC = () => {
                                     ref={editorRef}
                                     contentEditable
                                     onInput={handleEditorInput}
+                                    onPaste={handleEditorPaste}
                                     onClick={(e) => {
                                         const target = e.target as HTMLElement;
                                         const box = target.closest('.ce-capture-box') as HTMLElement;
@@ -2224,7 +2403,7 @@ export const WordToXml: React.FC = () => {
                                         <div className="space-y-2 text-xs text-slate-400">
                                             <div className="flex justify-between py-1 border-b border-slate-800">
                                                 <span>Selected Namespace Schema:</span>
-                                                <span className="font-bold text-slate-200 uppercase">{options.schema}</span>
+                                                <span className="font-bold text-slate-200 uppercase">{options.schema==='elsevier'?'CE':options.schema}</span>
                                             </div>
                                             <div className="flex justify-between py-1 border-b border-slate-800">
                                                 <span>Enclose in &lt;ce:para&gt;:</span>
@@ -2252,12 +2431,13 @@ export const WordToXml: React.FC = () => {
 
                         {/* Output Footer Status Bar */}
                         <div className="bg-slate-900 border-t border-slate-800 px-6 py-3 flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                            <span className="flex items-center gap-1.5 text-emerald-400">
-                                <CheckCircle2 size={12} />
-                                XML Output Ready ({stats.totalTags} tags generated)
+                            <span className={`flex items-center gap-1.5 ${conversionError?'text-rose-400':xmlOutput?'text-emerald-400':'text-slate-400'}`}>
+                                {xmlOutput?<CheckCircle2 size={12}/>:<AlertCircle size={12}/>}
+                                {conversionError?'Output blocked — review the message above':xmlOutput?`CE ${options.dtdVersion} snippet structure checked (${stats.totalTags} tags)`:'Waiting for text or a capture'}
                             </span>
-                            <span>Schema: {options.schema.toUpperCase()}</span>
+                            <span>Schema: {options.schema==='elsevier'?'CE':options.schema.toUpperCase()}</span>
                         </div>
+                        <p className="border-t border-slate-800 bg-slate-900 px-6 py-2 text-xs text-slate-400">Checks cover the generated snippet. Check article placement and existing IDs after insertion.</p>
                     </div>
                 </div>
 

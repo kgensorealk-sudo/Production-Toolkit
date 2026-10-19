@@ -1,0 +1,1929 @@
+{
+  "name": "CE article 5.7 snippet rules",
+  "source": "art570.dtd",
+  "sourceSha256": "8f56cf5bd3eae1015679bea161e6b7c9ae04d6f9e64eb3f2f50bfa026a8ba612",
+  "commonSha256": "e518220802ff080d62a8164550190351d8a02e281381578d3bd5d905d83031bd",
+  "attribution": "Derived from the CE common element pool and article DTD, CC BY 4.0. Copyright Elsevier B.V. Original source attribution and license: https://creativecommons.org/licenses/by/4.0/",
+  "unsupportedInVersion": [],
+  "elements": {
+    "ce:text": {
+      "type": "mixed",
+      "model": null,
+      "allowedChildren": [
+        "ce:bold",
+        "ce:inf",
+        "ce:italic",
+        "ce:small-caps",
+        "ce:sup",
+        "ce:underline",
+        "color",
+        "cross-out",
+        "glyph",
+        "hsp",
+        "inline-figure",
+        "inter-ref",
+        "math",
+        "monospace",
+        "sans-serif",
+        "vsp"
+      ],
+      "attributes": {
+        "id": {
+          "type": "id",
+          "required": false,
+          "fixed": null,
+          "values": []
+        }
+      }
+    },
+    "ce:label": {
+      "type": "mixed",
+      "model": null,
+      "allowedChildren": [
+        "ce:bold",
+        "ce:inf",
+        "ce:italic",
+        "ce:small-caps",
+        "ce:sup",
+        "ce:underline",
+        "color",
+        "cross-out",
+        "glyph",
+        "hsp",
+        "inline-figure",
+        "math",
+        "monospace",
+        "sans-serif",
+        "vsp"
+      ],
+      "attributes": {}
+    },
+    "ce:section-title": {
+      "type": "mixed",
+      "model": null,
+      "allowedChildren": [
+        "anchor",
+        "ce:bold",
+        "ce:inf",
+        "ce:italic",
+        "ce:small-caps",
+        "ce:sup",
+        "ce:underline",
+        "color",
+        "cross-out",
+        "cross-ref",
+        "cross-refs",
+        "footnote",
+        "glyph",
+        "hsp",
+        "inline-figure",
+        "inter-ref",
+        "inter-refs",
+        "intra-ref",
+        "intra-refs",
+        "math",
+        "monospace",
+        "sans-serif",
+        "vsp"
+      ],
+      "attributes": {
+        "id": {
+          "type": "id",
+          "required": false,
+          "fixed": null,
+          "values": []
+        },
+        "role": {
+          "type": "cdata",
+          "required": false,
+          "fixed": null,
+          "values": []
+        }
+      }
+    },
+    "ce:abstract": {
+      "type": "element",
+      "model": {
+        "type": "seq",
+        "occur": "once",
+        "left": {
+          "type": "element",
+          "occur": "opt",
+          "name": "ce:section-title"
+        },
+        "right": {
+          "type": "seq",
+          "occur": "once",
+          "left": {
+            "type": "element",
+            "occur": "plus",
+            "name": "ce:abstract-sec"
+          },
+          "right": {
+            "type": "element",
+            "occur": "opt",
+            "name": "figure"
+          }
+        }
+      },
+      "allowedChildren": [],
+      "attributes": {
+        "id": {
+          "type": "id",
+          "required": false,
+          "fixed": null,
+          "values": []
+        },
+        "class": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "author",
+            "editor",
+            "graphical",
+            "teaser",
+            "author-highlights",
+            "editor-highlights",
+            "sda"
+          ]
+        },
+        "xml:lang": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "aa",
+            "ab",
+            "af",
+            "am",
+            "ar",
+            "as",
+            "ay",
+            "az",
+            "ba",
+            "be",
+            "bg",
+            "bh",
+            "bi",
+            "bn",
+            "bo",
+            "br",
+            "ca",
+            "co",
+            "cs",
+            "cy",
+            "da",
+            "de",
+            "dz",
+            "el",
+            "en",
+            "eo",
+            "es",
+            "et",
+            "eu",
+            "fa",
+            "fi",
+            "fj",
+            "fo",
+            "fr",
+            "fy",
+            "ga",
+            "gd",
+            "gl",
+            "gn",
+            "gu",
+            "ha",
+            "he",
+            "hi",
+            "hr",
+            "hu",
+            "hy",
+            "ia",
+            "id",
+            "ie",
+            "ik",
+            "is",
+            "it",
+            "ja",
+            "jw",
+            "ka",
+            "kk",
+            "kl",
+            "km",
+            "kn",
+            "ko",
+            "ks",
+            "ku",
+            "ky",
+            "la",
+            "ln",
+            "lo",
+            "lt",
+            "lv",
+            "mg",
+            "mi",
+            "mk",
+            "ml",
+            "mn",
+            "mo",
+            "mr",
+            "ms",
+            "mt",
+            "my",
+            "na",
+            "ne",
+            "nl",
+            "no",
+            "oc",
+            "om",
+            "or",
+            "pa",
+            "pl",
+            "ps",
+            "pt",
+            "qu",
+            "rm",
+            "rn",
+            "ro",
+            "ru",
+            "rw",
+            "sa",
+            "sd",
+            "sg",
+            "si",
+            "sk",
+            "sl",
+            "sm",
+            "sn",
+            "so",
+            "sq",
+            "sr",
+            "ss",
+            "st",
+            "su",
+            "sv",
+            "sw",
+            "ta",
+            "te",
+            "tg",
+            "th",
+            "ti",
+            "tk",
+            "tl",
+            "tn",
+            "to",
+            "tr",
+            "ts",
+            "tt",
+            "tw",
+            "uk",
+            "ur",
+            "uz",
+            "vi",
+            "vo",
+            "wo",
+            "xh",
+            "yi",
+            "yo",
+            "zh",
+            "zu"
+          ]
+        },
+        "view": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "compact",
+            "standard",
+            "extended",
+            "compact-standard",
+            "standard-extended",
+            "all"
+          ]
+        }
+      }
+    },
+    "ce:abstract-sec": {
+      "type": "element",
+      "model": {
+        "type": "seq",
+        "occur": "once",
+        "left": {
+          "type": "element",
+          "occur": "opt",
+          "name": "ce:section-title"
+        },
+        "right": {
+          "type": "element",
+          "occur": "plus",
+          "name": "ce:simple-para"
+        }
+      },
+      "allowedChildren": [],
+      "attributes": {
+        "id": {
+          "type": "id",
+          "required": false,
+          "fixed": null,
+          "values": []
+        },
+        "view": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "compact",
+            "standard",
+            "extended",
+            "compact-standard",
+            "standard-extended",
+            "all"
+          ]
+        },
+        "role": {
+          "type": "cdata",
+          "required": false,
+          "fixed": null,
+          "values": []
+        }
+      }
+    },
+    "ce:keywords": {
+      "type": "element",
+      "model": {
+        "type": "seq",
+        "occur": "once",
+        "left": {
+          "type": "element",
+          "occur": "opt",
+          "name": "ce:section-title"
+        },
+        "right": {
+          "type": "element",
+          "occur": "plus",
+          "name": "ce:keyword"
+        }
+      },
+      "allowedChildren": [],
+      "attributes": {
+        "id": {
+          "type": "id",
+          "required": false,
+          "fixed": null,
+          "values": []
+        },
+        "class": {
+          "type": "cdata",
+          "required": false,
+          "fixed": null,
+          "values": []
+        },
+        "xml:lang": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "aa",
+            "ab",
+            "af",
+            "am",
+            "ar",
+            "as",
+            "ay",
+            "az",
+            "ba",
+            "be",
+            "bg",
+            "bh",
+            "bi",
+            "bn",
+            "bo",
+            "br",
+            "ca",
+            "co",
+            "cs",
+            "cy",
+            "da",
+            "de",
+            "dz",
+            "el",
+            "en",
+            "eo",
+            "es",
+            "et",
+            "eu",
+            "fa",
+            "fi",
+            "fj",
+            "fo",
+            "fr",
+            "fy",
+            "ga",
+            "gd",
+            "gl",
+            "gn",
+            "gu",
+            "ha",
+            "he",
+            "hi",
+            "hr",
+            "hu",
+            "hy",
+            "ia",
+            "id",
+            "ie",
+            "ik",
+            "is",
+            "it",
+            "ja",
+            "jw",
+            "ka",
+            "kk",
+            "kl",
+            "km",
+            "kn",
+            "ko",
+            "ks",
+            "ku",
+            "ky",
+            "la",
+            "ln",
+            "lo",
+            "lt",
+            "lv",
+            "mg",
+            "mi",
+            "mk",
+            "ml",
+            "mn",
+            "mo",
+            "mr",
+            "ms",
+            "mt",
+            "my",
+            "na",
+            "ne",
+            "nl",
+            "no",
+            "oc",
+            "om",
+            "or",
+            "pa",
+            "pl",
+            "ps",
+            "pt",
+            "qu",
+            "rm",
+            "rn",
+            "ro",
+            "ru",
+            "rw",
+            "sa",
+            "sd",
+            "sg",
+            "si",
+            "sk",
+            "sl",
+            "sm",
+            "sn",
+            "so",
+            "sq",
+            "sr",
+            "ss",
+            "st",
+            "su",
+            "sv",
+            "sw",
+            "ta",
+            "te",
+            "tg",
+            "th",
+            "ti",
+            "tk",
+            "tl",
+            "tn",
+            "to",
+            "tr",
+            "ts",
+            "tt",
+            "tw",
+            "uk",
+            "ur",
+            "uz",
+            "vi",
+            "vo",
+            "wo",
+            "xh",
+            "yi",
+            "yo",
+            "zh",
+            "zu"
+          ]
+        },
+        "view": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "compact",
+            "standard",
+            "extended",
+            "compact-standard",
+            "standard-extended",
+            "all"
+          ]
+        }
+      }
+    },
+    "ce:keyword": {
+      "type": "element",
+      "model": {
+        "type": "seq",
+        "occur": "once",
+        "left": {
+          "type": "element",
+          "occur": "once",
+          "name": "ce:text"
+        },
+        "right": {
+          "type": "element",
+          "occur": "mult",
+          "name": "ce:keyword"
+        }
+      },
+      "allowedChildren": [],
+      "attributes": {
+        "id": {
+          "type": "id",
+          "required": false,
+          "fixed": null,
+          "values": []
+        }
+      }
+    },
+    "ce:sections": {
+      "type": "element",
+      "model": {
+        "type": "or",
+        "occur": "plus",
+        "left": {
+          "type": "element",
+          "occur": "once",
+          "name": "ce:para"
+        },
+        "right": {
+          "type": "element",
+          "occur": "once",
+          "name": "ce:section"
+        }
+      },
+      "allowedChildren": [],
+      "attributes": {}
+    },
+    "ce:appendices": {
+      "type": "element",
+      "model": {
+        "type": "element",
+        "occur": "plus",
+        "name": "ce:section"
+      },
+      "allowedChildren": [],
+      "attributes": {
+        "view": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "compact",
+            "standard",
+            "extended",
+            "compact-standard",
+            "standard-extended",
+            "all"
+          ]
+        }
+      }
+    },
+    "ce:section": {
+      "type": "element",
+      "model": {
+        "type": "or",
+        "occur": "once",
+        "left": {
+          "type": "seq",
+          "occur": "once",
+          "left": {
+            "type": "or",
+            "occur": "once",
+            "left": {
+              "type": "element",
+              "occur": "once",
+              "name": "ce:section-title"
+            },
+            "right": {
+              "type": "seq",
+              "occur": "once",
+              "left": {
+                "type": "element",
+                "occur": "once",
+                "name": "ce:label"
+              },
+              "right": {
+                "type": "element",
+                "occur": "opt",
+                "name": "ce:section-title"
+              }
+            }
+          },
+          "right": {
+            "type": "or",
+            "occur": "plus",
+            "left": {
+              "type": "element",
+              "occur": "once",
+              "name": "ce:para"
+            },
+            "right": {
+              "type": "element",
+              "occur": "once",
+              "name": "ce:section"
+            }
+          }
+        },
+        "right": {
+          "type": "element",
+          "occur": "plus",
+          "name": "ce:section"
+        }
+      },
+      "allowedChildren": [],
+      "attributes": {
+        "id": {
+          "type": "id",
+          "required": false,
+          "fixed": null,
+          "values": []
+        },
+        "view": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "compact",
+            "standard",
+            "extended",
+            "compact-standard",
+            "standard-extended",
+            "all"
+          ]
+        },
+        "role": {
+          "type": "cdata",
+          "required": false,
+          "fixed": null,
+          "values": []
+        }
+      }
+    },
+    "ce:para": {
+      "type": "mixed",
+      "model": null,
+      "allowedChildren": [
+        "anchor",
+        "associated-resource",
+        "ce:bold",
+        "ce:inf",
+        "ce:italic",
+        "ce:list",
+        "ce:small-caps",
+        "ce:sup",
+        "ce:underline",
+        "color",
+        "cross-out",
+        "cross-ref",
+        "cross-refs",
+        "def-list",
+        "display",
+        "displayed-quote",
+        "enunciation",
+        "float-anchor",
+        "footnote",
+        "glyph",
+        "grant-number",
+        "grant-sponsor",
+        "hsp",
+        "inline-figure",
+        "inter-ref",
+        "inter-refs",
+        "intra-ref",
+        "intra-refs",
+        "math",
+        "monospace",
+        "sans-serif",
+        "vsp"
+      ],
+      "attributes": {
+        "id": {
+          "type": "id",
+          "required": false,
+          "fixed": null,
+          "values": []
+        },
+        "view": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "compact",
+            "standard",
+            "extended",
+            "compact-standard",
+            "standard-extended",
+            "all"
+          ]
+        },
+        "role": {
+          "type": "cdata",
+          "required": false,
+          "fixed": null,
+          "values": []
+        }
+      }
+    },
+    "ce:simple-para": {
+      "type": "mixed",
+      "model": null,
+      "allowedChildren": [
+        "anchor",
+        "associated-resource",
+        "ce:bold",
+        "ce:inf",
+        "ce:italic",
+        "ce:list",
+        "ce:small-caps",
+        "ce:sup",
+        "ce:underline",
+        "color",
+        "cross-out",
+        "cross-ref",
+        "cross-refs",
+        "def-list",
+        "display",
+        "displayed-quote",
+        "enunciation",
+        "footnote",
+        "glyph",
+        "grant-number",
+        "grant-sponsor",
+        "hsp",
+        "inline-figure",
+        "inter-ref",
+        "inter-refs",
+        "intra-ref",
+        "intra-refs",
+        "math",
+        "monospace",
+        "sans-serif",
+        "vsp"
+      ],
+      "attributes": {
+        "id": {
+          "type": "id",
+          "required": false,
+          "fixed": null,
+          "values": []
+        },
+        "view": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "compact",
+            "standard",
+            "extended",
+            "compact-standard",
+            "standard-extended",
+            "all"
+          ]
+        },
+        "role": {
+          "type": "cdata",
+          "required": false,
+          "fixed": null,
+          "values": []
+        }
+      }
+    },
+    "ce:acknowledgment": {
+      "type": "element",
+      "model": {
+        "type": "seq",
+        "occur": "once",
+        "left": {
+          "type": "element",
+          "occur": "opt",
+          "name": "ce:section-title"
+        },
+        "right": {
+          "type": "or",
+          "occur": "plus",
+          "left": {
+            "type": "element",
+            "occur": "once",
+            "name": "ce:para"
+          },
+          "right": {
+            "type": "element",
+            "occur": "once",
+            "name": "ce:section"
+          }
+        }
+      },
+      "allowedChildren": [],
+      "attributes": {
+        "id": {
+          "type": "id",
+          "required": false,
+          "fixed": null,
+          "values": []
+        },
+        "view": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "compact",
+            "standard",
+            "extended",
+            "compact-standard",
+            "standard-extended",
+            "all"
+          ]
+        },
+        "role": {
+          "type": "cdata",
+          "required": false,
+          "fixed": null,
+          "values": []
+        }
+      }
+    },
+    "ce:conflict-of-interest": {
+      "type": "element",
+      "model": {
+        "type": "seq",
+        "occur": "once",
+        "left": {
+          "type": "element",
+          "occur": "opt",
+          "name": "ce:section-title"
+        },
+        "right": {
+          "type": "element",
+          "occur": "plus",
+          "name": "ce:para"
+        }
+      },
+      "allowedChildren": [],
+      "attributes": {
+        "id": {
+          "type": "id",
+          "required": true,
+          "fixed": null,
+          "values": []
+        },
+        "view": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "compact",
+            "standard",
+            "extended",
+            "compact-standard",
+            "standard-extended",
+            "all"
+          ]
+        },
+        "role": {
+          "type": "cdata",
+          "required": false,
+          "fixed": null,
+          "values": []
+        }
+      }
+    },
+    "ce:data-availability": {
+      "type": "element",
+      "model": {
+        "type": "seq",
+        "occur": "once",
+        "left": {
+          "type": "element",
+          "occur": "opt",
+          "name": "ce:section-title"
+        },
+        "right": {
+          "type": "element",
+          "occur": "plus",
+          "name": "ce:para"
+        }
+      },
+      "allowedChildren": [],
+      "attributes": {
+        "id": {
+          "type": "id",
+          "required": true,
+          "fixed": null,
+          "values": []
+        },
+        "view": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "compact",
+            "standard",
+            "extended",
+            "compact-standard",
+            "standard-extended",
+            "all"
+          ]
+        },
+        "role": {
+          "type": "cdata",
+          "required": false,
+          "fixed": null,
+          "values": []
+        }
+      }
+    },
+    "ce:list": {
+      "type": "element",
+      "model": {
+        "type": "seq",
+        "occur": "once",
+        "left": {
+          "type": "element",
+          "occur": "opt",
+          "name": "ce:label"
+        },
+        "right": {
+          "type": "seq",
+          "occur": "once",
+          "left": {
+            "type": "element",
+            "occur": "opt",
+            "name": "ce:section-title"
+          },
+          "right": {
+            "type": "element",
+            "occur": "plus",
+            "name": "ce:list-item"
+          }
+        }
+      },
+      "allowedChildren": [],
+      "attributes": {
+        "id": {
+          "type": "id",
+          "required": false,
+          "fixed": null,
+          "values": []
+        },
+        "role": {
+          "type": "cdata",
+          "required": false,
+          "fixed": null,
+          "values": []
+        }
+      }
+    },
+    "ce:list-item": {
+      "type": "element",
+      "model": {
+        "type": "seq",
+        "occur": "once",
+        "left": {
+          "type": "element",
+          "occur": "opt",
+          "name": "ce:label"
+        },
+        "right": {
+          "type": "element",
+          "occur": "plus",
+          "name": "ce:para"
+        }
+      },
+      "allowedChildren": [],
+      "attributes": {
+        "id": {
+          "type": "id",
+          "required": false,
+          "fixed": null,
+          "values": []
+        },
+        "class": {
+          "type": "cdata",
+          "required": false,
+          "fixed": null,
+          "values": []
+        }
+      }
+    },
+    "ce:caption": {
+      "type": "element",
+      "model": {
+        "type": "element",
+        "occur": "plus",
+        "name": "ce:simple-para"
+      },
+      "allowedChildren": [],
+      "attributes": {
+        "id": {
+          "type": "id",
+          "required": false,
+          "fixed": null,
+          "values": []
+        },
+        "xml:lang": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "aa",
+            "ab",
+            "af",
+            "am",
+            "ar",
+            "as",
+            "ay",
+            "az",
+            "ba",
+            "be",
+            "bg",
+            "bh",
+            "bi",
+            "bn",
+            "bo",
+            "br",
+            "ca",
+            "co",
+            "cs",
+            "cy",
+            "da",
+            "de",
+            "dz",
+            "el",
+            "en",
+            "eo",
+            "es",
+            "et",
+            "eu",
+            "fa",
+            "fi",
+            "fj",
+            "fo",
+            "fr",
+            "fy",
+            "ga",
+            "gd",
+            "gl",
+            "gn",
+            "gu",
+            "ha",
+            "he",
+            "hi",
+            "hr",
+            "hu",
+            "hy",
+            "ia",
+            "id",
+            "ie",
+            "ik",
+            "is",
+            "it",
+            "ja",
+            "jw",
+            "ka",
+            "kk",
+            "kl",
+            "km",
+            "kn",
+            "ko",
+            "ks",
+            "ku",
+            "ky",
+            "la",
+            "ln",
+            "lo",
+            "lt",
+            "lv",
+            "mg",
+            "mi",
+            "mk",
+            "ml",
+            "mn",
+            "mo",
+            "mr",
+            "ms",
+            "mt",
+            "my",
+            "na",
+            "ne",
+            "nl",
+            "no",
+            "oc",
+            "om",
+            "or",
+            "pa",
+            "pl",
+            "ps",
+            "pt",
+            "qu",
+            "rm",
+            "rn",
+            "ro",
+            "ru",
+            "rw",
+            "sa",
+            "sd",
+            "sg",
+            "si",
+            "sk",
+            "sl",
+            "sm",
+            "sn",
+            "so",
+            "sq",
+            "sr",
+            "ss",
+            "st",
+            "su",
+            "sv",
+            "sw",
+            "ta",
+            "te",
+            "tg",
+            "th",
+            "ti",
+            "tk",
+            "tl",
+            "tn",
+            "to",
+            "tr",
+            "ts",
+            "tt",
+            "tw",
+            "uk",
+            "ur",
+            "uz",
+            "vi",
+            "vo",
+            "wo",
+            "xh",
+            "yi",
+            "yo",
+            "zh",
+            "zu"
+          ]
+        },
+        "role": {
+          "type": "cdata",
+          "required": false,
+          "fixed": null,
+          "values": []
+        }
+      }
+    },
+    "ce:bold": {
+      "type": "mixed",
+      "model": null,
+      "allowedChildren": [
+        "ce:bold",
+        "ce:inf",
+        "ce:italic",
+        "ce:small-caps",
+        "ce:sup",
+        "ce:underline",
+        "color",
+        "cross-out",
+        "glyph",
+        "hsp",
+        "inline-figure",
+        "monospace",
+        "sans-serif",
+        "vsp"
+      ],
+      "attributes": {}
+    },
+    "ce:italic": {
+      "type": "mixed",
+      "model": null,
+      "allowedChildren": [
+        "ce:bold",
+        "ce:inf",
+        "ce:italic",
+        "ce:small-caps",
+        "ce:sup",
+        "ce:underline",
+        "color",
+        "cross-out",
+        "glyph",
+        "hsp",
+        "inline-figure",
+        "monospace",
+        "sans-serif",
+        "vsp"
+      ],
+      "attributes": {}
+    },
+    "ce:small-caps": {
+      "type": "mixed",
+      "model": null,
+      "allowedChildren": [
+        "ce:bold",
+        "ce:inf",
+        "ce:italic",
+        "ce:small-caps",
+        "ce:sup",
+        "ce:underline",
+        "color",
+        "cross-out",
+        "glyph",
+        "hsp",
+        "inline-figure",
+        "monospace",
+        "sans-serif",
+        "vsp"
+      ],
+      "attributes": {}
+    },
+    "ce:underline": {
+      "type": "mixed",
+      "model": null,
+      "allowedChildren": [
+        "ce:bold",
+        "ce:inf",
+        "ce:italic",
+        "ce:small-caps",
+        "ce:sup",
+        "ce:underline",
+        "color",
+        "cross-out",
+        "glyph",
+        "hsp",
+        "inline-figure",
+        "monospace",
+        "sans-serif",
+        "vsp"
+      ],
+      "attributes": {}
+    },
+    "ce:sup": {
+      "type": "mixed",
+      "model": null,
+      "allowedChildren": [
+        "ce:bold",
+        "ce:inf",
+        "ce:italic",
+        "ce:small-caps",
+        "ce:sup",
+        "ce:underline",
+        "color",
+        "cross-out",
+        "glyph",
+        "hsp",
+        "inline-figure",
+        "monospace",
+        "sans-serif",
+        "vsp"
+      ],
+      "attributes": {
+        "loc": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "pre",
+            "post"
+          ]
+        }
+      }
+    },
+    "ce:inf": {
+      "type": "mixed",
+      "model": null,
+      "allowedChildren": [
+        "ce:bold",
+        "ce:inf",
+        "ce:italic",
+        "ce:small-caps",
+        "ce:sup",
+        "ce:underline",
+        "color",
+        "cross-out",
+        "glyph",
+        "hsp",
+        "inline-figure",
+        "monospace",
+        "sans-serif",
+        "vsp"
+      ],
+      "attributes": {
+        "loc": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "pre",
+            "post"
+          ]
+        }
+      }
+    },
+    "ce:br": {
+      "type": "empty",
+      "model": null,
+      "allowedChildren": [],
+      "attributes": {}
+    },
+    "ce:table": {
+      "type": "element",
+      "model": {
+        "type": "seq",
+        "occur": "once",
+        "left": {
+          "type": "element",
+          "occur": "opt",
+          "name": "ce:label"
+        },
+        "right": {
+          "type": "seq",
+          "occur": "once",
+          "left": {
+            "type": "element",
+            "occur": "mult",
+            "name": "ce:caption"
+          },
+          "right": {
+            "type": "seq",
+            "occur": "once",
+            "left": {
+              "type": "element",
+              "occur": "mult",
+              "name": "alt-text"
+            },
+            "right": {
+              "type": "seq",
+              "occur": "once",
+              "left": {
+                "type": "element",
+                "occur": "opt",
+                "name": "source"
+              },
+              "right": {
+                "type": "seq",
+                "occur": "once",
+                "left": {
+                  "type": "seq",
+                  "occur": "opt",
+                  "left": {
+                    "type": "element",
+                    "occur": "once",
+                    "name": "copyright"
+                  },
+                  "right": {
+                    "type": "element",
+                    "occur": "opt",
+                    "name": "copyright-line"
+                  }
+                },
+                "right": {
+                  "type": "seq",
+                  "occur": "once",
+                  "left": {
+                    "type": "element",
+                    "occur": "mult",
+                    "name": "ce:keywords"
+                  },
+                  "right": {
+                    "type": "seq",
+                    "occur": "once",
+                    "left": {
+                      "type": "or",
+                      "occur": "plus",
+                      "left": {
+                        "type": "element",
+                        "occur": "once",
+                        "name": "tgroup"
+                      },
+                      "right": {
+                        "type": "seq",
+                        "occur": "once",
+                        "left": {
+                          "type": "element",
+                          "occur": "once",
+                          "name": "link"
+                        },
+                        "right": {
+                          "type": "element",
+                          "occur": "mult",
+                          "name": "alt-text"
+                        }
+                      }
+                    },
+                    "right": {
+                      "type": "seq",
+                      "occur": "once",
+                      "left": {
+                        "type": "element",
+                        "occur": "opt",
+                        "name": "legend"
+                      },
+                      "right": {
+                        "type": "element",
+                        "occur": "mult",
+                        "name": "table-footnote"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "allowedChildren": [],
+      "attributes": {
+        "xmlns:tb": {
+          "type": "cdata",
+          "required": false,
+          "fixed": "http://www.elsevier.com/xml/common/table/dtd",
+          "values": []
+        },
+        "xmlns": {
+          "type": "cdata",
+          "required": false,
+          "fixed": "http://www.elsevier.com/xml/common/cals/dtd",
+          "values": []
+        },
+        "frame": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "top",
+            "bottom",
+            "topbot",
+            "all",
+            "sides",
+            "none"
+          ]
+        },
+        "role": {
+          "type": "cdata",
+          "required": false,
+          "fixed": null,
+          "values": []
+        },
+        "id": {
+          "type": "id",
+          "required": false,
+          "fixed": null,
+          "values": []
+        },
+        "rowsep": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "0",
+            "1"
+          ]
+        },
+        "colsep": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "0",
+            "1"
+          ]
+        }
+      }
+    },
+    "tgroup": {
+      "type": "element",
+      "model": {
+        "type": "seq",
+        "occur": "once",
+        "left": {
+          "type": "or",
+          "occur": "mult",
+          "left": {
+            "type": "element",
+            "occur": "once",
+            "name": "colspec"
+          },
+          "right": {
+            "type": "element",
+            "occur": "once",
+            "name": "colspec"
+          }
+        },
+        "right": {
+          "type": "seq",
+          "occur": "once",
+          "left": {
+            "type": "element",
+            "occur": "opt",
+            "name": "thead"
+          },
+          "right": {
+            "type": "element",
+            "occur": "once",
+            "name": "tbody"
+          }
+        }
+      },
+      "allowedChildren": [],
+      "attributes": {
+        "cols": {
+          "type": "nmtoken",
+          "required": true,
+          "fixed": null,
+          "values": []
+        },
+        "altimg": {
+          "type": "cdata",
+          "required": false,
+          "fixed": null,
+          "values": []
+        },
+        "align": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "left",
+            "right",
+            "center",
+            "justify",
+            "char"
+          ]
+        },
+        "rowsep": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "0",
+            "1"
+          ]
+        },
+        "colsep": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "0",
+            "1"
+          ]
+        }
+      }
+    },
+    "colspec": {
+      "type": "empty",
+      "model": null,
+      "allowedChildren": [],
+      "attributes": {
+        "colnum": {
+          "type": "nmtoken",
+          "required": false,
+          "fixed": null,
+          "values": []
+        },
+        "role": {
+          "type": "cdata",
+          "required": false,
+          "fixed": null,
+          "values": []
+        },
+        "charoff": {
+          "type": "nmtoken",
+          "required": false,
+          "fixed": null,
+          "values": []
+        },
+        "char": {
+          "type": "cdata",
+          "required": false,
+          "fixed": null,
+          "values": []
+        },
+        "align": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "left",
+            "right",
+            "center",
+            "justify",
+            "char"
+          ]
+        },
+        "rowsep": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "0",
+            "1"
+          ]
+        },
+        "colsep": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "0",
+            "1"
+          ]
+        },
+        "colwidth": {
+          "type": "cdata",
+          "required": false,
+          "fixed": null,
+          "values": []
+        },
+        "colname": {
+          "type": "nmtoken",
+          "required": false,
+          "fixed": null,
+          "values": []
+        }
+      }
+    },
+    "thead": {
+      "type": "element",
+      "model": {
+        "type": "element",
+        "occur": "plus",
+        "name": "row"
+      },
+      "allowedChildren": [],
+      "attributes": {
+        "valign": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "top",
+            "middle",
+            "bottom"
+          ]
+        }
+      }
+    },
+    "tbody": {
+      "type": "element",
+      "model": {
+        "type": "element",
+        "occur": "plus",
+        "name": "row"
+      },
+      "allowedChildren": [],
+      "attributes": {
+        "valign": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "top",
+            "middle",
+            "bottom"
+          ]
+        }
+      }
+    },
+    "row": {
+      "type": "element",
+      "model": {
+        "type": "element",
+        "occur": "plus",
+        "name": "entry"
+      },
+      "allowedChildren": [],
+      "attributes": {
+        "rowsep": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "0",
+            "1"
+          ]
+        },
+        "role": {
+          "type": "cdata",
+          "required": false,
+          "fixed": null,
+          "values": []
+        },
+        "id": {
+          "type": "id",
+          "required": false,
+          "fixed": null,
+          "values": []
+        },
+        "valign": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "top",
+            "middle",
+            "bottom"
+          ]
+        }
+      }
+    },
+    "entry": {
+      "type": "mixed",
+      "model": null,
+      "allowedChildren": [
+        "alignmark",
+        "bottom-border",
+        "ce:bold",
+        "ce:br",
+        "ce:inf",
+        "ce:italic",
+        "ce:list",
+        "ce:small-caps",
+        "ce:sup",
+        "ce:underline",
+        "color",
+        "cross-out",
+        "cross-ref",
+        "cross-refs",
+        "def-list",
+        "display",
+        "displayed-quote",
+        "enunciation",
+        "glyph",
+        "hsp",
+        "inline-figure",
+        "inter-ref",
+        "inter-refs",
+        "intra-ref",
+        "intra-refs",
+        "left-border",
+        "math",
+        "monospace",
+        "right-border",
+        "sans-serif",
+        "top-border",
+        "vsp"
+      ],
+      "attributes": {
+        "xmlns": {
+          "type": "cdata",
+          "required": false,
+          "fixed": "http://www.elsevier.com/xml/common/dtd",
+          "values": []
+        },
+        "colname": {
+          "type": "nmtoken",
+          "required": false,
+          "fixed": null,
+          "values": []
+        },
+        "background-color": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "black",
+            "silver",
+            "gray",
+            "white",
+            "maroon",
+            "red",
+            "purple",
+            "fuchsia",
+            "green",
+            "lime",
+            "olive",
+            "yellow",
+            "navy",
+            "blue",
+            "teal",
+            "aqua",
+            "000000",
+            "C0C0C0",
+            "808080",
+            "FFFFFF",
+            "800000",
+            "FF0000",
+            "800080",
+            "FF00FF",
+            "008000",
+            "00FF00",
+            "808000",
+            "FFFF00",
+            "000080",
+            "0000FF",
+            "008080",
+            "00FFFF"
+          ]
+        },
+        "role": {
+          "type": "cdata",
+          "required": false,
+          "fixed": null,
+          "values": []
+        },
+        "id": {
+          "type": "id",
+          "required": false,
+          "fixed": null,
+          "values": []
+        },
+        "valign": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "top",
+            "middle",
+            "bottom"
+          ]
+        },
+        "charoff": {
+          "type": "nmtoken",
+          "required": false,
+          "fixed": null,
+          "values": []
+        },
+        "char": {
+          "type": "cdata",
+          "required": false,
+          "fixed": null,
+          "values": []
+        },
+        "align": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "left",
+            "right",
+            "center",
+            "justify",
+            "char"
+          ]
+        },
+        "rowsep": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "0",
+            "1"
+          ]
+        },
+        "colsep": {
+          "type": "enumeration",
+          "required": false,
+          "fixed": null,
+          "values": [
+            "0",
+            "1"
+          ]
+        },
+        "morerows": {
+          "type": "nmtoken",
+          "required": false,
+          "fixed": null,
+          "values": []
+        },
+        "nameend": {
+          "type": "nmtoken",
+          "required": false,
+          "fixed": null,
+          "values": []
+        },
+        "namest": {
+          "type": "nmtoken",
+          "required": false,
+          "fixed": null,
+          "values": []
+        }
+      }
+    }
+  }
+}

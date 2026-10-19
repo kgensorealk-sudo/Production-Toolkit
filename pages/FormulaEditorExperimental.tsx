@@ -1041,7 +1041,7 @@ const FormulaEditorExperimental: React.FC = () => {
         },
         {
             id: 'wordToXml',
-            toolName: 'MS Word to XML Converter',
+            toolName: 'MS Word Rich Text to CE XML Scanner',
             description: 'Convert MS Word formula structures into standardized XML.',
             path: '/wordToXml',
             icon: <FileCode size={15} className="text-purple-600" />,
