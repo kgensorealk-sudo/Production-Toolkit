@@ -6,7 +6,7 @@ attachment lists; legacy workspaces can still recover original ZIP sources.
 Keep original ZIP backups before clearing browser storage.
 
 Local author checks and AI review share attached files and instructions. Reports
-are read-only author-group evidence, never corrected XML or publisher validation.
+contain read-only findings and source identities, never corrected XML or publisher validation.
 Changing sources or instructions invalidates author findings. AI cancellation stops
 the browser request; a provider may already have started processing it.
 
@@ -22,3 +22,13 @@ Workspace backups include manuscript text and conversation. Store them privately
 Import requires confirmation before replacing the active workspace. It allocates
 fresh file identities, strips answer/approval metadata and marks imported chat as
 unverified history, excluded from subsequent source-bound AI context.
+
+
+The workspace follows the approved layout: article tasks and settings in a sidebar,
+shared XML/PDF file cards, Summary/Findings/Queries/Activity views, and an adjacent
+source evidence panel. On mobile, Tasks & settings expands the task controls and
+Jump to source evidence moves focus to the stacked source panel. Findings combine
+local author checks, recorded markup diagnostics, source limitations, and queries
+without established responses. Counts describe observed records, not manuscript
+completeness. Large lists and excerpts are paginated; reports include all observed
+findings. No sample findings from the proposal are inserted into live tasks.

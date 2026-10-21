@@ -1388,6 +1388,16 @@
       "timeoutMs": 180000,
       "baselineDependencies": [],
       "externalChecks": []
+    },
+    {
+      "file": "tests/keeper-workspace-layout.mjs",
+      "kinds": [
+        "behavioral"
+      ],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineDependencies": [],
+      "externalChecks": []
     }
   ],
   "helpers": [

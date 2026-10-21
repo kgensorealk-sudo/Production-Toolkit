@@ -1,5 +1,5 @@
 import {parseKeeperWorkspaceBackup} from '../utils/keeperWorkspaceBackup';
-import KeeperWorkspaceChecks from './KeeperWorkspaceChecks';
+import KeeperArticleWorkspace from './KeeperArticleWorkspace';
 import { keeperRequestSession } from '../utils/keeperRequestSession';
 import KeeperActivityReport from './KeeperActivityReport';
 import type {KeeperActivity} from '../utils/keeperActivity';
@@ -771,8 +771,20 @@ ${userAuthContext}`;
     if(!user?.id || restoredOwner!==user.id)return <section aria-label="Keeper sandbox" className="p-6 text-sm text-slate-600">{user?.id?'Restoring your local Keeper workspace…':'Sign in to open your local Keeper workspace.'}</section>;
 
     return (
-        <section aria-label="Keeper sandbox" className="space-y-5">
-            <header className="rounded-xl bg-indigo-50 p-4"><h2 className="font-semibold break-words">{activeTask==='scratch'?'Standalone workspace':'Selected article task'}</h2><p role="status" className="text-sm text-slate-700">{saveStatus}</p><details className="text-sm"><summary>Task identity</summary><p className="break-all">{activeTask}</p></details></header>
+        <KeeperArticleWorkspace
+            key={`${user.id}:${activeTask}`}
+            artifacts={sandboxArtifacts} instructions={taskInstructions} activeTask={activeTask} saveStatus={saveStatus}
+            inspectionStatus={inspectionStatus}
+            evidence={inspectionStatus==='ready'&&keeperSameSources(localEvidenceSources.current,sandboxArtifacts)?localEvidence.current:null}
+            busy={isLoading||Boolean(currentlyTypingId)}
+            canAsk={Boolean(inputPrompt.trim()||taskInstructions.trim()||sandboxArtifacts.length)&&!isLoading&&!isImporting&&inspectionStatus!=='running'&&inspectionStatus!=='error'&&!currentlyTypingId}
+            ask={()=>void handleSendMessage()}
+            cancel={()=>{cancelRequest();typingControllerRef.current?.stop();setCurrentlyTypingId(null);}}
+            importFile={()=>fileInputRef.current?.click()}
+            removeFile={id=>{importVersion.current++;setIsImporting(false);const remaining=sandboxArtifacts.filter(x=>x.id!==id);setSandboxArtifacts(remaining);setActiveScope(keeperArtifactScope(remaining));typingControllerRef.current?.stop();setCurrentlyTypingId(null);setEvidenceReport(null);}}
+            onStandalone={()=>void selectLocalTask('scratch',[])}
+            sidebar={<KeeperLocalTasks activeTask={activeTask} owner={user?.id} disabled={switchingTask||isLoading} onSelect={(task,artifacts)=>void selectLocalTask(task,artifacts)} onBeforeRemove={async task=>task!==activeTask||Boolean(await selectLocalTask('scratch',[]))}/>}
+            settings={<>
             <details className="rounded-xl border border-slate-200 bg-white p-4">
                 <summary className="cursor-pointer text-sm font-semibold">Settings · Gemini API key · {personalGeminiKey.trim()?'Personal key':'Application key'}</summary>
                 <div className="mt-3 space-y-3 text-sm">
@@ -783,51 +795,43 @@ ${userAuthContext}`;
                 </div>
             </details>
             <details className="rounded-xl border border-slate-200 p-4 text-sm"><summary>Workspace backup and recovery</summary><p className="my-2">Backups contain manuscript data. Store them securely. Imported chat is historical text; run local checks again.</p><button className="underline mr-4" onClick={exportUnsavedWorkspace}>Export workspace backup</button><label className="inline-block">Import workspace backup<input className="block max-w-full mt-2" type="file" accept=".json,application/json" disabled={isLoading||isImporting||switchingTask||Boolean(saveError)} onChange={e=>{const file=e.target.files?.[0];e.target.value='';if(file)void importWorkspaceBackup(file);}}/></label></details>
-            {saveError&&<div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm"><p>{saveError}</p><button className="underline mr-4" onClick={exportUnsavedWorkspace}>Export unsaved workspace (contains manuscript data)</button><button className="underline" onClick={()=>setRestoreRetry(n=>n+1)}>Reload saved version</button></div>}
-            <KeeperLocalTasks activeTask={activeTask} owner={user?.id} disabled={switchingTask} onSelect={(task,artifacts)=>void selectLocalTask(task,artifacts)} onBeforeRemove={async task=>task!==activeTask||Boolean(await selectLocalTask('scratch',[]))}/>
-            <button className="text-sm text-indigo-700 underline" disabled={switchingTask||Boolean(saveError)} onClick={()=>void selectLocalTask('scratch',[])}>Open standalone workspace</button>
-
+            </>}
+            notices={<>
+                {saveError&&<div role="alert" className="kw-notice"><p>{saveError}</p><button className="underline mr-4" onClick={exportUnsavedWorkspace}>Export unsaved workspace (contains manuscript data)</button><button className="underline" onClick={()=>setRestoreRetry(n=>n+1)}>Reload saved version</button></div>}
             {messages.some(message=>message.artifactScope==='imported-history')&&<details className="rounded-xl border border-slate-200 p-4 text-sm"><summary>Imported conversation history · unverified</summary><p className="my-2">Historical text only. These messages are excluded from new AI requests and do not establish completed work.</p>{messages.filter(message=>message.artifactScope==='imported-history').map(message=><p className="whitespace-pre-wrap my-3" key={message.id}><strong>{message.role}: </strong>{message.content}</p>)}</details>}
             {resetNotice && <p role="status" className="rounded-xl bg-indigo-50 text-indigo-700 px-4 py-3 text-sm">{resetNotice}</p>}
             {showResetConfirm && <div role="group" aria-label="Clear Keeper conversation" className="border border-amber-200 bg-amber-50 rounded-xl p-4 flex flex-wrap items-center gap-3"><p className="text-sm flex-1">Clear instructions and conversation? Attached files and inspection findings will remain.</p><button onClick={() => setShowResetConfirm(false)} className="text-sm px-3 py-2">Cancel</button><button onClick={executeResetChat} disabled={isLoading} className="text-sm bg-slate-900 text-white px-3 py-2 rounded-lg disabled:opacity-40">Clear conversation</button></div>}
-            <KeeperWorkspaceChecks key={`${user.id}:${activeTask}`} artifacts={sandboxArtifacts} instructions={taskInstructions}/>
-            <div className="grid xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] gap-6 items-start">
-                <section className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-                    <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between"><div><p className="text-[10px] uppercase tracking-widest font-bold text-indigo-500">01 / Prepare</p><h2 className="font-semibold text-slate-900 mt-1">Task workspace</h2></div><button onClick={() => setShowResetConfirm(true)} disabled={isLoading} className="text-xs text-slate-500 hover:text-slate-900 disabled:opacity-40 flex items-center gap-2"><RotateCcw size={14} /> Clear conversation</button></div>
-                    <div className="p-6">
-                        <label htmlFor="keeper-instructions" className="text-sm font-semibold text-slate-800">What should Keeper do?</label>
-                        <p className="text-xs text-slate-500 mt-1 mb-3">Include the rules, format, or examples you want him to follow.</p>
-                        <textarea id="keeper-instructions" value={taskInstructions} onChange={e => setTaskInstructions(e.target.value)} disabled={isLoading} placeholder="Describe your task and expected output…" className="w-full min-h-[130px] p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm leading-relaxed resize-y outline-none focus:ring-2 focus:ring-indigo-400" />
-                        <div className="flex items-center justify-between mt-6 mb-3"><label htmlFor="keeper-task-input" className="text-sm font-semibold text-slate-800">Source material <span className="font-normal text-slate-400 ml-1">Optional</span></label><button type="button" onClick={() => fileInputRef.current?.click()} disabled={isLoading || isImporting} className="text-xs font-semibold text-indigo-600 flex items-center gap-1.5 disabled:opacity-40"><Paperclip size={14} /> Import file</button></div>
-                        <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept=".xml,.pdf" className="hidden" />
-                        {isImporting && <p role="status" className="text-xs text-slate-500 mb-3">Importing file...</p>}
-                        {inspectionStatus !== 'idle' && <p role="status" className="text-xs text-indigo-700 mb-3">{inspectionStatus === 'running' ? 'Inspecting files in the background…' : inspectionStatus === 'ready' ? 'Inspection ready. Keeper can retrieve these findings.' : 'Inspection failed.'}{inspectionStatus === 'error' && <button className="ml-2 underline" onClick={()=>setInspectionRetry(n=>n+1)}>Retry inspection</button>}</p>}
-                        {fileNotice && <p role="alert" className="text-xs text-amber-700 mb-3">{fileNotice}</p>}
-                        {sandboxArtifacts.map(a=><div key={a.id} className="flex items-center justify-between text-xs bg-indigo-50 rounded-lg p-3 mb-2"><span className="min-w-0 break-all" title={a.name}>{a.name} - {a.kind.toUpperCase()}</span><button className="shrink-0 ml-3" aria-label={`Remove attachment ${a.name}`} disabled={isLoading} onClick={()=>{importVersion.current++;setIsImporting(false);const remaining=sandboxArtifacts.filter(x=>x.id!==a.id);setSandboxArtifacts(remaining);setActiveScope(keeperArtifactScope(remaining));typingControllerRef.current?.stop();setCurrentlyTypingId(null);setEvidenceReport(null);}}>Remove</button></div>)}
-                        <p className="text-xs text-slate-500 mb-3">Local workspace: import one XML and an optional edit-report PDF. Browser data deletion removes local copies. Processing pauses when the app closes. Automatic inspection runs locally. When you ask Keeper, extracted evidence is sent to the application server and AI provider for interpretation; original files remain on this device.</p>
-                        <textarea id="keeper-task-input" ref={textareaRef} value={inputPrompt} onChange={e => {setInputPrompt(e.target.value);if(/^\s*</.test(inputPrompt)||/^\s*</.test(e.target.value))setEvidenceReport(null);}} disabled={isLoading || isImporting} placeholder="Paste text, XML, or an example here…" className="w-full min-h-[290px] p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm leading-relaxed font-mono resize-y outline-none focus:ring-2 focus:ring-indigo-400" />
-                    </div>
-                    <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-3"><span className="text-xs text-slate-400">{(inputPrompt.length + taskInstructions.length).toLocaleString()} characters</span><button onClick={() => handleSendMessage()} disabled={(!inputPrompt.trim() && !taskInstructions.trim() && !sandboxArtifacts.length) || isLoading || isImporting || inspectionStatus === 'running' || inspectionStatus === 'error' || Boolean(currentlyTypingId)} className="inline-flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl font-semibold text-sm disabled:opacity-40 hover:bg-indigo-700 transition-colors">{isLoading ? 'Working…' : currentlyTypingId ? 'Preparing result…' : 'Ask Keeper'}<ArrowRight size={16} /></button>{isLoading&&<button type="button" className="underline text-sm" onClick={()=>{responseVersion.current++;activeRequest.current?.abort();typingControllerRef.current?.stop();setCurrentlyTypingId(null);setIsLoading(false);setFileNotice('AI request cancelled. Local evidence is retained.');}}>Cancel AI request</button>}</div>
-                </section>
+                {fileNotice&&<p role="status" className="kw-notice">{fileNotice}</p>}
+                {isImporting&&<p role="status" className="kw-notice">Importing file…</p>}
+                {inspectionStatus==='error'&&<button type="button" className="kw-secondary" onClick={()=>setInspectionRetry(n=>n+1)}>Retry inspection</button>}
+            </>}
+            sourceInput={<input aria-label="Import article XML or edit-report PDF" type="file" ref={fileInputRef} onChange={handleFileUpload} accept=".xml,.pdf" className="hidden" disabled={isLoading||isImporting}/>}
+            prompt={<section className="kw-instructions" aria-label="Task instructions">
+                <label htmlFor="keeper-instructions">What should Keeper do?</label>
+                <textarea id="keeper-instructions" value={taskInstructions} onChange={e=>setTaskInstructions(e.target.value)} disabled={isLoading} placeholder="Describe your task, rules, and expected output…" rows={3}/>
+                <details><summary>Paste source text or XML</summary><label className="sr-only" htmlFor="keeper-task-input">Source material</label><textarea id="keeper-task-input" ref={textareaRef} value={inputPrompt} onChange={e=>{setInputPrompt(e.target.value);if(/^\s*</.test(inputPrompt)||/^\s*</.test(e.target.value))setEvidenceReport(null);}} disabled={isLoading||isImporting} placeholder="Paste text, XML, or an example here…" rows={5}/></details>
+                <div className="kw-prompt-footer"><span>{(inputPrompt.length+taskInstructions.length).toLocaleString()} characters</span><button type="button" onClick={()=>setShowResetConfirm(true)} disabled={isLoading} className="kw-text-button">Clear conversation</button></div>
+            </section>}
+            answer={<>
                 <section className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
                     <div className="px-6 py-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3"><div><p className="text-[10px] uppercase tracking-widest font-bold text-indigo-500">02 / Review</p><h2 className="font-semibold text-slate-900 mt-1">Result</h2></div><div className="flex items-center gap-3">{currentlyTypingId && <button onClick={handleSkipTyping} className="text-xs text-indigo-600">Show full result</button>}{lastAssistantMessage && <button onClick={() => copyToClipboard((liveAnswerId===lastAssistantMessage.id?'':keeperHistoricalNotice+'\n\n'+keeperActionStatusNotice+'\n\n')+lastAssistantMessage.content, lastAssistantMessage.id)} className="inline-flex items-center gap-2 text-xs text-slate-600 border border-slate-200 rounded-lg px-3 py-2"><Copy size={13} />{copiedId === lastAssistantMessage.id ? 'Copied' : 'Copy result'}</button>}</div></div>
                     <div ref={messagesContainerRef} aria-live="polite" aria-busy={isLoading || Boolean(currentlyTypingId)} className="min-h-[550px] max-h-[800px] overflow-y-auto p-6">
                         {lastAssistantMessage ? <div className="prose prose-sm max-w-none text-slate-800 break-words"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{a: ({children,href}) => {const ref=href?.match(/^#keeper-evidence-(E[1-9]\d*)$/)?.[1];return ref&&lastAssistantMessage.answerEvidence?.references.some(r=>r.ref===ref&&r.cited)?<button className="text-indigo-700 underline" onClick={()=>setSelectedEvidenceRef(ref)} aria-label={`Open evidence ${ref}`}>{children}</button>:<span>{children}</span>;}, img: ({alt}) => <span>{alt || 'Image omitted in local report'}</span>}}>{liveAnswerId===lastAssistantMessage.id?lastAssistantMessage.content:''}</ReactMarkdown>{liveAnswerId!==lastAssistantMessage.id&&<KeeperRecordedAnswer content={lastAssistantMessage.content}/>} </div> : <div className="min-h-[500px] flex flex-col justify-center items-center text-center"><div className="bg-indigo-50 text-indigo-400 rounded-2xl p-5 mb-5"><FileText size={30} strokeWidth={1.4} /></div><h3 className="font-semibold text-slate-700">A blank canvas</h3><p className="text-sm text-slate-400 mt-2 max-w-[260px] leading-relaxed">Your result will appear here. Start with a task and any material Keeper needs.</p></div>}
                     </div>
                     <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-between text-xs text-slate-400"><span>{lastAssistantMessage ? lastModelBadge.label : 'Ready when you are'}</span><span>Results stay in this sandbox</span></div>
-                </section>
-            </div>
-            {lastAssistantMessage?.activity && <KeeperActivityReport activity={lastAssistantMessage.activity}/> }
-            {lastAssistantMessage?.answerEvidence && <KeeperAnswerEvidencePanel answer={lastAssistantMessage.answerEvidence} evidence={inspectionStatus==='ready'?localEvidence.current:null} selectedRef={selectedEvidenceRef} onSelect={setSelectedEvidenceRef}/>}
-            {lastAssistantMessage&&!lastAssistantMessage.answerEvidence&&sandboxArtifacts.length>0&&<p className="text-xs text-slate-500">No answer-level evidence references are available for this reply. The local QA report remains separate.</p>}
+                </section>            </>}
+            answerEvidence={lastAssistantMessage?.answerEvidence?<KeeperAnswerEvidencePanel answer={lastAssistantMessage.answerEvidence} evidence={inspectionStatus==='ready'?localEvidence.current:null} selectedRef={selectedEvidenceRef} onSelect={setSelectedEvidenceRef}/>:null}
+            selectedAiEvidence={Boolean(selectedEvidenceRef)} clearAiEvidence={()=>setSelectedEvidenceRef(null)}
+            activity={<>
+                {lastAssistantMessage?.activity?<KeeperActivityReport activity={lastAssistantMessage.activity}/>:<p className="kw-muted">No AI activity has been recorded for this task.</p>}
             {savedReview && <section aria-label="Review progress" className="rounded-xl border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-950">
                 {savedReview.status==='ready'?<><p>{savedReview.batch.reviewed} of {savedReview.batch.total} inventory records covered by completed batch answers · {savedReview.batch.total-savedReview.batch.reviewed} remaining. Retrieval and an answer do not establish editorial completion. Inspection limits still apply.</p><p className="mt-1 text-xs whitespace-pre-wrap break-words">Review task: {savedReview.batch.question}</p>
                 {savedReview.batch.next&&<button className="mt-3 rounded-lg bg-indigo-700 px-4 py-2 text-white disabled:opacity-50" disabled={isLoading||isImporting||switchingTask||Boolean(saveError)} onClick={()=>void handleSendMessage(undefined,savedReview.batch.next!)}>{savedReview.batch.reviewed===savedReview.batch.start?'Retry pending batch':'Continue review'}</button>}</>:<><p>{savedReview.reason}</p>{savedReview.status==='stale'&&<button className="mt-3 underline disabled:opacity-50" disabled={isLoading||isImporting||switchingTask||inspectionStatus!=='ready'||Boolean(saveError)||typeof savedReview.batch.question!=='string'} onClick={()=>void handleSendMessage(savedReview.batch.question)}>Start fresh review</button>}</>}
             </section>}
-            {evidenceReport && <KeeperEvidenceReport report={evidenceReport} />}
-            {inspectionStatus==='ready'&&localEvidence.current&&<KeeperQueryProvenance evidence={localEvidence.current}/>}
-            {messages.some(message => message.role === 'assistant') && <details className="border border-slate-200 rounded-xl bg-white p-5"><summary className="text-sm font-semibold text-slate-600 cursor-pointer">Session history</summary><div className="space-y-4 mt-4">{messages.map(message => <div key={message.id} className="border-t border-slate-100 pt-4"><p className="text-xs font-semibold text-slate-400 mb-2">{message.role === 'user' ? 'Your input' : 'Keeper recorded answer · unverified'} · {new Date(message.timestamp).toLocaleString()}</p>{message.role==='assistant'?<KeeperRecordedAnswer content={message.content}/>:<pre className="text-sm whitespace-pre-wrap break-words font-sans text-slate-700">{message.content}</pre>}</div>)}</div></details>}
-        </section>
+            {messages.some(message => message.role === 'assistant') && <details className="border border-slate-200 rounded-xl bg-white p-5"><summary className="text-sm font-semibold text-slate-600 cursor-pointer">Session history</summary><div className="space-y-4 mt-4">{messages.map(message => <div key={message.id} className="border-t border-slate-100 pt-4"><p className="text-xs font-semibold text-slate-400 mb-2">{message.role === 'user' ? 'Your input' : 'Keeper recorded answer · unverified'} · {new Date(message.timestamp).toLocaleString()}</p>{message.role==='assistant'?<KeeperRecordedAnswer content={message.content}/>:<pre className="text-sm whitespace-pre-wrap break-words font-sans text-slate-700">{message.content}</pre>}</div>)}</div></details>}            </>}
+            queries={inspectionStatus==='ready'&&localEvidence.current?<KeeperQueryProvenance evidence={localEvidence.current}/>:null}
+            technical={evidenceReport?<KeeperEvidenceReport report={evidenceReport}/>:<p>No local source inventory yet.</p>}
+        />
     );
 };
 
