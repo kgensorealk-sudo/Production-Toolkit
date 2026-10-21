@@ -95,9 +95,11 @@ const GrantTagger: React.FC = () => {
 
             // Attempt backend server API call first
             try {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (!session || session.user.id !== user?.id) throw new Error('Sign in again to use AI extraction.');
                 const res = await fetch('/api/ai/grant-extract', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
                     body: JSON.stringify({ statement: trimmed }),
                 });
 

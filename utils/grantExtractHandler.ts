@@ -1,3 +1,4 @@
+import { verifySubscriptionAccess } from './subscriptionAccess.js';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI } from '@google/genai';
 import OpenAI from 'openai';
@@ -20,6 +21,7 @@ function getGeminiClient(): GoogleGenAI | null {
   return new GoogleGenAI({
     apiKey,
     httpOptions: {
+      timeout: 12000,
       headers: {
         'User-Agent': 'aistudio-build',
       },
@@ -35,18 +37,23 @@ function getOpenAIClient(): OpenAI | null {
   return new OpenAI({ apiKey });
 }
 
+// Per-instance burst protection. Configure a shared gateway limit for multi-instance deployments.
+const grantWindows = new Map<string, { start: number; count: number }>();
+export function consumeGrantRequest(user: string, now = Date.now()) {
+  for (const [id, window] of grantWindows) if (now - window.start >= 60_000) grantWindows.delete(id);
+  const window = grantWindows.get(user) || { start: now, count: 0 };
+  if (!grantWindows.has(user) && grantWindows.size >= 10_000) return false;
+  grantWindows.set(user, window);
+  return ++window.count <= 10;
+}
 const CANDIDATES: Array<{ model: string; provider: 'gemini' | 'openai' }> = [
-  { model: 'gemini-3.8-flash', provider: 'gemini' },
-  { model: 'gemini-3.1-flash-lite', provider: 'gemini' },
-  { model: 'gemini-flash-latest', provider: 'gemini' },
-  { model: 'gemini-3.7-flash', provider: 'gemini' },
-  { model: 'gpt-4o-mini', provider: 'openai' },
-  { model: 'gpt-4o', provider: 'openai' },
+  { model: process.env.KEEPER_GEMINI_MODEL || 'gemini-2.5-flash', provider: 'gemini' },
+  { model: process.env.KEEPER_OPENAI_MODEL || 'gpt-4o-mini', provider: 'openai' },
 ];
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') {
@@ -57,9 +64,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed. Use POST.' });
   }
 
+  const access = await verifySubscriptionAccess(req);
+  if (!access.authorized) return res.status(access.status || 403).json({ error: access.error });
+  if (!consumeGrantRequest(access.user.id)) {
+    res.setHeader('Retry-After', '60');
+    return res.status(429).json({ error: 'Too many analyses. Wait one minute and retry.' });
+  }
+
   try {
     const { statement } = req.body || {};
-    const textToAnalyze = (statement || '').trim();
+    if (typeof statement !== 'string' || statement.length > 20_000) return res.status(400).json({ error: 'Supply a funding statement up to 20,000 characters.' });
+    const textToAnalyze = statement.trim();
 
     if (!textToAnalyze) {
       return res.status(400).json({ error: 'Funding statement is required.' });
@@ -88,9 +103,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (candidate.provider === 'gemini' && !geminiClient) continue;
       if (candidate.provider === 'openai' && !openaiClient) continue;
 
+      let timer: ReturnType<typeof setTimeout> | undefined;
       try {
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(
+          timer = setTimeout(
             () => reject(new Error(`Model ${candidate.model} request timed out after ${TIMEOUT_MS / 1000}s`)),
             TIMEOUT_MS
           )
@@ -128,7 +144,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 content: `Analyze the following funding statement according to your instructions:\n\n"""\n${textToAnalyze}\n"""`,
               },
             ],
-          });
+          }, { timeout: TIMEOUT_MS });
 
           const response: any = await Promise.race([apiPromise, timeoutPromise]);
           outputText = (response?.choices?.[0]?.message?.content || '').trim();
@@ -139,9 +155,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           activeModel = candidate.model;
           break;
         }
-      } catch (err) {
-        console.warn(`[grant-extract] ${candidate.model} failed, trying next candidate:`, err);
-      }
+      } catch {
+        console.warn(`[grant-extract] ${candidate.model} unavailable; trying fallback.`);
+      } finally { if (timer) clearTimeout(timer); }
     }
 
     // If AI calls produced a response, sanitize and parse

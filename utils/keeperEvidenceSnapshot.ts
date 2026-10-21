@@ -1,12 +1,14 @@
+import { KEEPER_REQUEST_LIMIT } from './keeperPayload.js';
 import type {KeeperEvidence} from './keeperEvidenceCore.js';
 
 // Browser-generated evidence is untrusted input, never a server-verified inspection.
 // Copy allowlisted fields only; source ZIP/XML/PDF bytes are not accepted here.
 export function validateKeeperEvidenceSnapshot(input:unknown):KeeperEvidence|null {
   if(input===undefined)return null;
+  if (new TextEncoder().encode(JSON.stringify(input)).byteLength > KEEPER_REQUEST_LIMIT) throw new Error('Local evidence exceeds the 4 MB request limit. Request a smaller review batch.');
   const fail=():never=>{throw new Error('Invalid local evidence snapshot.');};
   const object=(v:any)=>v&&typeof v==='object'&&!Array.isArray(v)?v:fail();
-  const str=(v:any,max=200000):string=>typeof v==='string'&&v.length<=max?v:fail();
+  const str=(v:any,max=KEEPER_REQUEST_LIMIT):string=>typeof v==='string'&&v.length<=max?v:fail();
   const list=(v:any,max:number):any[]=>Array.isArray(v)&&v.length<=max?v:fail();
   const strings=(v:any,max=1000)=>list(v,max).map(x=>str(x,10000));
   const optional=(v:any)=>v===undefined?undefined:str(v);

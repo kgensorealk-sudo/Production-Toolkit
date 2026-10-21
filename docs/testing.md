@@ -72,14 +72,12 @@ admins must retain management access.
 reports. It does not invoke VTool. Corpus scans and historical manuscript validators need
 explicit local authorization/configuration and are excluded from the portable command.
 
-## Build gaps, unchanged in this phase
+## Build and deployment coverage
 
-Standalone `server.ts` and `api/` entry roots are not included in the existing TypeScript
-configuration. Imported modules may still be checked transitively. Vercel uses `vite build`
-without a regression/typecheck gate. Electron has separate entry-point, port, module-format
-and packaging-dependency inconsistencies. None of these production configurations changed.
-No claim is made that a green portable suite establishes production provider availability,
-browser worker bundling, full privacy, or publisher DTD/VTool validity.
+TypeScript now includes `server.ts` and `api/`. Vercel runs type checking, portable
+regressions and the production build; GitHub CI also exercises PostgreSQL RLS.
+Electron packaging remains a separate platform check. Passing portable tests does
+not establish live provider availability or publisher DTD/VTool validity.
 
 ## Phase 1 corrections
 
@@ -91,3 +89,19 @@ completion and execution failures report FAIL. Real VTool validation remains sep
 Historical result annotations remain unchanged. See `testing-phase1/classification-reconciliation.json`
 for the 22 corrected classifications and `testing-phase1/privacy-review.json` for report redactions.
 Raw evidence is retained privately outside the repository.
+
+## Keeper workspace browser regression
+
+Run `npx vite --config tests/browser/vite.config.ts` and open
+`http://localhost:3101/tests/browser/keeper.html`. This fixture mounts the real
+Keeper page, IndexedDB and browser XML/PDF/ZIP workers. Only authentication and
+AI responses are synthetic; no real provider or Supabase credentials are used.
+Check XML/PDF import, ZIP task selection, local author checks and evidence filters,
+removing all attachments then reopening/refreshing, long filenames at 390px,
+cancel/retry, and provider failure retaining local evidence. This fixture is
+separate from the production entry point and must not be deployed as an app.
+
+Deployment now runs TypeScript, portable regressions and the production build.
+GitHub CI also runs the disposable PostgreSQL authorization regression. External
+publisher validation and live provider availability still require their explicit
+fixtures and credentials. The server and API entry roots are included in TypeScript.

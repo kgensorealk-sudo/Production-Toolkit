@@ -20,8 +20,8 @@ export function keeperPastedXmlArtifact(previous:KeeperPastedArtifact|null,conte
   return previous?.content===content ? previous : {id:newId(),name:'Pasted XML',kind:'xml',content};
 }
 
-// An empty cleared workspace must not hide the original ZIP's prepared sources.
-export function keeperRestoredSources<T extends {id:string}>(saved:{artifacts?:T[];activeScope?:string}|null|undefined,fallback:T[]=[]){
-  const artifacts=saved?.artifacts?.length?saved.artifacts:fallback;
+// Current workspaces preserve explicit removals; legacy empty workspaces recover ZIP sources.
+export function keeperRestoredSources<T extends {id:string}>(saved:{version?:number;artifacts?:T[];activeScope?:string}|null|undefined,fallback:T[]=[]){
+  const artifacts=saved?.artifacts && (saved.version === 2 || saved.artifacts.length > 0) ? saved.artifacts : fallback;
   return {artifacts,activeScope:keeperArtifactScope(artifacts)};
 }

@@ -1185,7 +1185,7 @@ const TableFixer: React.FC = () => {
                                                                 )}
                                                             </div>
                                                         </div>
-                                                        <div className="text-xs text-slate-600 leading-relaxed bg-slate-50/80 p-2.5 rounded-xl border border-slate-100 font-mono break-words" dangerouslySetInnerHTML={{__html: fn.content || '<span class="italic text-slate-400">Empty content</span>'}}></div>
+                                                        <div className="text-xs text-slate-600 leading-relaxed bg-slate-50/80 p-2.5 rounded-xl border border-slate-100 font-mono break-words" >{fn.content || 'Empty content'}</div>
                                                     </div>
                                                 </label>
                                             ))}
@@ -1727,7 +1727,7 @@ const TableFixer: React.FC = () => {
                                                     </div>
                                                 </div>
 
-                                                <div className="text-xs text-slate-600 mb-2 line-clamp-2 bg-slate-50 p-2 rounded-lg font-mono border border-slate-100" dangerouslySetInnerHTML={{ __html: item.content || '<span class="italic text-slate-400">Empty text</span>' }}></div>
+                                                <div className="text-xs text-slate-600 mb-2 line-clamp-2 bg-slate-50 p-2 rounded-lg font-mono border border-slate-100" >{item.content || 'Empty text'}</div>
 
                                                 {/* Generated Tag Snippet Preview */}
                                                 <div className="bg-slate-900 text-slate-200 p-2.5 rounded-xl text-[11px] font-mono overflow-x-auto leading-relaxed border border-slate-800 flex items-start gap-2">

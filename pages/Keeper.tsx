@@ -1,9 +1,4 @@
 import React from 'react';
 import KeeperSandbox from '../components/KeeperSandbox';
-import KeeperEvaluationDashboard from '../components/KeeperEvaluationDashboard';
-import {useAuth} from '../contexts/AuthContext';
-
-export default function Keeper(){
- const {user}=useAuth();
- return <section id="keeper-evaluation-panel" aria-label="Keeper production workspace"><KeeperEvaluationDashboard ownerIdentity={user?.id || 'signed-out'} operator advancedWorkspace={<KeeperSandbox />} /></section>;
-}
+import '../components/KeeperWorkspace.css';
+export default function Keeper(){return <section id="keeper-evaluation-panel" className="keeper-workspace" aria-label="Keeper production workspace"><header className="mb-5"><h1 className="text-2xl font-bold">Keeper article workspace</h1><p className="mt-2 text-slate-700">One task, shared source files, local checks and AI review.</p></header><KeeperSandbox /></section>;}

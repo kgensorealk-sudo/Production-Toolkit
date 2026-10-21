@@ -31,6 +31,8 @@
     "utils",
     "types.ts",
     "constants.ts",
-    "supabaseClient.ts"
+    "supabaseClient.ts",
+    "server.ts",
+    "api"
   ]
 }

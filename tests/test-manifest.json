@@ -1378,6 +1378,16 @@
       "classification": "portable",
       "timeoutMs": 180000,
       "introducedIn": "Phase 2B Unit 1"
+    },
+    {
+      "file": "tests/keeper-security-boundaries.mjs",
+      "kinds": [
+        "behavioral"
+      ],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineDependencies": [],
+      "externalChecks": []
     }
   ],
   "helpers": [

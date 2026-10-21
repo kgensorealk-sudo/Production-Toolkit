@@ -1,0 +1,3 @@
+import {defineConfig} from 'vite';
+import react from '@vitejs/plugin-react';
+export default defineConfig({plugins:[react(),{name:'synthetic-account',enforce:'pre',resolveId(id){if(id.endsWith('/contexts/AuthContext'))return '\0fixture-auth';if(id.endsWith('/supabaseClient'))return '\0fixture-supabase';},load(id){if(id==='\0fixture-auth')return `export const useAuth=()=>({user:{id:'synthetic-browser-owner',email:'reviewer@example.invalid'},profile:{role:'user',is_subscribed:true},isAdmin:false,freeTools:[]});`;if(id==='\0fixture-supabase')return `export const supabase={auth:{getSession:async()=>({data:{session:{user:{id:'synthetic-browser-owner'},access_token:'synthetic-token'}}})}};`;}}],server:{host:'0.0.0.0',port:3101,strictPort:true}});

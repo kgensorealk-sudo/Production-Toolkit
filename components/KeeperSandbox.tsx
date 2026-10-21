@@ -1,3 +1,6 @@
+import {parseKeeperWorkspaceBackup} from '../utils/keeperWorkspaceBackup';
+import KeeperWorkspaceChecks from './KeeperWorkspaceChecks';
+import { keeperRequestSession } from '../utils/keeperRequestSession';
 import KeeperActivityReport from './KeeperActivityReport';
 import type {KeeperActivity} from '../utils/keeperActivity';
 import type {KeeperReviewBatch,KeeperReviewCursor} from '../utils/keeperReviewBatch';
@@ -82,6 +85,10 @@ interface Message {
  * actually generated the reply, because data.modelUsed from the API was being discarded.
  */
 export const getModelBadgeInfo = (modelUsed?: string): { label: string; isOffline: boolean } => {
+    if (modelUsed === 'keeper-connection-unavailable') return {label:'AI unavailable · retry this task',isOffline:false};
+    if (modelUsed === 'keeper-input-error') return {label:'Input needs attention',isOffline:false};
+    if (modelUsed === 'keeper-auth-required') return {label:'Sign in again',isOffline:false};
+    if (modelUsed === 'keeper-review-incomplete') return {label:'Review incomplete',isOffline:false};
     if (modelUsed === 'keeper-evidence-counts') return {label:'Verified inventory counts',isOffline:false};
     if (modelUsed === 'keeper-evidence-only') return {label:'Evidence report · AI interpretation unavailable',isOffline:false};
     if (!modelUsed) {
@@ -218,6 +225,10 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
     const [isImporting, setIsImporting] = useState(false);
     const importVersion = useRef(0);
     const responseVersion = useRef(0);
+    const activeRequest = useRef<AbortController | null>(null);
+    const currentOwner = useRef(user?.id);
+    currentOwner.current = user?.id;
+    const cancelRequest = () => { responseVersion.current++; activeRequest.current?.abort(); activeRequest.current=null; setIsLoading(false); setFileNotice('Request cancelled. Local files and findings are retained.'); };
     const pastedArtifactRef = useRef<KeeperPastedArtifact|null>(null);
     const [activeScope,setActiveScope] = useState('[]');
     const [selectedEvidenceRef,setSelectedEvidenceRef]=useState<string|null>(null);
@@ -296,6 +307,7 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
     const [activeTask,setActiveTask]=useState('scratch');
     const [restoreError,setRestoreError]=useState('');
     const [saveError,setSaveError]=useState('');
+    const [saveStatus,setSaveStatus]=useState('Restoring workspace…');
     const [restoreRetry,setRestoreRetry]=useState(0);
     const [switchingTask,setSwitchingTask]=useState(false);
     const workspaceWriter=useRef<KeeperWorkspaceWriter|null>(null);
@@ -309,7 +321,7 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
     };
     useEffect(()=>{
         let active=true;ownerGeneration.current++;
-        responseVersion.current++;importVersion.current++;
+        responseVersion.current++;activeRequest.current?.abort();importVersion.current++;
         typingControllerRef.current?.stop();setCurrentlyTypingId(null);setIsLoading(false);setIsImporting(false);
         setRestoredOwner(null);setRestoreError('');setSaveError('');setSwitchingTask(false);
         workspaceWriter.current=null;applyWorkspace(null);setEvidenceReport(null);
@@ -322,18 +334,20 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
             workspaceWriter.current=new KeeperWorkspaceWriter(account,task,saved?._revision||0);
             applyWorkspace(saved,sources);setActiveTask(task);setRestoredOwner(account);
         })().catch(error=>{if(active)setRestoreError(error instanceof Error?error.message:'Local storage could not be restored.');});
-        return()=>{active=false;ownerGeneration.current++;responseVersion.current++;};
+        return()=>{active=false;ownerGeneration.current++;responseVersion.current++;activeRequest.current?.abort();};
     },[user?.id,restoreRetry]);
     const workspaceSnapshot=()=>({version:2,artifacts:sandboxArtifacts,messages,inputPrompt,taskInstructions,activeScope});
     useEffect(()=>{
         const writer=workspaceWriter.current;
         if(!user?.id||restoredOwner!==user.id||currentlyTypingId||switchingTask||!writer||writer.task!==activeTask)return;
-        void writer.save(workspaceSnapshot()).catch(error=>{if(workspaceWriter.current===writer)setSaveError(error instanceof Error?error.message:'Local save failed.');});
+        let current=true;setSaveStatus('Saving locally…');
+        void writer.save(workspaceSnapshot()).then(()=>{if(current&&workspaceWriter.current===writer)setSaveStatus('Saved on this device');}).catch(error=>{if(current&&workspaceWriter.current===writer){setSaveStatus('Save failed');setSaveError(error instanceof Error?error.message:'Local save failed.');}});
+        return()=>{current=false;};
     },[user?.id,restoredOwner,sandboxArtifacts,messages,inputPrompt,taskInstructions,activeScope,currentlyTypingId,activeTask,switchingTask]);
     const selectLocalTask=async(task:string,artifacts:typeof sandboxArtifacts)=>{
         if(!user?.id||switchingTask||saveError)return false;
         const account=user.id,generation=ownerGeneration.current;
-        setSwitchingTask(true);responseVersion.current++;importVersion.current++;
+        setSwitchingTask(true);responseVersion.current++;activeRequest.current?.abort();importVersion.current++;
         typingControllerRef.current?.stop();setCurrentlyTypingId(null);setIsLoading(false);setIsImporting(false);
         try{
             await workspaceWriter.current?.save(workspaceSnapshot());
@@ -347,9 +361,22 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
         }catch(error){if(generation===ownerGeneration.current)setSaveError(error instanceof Error?error.message:'Task could not be restored.');}
         finally{if(generation===ownerGeneration.current)setSwitchingTask(false);}
     };
+    const importWorkspaceBackup=async(file:File)=>{
+        const owner=user?.id,generation=ownerGeneration.current,requestGeneration=responseVersion.current;
+        if(!owner||isLoading||switchingTask||isImporting)return;
+        try{
+            if(file.size>12_000_000)throw new Error('Backup exceeds 12 MB.');
+            const restored=parseKeeperWorkspaceBackup(await file.text());
+            if(generation!==ownerGeneration.current||requestGeneration!==responseVersion.current)return;
+            if(!window.confirm('Replace the current workspace with this backup? Export the current workspace first if you need to keep it. Imported chat remains unverified history.'))return;
+            responseVersion.current++;activeRequest.current?.abort();importVersion.current++;
+            typingControllerRef.current?.stop();setCurrentlyTypingId(null);
+            applyWorkspace(restored);setEvidenceReport(null);setResetNotice('Backup restored. Local checks will inspect the files again; imported conversation is unverified history.');
+        }catch(error){if(generation===ownerGeneration.current)setFileNotice(error instanceof Error?error.message:'Backup could not be restored.');}
+    };
     const exportUnsavedWorkspace=()=>{
         const url=URL.createObjectURL(new Blob([JSON.stringify(workspaceSnapshot())],{type:'application/json'}));
-        const link=document.createElement('a');link.href=url;link.download='keeper-local-unsaved-workspace.json';link.click();
+        const link=document.createElement('a');link.href=url;link.download='keeper-workspace-backup.json';link.click();
         setTimeout(()=>URL.revokeObjectURL(url),1000);
     };
 
@@ -386,6 +413,7 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
     useEffect(() => {
         return () => {
             responseVersion.current++;
+            activeRequest.current?.abort();
             typingControllerRef.current?.stop();
         };
     }, []);
@@ -491,6 +519,7 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
         const text = [taskInstructions.trim() ? 'Task instructions:\n' + taskInstructions.trim() : '', modelSource ? 'Source material:\n' + modelSource : requestArtifacts.length ? 'Inspect the supplied sandbox files and report findings.' : ''].filter(Boolean).join('\n\n');
         if (!user?.id || restoredOwner!==user.id || !text || isLoading || isImporting || inspectionStatus === 'running' || inspectionStatus === 'error') return;
         const generation=++responseVersion.current;
+        const requestOwner=user.id;
         const clientStarted=Date.now();let localInspectionMs=0,requestMs=0;
         setIsLoading(true);
         let evidenceSnapshot:KeeperEvidence|undefined;
@@ -610,10 +639,12 @@ ${userAuthContext}`;
             const generateResponsePromise = (async () => {
                 let apiStarted=0;
                 const apiController=new AbortController();
+                activeRequest.current=apiController;
                 const apiTimer=setTimeout(()=>apiController.abort(),75000);
                 try {
-                    const sessionData = await supabase.auth.getSession();
-                    const token = sessionData?.data?.session?.access_token || session?.access_token;
+                    const token = await keeperRequestSession(() => supabase.auth.getSession(), requestOwner,
+                        () => generation===responseVersion.current && currentOwner.current===requestOwner, apiController.signal);
+                    if (!token) return null;
 
                     apiStarted=Date.now();
                     const response = await fetch('/api/ai/chat', {
@@ -668,7 +699,7 @@ ${userAuthContext}`;
                     if (err?.message?.includes('server limit')) return {reply:err.message,modelUsed:'keeper-input-error'};
                     console.warn("Keeper live AI connection unavailable:", err?.message || err);
                     return { reply: err?.message || KEEPER_CONTACT_ADMIN_NOTICE, modelUsed: 'keeper-connection-unavailable' };
-                } finally { clearTimeout(apiTimer);apiController.abort(); }
+                } finally { clearTimeout(apiTimer);apiController.abort();if(activeRequest.current===apiController)activeRequest.current=null; }
             })();
 
             const responseData:{reply:string;modelUsed?:string;activity?:KeeperActivity;reviewBatch?:KeeperReviewBatch;answerEvidence?:KeeperAnswerEvidence}|null = await generateResponsePromise;
@@ -700,7 +731,7 @@ ${userAuthContext}`;
 
         } catch (err: any) {
             console.error("Critical error in AI chat message handling:", err);
-            setIsLoading(false);
+            if(generation===responseVersion.current)setIsLoading(false);
         }
     };
 
@@ -741,8 +772,9 @@ ${userAuthContext}`;
 
     return (
         <section aria-label="Keeper sandbox" className="space-y-5">
+            <header className="rounded-xl bg-indigo-50 p-4"><h2 className="font-semibold break-words">{activeTask==='scratch'?'Standalone workspace':'Selected article task'}</h2><p role="status" className="text-sm text-slate-700">{saveStatus}</p><details className="text-sm"><summary>Task identity</summary><p className="break-all">{activeTask}</p></details></header>
             <details className="rounded-xl border border-slate-200 bg-white p-4">
-                <summary className="cursor-pointer text-sm font-semibold">Gemini API key · {personalGeminiKey.trim()?'Personal key':'Application key'}</summary>
+                <summary className="cursor-pointer text-sm font-semibold">Settings · Gemini API key · {personalGeminiKey.trim()?'Personal key':'Application key'}</summary>
                 <div className="mt-3 space-y-3 text-sm">
                     <label className="block" htmlFor="keeper-gemini-key">Your Gemini API key (optional)</label>
                     <input id="keeper-gemini-key" type="password" autoComplete="off" spellCheck={false} maxLength={256} disabled={isLoading} value={personalGeminiKey} onChange={e=>setPersonalGemini({owner:user.id,key:e.target.value})} className="w-full rounded-lg border border-slate-300 px-3 py-2" aria-describedby="keeper-key-help"/>
@@ -750,12 +782,15 @@ ${userAuthContext}`;
                     <button disabled={isLoading||!personalGeminiKey} className="text-indigo-700 underline disabled:opacity-40" onClick={()=>setPersonalGemini({owner:user.id,key:''})}>Clear personal key</button>
                 </div>
             </details>
+            <details className="rounded-xl border border-slate-200 p-4 text-sm"><summary>Workspace backup and recovery</summary><p className="my-2">Backups contain manuscript data. Store them securely. Imported chat is historical text; run local checks again.</p><button className="underline mr-4" onClick={exportUnsavedWorkspace}>Export workspace backup</button><label className="inline-block">Import workspace backup<input className="block max-w-full mt-2" type="file" accept=".json,application/json" disabled={isLoading||isImporting||switchingTask||Boolean(saveError)} onChange={e=>{const file=e.target.files?.[0];e.target.value='';if(file)void importWorkspaceBackup(file);}}/></label></details>
             {saveError&&<div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm"><p>{saveError}</p><button className="underline mr-4" onClick={exportUnsavedWorkspace}>Export unsaved workspace (contains manuscript data)</button><button className="underline" onClick={()=>setRestoreRetry(n=>n+1)}>Reload saved version</button></div>}
-            <KeeperLocalTasks owner={user?.id} disabled={switchingTask} onSelect={(task,artifacts)=>void selectLocalTask(task,artifacts)} onBeforeRemove={async task=>task!==activeTask||Boolean(await selectLocalTask('scratch',[]))}/>
+            <KeeperLocalTasks activeTask={activeTask} owner={user?.id} disabled={switchingTask} onSelect={(task,artifacts)=>void selectLocalTask(task,artifacts)} onBeforeRemove={async task=>task!==activeTask||Boolean(await selectLocalTask('scratch',[]))}/>
             <button className="text-sm text-indigo-700 underline" disabled={switchingTask||Boolean(saveError)} onClick={()=>void selectLocalTask('scratch',[])}>Open standalone workspace</button>
 
+            {messages.some(message=>message.artifactScope==='imported-history')&&<details className="rounded-xl border border-slate-200 p-4 text-sm"><summary>Imported conversation history · unverified</summary><p className="my-2">Historical text only. These messages are excluded from new AI requests and do not establish completed work.</p>{messages.filter(message=>message.artifactScope==='imported-history').map(message=><p className="whitespace-pre-wrap my-3" key={message.id}><strong>{message.role}: </strong>{message.content}</p>)}</details>}
             {resetNotice && <p role="status" className="rounded-xl bg-indigo-50 text-indigo-700 px-4 py-3 text-sm">{resetNotice}</p>}
-            {showResetConfirm && <div role="alertdialog" aria-label="Clear Keeper conversation" className="border border-amber-200 bg-amber-50 rounded-xl p-4 flex flex-wrap items-center gap-3"><p className="text-sm flex-1">Clear instructions and conversation? Attached files and inspection findings will remain.</p><button onClick={() => setShowResetConfirm(false)} className="text-sm px-3 py-2">Cancel</button><button onClick={executeResetChat} disabled={isLoading} className="text-sm bg-slate-900 text-white px-3 py-2 rounded-lg disabled:opacity-40">Clear conversation</button></div>}
+            {showResetConfirm && <div role="group" aria-label="Clear Keeper conversation" className="border border-amber-200 bg-amber-50 rounded-xl p-4 flex flex-wrap items-center gap-3"><p className="text-sm flex-1">Clear instructions and conversation? Attached files and inspection findings will remain.</p><button onClick={() => setShowResetConfirm(false)} className="text-sm px-3 py-2">Cancel</button><button onClick={executeResetChat} disabled={isLoading} className="text-sm bg-slate-900 text-white px-3 py-2 rounded-lg disabled:opacity-40">Clear conversation</button></div>}
+            <KeeperWorkspaceChecks key={`${user.id}:${activeTask}`} artifacts={sandboxArtifacts} instructions={taskInstructions}/>
             <div className="grid xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] gap-6 items-start">
                 <section className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
                     <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between"><div><p className="text-[10px] uppercase tracking-widest font-bold text-indigo-500">01 / Prepare</p><h2 className="font-semibold text-slate-900 mt-1">Task workspace</h2></div><button onClick={() => setShowResetConfirm(true)} disabled={isLoading} className="text-xs text-slate-500 hover:text-slate-900 disabled:opacity-40 flex items-center gap-2"><RotateCcw size={14} /> Clear conversation</button></div>
@@ -764,15 +799,15 @@ ${userAuthContext}`;
                         <p className="text-xs text-slate-500 mt-1 mb-3">Include the rules, format, or examples you want him to follow.</p>
                         <textarea id="keeper-instructions" value={taskInstructions} onChange={e => setTaskInstructions(e.target.value)} disabled={isLoading} placeholder="Describe your task and expected output…" className="w-full min-h-[130px] p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm leading-relaxed resize-y outline-none focus:ring-2 focus:ring-indigo-400" />
                         <div className="flex items-center justify-between mt-6 mb-3"><label htmlFor="keeper-task-input" className="text-sm font-semibold text-slate-800">Source material <span className="font-normal text-slate-400 ml-1">Optional</span></label><button type="button" onClick={() => fileInputRef.current?.click()} disabled={isLoading || isImporting} className="text-xs font-semibold text-indigo-600 flex items-center gap-1.5 disabled:opacity-40"><Paperclip size={14} /> Import file</button></div>
-                        <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept=".xml,.pdf,.txt" className="hidden" />
+                        <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept=".xml,.pdf" className="hidden" />
                         {isImporting && <p role="status" className="text-xs text-slate-500 mb-3">Importing file...</p>}
                         {inspectionStatus !== 'idle' && <p role="status" className="text-xs text-indigo-700 mb-3">{inspectionStatus === 'running' ? 'Inspecting files in the background…' : inspectionStatus === 'ready' ? 'Inspection ready. Keeper can retrieve these findings.' : 'Inspection failed.'}{inspectionStatus === 'error' && <button className="ml-2 underline" onClick={()=>setInspectionRetry(n=>n+1)}>Retry inspection</button>}</p>}
                         {fileNotice && <p role="alert" className="text-xs text-amber-700 mb-3">{fileNotice}</p>}
-                        {sandboxArtifacts.map(a=><div key={a.id} className="flex items-center justify-between text-xs bg-indigo-50 rounded-lg p-3 mb-2"><span>{a.name} - {a.kind.toUpperCase()}</span><button disabled={isLoading} onClick={()=>{importVersion.current++;setIsImporting(false);const remaining=sandboxArtifacts.filter(x=>x.id!==a.id);setSandboxArtifacts(remaining);setActiveScope(keeperArtifactScope(remaining));typingControllerRef.current?.stop();setCurrentlyTypingId(null);setEvidenceReport(null);}}>Remove</button></div>)}
+                        {sandboxArtifacts.map(a=><div key={a.id} className="flex items-center justify-between text-xs bg-indigo-50 rounded-lg p-3 mb-2"><span className="min-w-0 break-all" title={a.name}>{a.name} - {a.kind.toUpperCase()}</span><button className="shrink-0 ml-3" aria-label={`Remove attachment ${a.name}`} disabled={isLoading} onClick={()=>{importVersion.current++;setIsImporting(false);const remaining=sandboxArtifacts.filter(x=>x.id!==a.id);setSandboxArtifacts(remaining);setActiveScope(keeperArtifactScope(remaining));typingControllerRef.current?.stop();setCurrentlyTypingId(null);setEvidenceReport(null);}}>Remove</button></div>)}
                         <p className="text-xs text-slate-500 mb-3">Local workspace: import one XML and an optional edit-report PDF. Browser data deletion removes local copies. Processing pauses when the app closes. Automatic inspection runs locally. When you ask Keeper, extracted evidence is sent to the application server and AI provider for interpretation; original files remain on this device.</p>
                         <textarea id="keeper-task-input" ref={textareaRef} value={inputPrompt} onChange={e => {setInputPrompt(e.target.value);if(/^\s*</.test(inputPrompt)||/^\s*</.test(e.target.value))setEvidenceReport(null);}} disabled={isLoading || isImporting} placeholder="Paste text, XML, or an example here…" className="w-full min-h-[290px] p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm leading-relaxed font-mono resize-y outline-none focus:ring-2 focus:ring-indigo-400" />
                     </div>
-                    <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-3"><span className="text-xs text-slate-400">{(inputPrompt.length + taskInstructions.length).toLocaleString()} characters</span><button onClick={() => handleSendMessage()} disabled={(!inputPrompt.trim() && !taskInstructions.trim() && !sandboxArtifacts.length) || isLoading || isImporting || inspectionStatus === 'running' || inspectionStatus === 'error' || Boolean(currentlyTypingId)} className="inline-flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl font-semibold text-sm disabled:opacity-40 hover:bg-indigo-700 transition-colors">{isLoading ? 'Working…' : currentlyTypingId ? 'Preparing result…' : 'Run task'}<ArrowRight size={16} /></button></div>
+                    <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-3"><span className="text-xs text-slate-400">{(inputPrompt.length + taskInstructions.length).toLocaleString()} characters</span><button onClick={() => handleSendMessage()} disabled={(!inputPrompt.trim() && !taskInstructions.trim() && !sandboxArtifacts.length) || isLoading || isImporting || inspectionStatus === 'running' || inspectionStatus === 'error' || Boolean(currentlyTypingId)} className="inline-flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl font-semibold text-sm disabled:opacity-40 hover:bg-indigo-700 transition-colors">{isLoading ? 'Working…' : currentlyTypingId ? 'Preparing result…' : 'Ask Keeper'}<ArrowRight size={16} /></button>{isLoading&&<button type="button" className="underline text-sm" onClick={()=>{responseVersion.current++;activeRequest.current?.abort();typingControllerRef.current?.stop();setCurrentlyTypingId(null);setIsLoading(false);setFileNotice('AI request cancelled. Local evidence is retained.');}}>Cancel AI request</button>}</div>
                 </section>
                 <section className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
                     <div className="px-6 py-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3"><div><p className="text-[10px] uppercase tracking-widest font-bold text-indigo-500">02 / Review</p><h2 className="font-semibold text-slate-900 mt-1">Result</h2></div><div className="flex items-center gap-3">{currentlyTypingId && <button onClick={handleSkipTyping} className="text-xs text-indigo-600">Show full result</button>}{lastAssistantMessage && <button onClick={() => copyToClipboard((liveAnswerId===lastAssistantMessage.id?'':keeperHistoricalNotice+'\n\n'+keeperActionStatusNotice+'\n\n')+lastAssistantMessage.content, lastAssistantMessage.id)} className="inline-flex items-center gap-2 text-xs text-slate-600 border border-slate-200 rounded-lg px-3 py-2"><Copy size={13} />{copiedId === lastAssistantMessage.id ? 'Copied' : 'Copy result'}</button>}</div></div>

@@ -1,42 +1,42 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { HashRouter } from 'react-router-dom';
 import { Routes, Route, Navigate, useNavigate } from 'react-router';
 import Layout from './components/Layout';
-import Keeper from './pages/Keeper';
+const Keeper = lazy(() => import('./pages/Keeper'));
 import Landing from './pages/Landing';
-import Dashboard from './pages/Dashboard';
-import XmlRenumber from './pages/XmlRenumber';
-import XmlRenumberExperimental from './pages/XmlRenumberExperimental';
-import CreditGenerator from './pages/CreditGenerator';
-import QuickDiff from './pages/QuickDiff';
-import TagCleaner from './pages/TagCleaner';
-import TableFixer from './pages/TableFixer';
-import TableBeautifier from './pages/TableBeautifier';
-import ArticleHighlights from './pages/ArticleHighlights';
-import ViewSync from './pages/ViewSync';
-import ReferenceUpdater from './pages/ReferenceUpdater';
-import ReferenceDupeChecker from './pages/ReferenceDupeChecker';
-import UncitedRefCleaner from './pages/UncitedRefCleaner';
-import OtherRefScanner from './pages/OtherRefScanner';
-import ReferenceExtractor from './pages/ReferenceExtractor';
-import GrantTagger from './pages/GrantTagger';
-import IdAuditor from './pages/IdAuditor';
-import CommentReplacer from './pages/CommentReplacer';
-import CitationLinker from './pages/CitationLinker';
-import CitationLinkerExperimental from './pages/CitationLinkerExperimental';
-import FormulaEditorExperimental from './pages/FormulaEditorExperimental';
-import SectionAuditor from './pages/SectionAuditor';
-import AffiliationSequencer from './pages/AffiliationSequencer';
-import StructuralNodeArchitect from './pages/StructuralNodeArchitect';
-import RefSorter from './pages/RefSorter';
-import WordToXml from './pages/WordToXml';
-import ReferenceTaggerExperimental from './pages/ReferenceTaggerExperimental';
-import Docs from './pages/Docs';
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const XmlRenumber = lazy(() => import('./pages/XmlRenumber'));
+const XmlRenumberExperimental = lazy(() => import('./pages/XmlRenumberExperimental'));
+const CreditGenerator = lazy(() => import('./pages/CreditGenerator'));
+const QuickDiff = lazy(() => import('./pages/QuickDiff'));
+const TagCleaner = lazy(() => import('./pages/TagCleaner'));
+const TableFixer = lazy(() => import('./pages/TableFixer'));
+const TableBeautifier = lazy(() => import('./pages/TableBeautifier'));
+const ArticleHighlights = lazy(() => import('./pages/ArticleHighlights'));
+const ViewSync = lazy(() => import('./pages/ViewSync'));
+const ReferenceUpdater = lazy(() => import('./pages/ReferenceUpdater'));
+const ReferenceDupeChecker = lazy(() => import('./pages/ReferenceDupeChecker'));
+const UncitedRefCleaner = lazy(() => import('./pages/UncitedRefCleaner'));
+const OtherRefScanner = lazy(() => import('./pages/OtherRefScanner'));
+const ReferenceExtractor = lazy(() => import('./pages/ReferenceExtractor'));
+const GrantTagger = lazy(() => import('./pages/GrantTagger'));
+const IdAuditor = lazy(() => import('./pages/IdAuditor'));
+const CommentReplacer = lazy(() => import('./pages/CommentReplacer'));
+const CitationLinker = lazy(() => import('./pages/CitationLinker'));
+const CitationLinkerExperimental = lazy(() => import('./pages/CitationLinkerExperimental'));
+const FormulaEditorExperimental = lazy(() => import('./pages/FormulaEditorExperimental'));
+const SectionAuditor = lazy(() => import('./pages/SectionAuditor'));
+const AffiliationSequencer = lazy(() => import('./pages/AffiliationSequencer'));
+const StructuralNodeArchitect = lazy(() => import('./pages/StructuralNodeArchitect'));
+const RefSorter = lazy(() => import('./pages/RefSorter'));
+const WordToXml = lazy(() => import('./pages/WordToXml'));
+const ReferenceTaggerExperimental = lazy(() => import('./pages/ReferenceTaggerExperimental'));
+const Docs = lazy(() => import('./pages/Docs'));
 import Login from './pages/Login';
-import AdminDashboard from './pages/AdminDashboard';
-import Experimental from './pages/Experimental';
-import UserSettings from './pages/UserSettings';
-import Terms from './pages/Terms';
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
+const Experimental = lazy(() => import('./pages/Experimental'));
+const UserSettings = lazy(() => import('./pages/UserSettings'));
+const Terms = lazy(() => import('./pages/Terms'));
 import AuthModal from './components/AuthModal';
 import InactivityTracker from './components/InactivityTracker';
 import { ToolId } from './types';
@@ -138,7 +138,7 @@ const App: React.FC = () => {
                 <AuthProvider>
                     <InactivityTracker>
                         <HashRouter>
-                            <Routes>
+                            <Suspense fallback={<p role="status" className="p-6">Loading tool…</p>}><Routes>
                                 <Route path="/login" element={<Login />} />
                                 <Route path="/terms" element={<Terms />} />
                                 <Route path="/" element={<ProtectedRoute><Layout isLanding={true}><Landing /></Layout></ProtectedRoute>} />
@@ -178,7 +178,7 @@ const App: React.FC = () => {
                                 <Route path="/refSorter" element={<ProtectedRoute><Layout currentTool={ToolId.REF_SORTER}><NodeAccessController toolId={ToolId.REF_SORTER} displayName="Reference Sorter" mode="subscription-only"><RefSorter /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/wordToXml" element={<ProtectedRoute><Layout currentTool={ToolId.WORD_TO_XML}><NodeAccessController toolId={ToolId.WORD_TO_XML} displayName="MS Word Rich Text to CE XML Scanner" mode="key-allowed"><WordToXml /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/refTaggerExp" element={<ProtectedRoute><Layout currentTool={ToolId.REF_TAGGER_EXP}><NodeAccessController toolId={ToolId.REF_TAGGER_EXP} displayName="Reference XML Tagger Pro (Experimental)" mode="key-allowed"><ReferenceTaggerExperimental /></NodeAccessController></Layout></ProtectedRoute>} />
-                            </Routes>
+                            </Routes></Suspense>
                         </HashRouter>
                     </InactivityTracker>
                 </AuthProvider>

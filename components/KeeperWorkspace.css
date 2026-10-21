@@ -1,0 +1,10 @@
+.keeper-workspace {min-width:0;color:#1e293b;}
+.keeper-workspace * {min-width:0;}
+.keeper-workspace pre {white-space:pre-wrap;overflow-wrap:anywhere;}
+.keeper-workspace table {display:block;max-width:100%;overflow-x:auto;}
+.keeper-workspace button:focus-visible,.keeper-workspace summary:focus-visible,.keeper-workspace select:focus-visible {outline:3px solid #4338ca;outline-offset:3px;}
+.keeper-workspace .text-slate-400,.keeper-workspace .text-slate-500 {color:#475569;}
+.keeper-workspace .text-indigo-400,.keeper-workspace .text-indigo-500 {color:#4338ca;}
+.keeper-workspace [class*="text-[10px]"],.keeper-workspace [class*="text-[11px]"] {font-size:.8125rem;}
+.keeper-workspace .flex {flex-wrap:wrap;}
+.keeper-workspace p,.keeper-workspace span {overflow-wrap:anywhere;}
