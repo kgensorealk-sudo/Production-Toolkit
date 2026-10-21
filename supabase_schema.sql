@@ -149,15 +149,19 @@ CREATE TRIGGER on_auth_user_created
 
 -- 3. HELPER: Admin Check
 CREATE OR REPLACE FUNCTION public.is_admin()
-RETURNS BOOLEAN AS $$
+RETURNS BOOLEAN
+STABLE
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
 BEGIN
-  -- Super admin email or role check
+  -- Only the protected role grants admin access. Profile email is user-editable.
   RETURN EXISTS (
     SELECT 1 FROM public.profiles
-    WHERE id = auth.uid() AND (role = 'admin' OR LOWER(email) = 'kgenso.realk@gmail.com' OR LOWER(email) = 'generalkevin53@gmail.com')
+    WHERE id = auth.uid() AND LOWER(role) = 'admin'
   );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql;
 
 -- 4. HARDENED SECURITY POLICIES
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;

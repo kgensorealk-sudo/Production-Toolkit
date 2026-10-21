@@ -4,6 +4,23 @@
 -- This script hardens RLS policies and provisions the secure redemption RPC.
 -- ==============================================================================
 
+-- Only the protected profile role grants admin access. Never infer privileges
+-- from profile email: users can edit it without verifying ownership.
+-- Existing admins must have profiles.role = 'admin', set by a trusted operator.
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN
+STABLE
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = auth.uid() AND LOWER(role) = 'admin'
+  );
+END;
+$$ LANGUAGE plpgsql;
+
 -- ------------------------------------------------------------------------------
 -- 1. CRITICAL FIX: PROFILES SELECT POLICY (Fixes cross-tenant data leak)
 -- Restrict profiles SELECT so only the authenticated user or an admin can read

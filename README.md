@@ -13,6 +13,12 @@ Requires Node.js and npm.
 
 The frontend currently uses the Supabase project configured in `supabaseClient.ts`. The database schema and security migration are in `supabase_schema.sql` and `security_fixes_migration.sql`; applying them is a separate database operation.
 
+Database admin access requires `profiles.role = 'admin'` (case insensitive).
+Before applying `security_fixes_migration.sql` to an existing installation,
+verify intended administrators have this role using a trusted database operator.
+Profile email no longer grants admin privileges. Review existing admin role
+assignments if the installation previously used email-based authorization.
+
 ## Checks and builds
 
 - `npm run lint`: TypeScript checks.

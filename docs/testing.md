@@ -40,6 +40,24 @@ coverage, not a replacement for the private original article scenario.
 
 ## External checks
 
+### Database admin regression
+
+Run against an empty, disposable PostgreSQL database as a superuser:
+
+```sh
+psql -X --set=ON_ERROR_STOP=1 --dbname=toolkit_security_test --file=tests/sql/profile-admin-access.sql
+```
+
+This separate database check is not part of `npm test`. It creates synthetic
+Supabase auth fixtures and rolls back all changes. It verifies the baseline
+schema, upgrading the vulnerable admin helper via the standalone migration,
+and reapplying that migration. Assertions run as the `authenticated` role with
+RLS enforced: changing profile email must not grant admin privileges, self
+promotion/subscription and unauthorized writes must fail, and legitimate role
+admins must retain management access.
+
+### External validation sources
+
 - `KEEPER_STAGE1_SOURCE`: authorized Stage-1 HTML; executes the existing parity variants.
 - `TOOLKIT_ARTICLE_BASELINE`: authorized original complete article; executes the retained
   full-manuscript citation-protection scenario. The file remains outside Git.
