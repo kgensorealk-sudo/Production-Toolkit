@@ -3,6 +3,40 @@
   "runtime": "Node 24; verified locally with 24.11.1 on Windows x64",
   "entries": [
     {
+      "file": "tests/keeper-author-group-evaluation.mjs",
+      "kinds": [
+        "behavioral"
+      ],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineDependencies": [],
+      "externalChecks": [
+        "keeper-author-group-cej"
+      ]
+    },
+    {
+      "file": "tests/keeper-author-group-dashboard.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineDependencies": [],
+      "externalChecks": []
+    },
+    {
+      "file": "tests/keeper-operator-dashboard.mjs",
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineDependencies": [],
+      "externalChecks": []
+    },
+    {
       "file": "tests/word-to-xml-safety.mjs",
       "kinds": [
         "behavioral",
@@ -22,7 +56,10 @@
     },
     {
       "file": "tests/keeper-provider-diagnostics.mjs",
-      "kinds": ["behavioral", "source-contract/static"],
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
       "classification": "portable",
       "timeoutMs": 180000,
       "introducedIn": "Keeper provider diagnostics",
@@ -31,7 +68,10 @@
     },
     {
       "file": "tests/keeper-production-registration.mjs",
-      "kinds": ["behavioral", "source-contract/static"],
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
       "classification": "portable",
       "timeoutMs": 180000,
       "introducedIn": "Phase 2B Unit 3",
@@ -40,7 +80,10 @@
     },
     {
       "file": "tests/id-auditor-referential-integrity.mjs",
-      "kinds": ["behavioral", "source-contract/static"],
+      "kinds": [
+        "behavioral",
+        "source-contract/static"
+      ],
       "baselineDependencies": [],
       "externalChecks": [],
       "classification": "portable",
@@ -1338,6 +1381,7 @@
     }
   ],
   "helpers": [
+    "keeper-author-group-real-case.mjs",
     "reference-updater-harness.mjs",
     "citation-linker-harness.mjs",
     "test-output.mjs",
@@ -1346,6 +1390,13 @@
     "external-validation-protocol.mjs"
   ],
   "externalChecks": [
+    {
+      "id": "keeper-author-group-cej",
+      "classification": "external validation",
+      "entry": "tests/keeper-author-group-real-case.mjs",
+      "requires": "KEEPER_AUTHOR_GROUP_FIXTURE",
+      "limitation": "Explicit standalone invocation only; not dispatched by the existing external runner. Exit 2 and UNAVAILABLE if absent. Excluded from portable entry counts."
+    },
     {
       "id": "stage1-parity",
       "classification": "external validation",
@@ -1725,6 +1776,7 @@
     }
   ],
   "helperDetails": {
+    "keeper-author-group-real-case.mjs": "External-only entry point, inventoried here for discovery compatibility. Run explicitly with KEEPER_AUTHOR_GROUP_FIXTURE; never counted as a portable pass.",
     "reference-updater-harness.mjs": "Source extraction; not a test entry point.",
     "citation-linker-harness.mjs": "Source extraction; no inherited test execution.",
     "test-output.mjs": "Temporary output isolation.",
