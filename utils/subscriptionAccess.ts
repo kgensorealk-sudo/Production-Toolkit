@@ -87,4 +87,3 @@ export async function verifySubscriptionAccess(req: VercelRequest): Promise<{ au
     };
   }
 }
-
