@@ -133,7 +133,7 @@ export function evaluateAuthorGroup(xml:string,instructions=''):AuthorGroupEvalu
    if(record.correspondence.length&&!record.emails.length)issue('EMAIL','Corresponding author has no independently owned email.',a,id);
    if(ownEmails.length&&!record.correspondence.length)issue('CORRESPONDENCE','Author email is present without a supported correspondence link.',a,id);
    if(Object.entries(a.attributes).some(([k,v])=>/corresp/i.test(k)||(/role|type|class/i.test(k)&&/corresp/i.test(v)))&&!record.correspondence.length)issue('CORRESPONDENCE','Corresponding-author marker lacks a supported correspondence link.',a,id);
-   for(const name of ['ce:given-name','ce:surname']){
+   for(const name of ['ce:given-name','ce:surname','ce:indexed-name']){
     const wrappers=(children.get(a)||[]).filter(n=>['opt_ins','opt_del'].includes(opt(n))&&(children.get(n)||[]).some(c=>c.name===name));
     if(!wrappers.length)continue;
     const oldNodes=wrappers.filter(n=>opt(n)==='opt_del').flatMap(n=>(children.get(n)||[]).filter(c=>c.name===name));
@@ -143,8 +143,8 @@ export function evaluateAuthorGroup(xml:string,instructions=''):AuthorGroupEvalu
     correction(`${id}:${name}:${old}:${next}`,{authorId:id||null,before:old||null,after:next||null,alreadyPresent:verified,evidence:wrappers.map(ev)});
     if(!verified)issue('HISTORY','Whole name-field OPT replacement lacks an unambiguous before/after pair.',wrappers[0],id);
    }
-   for(const n of [...given,...surnames]){
-    const relevant=nodes.filter(c=>c.start>=n.openEnd&&c.end<=n.closeStart&&['opt_ins','opt_del'].includes(opt(c)));
+   for(const n of [...given,...surnames,...indexed]){
+    const relevant=nodes.filter(c=>c.start>=n.openEnd&&c.end<=n.closeStart&&!commented.has(c)&&['opt_ins','opt_del'].includes(opt(c)));
     if(!relevant.length)continue;
     const old=norm(text(n,true)),current=norm(text(n));const hasIns=relevant.some(c=>opt(c)==='opt_ins'),hasDel=relevant.some(c=>opt(c)==='opt_del');
     const verified=!!id&&idOwners.get(id)?.length===1&&hasIns&&hasDel&&relevant.length===2&&!!old&&!!current&&old!==current&&!relevant.some(c=>ancestor(c,'opt_INS')||ancestor(c,'opt_DEL')||ancestor(c,'opt_ins')||ancestor(c,'opt_del'));
@@ -154,7 +154,12 @@ export function evaluateAuthorGroup(xml:string,instructions=''):AuthorGroupEvalu
    if((children.get(a)||[]).some(n=>['opt_ins','opt_del'].includes(opt(n))&&(children.get(n)||[]).some(c=>c.name==='ce:author')))issue('HISTORY','Unsupported nested author replacement.',a,id,'INCOMPLETE');
   }
   // Structural author additions/removals/order edits cannot be treated as ordinary name substitutions.
-  for(const n of nodes)if(['opt_ins','opt_del'].includes(opt(n))&&groups.some(g=>n.start>=g.openEnd&&n.end<=g.closeStart)&&(children.get(n)||[]).some(c=>c.name==='ce:author'))issue('HISTORY','Whole-author addition/removal requires independently bound order and identity evidence.',n,null,'INCOMPLETE');
+  const structuralAuthorEdits=new Set<Node>();
+  for(const n of nodes)if(n.name==='ce:author'&&!commented.has(n)){
+   let group=nearestGroup(n);while(group&&!groups.includes(group))group=nearestGroup(group);if(!group)continue;
+   for(let p=parents.get(n);p&&p!==group;p=parents.get(p))if(['opt_ins','opt_del'].includes(opt(p)))structuralAuthorEdits.add(p);
+  }
+  for(const n of structuralAuthorEdits)issue('HISTORY','Whole-author addition/removal requires independently bound order and identity evidence.',n,null,'INCOMPLETE');
   // Separate CRediT name references: bold Name: segments and structured ce:author names.
   const creditSections=nodes.filter(n=>n.name==='ce:section'&&active(n)&&(children.get(n)||[]).some(c=>c.name==='ce:section-title'&&/CRediT|authorship contribution/i.test(text(c))));
   for(const section of creditSections){

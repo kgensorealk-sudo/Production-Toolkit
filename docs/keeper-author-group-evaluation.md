@@ -43,7 +43,7 @@ Checks include:
 
 ## Correction semantics
 
-An independently verified visible substitution requires exactly one insertion and one deletion in a current given-name or surname field (or one unambiguous whole-field insertion/deletion pair), with nonempty different normalized before/after values and no nested conflicting OPT pair. It verifies only that change as represented in supplied XML; it does not prove who performed it, when, or that the supplied history is exhaustive. One-sided/multiple competing pairs and whole-author additions/removals require review; whole-author identity/order changes are not automatically reconstructed.
+An independently verified visible substitution requires exactly one insertion and one deletion in a current given-name, surname or indexed-name field (or one unambiguous whole-field insertion/deletion pair), with nonempty different normalized before/after values and no nested conflicting OPT pair. It verifies only that change as represented in supplied XML; it does not prove who performed it, when, or that the supplied history is exhaustive. One-sided/multiple competing pairs and whole-author additions/removals require review; whole-author identity/order changes are not automatically reconstructed.
 
 Explicit instruction format:
 
@@ -86,3 +86,9 @@ CEJ_183175 acceptance requires exact SHA-256 `37c11c828d66d30126638ee6be6b20039d
 Portable evaluator tests cover synthetic corrections, pending/ambiguous instructions, reference and email ownership, indexed-name/CRediT mismatches, deleted authors, malformed/unsupported XML, entities, Unicode, resource limits and evidence spans. Dashboard tests combine actual worker-handler hashing/evaluation with DOM lifecycle scenarios using a controlled Worker double; they do not by themselves prove browser worker bundling. Real-browser evidence must exercise the actual Vite-bundled worker and upload flow separately. UI evidence may use an isolated render of the actual component to avoid signed-in application/storage activity; such evidence is not represented as authentication or full Toolkit navigation acceptance.
 
 No test result establishes external publisher validation, authorization, correction execution, production readiness or owner ratification. Local evidence logs, screenshots, exact hashes and diff are delivered separately for independent review.
+
+## OPT evaluation bug corrections
+
+Author-name OPT accounting also covers `ce:indexed-name`, including whole-field replacements. One-sided or competing edits require review; current indexed-name consistency is checked separately. These observations never mean Keeper applied an edit.
+
+Whole-author insertions/deletions require review even when intervening elements wrap the author. Such unsupported structures are not accepted as structurally valid merely because current names can be extracted. Markup contained in `opt_comment` is excluded from active edit accounting; relevant author-correction instruction text in those comments still undergoes the existing fail-closed instruction checks. Affiliation and other non-name OPT changes are not comprehensive correction-history coverage.
