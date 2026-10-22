@@ -87,7 +87,7 @@ export default function KeeperArticleWorkspace(props: Props) {
     <aside className="kw-sidebar" aria-label="Article tasks">
       <div className="kw-brand">Keeper <Sparkles size={23} aria-hidden="true"/></div>
       <p className="kw-sidebar-sub">Article review workspace</p>
-      <button type="button" className="kw-new" onClick={props.onStandalone} disabled={props.busy}><Plus size={16}/>Standalone workspace</button>
+      {props.activeTask !== 'scratch' && <button type="button" className="kw-new" onClick={props.onStandalone} disabled={props.busy}><Plus size={16}/>Open default workspace</button>}
       <button type="button" className="kw-mobile-toggle" aria-expanded={mobileTasksOpen} aria-controls="kw-sidebar-tools" onClick={()=>setMobileTasksOpen(!mobileTasksOpen)}>Tasks &amp; settings</button>
       <div id="kw-sidebar-tools" className={`kw-sidebar-tools${mobileTasksOpen?' kw-mobile-expanded':''}`}>{props.sidebar}
       <div className="kw-sidebar-bottom"><p><ShieldCheck size={16} aria-hidden="true"/> Files saved on this device</p>{props.settings}</div></div>

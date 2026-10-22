@@ -42,6 +42,16 @@ try{
   assert.ok(document.querySelector('[aria-label="Finding evidence"]').textContent.includes('No matched author response.'));
   assert.equal(workers.length,0,'No automatic author check or AI request on mount');
  });
+ await test('default workspace action is contextual, disabled while busy, and switches on click',async()=>{
+  assert.equal(button('Open default workspace'),undefined);
+  const original=props;let opens=0;
+  props={...props,activeTask:'saved-zip-task',busy:true,onStandalone:()=>{opens++;props={...props,activeTask:'scratch'};}};
+  await render();assert.ok(button('Open default workspace').disabled);
+  await click(button('Open default workspace'));assert.equal(opens,0);
+  props={...props,busy:false};await render();await click(button('Open default workspace'));
+  assert.equal(opens,1);await render();assert.equal(button('Open default workspace'),undefined);
+  props=original;await render();
+ });
  await test('domain filters select actual evidence and escape XML quotes',async()=>{
   await click(button('OPT markup · 1'));assert.equal(document.querySelectorAll('.kw-finding').length,1);
   assert.ok(document.querySelector('.kw-inspector').textContent.includes('<img onerror="alert(1)" />'));assert.equal(document.querySelector('.kw-inspector img'),null);

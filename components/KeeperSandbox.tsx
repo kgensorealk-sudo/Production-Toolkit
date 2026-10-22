@@ -357,7 +357,7 @@ export const KeeperSandbox: React.FC<KeeperSandboxProps> = ({ promptRequest }) =
             if(generation!==ownerGeneration.current)return;
             workspaceWriter.current=new KeeperWorkspaceWriter(account,task,saved?._revision||0);
             applyWorkspace(saved,artifacts);setActiveTask(task);setEvidenceReport(null);setSaveError('');
-            setFileNotice('Selected local ZIP task. Saved instructions and conversation restored.');return true;
+            setFileNotice(task==='scratch'?'Default workspace opened. Saved instructions and conversation restored.':'Selected local ZIP task. Saved instructions and conversation restored.');return true;
         }catch(error){if(generation===ownerGeneration.current)setSaveError(error instanceof Error?error.message:'Task could not be restored.');}
         finally{if(generation===ownerGeneration.current)setSwitchingTask(false);}
     };

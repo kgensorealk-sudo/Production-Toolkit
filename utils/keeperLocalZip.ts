@@ -17,17 +17,17 @@ export async function unpackKeeperZip(blob:Blob){
     }
     const files=entries.filter(e=>!e.directory);
     const basename=(s:string)=>s.replace(/\\/g,'/').split('/').pop()!.toLowerCase();
-    const xmls=files.filter(e=>/^[a-z][a-z0-9]*_\d+\.xml$/i.test(basename(e.filename)));
+    const articleStem=(name:string)=>basename(name).match(/^([a-z][a-z0-9]*_\d+)(?:_out)?\.xml$/i)?.[1]||null;
+    const xmls=files.filter(e=>articleStem(e.filename)!==null);
     const reports=files.filter(e=>/_edit_report\.pdf$/i.test(e.filename));
     const orders=files.filter(e=>/\.order$/i.test(e.filename));
     const issues:string[]=[];
     if(xmls.length!==1)issues.push(xmls.length?'Multiple article XML candidates; attach the intended XML manually.':'Missing production article XML; attach it manually.');
     const xml=xmls.length===1?xmls[0]:undefined;
-    const stem=xml?basename(xml.filename).slice(0,-4):null;
+    const stem=xml?articleStem(xml.filename):null;
     const pdfs=stem?reports.filter(e=>basename(e.filename)===stem+'_edit_report.pdf'):[];
     const matchingOrders=stem?orders.filter(e=>basename(e.filename)===stem+'.order'):[];
-    if(pdfs.length!==1)issues.push('Missing or ambiguous matching edit-report PDF.');
-    if(matchingOrders.length!==1)issues.push('Missing or ambiguous matching ORDER file.');
+    if(stem&&pdfs.length!==1)issues.push(pdfs.length?'Multiple matching edit-report PDFs; attach the intended PDF manually.':'No matching edit-report PDF; attach it for author-response review.');
     const artifacts:KeeperArtifact[]=[];
     let actual=0;
     for(const entry of [xml,pdfs.length===1?pdfs[0]:undefined].filter(e=>e!==undefined)){
