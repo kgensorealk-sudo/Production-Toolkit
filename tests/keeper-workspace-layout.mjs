@@ -4,7 +4,8 @@ import {createRoot} from 'react-dom/client';
 import {JSDOM} from 'jsdom';
 import Workspace from '../components/KeeperArticleWorkspace.tsx';
 import {processAuthorGroupRequest} from '../utils/keeperAuthorGroupEvaluation.worker.ts';
-import {keeperWorkspaceFindings} from '../utils/keeperWorkspaceFindings.ts';
+import {keeperWorkspaceAuthors,keeperWorkspaceFindings} from '../utils/keeperWorkspaceFindings.ts';
+import {evaluateAuthorGroup} from '../utils/keeperAuthorGroupEvaluation.ts';
 
 const dom=new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>',{url:'https://workspace.test'});
 const saved=new Map();
@@ -101,6 +102,41 @@ try{
   await click(button('Next findings'));assert.equal(document.querySelectorAll('.kw-finding').length,20);assert.ok(document.querySelector('.kw-quote').textContent.includes('Question 21'));
   await click(button('Next findings'));assert.equal(document.querySelectorAll('.kw-finding').length,5);assert.ok(button('Next findings').disabled);
   await click(button('Export report'));assert.equal(JSON.parse(await exported.text()).findings.length,45);
+ });
+ await test('passing authors remain visible with green no-action status, selectable evidence, and zero issues',async()=>{
+  const content='<article><head><ce:author-group><ce:author id="a1" author-id="p1"><ce:given-name>Jane</ce:given-name><ce:surname>Smith</ce:surname><ce:cross-ref refid="af1"/></ce:author><ce:author id="a2" author-id="p2"><ce:given-name>Alex</ce:given-name><ce:surname>Jones</ce:surname><ce:cross-ref refid="af1"/></ce:author><ce:affiliation id="af1"><ce:textfn>Institute</ce:textfn></ce:affiliation></ce:author-group></head></article>';
+  props={...props,artifacts:[{...xml,id:'clean-authors',content}],instructions:'',evidence:null,inspectionStatus:'ready'};
+  await render();await click(button('Run local checks'));const w=workers.at(-1);
+  await act(async()=>w.onmessage({data:await processAuthorGroupRequest(w.request)}));
+  assert.ok(button('All · 0'));await click(button('Author group · 2 authors'));
+  const rows=[...document.querySelectorAll('.kw-author-row')];assert.equal(rows.length,2);
+  assert.deepEqual(rows.map(row=>row.querySelector('strong').textContent),['Jane Smith','Alex Jones']);
+  assert.equal(document.querySelectorAll('.kw-author-row .kw-author-clear').length,2);
+  assert.ok(rows.every(row=>row.textContent.includes('Author action: None.')));
+  await click(rows[1]);assert.ok(document.querySelector('.kw-quote').textContent.includes('Alex'));
+  await click(button('Export report'));const report=JSON.parse(await exported.text());
+  assert.equal(report.findings.length,0);assert.equal(report.authorGroup.authors.length,2);
+  props={...props,instructions:'Changed instructions'};await render();assert.equal(document.querySelectorAll('.kw-author-row').length,0);
+ });
+ await test('author status marks affected identities, unresolved group issues and incomplete checks for attention',async()=>{
+  const content='<article><head><ce:author-group><ce:author id="a1" author-id="p1"><ce:given-name>Jane</ce:given-name><ce:surname>Smith</ce:surname><ce:cross-ref refid="af1"/></ce:author><ce:author id="a2" author-id="p2"><ce:given-name>Alex</ce:given-name><ce:surname>Jones</ce:surname><ce:cross-ref refid="af1"/></ce:author><ce:affiliation id="af1"><ce:textfn>Institute</ce:textfn></ce:affiliation></ce:author-group></head></article>';
+  const result=evaluateAuthorGroup(content.replace('<ce:surname>Jones</ce:surname>',''));
+  assert.deepEqual(keeperWorkspaceAuthors(result).map(row=>row.needsAttention),[false,true]);
+  const incomplete={...result,countsComplete:false};assert.ok(keeperWorkspaceAuthors(incomplete).every(row=>row.needsAttention));
+  const group={...result,findings:[{code:'HISTORY',severity:'HOLD',message:'Unresolved author correction.',authorId:null,evidence:[]}]};
+  assert.ok(keeperWorkspaceAuthors(group).every(row=>row.needsAttention));
+  const duplicate=evaluateAuthorGroup(content.replace('id="a2"','id="a1"'));
+  assert.ok(keeperWorkspaceAuthors(duplicate).every(row=>row.needsAttention));
+  const duplicatePerson=evaluateAuthorGroup(content.replace('author-id="p2"','author-id="p1"'));
+  assert.ok(keeperWorkspaceAuthors(duplicatePerson).every(row=>row.needsAttention));
+  const duplicateName=evaluateAuthorGroup(content.replace('>Alex<','>Jane<').replace('>Jones<','>Smith<'));
+  assert.ok(keeperWorkspaceAuthors(duplicateName).every(row=>row.needsAttention));
+  props={...props,artifacts:[{...xml,id:'author-attention',content:content.replace('<ce:surname>Jones</ce:surname>','')}],instructions:'',evidence:null};
+  await render();await click(button('Run local checks'));const w=workers.at(-1);
+  await act(async()=>w.onmessage({data:await processAuthorGroupRequest(w.request)}));
+  assert.equal(document.querySelectorAll('.kw-author-row .kw-author-attention').length,1);
+  assert.equal(document.querySelectorAll('.kw-author-row .kw-author-clear').length,1);
+  assert.ok(document.querySelector('.kw-author-row .kw-author-attention').closest('button').textContent.includes('Author action: Review required.'));
  });
  await test('projection contains only diagnosed records or unmatched queries and flags source limitations',()=>{
   assert.equal(keeperWorkspaceFindings(null,evidence).length,2);

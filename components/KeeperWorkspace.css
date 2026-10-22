@@ -75,6 +75,11 @@
 .kw-finding>strong{font-size:13px;display:block;font-weight:650;text-transform:capitalize}
 .kw-finding>p{font-size:12px;line-height:1.7;color:#526b64;margin:5px 0 8px}
 .kw-finding-source{font-size:10px;color:#516b60}
+.kw-authors{margin-bottom:20px}
+.kw-author-list{list-style:none;padding:0;margin:12px 0 0;display:grid;gap:10px;max-height:480px;overflow-y:auto}
+.kw-author-status.kw-author-clear{background:#e6f4e9;color:#1b6034;border:1px solid #95c5a2}
+.kw-author-status.kw-author-attention{background:#fde9e7;color:#982a25;border:1px solid #e3a19b}
+.kw-author-row>strong.kw-author-name{text-transform:none}
 .kw-coverage{font-size:11px;color:#5b6d63;border-top:1px solid #e5e9df;margin-top:18px;padding-top:12px;line-height:1.7}
 .kw-inspector{padding:21px;position:sticky;top:18px}
 .kw-inspector>header{display:flex;align-items:center;justify-content:space-between;gap:9px;margin-bottom:18px}

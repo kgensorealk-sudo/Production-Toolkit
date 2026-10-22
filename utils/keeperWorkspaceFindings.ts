@@ -1,4 +1,4 @@
-import type {AuthorGroupEvaluation} from './keeperAuthorGroupEvaluation';
+import type {AuthorGroupEvaluation, EvaluatedAuthor, EvaluationFinding} from './keeperAuthorGroupEvaluation';
 import type {KeeperEvidence} from './keeperEvidenceCore';
 
 export interface WorkspaceFinding {
@@ -12,6 +12,32 @@ export interface WorkspaceFinding {
   quotes: {location: string; text: string}[];
   sha256?: string;
   response?: string;
+}
+
+/** Author inventory is separate from findings so passing authors never inflate issue counts. */
+export function keeperWorkspaceAuthors(result: AuthorGroupEvaluation | null) {
+  if (!result) return [];
+  const applies = (finding: EvaluationFinding, author: EvaluatedAuthor) => finding.authorId
+    ? finding.authorId === author.id || (finding.code === 'IDENTITY' && result.authors.some(other => other.id === finding.authorId && (
+      Boolean(author.authorId && author.authorId === other.authorId) || Boolean(author.name && author.name === other.name)
+    )))
+    : finding.evidence.some(item => item.source === 'xml' && item.start < author.evidence.end && item.end > author.evidence.start);
+  const groupIssues = result.findings.filter(finding => !result.authors.some(author => applies(finding, author)));
+  return result.authors.map(author => {
+    const issues = result.findings.filter(finding => groupIssues.includes(finding) || applies(finding, author));
+    const incomplete = !result.countsComplete || result.AUTHOR_GROUP_INTEGRITY === 'INCOMPLETE';
+    const needsAttention = incomplete || issues.length > 0;
+    const status = needsAttention ? 'Needs attention' : 'No action needed';
+    const detail = issues.length ? issues.map(finding => finding.message).join(' ')
+      : incomplete ? 'Checks are incomplete; review this author before proceeding.' : 'No issues found in the supported author-group checks.';
+    const finding: WorkspaceFinding = {
+      id: `author-inventory:${author.order}`, domain: 'author', title: author.name || `Author ${author.order} · name unavailable`,
+      detail: `Author action: ${needsAttention ? 'Review required' : 'None'}. ${detail}`, severity: status,
+      sourceName: result.sourceName, location: `Author ${author.order} · line ${author.evidence.line}`, sha256: result.sourceSha256,
+      quotes: [{location: `XML · line ${author.evidence.line}, column ${author.evidence.column}${author.evidence.truncated ? ' · shortened excerpt' : ''}`, text: author.evidence.quote}],
+    };
+    return {finding, needsAttention, status};
+  });
 }
 
 /** Present only observed diagnostics and unmatched queries; never invent editorial results. */
