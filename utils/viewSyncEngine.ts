@@ -30,6 +30,19 @@ function structure(xml: string) {
 }
 export function inspectViews(xml: string) {
     const parsed = structure(xml);
+    // SV0159 counts every real element, including view-specific sections that
+    // are deliberately outside the paragraph synchronization scope.
+    const viewCounts = {extended: 0, 'compact-standard': 0, compact: 0};
+    for (const node of parsed.nodes) {
+        const view = node.attributes.view;
+        if (Object.prototype.hasOwnProperty.call(viewCounts, view)) viewCounts[view as keyof typeof viewCounts]++;
+    }
+    const compactCount = viewCounts['compact-standard'] + viewCounts.compact;
+    const compactLabel = viewCounts.compact ? 'compact-standard" and view="compact' : 'compact-standard';
+    const countMismatch: ViewNotice | undefined = viewCounts.extended !== compactCount ? {
+        paraId: 'SV0159',
+        message: `[SV0159] Elements with view="extended" and view="${compactLabel}" total count differs ${viewCounts.extended}:${compactCount}. Review unpaired views and view-specific structures.`
+    } : undefined;
     const protectedView = (node:Node) => {
         let ancestor=parsed.parents.get(node);
         let sectionView=false;
@@ -53,7 +66,7 @@ export function inspectViews(xml: string) {
             else notices.push({paraId: run.map(n=>n.attributes.id || '(missing ID)').join(', '),message:'Ambiguous consecutive views: select and arrange the actual counterpart paragraphs before synchronizing.'});
         }
     }
-    return {...parsed, pairs, orphans, notices};
+    return {...parsed, pairs, orphans, notices, viewCounts, countMismatch};
 }
 function descendants(parsed: ReturnType<typeof structure>, node: Node) {
     return parsed.nodes.filter(n => n.start >= node.openEnd && n.end <= node.closeStart);

@@ -143,5 +143,25 @@ for(const direction of ['compact-to-extended','extended-to-compact']) {
   const r=sync(x,{direction});assert.equal(r.output,x);assert.equal(r.applied.length,0);assert.ok(r.notices.some(n=>n.message.includes('Paragraph attributes differ')));
  });
 }
+test('SV0159 counts paragraphs and protected sections across the document',()=>{
+ const x=Array.from({length:16},(_,i)=>para('p'+i,'extended','Text.')).join('')+
+  Array.from({length:13},(_,i)=>para('c'+i,'compact-standard','Text.')).join('')+
+  '<ce:appendices><ce:section id="s1" view="extended"/><ce:section id="s2" view="compact-standard"/></ce:appendices>';
+ const audit=engine.inspectViews(x);
+ assert.deepEqual(audit.viewCounts,{extended:17,'compact-standard':14,compact:0});
+ assert.ok(audit.countMismatch.message.includes('[SV0159]'));
+ assert.ok(audit.countMismatch.message.includes('17:14'));
+ const c=component(x);c.scanForMismatches();c.queue[0]();
+ assert.ok(c.state.Logs.some(log=>log.paraId==='SV0159' && log.message.includes('17:14')));
+ assert.equal(c.state.ActiveTab,'report');assert.equal(c.state.Toast.type,'warn');
+ const s=component(x);s.processSync();s.queue[0]();
+ assert.ok(s.state.Logs.some(log=>log.paraId==='SV0159'));
+});
+test('SV0159 ignores comments and CDATA and accepts compact alias',()=>{
+ const x='<article>'+para('p1','extended','Text.')+para('p2','compact','Text.')+
+  '<!-- <ce:section view="extended"/> --><![CDATA[<ce:section view="extended"/>]]></article>';
+ assert.equal(engine.inspectViews(x).countMismatch,undefined);
+ assert.ok(engine.inspectViews('<ce:section view="compact-standard"/>').countMismatch.message.includes('0:1'));
+});
 console.log(`${count} View Synchronizer safety cases passed.`);
 export {engine,scanner,compile};

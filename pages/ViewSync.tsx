@@ -268,13 +268,14 @@ const ViewSync: React.FC = () => {
             if(operation!==operationRef.current)return;
             try {
                 const result=viewDifferences(input);
+                if(result.audit.countMismatch)result.audit.notices.unshift(result.audit.countMismatch);
                 scanSnapshotRef.current=input;
                 setMismatches(result.mismatches);
                 setSelectedMismatches(new Set(result.mismatches.map(m=>m.index)));
                 setOrphans(result.audit.orphans.map(n=>({type:n.attributes.view==='extended'?'extended':'compact',id:n.attributes.id || '(missing ID)',text:result.audit.textContent(n)})));
                 setLogs(result.audit.notices.map((n,i)=>({id:i+1,paraId:n.paraId,status:'warning',message:n.message,detectedRefs:[]})));
                 setActiveTab(result.audit.notices.length?'report':result.audit.orphans.length?'orphans':'mismatches');
-                setToast({msg:`${result.mismatches.length} content or link differences; ${result.audit.orphans.length} unpaired views; ${result.audit.notices.length} ambiguous groups.`,type:result.mismatches.length||result.audit.orphans.length||result.audit.notices.length?'warn':'success'});
+                setToast({msg:`${result.mismatches.length} content or link differences; ${result.audit.orphans.length} unpaired views; ${result.audit.notices.length} review warnings.`,type:result.mismatches.length||result.audit.orphans.length||result.audit.notices.length?'warn':'success'});
             } catch(error){reportError(error);} finally{setIsLoading(false);}
         },500);
     };
@@ -291,6 +292,8 @@ const ViewSync: React.FC = () => {
             if(operation!==operationRef.current)return;
             try {
                 const result=synchronizeViews(input,syncDirection,customStartId,specificIndices);
+                const countMismatch=inspectViews(result.output).countMismatch;
+                if(countMismatch)result.notices.unshift(countMismatch);
                 const newLogs:SyncLog[]=result.notices.map((n,i)=>({id:i+1,paraId:n.paraId,status:'warning',message:n.message,detectedRefs:[]}));
                 const modifications:RefModification[]=[];
                 for(const change of result.applied){
@@ -339,6 +342,8 @@ const ViewSync: React.FC = () => {
             if(operation!==operationRef.current)return;
             try{
                 const result=repairViewOrphans(input,customStartId);
+                const countMismatch=inspectViews(result.output).countMismatch;
+                if(countMismatch)result.notices.unshift(countMismatch);
                 setOutput(result.output);setLastProcessedInput(input);generateDiff(input,result.output);
                 setLogs([{id:1,paraId:'ORPHAN REVIEW',status:result.notices.length?'warning':'success',message:`Created ${result.created} verified counterparts.`,detectedRefs:[]},...result.notices.map((n,i)=>({id:i+2,paraId:n.paraId,status:'warning' as const,message:n.message,detectedRefs:[]}))]);
                 setSuggestions([]);
