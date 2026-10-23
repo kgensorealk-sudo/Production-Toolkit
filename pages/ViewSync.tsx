@@ -93,24 +93,29 @@ const ViewSync: React.FC = () => {
 
     const escapeHtml = (unsafe: string) => unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-    const buildLines = (diffParts: Change[], isLeft: boolean) => {
+    const buildLines = (diffParts: Change[], isLeft: boolean, viewAt: (offset:number)=>string|undefined, startOffset: number) => {
         let lines: string[] = [];
         let currentLine = "";
         let activeClass: string | null = null;
+        let offset = startOffset;
 
         const append = (text: string, cls: string | null) => {
             if (!text) return;
+            const viewBaseClass = cls?.replace(/text-(?:rose|emerald)-900/g, '').trim();
             for (let i = 0; i < text.length; i++) {
                 const char = text[i];
+                const view = viewAt(offset++);
+                const viewClass = view === 'extended' ? 'text-purple-700' : view === 'compact' || view === 'compact-standard' ? 'text-green-700' : '';
+                const charClass = viewClass ? [viewBaseClass,viewClass].filter(Boolean).join(' ') : cls;
                 if (char === '\n') {
                     if (activeClass) currentLine += '</span>';
                     lines.push(currentLine);
                     currentLine = "";
-                    if (activeClass) currentLine += `<span class="${activeClass}">`;
+                    activeClass = null;
                 } else {
-                    if (cls !== activeClass) {
+                    if (charClass !== activeClass) {
                         if (activeClass) currentLine += '</span>';
-                        activeClass = cls;
+                        activeClass = charClass;
                         if (activeClass) currentLine += `<span class="${activeClass}">`;
                     }
                     currentLine += escapeHtml(char);
@@ -130,6 +135,20 @@ const ViewSync: React.FC = () => {
     };
 
     const generateDiff = (original: string, modified: string) => {
+        // Read real XML nodes so comments and escaped tag-like text never set a
+        // view color. Each side tracks its own offsets through inserted/deleted XML.
+        const viewReader = (xml: string) => {
+            const nodes=scanReferenceXml(xml).nodes.filter(n=>['extended','compact','compact-standard'].includes(n.attributes.view));
+            const stack:typeof nodes=[];
+            let index=0;
+            return (offset:number) => {
+                while(index<nodes.length && nodes[index].start<=offset)stack.push(nodes[index++]);
+                while(stack.length && stack[stack.length-1].end<=offset)stack.pop();
+                return stack[stack.length-1]?.attributes.view;
+            };
+        };
+        const leftView=viewReader(original),rightView=viewReader(modified);
+        let leftOffset=0,rightOffset=0;
         const diff = diffLines(original, modified);
         let rows: any[] = [];
         let leftLineNum = 1;
@@ -165,18 +184,20 @@ const ViewSync: React.FC = () => {
 
             if (type === 'replace') {
                 const wordDiff = diffWordsWithSpace(leftVal, rightVal);
-                leftLines = buildLines(wordDiff, true);
-                rightLines = buildLines(wordDiff, false);
+                leftLines = buildLines(wordDiff, true, leftView, leftOffset);
+                rightLines = buildLines(wordDiff, false, rightView, rightOffset);
             } else if (type === 'delete') {
-                leftLines = buildLines([{removed: true, value: leftVal} as Change], true);
+                leftLines = buildLines([{removed: true, value: leftVal} as Change], true, leftView, leftOffset);
             } else if (type === 'insert') {
-                rightLines = buildLines([{added: true, value: rightVal} as Change], false);
+                rightLines = buildLines([{added: true, value: rightVal} as Change], false, rightView, rightOffset);
             } else {
-                 const lines = leftVal.split('\n');
-                 if (lines.length > 0 && lines[lines.length-1] === '') lines.pop(); 
-                 leftLines = lines.map(escapeHtml);
-                 rightLines = [...leftLines];
+                 leftLines = buildLines([{value:leftVal} as Change], true, leftView, leftOffset);
+                 rightLines = buildLines([{value:rightVal} as Change], false, rightView, rightOffset);
+                 if(leftVal.endsWith('\n'))leftLines.pop();
+                 if(rightVal.endsWith('\n'))rightLines.pop();
             }
+            leftOffset+=leftVal.length;
+            rightOffset+=rightVal.length;
 
             const maxRows = Math.max(leftLines.length, rightLines.length);
             const isChange = type !== 'equal';
@@ -600,6 +621,11 @@ const ViewSync: React.FC = () => {
                              <div className="absolute inset-0 overflow-hidden bg-white flex flex-col">
                                  {diffRows.length > 0 ? (
                                     <>
+                                        <div className="flex flex-wrap items-center gap-4 border-b border-slate-200 bg-white px-4 py-2 text-xs" aria-label="XML view color legend">
+                                            <span className="font-semibold text-purple-700"><span aria-hidden="true">● </span>Extended view</span>
+                                            <span className="font-semibold text-green-700"><span aria-hidden="true">● </span>Compact view</span>
+                                            <span className="text-slate-500">Background highlights show additions and deletions.</span>
+                                        </div>
                                         <div ref={diffContainerRef} className="flex-grow overflow-auto custom-scrollbar relative p-2">
                                             <div className="rounded-lg border border-slate-200 overflow-hidden">
                                                 <table className="w-full text-sm font-mono border-collapse table-fixed bg-white">
