@@ -163,5 +163,105 @@ test('SV0159 ignores comments and CDATA and accepts compact alias',()=>{
  assert.equal(engine.inspectViews(x).countMismatch,undefined);
  assert.ok(engine.inspectViews('<ce:section view="compact-standard"/>').countMismatch.message.includes('0:1'));
 });
+for(const direction of ['compact-to-extended','extended-to-compact']) {
+ for(const tag of ['ce:inter-refs','ce:intra-refs']) {
+  const attribute=tag==='ce:inter-refs'?'xlink:href':'refid';
+  const destination=tag==='ce:inter-refs'?'https://example.com':'p0100 p0105';
+  const linked=`<${tag} ${attribute}="${destination}">Resources</${tag}>`;
+  test('grouped destination cannot be removed '+tag+direction,()=>{
+   const x=direction==='compact-to-extended'?pair('New plain text',linked):pair(linked,'New plain text');
+   const r=sync(x,{direction});assert.equal(r.output,x);assert.equal(r.applied.length,0);
+   assert.ok(r.notices.some(n=>n.message.includes('destination')));
+  });
+  test('grouped destination change requires review '+tag+direction,()=>{
+   const x=pair(linked,linked.replace(destination,tag==='ce:inter-refs'?'https://example.org':'p0110 p0115'));
+   assert.equal(sync(x,{direction}).output,x);assert.ok(sync(x,{direction}).notices.length);
+  });
+  test('grouped destination retained during text synchronization '+tag+direction,()=>{
+   const x=pair('New '+linked,'Old '+linked),r=sync(x,{direction});
+   assert.equal(r.notices.length,0);assert.equal(r.applied.length,1);
+   assert.equal(engine.viewDifferences(r.output).mismatches.length,0);
+   const c=component(direction==='compact-to-extended'?pair(linked,'Old'):pair('Old',linked),{}, {syncDirection:direction});
+   c.processSync();c.queue[0]();assert.ok(c.state.Logs.some(l=>l.message.includes(destination)));
+  });
+ }
+ for(const ending of ['/>',' />'])test('self-closing citation gets a valid ID '+direction+ending,()=>{
+  const citation='<ce:cross-ref refid="bb0005"'+ending;
+  const x=direction==='compact-to-extended'?pair(citation,'Old'):pair('Old',citation);
+  const r=sync(x,{direction}),parsed=scanner.scanReferenceXml(r.output);
+  assert.equal(r.notices.length,0);assert.equal(r.applied.length,1);
+  const target=parsed.nodes.find(n=>n.attributes.view===(direction==='compact-to-extended'?'extended':'compact-standard'));
+  const copied=parsed.nodes.find(n=>n.name==='ce:cross-ref' && n.start>=target.openEnd && n.end<=target.closeStart);
+  assert.ok(copied.attributes.id);assert.equal(copied.attributes.refid,'bb0005');
+ });
+}
+test('self-closing citation can be cloned during orphan repair',()=>{
+ const r=engine.repairViewOrphans(para('p0005','compact-standard','<ce:cross-ref refid="bb0005"/>'));
+ assert.equal(r.created,1);assert.equal(r.notices.length,0);assert.doesNotThrow(()=>scanner.scanReferenceXml(r.output));
+});
+for(const view of ['extended','compact-standard'])test('nested orphan groups stay intact with a review notice '+view,()=>{
+ const x=para('p0005',view,'Text <ce:list><ce:list-item>'+para('p0010',view,'Nested')+'</ce:list-item></ce:list>');
+ const r=engine.repairViewOrphans(x);
+ assert.equal(r.output,x);assert.equal(r.created,0);assert.equal(r.notices.length,2);
+ assert.ok(r.notices.every(n=>n.message.includes('Nested paragraph views')));
+ // Independent safe orphans still receive their counterparts.
+ const safe='<ce:section>'+para('p0020',view,'Independent')+'</ce:section>';
+ const combined=engine.repairViewOrphans(x+safe);
+ assert.equal(combined.created,1);assert.ok(combined.output.startsWith(x));
+});
+test('nested pairs cannot produce overlapping synchronization edits',()=>{
+ const x=pair('New <ce:list><ce:list-item>'+para('p0020','compact-standard','Inner new')+para('p0025','extended','Inner old')+'</ce:list-item></ce:list>','Old');
+ const r=sync(x);assert.equal(r.output,x);assert.equal(r.applied.length,0);
+ assert.ok(r.notices.every(n=>n.message.includes('Nested paragraph views')));
+});
+for(const direction of ['compact-to-extended','extended-to-compact']) {
+ for(const tag of ['ce:intra-ref','ce:intra-refs']) {
+  for(const spacing of ['p0100  p0105',' p0100 p0105 ','p0100&#9;p0105'])test('equivalent link target whitespace permits synchronization '+direction+tag+spacing,()=>{
+   const x=pair(`New <${tag} refid="p0100 p0105">Sections</${tag}>`,
+    `Old <${tag} refid="${spacing}">Sections</${tag}>`);
+   const r=sync(x,{direction});assert.equal(r.notices.length,0);assert.equal(r.applied.length,1);
+   assert.equal(engine.viewDifferences(r.output).mismatches.length,0);
+   assert.equal(sync(r.output,{direction}).applied.length,0);
+  });
+  test('target order changes remain protected '+direction+tag,()=>{
+   const x=pair(`<${tag} refid="p0100 p0105">Sections</${tag}>`,
+    `<${tag} refid="p0105 p0100">Sections</${tag}>`);
+   const r=sync(x,{direction});assert.equal(r.output,x);assert.ok(r.notices.some(n=>n.message.includes('destination')));
+  });
+ }
+ test('fully synchronized nested views need no manual review '+direction,()=>{
+  const inner=(a,b)=>'<ce:list><ce:list-item>'+para(a,'compact-standard','Same')+para(b,'extended','Same')+'</ce:list-item></ce:list>';
+  const x=pair(inner('p0020','p0025'),inner('p0030','p0035'));
+  const r=sync(x,{direction});assert.equal(r.output,x);assert.equal(r.applied.length,0);assert.equal(r.notices.length,0);
+  assert.equal(engine.viewDifferences(x).mismatches.length,0);
+  // A no-op nested group must not prevent unrelated safe pairs from updating.
+  const separate='<ce:section>'+para('p0040','compact-standard','New')+para('p0045','extended','Old')+'</ce:section>';
+  const combined=sync(x+separate,{direction});assert.ok(combined.output.startsWith(x));
+  assert.equal(combined.applied.length,1);assert.equal(combined.notices.length,0);
+ });
+}
+for(const direction of ['compact-to-extended','extended-to-compact']) {
+ for(const tag of ['ce:intra-ref','ce:intra-refs','ce:cross-refs']) {
+  for(const spacing of ['&#9;','&#10;','&#13;','  '])test('local target whitespace retains IDs and stabilizes '+direction+tag+spacing,()=>{
+   const body=(anchor,root,id,sep)=>`<ce:anchor id="${anchor}"/><${tag} id="${id}" refid="${anchor}${sep}${root}${sep}p0100">Resources</${tag}>`;
+   const x=pair('New '+body('an0005','p0005','cf0005',' '),'Old '+body('an0010','p0010','cf0010',spacing))+
+    '<ce:intra-ref refid="cf0005 cf0010">External caller</ce:intra-ref>';
+   const r=sync(x,{direction}),parsed=scanner.scanReferenceXml(r.output);
+   assert.equal(r.notices.length,0);assert.equal(r.applied.length,1);
+   assert.ok(parsed.ids.has('cf0005'));assert.ok(parsed.ids.has('cf0010'));
+   const target=parsed.nodes.find(n=>n.attributes.id===(direction==='compact-to-extended'?'cf0010':'cf0005'));
+   const expected=direction==='compact-to-extended'?['an0010','p0010','p0100']:['an0005','p0005','p0100'];
+   assert.deepEqual(target.attributes.refid.trim().split(/\s+/),expected);
+   assert.equal(engine.viewDifferences(r.output).mismatches.length,0);
+   const repeated=sync(r.output,{direction});assert.equal(repeated.applied.length,0);assert.equal(repeated.output,r.output);
+  });
+ }
+ test('only target spacing differences are a no-op '+direction,()=>{
+  const x=pair('<ce:intra-refs refid="p0100 p0105">Same</ce:intra-refs>',
+   '<ce:intra-refs refid=" p0100&#9;p0105 ">Same</ce:intra-refs>');
+  assert.equal(engine.viewDifferences(x).mismatches.length,0);
+  const r=sync(x,{direction});assert.equal(r.output,x);assert.equal(r.applied.length,0);assert.equal(r.notices.length,0);
+ });
+}
 console.log(`${count} View Synchronizer safety cases passed.`);
 export {engine,scanner,compile};

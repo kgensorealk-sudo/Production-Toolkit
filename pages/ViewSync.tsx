@@ -299,7 +299,7 @@ const ViewSync: React.FC = () => {
                 for(const change of result.applied){
                     const before=scanReferenceXml('<ce:para>'+change.before+'</ce:para>');
                     const after=scanReferenceXml('<ce:para>'+change.after+'</ce:para>');
-                    const refs=(parsed:typeof before)=>parsed.nodes.filter(n=>['ce:cross-ref','ce:cross-refs','ce:inter-ref','ce:intra-ref','ce:float-anchor'].includes(n.name)).map(n=>({tagName:n.name,refid:n.attributes.refid || n.attributes['xlink:href'],text:parsed.textContent(n)}));
+                    const refs=(parsed:typeof before)=>parsed.nodes.filter(n=>['ce:cross-ref','ce:cross-refs','ce:inter-ref','ce:inter-refs','ce:intra-ref','ce:intra-refs','ce:float-anchor'].includes(n.name)).map(n=>({tagName:n.name,refid:n.attributes.refid || n.attributes['xlink:href'],text:parsed.textContent(n)}));
                     const oldRefs=refs(before),newRefs=refs(after);
                     newLogs.push({id:newLogs.length+1,paraId:change.paraId,status:'success',message:'Synchronized content with proven target ownership. Review the diff for removed or changed content.',detectedRefs:newRefs});
                     const remainingNew=[...newRefs];

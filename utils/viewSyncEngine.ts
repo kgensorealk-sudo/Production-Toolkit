@@ -5,9 +5,12 @@ type Node = ReferenceXmlNode;
 export interface ViewPair {compact: Node; extended: Node; index: number}
 export interface ViewNotice {paraId: string; message: string}
 const compact = new Set(['compact', 'compact-standard']);
+const destinationLinks = ['ce:inter-ref', 'ce:inter-refs', 'ce:intra-ref', 'ce:intra-refs', 'ce:float-anchor'];
+const linkKinds = ['ce:cross-ref', 'ce:cross-refs', ...destinationLinks];
 const isView = (n: Node) => ['ce:para', 'ce:simple-para'].includes(n.name) && (compact.has(n.attributes.view) || n.attributes.view === 'extended');
 const ruleMap = new Map(ID_RULES.map(r => [r.tag, r]));
-const escapeAttribute = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+const escapeAttribute = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;').replace(/\t/g, '&#9;').replace(/\n/g, '&#10;').replace(/\r/g, '&#13;');
+const canonicalRefids = (value: string, ids: Map<string,string>) => value.trim().split(/\s+/).filter(Boolean).map(id=>ids.get(id)||id).join(' ');
 type Edit = {start: number; end: number; value: string};
 function apply(xml: string, edits: Edit[]) {
     for (const e of [...edits].sort((a,b) => b.start - a.start)) xml = xml.slice(0,e.start) + e.value + xml.slice(e.end);
@@ -71,6 +74,12 @@ export function inspectViews(xml: string) {
 function descendants(parsed: ReturnType<typeof structure>, node: Node) {
     return parsed.nodes.filter(n => n.start >= node.openEnd && n.end <= node.closeStart);
 }
+function nestedViewScope(parsed: ReturnType<typeof structure>, node: Node) {
+    return parsed.nodes.some(other => other !== node && isView(other) && (
+        (other.start >= node.openEnd && other.end <= node.closeStart) ||
+        (node.start >= other.openEnd && node.end <= other.closeStart)
+    ));
+}
 function sensitive(parsed: ReturnType<typeof structure>, node: Node) {
     return descendants(parsed,node).some(n => ['ce:display','ce:e-component','e-component','ce:table','ce:figure'].includes(n.name));
 }
@@ -107,7 +116,7 @@ function projectedBody(xml:string,parsed:ReturnType<typeof structure>,source:Nod
             prototypes.set(label,n);
         }
         const body=xml.slice(source.openEnd,source.closeStart);
-        const protectedNodes=descendants(parsed,source).filter(n=>['ce:cross-ref','ce:cross-refs','ce:inter-ref','ce:intra-ref'].includes(n.name));
+        const protectedNodes=descendants(parsed,source).filter(n=>linkKinds.includes(n.name));
         const segments=[...body.matchAll(/<!\[CDATA\[[\s\S]*?\]\]>|<!--[\s\S]*?-->|<\?[\s\S]*?\?>|<(?:[^>"']|"[^"]*"|'[^']*')*>|([^<]+)/g)].filter(m=>m[1]);
         for(const [label,n] of prototypes) {
             let restored=0;
@@ -145,7 +154,7 @@ function localIds(parsed: ReturnType<typeof structure>, scope: Node) {
 }
 function canonical(parsed: ReturnType<typeof structure>, node: Node, ids=localIds(parsed,node),plainSupplementary=false): string {
     if(plainSupplementary && supplementary(node))return parsed.textContent(node);
-    const own = Object.entries(node.attributes).filter(([k])=>k!=='id' && k!=='view').map(([k,v])=>[k,k==='refid'?v.split(/(\s+)/).map(id=>ids.get(id)||id).join(''):k==='xlink:href'&&ids.has(fragment(v))?'#'+ids.get(fragment(v)):v]).sort(([a],[b])=>a.localeCompare(b));
+    const own = Object.entries(node.attributes).filter(([k])=>k!=='id' && k!=='view').map(([k,v])=>[k,k==='refid'?canonicalRefids(v,ids):k==='xlink:href'&&ids.has(fragment(v))?'#'+ids.get(fragment(v)):v]).sort(([a],[b])=>a.localeCompare(b));
     const childNodes = parsed.children.get(node) || [];
     let pos = node.openEnd, body = '';
     for (const child of childNodes) {
@@ -190,17 +199,16 @@ function allocator(parsed: ReturnType<typeof structure>, start: string) {
 }
 function cloneBody(xml: string, parsed: ReturnType<typeof structure>, source: Node, target: Node | undefined, allocate: (n:Node)=>string, rootId?:string) {
     const sourceNodes=descendants(parsed,source), targetNodes=target?descendants(parsed,target):[];
-    const linkKinds=['ce:cross-ref','ce:cross-refs','ce:inter-ref','ce:intra-ref','ce:float-anchor'];
     if(target){
         const available=new Map<string,number>();
         const sourceLocalIds=localIds(parsed,source),targetLocalIds=localIds(parsed,target);
         const identity=(n:Node,ids:Map<string,string>)=>{
             const href=n.attributes['xlink:href'] || '';
             return JSON.stringify([n.name,ids.has(fragment(href))?'#'+ids.get(fragment(href)):href,
-                (n.attributes.refid || '').split(/(\s+)/).map(id=>ids.get(id)||id).join('')]);
+                canonicalRefids(n.attributes.refid || '',ids)]);
         };
-        for(const n of sourceNodes.filter(n=>['ce:inter-ref','ce:intra-ref','ce:float-anchor'].includes(n.name))){const key=identity(n,sourceLocalIds);available.set(key,(available.get(key)||0)+1);}
-        for(const n of targetNodes.filter(n=>['ce:inter-ref','ce:intra-ref','ce:float-anchor'].includes(n.name))){
+        for(const n of sourceNodes.filter(n=>destinationLinks.includes(n.name))){const key=identity(n,sourceLocalIds);available.set(key,(available.get(key)||0)+1);}
+        for(const n of targetNodes.filter(n=>destinationLinks.includes(n.name))){
             const key=identity(n,targetLocalIds),count=available.get(key)||0;
             if(!count)throw new Error(`Target ${n.name} destination is absent from the source. Preserved the pair for link review.`);
             available.set(key,count-1);
@@ -224,7 +232,10 @@ function cloneBody(xml: string, parsed: ReturnType<typeof structure>, source: No
         if(n.attributes.id)map.set(n.attributes.id,id);
         const range=n.attributeRanges.id;
         if(range)edits.push({start:range.valueStart,end:range.valueEnd,value:escapeAttribute(id)});
-        else edits.push({start:n.openEnd-1,end:n.openEnd-1,value:` id="${id}"`});
+        else {
+            const position=n.openEnd-(xml[n.openEnd-2]==='/'?2:1);
+            edits.push({start:position,end:position,value:` id="${id}"`});
+        }
     }
     if(target) {
         const removed=new Set(targetNodes.filter(n=>n.attributes.id && !kept.has(n.attributes.id)).map(n=>n.attributes.id));
@@ -255,6 +266,7 @@ export function synchronizeViews(xml:string,direction:'compact-to-extended'|'ext
         const source=direction==='compact-to-extended'?pair.compact:pair.extended, target=direction==='compact-to-extended'?pair.extended:pair.compact;
         const paraId=target.attributes.id || '(missing ID)';
         if(canonical(audit,source,undefined,true)===canonical(audit,target,undefined,true) && !descendants(audit,pair.compact).some(supplementary) && !unlinkedSupplementary(xml,audit,pair.extended))continue;
+        if(nestedViewScope(audit,source)||nestedViewScope(audit,target)) {notices.push({paraId,message:'Nested paragraph views require manual review. Preserved their content to avoid overlapping synchronization.'});continue;}
         // Paragraph metadata may intentionally differ by view. Do not silently
         // leave a detected difference unresolved or overwrite its meaning.
         const metadata=(node:Node)=>JSON.stringify(Object.entries(node.attributes).filter(([key])=>key!=='id' && key!=='view').sort(([a],[b])=>a.localeCompare(b)));
@@ -286,6 +298,7 @@ export function repairViewOrphans(xml:string,start='') {
     let created=0;
     for(const orphan of audit.orphans) {
         const paraId=orphan.attributes.id || '(missing ID)';
+        if(nestedViewScope(audit,orphan)) {notices.push({paraId,message:'Nested paragraph views require manual review. Preserved the group before creating any counterparts.'});continue;}
         if(sensitive(audit,orphan)) {notices.push({paraId,message:'Supplementary/display view has no verified counterpart. Preserved it for manual review.'});continue;}
         try {
             if(orphan.openEnd===orphan.end) throw new Error('Empty self-closing view needs a content review before creating a counterpart.');
