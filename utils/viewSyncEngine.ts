@@ -63,9 +63,19 @@ export function inspectViews(xml: string) {
             if (!eligible(siblings[i])) continue;
             const run: Node[] = [siblings[i]];
             while (i+1<siblings.length && eligible(siblings[i+1]) && !xml.slice(siblings[i].end,siblings[i+1].start).replace(/<!--[\s\S]*?-->|<\?[\s\S]*?\?>/g,'').trim()) run.push(siblings[++i]);
-            if (run.length === 2 && run[0].name === run[1].name && compact.has(run[0].attributes.view) !== compact.has(run[1].attributes.view)) {
-                pairs.push({compact: compact.has(run[0].attributes.view) ? run[0] : run[1], extended: compact.has(run[0].attributes.view) ? run[1] : run[0], index: pairs.length});
-            } else if (run.length === 1) orphans.push(run[0]);
+            // Every paragraph in a one-sided run is missing its counterpart.
+            // Once repaired, an even run can contain several adjacent pairs.
+            // Require a complete disjoint pairing; mixed incomplete runs remain
+            // ambiguous rather than guessing which paragraph owns a counterpart.
+            const pairable = run.length % 2 === 0 && run.every((node,index) => index % 2 === 0 || (
+                node.name === run[index-1].name && compact.has(node.attributes.view) !== compact.has(run[index-1].attributes.view)
+            ));
+            if (pairable) {
+                for(let index=0;index<run.length;index+=2) {
+                    const [first,second]=[run[index],run[index+1]];
+                    pairs.push({compact:compact.has(first.attributes.view)?first:second,extended:compact.has(first.attributes.view)?second:first,index:pairs.length});
+                }
+            } else if (run.every(node=>compact.has(node.attributes.view)===compact.has(run[0].attributes.view))) orphans.push(...run);
             else notices.push({paraId: run.map(n=>n.attributes.id || '(missing ID)').join(', '),message:'Ambiguous consecutive views: select and arrange the actual counterpart paragraphs before synchronizing.'});
         }
     }

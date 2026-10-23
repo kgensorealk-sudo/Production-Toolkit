@@ -263,5 +263,42 @@ for(const direction of ['compact-to-extended','extended-to-compact']) {
   const r=sync(x,{direction});assert.equal(r.output,x);assert.equal(r.applied.length,0);assert.equal(r.notices.length,0);
  });
 }
+for(const view of ['extended','compact-standard','compact']) {
+ for(const size of [2,3,4])test('consecutive one-sided views each receive a counterpart '+view+size,()=>{
+  const x=Array.from({length:size},(_,i)=>para('p'+i,view,'Paragraph '+i+'.')).join('\n<!-- preserve separator -->\n');
+  const audit=engine.inspectViews(x);assert.equal(audit.orphans.length,size);assert.equal(audit.notices.length,0);
+  const repaired=engine.repairViewOrphans(x),after=engine.inspectViews(repaired.output);
+  assert.equal(repaired.created,size);assert.equal(repaired.notices.length,0);
+  assert.equal(after.pairs.length,size);assert.equal(after.orphans.length,0);assert.equal(after.notices.length,0);
+  assert.equal(after.countMismatch,undefined);
+  for(const pair of after.pairs)assert.equal(after.textContent(pair.compact),after.textContent(pair.extended));
+  assert.equal(engine.repairViewOrphans(repaired.output).created,0);
+  for(const direction of ['compact-to-extended','extended-to-compact']) {
+   const repeated=sync(repaired.output,{direction});assert.equal(repeated.output,repaired.output);assert.equal(repeated.notices.length,0);
+  }
+  assert.equal((repaired.output.match(/<!-- preserve separator -->/g)||[]).length,size-1);
+ });
+}
+for(const direction of ['compact-to-extended','extended-to-compact'])test('adjacent pairs synchronize independently and respect selection '+direction,()=>{
+ const x=pair('First new','First old')+para('p0015','extended','Second old')+para('p0020','compact-standard','Second new')+
+  para('p0025','compact-standard','Third new')+para('p0030','extended','Third old');
+ assert.equal(engine.inspectViews(x).pairs.length,3);
+ const result=sync(x,{direction,selection:new Set([1])});assert.equal(result.applied.length,1);assert.equal(result.notices.length,0);
+ assert.ok(result.output.startsWith(pair('First new','First old')));
+ assert.ok(result.output.endsWith(para('p0025','compact-standard','Third new')+para('p0030','extended','Third old')));
+ assert.equal(engine.viewDifferences(result.output).mismatches.length,2);
+ assert.equal(sync(x,{direction}).applied.length,3);
+});
+for(const views of [['extended','extended','compact-standard','compact-standard'],['compact-standard','extended','extended'],['extended','compact-standard','extended']])test('incomplete mixed runs remain ambiguous '+views.join(),()=>{
+ const x=views.map((view,i)=>para('p'+i,view,'Text '+i)).join('');
+ const a=engine.inspectViews(x);assert.equal(a.pairs.length,0);assert.equal(a.orphans.length,0);assert.equal(a.notices.length,1);
+ assert.equal(engine.repairViewOrphans(x).output,x);assert.equal(sync(x).output,x);
+});
+test('one-sided runs support paragraph types without pairing different types',()=>{
+ const x=para('p0005','extended','First')+'<ce:simple-para id="sp0005" view="extended">Second</ce:simple-para>';
+ const r=engine.repairViewOrphans(x);assert.equal(r.created,2);assert.equal(engine.inspectViews(r.output).pairs.length,2);
+ const wrong=para('p0005','extended','First')+'<ce:simple-para id="sp0005" view="compact-standard">Second</ce:simple-para>';
+ assert.equal(engine.inspectViews(wrong).pairs.length,0);assert.equal(engine.inspectViews(wrong).notices.length,1);
+});
 console.log(`${count} View Synchronizer safety cases passed.`);
 export {engine,scanner,compile};
