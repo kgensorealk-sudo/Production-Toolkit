@@ -300,5 +300,16 @@ test('one-sided runs support paragraph types without pairing different types',()
  const wrong=para('p0005','extended','First')+'<ce:simple-para id="sp0005" view="compact-standard">Second</ce:simple-para>';
  assert.equal(engine.inspectViews(wrong).pairs.length,0);assert.equal(engine.inspectViews(wrong).notices.length,1);
 });
+test('ambiguous run names the likely unpaired paragraph',()=>{
+ const x=para('p0050','extended','Four perspectives were combined in one model.')+para('p3000','compact-standard','Four perspectives were combined in one model.')+para('p0055','extended','Participants completed the survey in three sessions.');
+ const a=engine.inspectViews(x);assert.equal(a.pairs.length,0);assert.equal(a.orphans.length,0);assert.equal(a.notices.length,1);
+ assert.ok(a.notices[0].message.includes('p0055 (extended) has no matching compact view'));
+ assert.equal(sync(x).output,x);assert.equal(engine.repairViewOrphans(x).output,x);assert.equal(engine.repairViewOrphans(x).created,0);
+});
+test('ambiguous run hint names an unpaired compact view',()=>{
+ const x=para('p3000','compact-standard','Participants completed the survey in three sessions.')+para('p0050','extended','Four perspectives were combined in one model.')+para('p3010','compact-standard','Four perspectives were combined in one model.');
+ const a=engine.inspectViews(x);assert.equal(a.notices.length,1);
+ assert.ok(a.notices[0].message.includes('p3000 (compact) has no matching extended view'));
+});
 console.log(`${count} View Synchronizer safety cases passed.`);
 export {engine,scanner,compile};

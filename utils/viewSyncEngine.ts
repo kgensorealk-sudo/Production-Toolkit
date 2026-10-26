@@ -31,6 +31,30 @@ function structure(xml: string) {
     }
     return {...parsed, parents, children};
 }
+// Best-effort hint for an ambiguous run: which paragraphs have no opposite-view
+// neighbour with similar text. It only words the notice; it never changes how
+// views are paired, synchronized or repaired.
+const hintTokens = (s: string) => new Set(s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean));
+function hintSimilarity(a: string, b: string) {
+    const x = hintTokens(a), y = hintTokens(b);
+    if (!x.size && !y.size) return 1;
+    let common = 0;
+    for (const t of x) if (y.has(t)) common++;
+    return (2 * common) / (x.size + y.size);
+}
+function likelyUnpaired(run: Node[], text: (n: Node) => string) {
+    const n = run.length, best: number[] = new Array(n + 1).fill(0), paired: boolean[] = new Array(n + 1).fill(false);
+    for (let i = 2; i <= n; i++) {
+        best[i] = best[i - 1];
+        const a = run[i - 2], b = run[i - 1];
+        if (a.name !== b.name || compact.has(a.attributes.view) === compact.has(b.attributes.view)) continue;
+        const s = hintSimilarity(text(a), text(b));
+        if (s >= 0.3 && best[i - 2] + s > best[i]) { best[i] = best[i - 2] + s; paired[i] = true; }
+    }
+    const lonely: Node[] = [];
+    for (let i = n; i > 0;) { if (paired[i]) i -= 2; else { lonely.unshift(run[i - 1]); i--; } }
+    return lonely.map(node => `${node.attributes.id || '(missing ID)'} (${compact.has(node.attributes.view) ? 'compact' : 'extended'}) has no matching ${compact.has(node.attributes.view) ? 'extended' : 'compact'} view`);
+}
 export function inspectViews(xml: string) {
     const parsed = structure(xml);
     // SV0159 counts every real element, including view-specific sections that
@@ -76,7 +100,10 @@ export function inspectViews(xml: string) {
                     pairs.push({compact:compact.has(first.attributes.view)?first:second,extended:compact.has(first.attributes.view)?second:first,index:pairs.length});
                 }
             } else if (run.every(node=>compact.has(node.attributes.view)===compact.has(run[0].attributes.view))) orphans.push(...run);
-            else notices.push({paraId: run.map(n=>n.attributes.id || '(missing ID)').join(', '),message:'Ambiguous consecutive views: select and arrange the actual counterpart paragraphs before synchronizing.'});
+            else {
+                const hint = likelyUnpaired(run, n => parsed.textContent(n));
+                notices.push({paraId: run.map(n=>n.attributes.id || '(missing ID)').join(', '),message:'Ambiguous consecutive views: select and arrange the actual counterpart paragraphs before synchronizing.'+(hint.length?' Possibly unpaired (by text similarity): '+hint.join('; ')+'.':'')});
+            }
         }
     }
     return {...parsed, pairs, orphans, notices, viewCounts, countMismatch};
