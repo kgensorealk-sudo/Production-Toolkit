@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useRef, useCallb
 import { supabase } from '../supabaseClient';
 import { UserProfile } from '../types';
 import { INACTIVITY_LIMIT } from '../constants';
+import { hasActiveSubscription } from '../utils/subscriptionAccess';
 
 type Session = any;
 type User = any;
@@ -237,7 +238,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         email: email || '',
                         role: 'user',
                         display_name: email ? email.split('@')[0] : 'User',
-                        is_subscribed: true,
+                        is_subscribed: false,
                         created_at: new Date().toISOString(),
                         last_seen: new Date().toISOString()
                     };
@@ -249,7 +250,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         email: email || '',
                         role: 'user',
                         display_name: email ? email.split('@')[0] : 'User',
-                        is_subscribed: true,
+                        is_subscribed: false,
                         created_at: new Date().toISOString(),
                         last_seen: new Date().toISOString()
                     };
@@ -270,9 +271,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 }
 
                 const isRoleAdmin = (profileData.role || '').toLowerCase() === 'admin';
-                let isActive = profileData.is_subscribed ?? true;
-                if (isRoleAdmin) isActive = true;
-                else if (profileData.subscription_end && new Date(profileData.subscription_end) < new Date()) isActive = false;
+                const isActive = isRoleAdmin || hasActiveSubscription(profileData);
 
                 const localTermsAccepted = localStorage.getItem(`terms_accepted_${userId}`) === 'true';
                 const isTermsAccepted = Boolean(
