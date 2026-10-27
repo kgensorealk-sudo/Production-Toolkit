@@ -76,6 +76,8 @@ const ViewSync: React.FC = () => {
     const [diffRows, setDiffRows] = useState<any[]>([]);
     const [currentChangeIndex, setCurrentChangeIndex] = useState(0);
     const [totalChanges, setTotalChanges] = useState(0);
+    const [pendingSync, setPendingSync] = useState<{indices?: Set<number>; direction: 'compact-to-extended' | 'extended-to-compact'; total: number; samples: {paraId: string; compactText: string; extendedText: string}[]} | null>(null);
+    const [skipSyncConfirm, setSkipSyncConfirm] = useState(false);
 
     useEffect(() => {
         if (location.state?.transferredXml) {
@@ -356,6 +358,24 @@ const ViewSync: React.FC = () => {
             }catch(error){reportError(error);}finally{setIsLoading(false);}
         },800);
     };
+    // Wrong direction silently overwrites the corrected view with the stale one,
+    // so show which view will be rewritten and the first differences before syncing.
+    const requestSync = (indices?: Set<number>) => {
+        if (skipSyncConfirm) { processSync(indices); return; }
+        try {
+            const found = viewDifferences(input).mismatches.filter(m => !indices || indices.has(m.index));
+            if (!found.length) { processSync(indices); return; }
+            setPendingSync({
+                indices, direction: syncDirection, total: found.length,
+                samples: found.slice(0, 3).map(m => ({paraId: m.paraId, compactText: m.compactText, extendedText: m.extendedText}))
+            });
+        } catch (error) { reportError(error); }
+    };
+    const confirmSync = () => {
+        const pending = pendingSync;
+        setPendingSync(null);
+        if (pending) processSync(pending.indices);
+    };
     const fixOrphans = () => {
         const operation=++operationRef.current;
         setIsLoading(true);
@@ -394,7 +414,7 @@ const ViewSync: React.FC = () => {
     const isStale = output && input !== lastProcessedInput;
 
     useKeyboardShortcuts({
-        onPrimary: processSync,
+        onPrimary: () => requestSync(),
         onCopy: copyOutput,
         onClear: clearAll
     }, [input, output, syncDirection, customStartId]);
@@ -471,7 +491,7 @@ const ViewSync: React.FC = () => {
                     </button>
 
                     <button 
-                        onClick={() => processSync()} 
+                        onClick={() => requestSync()} 
                         disabled={isLoading}
                         title="Ctrl+Enter"
                         className="flex-shrink-0 group bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 px-8 rounded-xl shadow-lg shadow-indigo-500/30 transform transition-all active:scale-95 disabled:opacity-70 disabled:cursor-wait hover:-translate-y-0.5"
@@ -733,7 +753,7 @@ const ViewSync: React.FC = () => {
                                         )}
                                     </div>
                                     <button 
-                                        onClick={() => processSync(selectedMismatches)}
+                                        onClick={() => requestSync(selectedMismatches)}
                                         disabled={selectedMismatches.size === 0 || isLoading}
                                         className="flex items-center gap-2 px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all"
                                     >
@@ -958,6 +978,63 @@ const ViewSync: React.FC = () => {
                     </div>
                 </div>
             </div>
+
+            {pendingSync && (() => {
+                const source = pendingSync.direction === 'compact-to-extended' ? 'Compact' : 'Extended';
+                const target = source === 'Compact' ? 'Extended' : 'Compact';
+                return (
+                    <div
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+                        role="dialog" aria-modal="true" aria-labelledby="sync-confirm-title"
+                        onClick={() => setPendingSync(null)}
+                        onKeyDown={(event) => { if (event.key === 'Escape') setPendingSync(null); }}
+                    >
+                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden" onClick={(event) => event.stopPropagation()}>
+                            <div className="px-6 py-4 border-b border-slate-100 flex items-start gap-3">
+                                <AlertTriangle className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" />
+                                <div>
+                                    <h3 id="sync-confirm-title" className="text-sm font-bold text-slate-800">Confirm sync direction</h3>
+                                    <p className="text-xs text-slate-600 mt-1">
+                                        The <b>{target}</b> view of {pendingSync.total} pair{pendingSync.total === 1 ? '' : 's'} will be rewritten to match the <b>{source}</b> view. Make sure the {source} view is the corrected one.
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="flex-grow overflow-auto p-4 grid gap-3">
+                                {pendingSync.samples.map((sample, i) => (
+                                    <div key={i} className="border border-slate-200 rounded-xl overflow-hidden">
+                                        <div className="px-4 py-1.5 bg-slate-50 border-b border-slate-100 text-xs font-bold font-mono text-slate-700">ID: {sample.paraId}</div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-100">
+                                            <div className="p-3">
+                                                <div className="text-[10px] font-bold uppercase mb-1 text-slate-400">Compact view {source === 'Compact' ? '(source)' : '(will be overwritten)'}</div>
+                                                <div className="text-xs text-slate-600 leading-relaxed line-clamp-4">{renderMismatchDiff(sample.compactText, sample.extendedText, 'compact')}</div>
+                                            </div>
+                                            <div className="p-3">
+                                                <div className="text-[10px] font-bold uppercase mb-1 text-slate-400">Extended view {source === 'Extended' ? '(source)' : '(will be overwritten)'}</div>
+                                                <div className="text-xs text-slate-600 leading-relaxed line-clamp-4">{renderMismatchDiff(sample.compactText, sample.extendedText, 'extended')}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                                {pendingSync.total > pendingSync.samples.length && (
+                                    <p className="text-xs text-slate-500">…and {pendingSync.total - pendingSync.samples.length} more pair{pendingSync.total - pendingSync.samples.length === 1 ? '' : 's'}.</p>
+                                )}
+                            </div>
+                            <div className="px-6 py-3 border-t border-slate-100 flex items-center justify-between gap-3">
+                                <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
+                                    <input type="checkbox" checked={skipSyncConfirm} onChange={(event) => setSkipSyncConfirm(event.target.checked)} className="w-4 h-4 rounded border-slate-300" />
+                                    Don't ask again until I reload the page
+                                </label>
+                                <div className="flex items-center gap-2">
+                                    <button onClick={() => setPendingSync(null)} className="px-4 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-100">Cancel</button>
+                                    <button autoFocus onClick={confirmSync} className="px-4 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700">
+                                        Sync {source} → {target}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
 
             {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
         </div>
