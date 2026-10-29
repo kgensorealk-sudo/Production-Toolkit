@@ -8,6 +8,7 @@ import {
     Split, LayoutGrid, Calculator
 } from 'lucide-react';
 import Toast from '../components/Toast';
+import { setFormulaTokenText, updateFormulaSpaceWidth, formulaSymbolTag, insertFormulaSymbol, expandFormulaFences, insertFormulaSnippet, insertFormulaTokenAfter, removeFormulaToken, exportFormulaXml, formatFormulaXml, formulaMetadata, editFormulaToken, formulaTokens, parseFormula, renderFormulaPreview, texToMathML, updateFormulaMetadata } from '../utils/formulaStudio';
 import { SmartSuggestion } from '../types';
 
 interface MathNode {
@@ -76,6 +77,31 @@ const PRESET_SAMPLES = [
 
 const FormulaEditorExperimental: React.FC = () => {
     const navigate = useNavigate();
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [texError, setTexError] = useState<string | null>(null);
+    const handleImportFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+        try {
+            if (file.size > 2 * 1024 * 1024) throw new Error('Choose an XML file smaller than 2 MB.');
+            const xml = await file.text();
+            const doc = parseFormula(xml);
+            if (!Array.from(doc.querySelectorAll('*')).some(el => el.localName === 'math')) throw new Error('This file has no MathML formula. Choose a file containing a <math> element.');
+            setXmlInput(xml);
+            setToast({msg: 'Opened ' + file.name + '. Undo restores your previous formula.', type: 'success'});
+        } catch (error) { setToast({msg: error instanceof Error ? error.message : 'Could not open this file.', type: 'error'}); }
+    };
+    const downloadXml = () => {
+        try {
+        const url = URL.createObjectURL(new Blob([exportFormulaXml(xmlInput)], {type: 'application/xml;charset=utf-8'}));
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = (formulaId || 'formula').replace(/[^a-zA-Z0-9_-]/g, '_') + '.xml';
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        } catch (error) { setToast({msg: error instanceof Error ? error.message : 'Could not download XML.', type: 'error'}); }
+    };
 
     // Default XML set to the user's sample
     const [xmlInput, setXmlInputState] = useState<string>(PRESET_SAMPLES[0].xml);
@@ -90,6 +116,7 @@ const FormulaEditorExperimental: React.FC = () => {
             setHistory(nextHistory);
             setHistoryIndex(nextHistory.length - 1);
             setXmlInputState(val);
+            setSelectedCanvasToken(null);
         }
     };
 
@@ -98,6 +125,7 @@ const FormulaEditorExperimental: React.FC = () => {
             const prevIndex = historyIndex - 1;
             setHistoryIndex(prevIndex);
             setXmlInputState(history[prevIndex]);
+            setSelectedCanvasToken(null);
             setToast({ msg: 'Undo XML edit', type: 'info' });
         }
     };
@@ -107,6 +135,7 @@ const FormulaEditorExperimental: React.FC = () => {
             const nextIndex = historyIndex + 1;
             setHistoryIndex(nextIndex);
             setXmlInputState(history[nextIndex]);
+            setSelectedCanvasToken(null);
             setToast({ msg: 'Redo XML edit', type: 'info' });
         }
     };
@@ -114,6 +143,8 @@ const FormulaEditorExperimental: React.FC = () => {
     // Keyboard Shortcuts for Undo & Redo (Ctrl+Z / Cmd+Z / Ctrl+Y / Cmd+Shift+Z)
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
+            const target = e.target as HTMLElement | null;
+            if (target?.closest('input, textarea, [contenteditable="true"]') && !target.hasAttribute('data-formula-xml') && !target.hasAttribute('data-formula-editor')) return;
             if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
                 if (e.shiftKey) {
                     e.preventDefault();
@@ -137,53 +168,22 @@ const FormulaEditorExperimental: React.FC = () => {
     const [texInput, setTexInput] = useState<string>('\\ln \\frac{C_0}{C_t} = K_{app} t');
 
     const handleConvertTex = () => {
-        if (!texInput.trim()) return;
-        let clean = texInput.trim();
-
-        // Convert TeX font macros for mathvariant: \mathit{x}, \mathrm{x}
-        clean = clean.replace(/\\mathit\{([^}]+)\}/g, '<mml:mi mathvariant="italic">$1</mml:mi>');
-        clean = clean.replace(/\\mathrm\{([^}]+)\}/g, '<mml:mi mathvariant="normal">$1</mml:mi>');
-
-        // Convert TeX fractions: \frac{num}{den} -> <mml:mfrac><mml:mi>num</mml:mi><mml:mi>den</mml:mi></mml:mfrac>
-        clean = clean.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, (_, num, den) => {
-            return `<mml:mfrac><mml:msub><mml:mi>${num.trim().charAt(0)}</mml:mi><mml:mn>${num.trim().slice(1) || '0'}</mml:mn></mml:msub><mml:msub><mml:mi>${den.trim().charAt(0)}</mml:mi><mml:mn>${den.trim().slice(1) || 't'}</mml:mn></mml:msub></mml:mfrac>`;
-        });
-
-        // Convert TeX square roots: \sqrt{x}
-        clean = clean.replace(/\\sqrt\{([^}]+)\}/g, '<mml:msqrt><mml:mi>$1</mml:mi></mml:msqrt>');
-
-        // Convert subscripts: X_{Y} or X_Y
-        clean = clean.replace(/([a-zA-Z0-9]+)_\{([^}]+)\}/g, '<mml:msub><mml:mi>$1</mml:mi><mml:mn>$2</mml:mn></mml:msub>');
-        clean = clean.replace(/([a-zA-Z0-9]+)_([a-zA-Z0-9]+)/g, '<mml:msub><mml:mi>$1</mml:mi><mml:mn>$2</mml:mn></mml:msub>');
-
-        // Convert superscripts: X^{Y} or X^Y
-        clean = clean.replace(/([a-zA-Z0-9]+)\^\{([^}]+)\}/g, '<mml:msup><mml:mi>$1</mml:mi><mml:mn>$2</mml:mn></mml:msup>');
-        clean = clean.replace(/([a-zA-Z0-9]+)\^([a-zA-Z0-9]+)/g, '<mml:msup><mml:mi>$1</mml:mi><mml:mn>$2</mml:mn></mml:msup>');
-
-        // Greek symbols & commands
-        const cmdMap: Record<string, string> = {
-            '\\alpha': 'α', '\\beta': 'β', '\\gamma': 'γ', '\\delta': 'δ',
-            '\\theta': 'θ', '\\lambda': 'λ', '\\mu': 'μ', '\\pi': 'π', '\\sigma': 'σ',
-            '\\omega': 'ω', '\\Delta': 'Δ', '\\ln': 'ln', '\\log': 'log', '\\sin': 'sin',
-            '\\cos': 'cos', '\\tan': 'tan', '\\lim': 'lim', '\\int': '∫', '\\sum': '∑',
-            '\\infty': '∞', '\\pm': '±', '\\approx': '≈', '\\neq': '≠', '\\le': '≤', '\\ge': '≥'
-        };
-
-        Object.entries(cmdMap).forEach(([cmd, sym]) => {
-            const esc = cmd.replace('\\', '\\\\');
-            clean = clean.replace(new RegExp(esc, 'g'), `<mml:mi>${sym}</mml:mi>`);
-        });
-
-        const generatedXml = `<ce:display><ce:formula id="fo${Math.floor(Math.random() * 8999 + 1000)}"><mml:math altimg="si1.svg">${clean}</mml:math></ce:formula></ce:display>`;
-        setXmlInput(generatedXml);
-        setToast({ msg: 'Converted TeX to MathML XML with mathvariant attributes!', type: 'success' });
-        setShowTexImporter(false);
+        try {
+            setTexError(null);
+            const converted = texToMathML(texInput);
+            setXmlInput(converted);
+            setSelectedCanvasToken(null);
+            setToast({ msg: 'Converted TeX to MathML XML.', type: 'success' });
+            setShowTexImporter(false);
+        } catch (error) {
+            setTexError(error instanceof Error ? error.message : 'Could not convert TeX.');
+        }
     };
 
     const [viewMode, setViewMode] = useState<'split' | 'rendered' | 'code'>('split');
     const [copied, setCopied] = useState(false);
     const [toast, setToast] = useState<{ msg: string; type: 'success' | 'warn' | 'error' | 'info' } | null>(null);
-    const [showInfo, setShowInfo] = useState(true);
+    const [showInfo, setShowInfo] = useState(false);
 
     // Node selection for visual inspector
     const [selectedNodePath, setSelectedNodePath] = useState<number[] | null>(null);
@@ -194,8 +194,31 @@ const FormulaEditorExperimental: React.FC = () => {
         text: string;
         tagName: string;
         mathvariant?: string;
+        width?: string;
         nodeIndex?: number;
     } | null>(null);
+    const symbolEditorRef = useRef<HTMLTextAreaElement>(null);
+    const spaceEditorRef = useRef<HTMLInputElement>(null);
+    const [spaceWidth, setSpaceWidth] = useState('');
+    const [spaceError, setSpaceError] = useState<string | null>(null);
+    useEffect(() => {
+        if (!selectedCanvasToken) return;
+        if (selectedCanvasToken.tagName === 'mspace') {
+            setSpaceWidth(selectedCanvasToken.width || '');
+            setSpaceError(null);
+            spaceEditorRef.current?.focus({preventScroll: true});
+        } else symbolEditorRef.current?.focus({preventScroll: true});
+    }, [selectedCanvasToken?.nodeIndex, selectedCanvasToken?.tagName, viewMode]);
+    const applySpaceWidth = () => {
+        if (selectedCanvasToken?.nodeIndex === undefined) return;
+        try {
+            const updated = updateFormulaSpaceWidth(xmlInput, selectedCanvasToken.nodeIndex, spaceWidth);
+            setXmlInput(updated);
+            setSelectedCanvasToken({...selectedCanvasToken, text: '', width: spaceWidth.trim()});
+            setSpaceWidth(spaceWidth.trim());
+            setSpaceError(null);
+        } catch (error) { setSpaceError(error instanceof Error ? error.message : 'Could not update spacing.'); }
+    };
     const [directCanvasTyping, setDirectCanvasTyping] = useState<boolean>(true);
     const [splitTargetType, setSplitTargetType] = useState<'sub' | 'super' | 'frac' | 'over' | 'under'>('sub');
 
@@ -209,478 +232,82 @@ const FormulaEditorExperimental: React.FC = () => {
 
     // Helper to wrap raw XML with standard Elsevier/MathML namespace declarations in memory
     const wrapWithNamespaces = (rawXml: string): string => {
-        let clean = rawXml.trim();
-        if (clean.includes('</mml:close>')) {
-            clean = clean.replace(/<\/mml:close>/gi, '</mml:msub>');
-        }
-        return `<root xmlns:ce="http://www.elsevier.com/xml/common/dtd" xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:sb="http://www.elsevier.com/xml/common/struct-bib/dtd" xmlns:sa="http://www.elsevier.com/xml/common/struct-aff/dtd" xmlns:xlink="http://www.w3.org/1999/xlink">${clean}</root>`;
+        return new XMLSerializer().serializeToString(parseFormula(rawXml));
     };
 
     // Insert snippet into MathML body
     const insertMathSnippet = (snippet: string, label: string) => {
-        let updated = xmlInput;
-        if (updated.includes('</mml:math>')) {
-            updated = updated.replace('</mml:math>', `${snippet}</mml:math>`);
-        } else if (updated.includes('</math>')) {
-            updated = updated.replace('</math>', `${snippet}</math>`);
-        } else {
-            updated = updated + snippet;
-        }
-        setXmlInput(updated);
-        setToast({ msg: `Inserted ${label} into formula!`, type: 'success' });
-    };
-
-    // Token Structural Transformations
-    const wrapTokenSubscript = (tokenText: string, tag: string) => {
-        const escText = tokenText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const pattern = new RegExp(`<mml:${tag}([^>]*)>${escText}</mml:${tag}>`, 'g');
-        const replacement = `<mml:msub><mml:${tag}$1>${tokenText}</mml:${tag}><mml:mn>0</mml:mn></mml:msub>`;
-        const updated = xmlInput.replace(pattern, replacement);
-        if (updated !== xmlInput) {
-            setXmlInput(updated);
-            setToast({ msg: `Wrapped "${tokenText}" as Subscript (<mml:msub>)`, type: 'success' });
-        }
-    };
-
-    const wrapTokenSuperscript = (tokenText: string, tag: string) => {
-        const escText = tokenText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const pattern = new RegExp(`<mml:${tag}([^>]*)>${escText}</mml:${tag}>`, 'g');
-        const replacement = `<mml:msup><mml:${tag}$1>${tokenText}</mml:${tag}><mml:mn>2</mml:mn></mml:msup>`;
-        const updated = xmlInput.replace(pattern, replacement);
-        if (updated !== xmlInput) {
-            setXmlInput(updated);
-            setToast({ msg: `Wrapped "${tokenText}" as Superscript (<mml:msup>)`, type: 'success' });
-        }
-    };
-
-    const wrapTokenSubSuperscript = (tokenText: string, tag: string) => {
-        const escText = tokenText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const pattern = new RegExp(`<mml:${tag}([^>]*)>${escText}</mml:${tag}>`, 'g');
-        const replacement = `<mml:msubsup><mml:${tag}$1>${tokenText}</mml:${tag}><mml:mn>0</mml:mn><mml:mi>t</mml:mi></mml:msubsup>`;
-        const updated = xmlInput.replace(pattern, replacement);
-        if (updated !== xmlInput) {
-            setXmlInput(updated);
-            setToast({ msg: `Wrapped "${tokenText}" as Sub/Superscript (<mml:msubsup>)`, type: 'success' });
-        }
-    };
-
-    const wrapTokenFraction = (tokenText: string, tag: string) => {
-        const escText = tokenText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const pattern = new RegExp(`<mml:${tag}([^>]*)>${escText}</mml:${tag}>`, 'g');
-        const replacement = `<mml:mfrac><mml:${tag}$1>${tokenText}</mml:${tag}><mml:mi>1</mml:mi></mml:mfrac>`;
-        const updated = xmlInput.replace(pattern, replacement);
-        if (updated !== xmlInput) {
-            setXmlInput(updated);
-            setToast({ msg: `Wrapped "${tokenText}" as Fraction (<mml:mfrac>)`, type: 'success' });
-        }
-    };
-
-    const wrapTokenSqrt = (tokenText: string, tag: string) => {
-        const escText = tokenText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const pattern = new RegExp(`<mml:${tag}([^>]*)>${escText}</mml:${tag}>`, 'g');
-        const replacement = `<mml:msqrt><mml:${tag}$1>${tokenText}</mml:${tag}></mml:msqrt>`;
-        const updated = xmlInput.replace(pattern, replacement);
-        if (updated !== xmlInput) {
-            setXmlInput(updated);
-            setToast({ msg: `Wrapped "${tokenText}" as Square Root (<mml:msqrt>)`, type: 'success' });
-        }
-    };
-
-    const wrapTokenUnder = (tokenText: string, tag: string) => {
-        const escText = tokenText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const pattern = new RegExp(`<mml:${tag}([^>]*)>${escText}</mml:${tag}>`, 'g');
-        const replacement = `<mml:munder><mml:${tag}$1>${tokenText}</mml:${tag}><mml:mo>&#x2200;</mml:mo></mml:munder>`;
-        const updated = xmlInput.replace(pattern, replacement);
-        if (updated !== xmlInput) {
-            setXmlInput(updated);
-            setToast({ msg: `Wrapped "${tokenText}" in Underscript (<mml:munder>)`, type: 'success' });
-        }
-    };
-
-    const wrapTokenOver = (tokenText: string, tag: string) => {
-        const escText = tokenText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const pattern = new RegExp(`<mml:${tag}([^>]*)>${escText}</mml:${tag}>`, 'g');
-        const replacement = `<mml:mover><mml:${tag}$1>${tokenText}</mml:${tag}><mml:mo>&#x203E;</mml:mo></mml:mover>`;
-        const updated = xmlInput.replace(pattern, replacement);
-        if (updated !== xmlInput) {
-            setXmlInput(updated);
-            setToast({ msg: `Wrapped "${tokenText}" in Overscript (<mml:mover>)`, type: 'success' });
-        }
-    };
-
-    const splitTokenAtPosition = (
-        tokenText: string, 
-        tag: string, 
-        splitIdx: number, 
-        structType: 'sub' | 'super' | 'frac' | 'over' | 'under' = splitTargetType
-    ) => {
-        if (!tokenText || tokenText.length < 2) {
-            setToast({ msg: 'Identifier must have at least 2 characters to split', type: 'warn' });
-            return;
-        }
-
-        const validIndex = Math.max(1, Math.min(splitIdx, tokenText.length - 1));
-        const base = tokenText.slice(0, validIndex);
-        const attach = tokenText.slice(validIndex);
-
-        const baseTag = tag;
-        const attachTag = /^\d+$/.test(attach) ? 'mn' : 'mi';
-
-        const escText = tokenText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const pattern = new RegExp(`<mml:${tag}([^>]*)>${escText}</mml:${tag}>`, 'g');
-        
-        let replacement = '';
-        let label = '';
-
-        if (structType === 'sub') {
-            replacement = `<mml:msub><mml:${baseTag}$1>${base}</mml:${baseTag}><mml:${attachTag}>${attach}</mml:${attachTag}></mml:msub>`;
-            label = `Subscript (${base}_${attach})`;
-        } else if (structType === 'super') {
-            replacement = `<mml:msup><mml:${baseTag}$1>${base}</mml:${baseTag}><mml:${attachTag}>${attach}</mml:${attachTag}></mml:msup>`;
-            label = `Superscript (${base}^${attach})`;
-        } else if (structType === 'frac') {
-            replacement = `<mml:mfrac><mml:${baseTag}$1>${base}</mml:${baseTag}><mml:${attachTag}>${attach}</mml:${attachTag}></mml:mfrac>`;
-            label = `Fraction (${base}/${attach})`;
-        } else if (structType === 'over') {
-            replacement = `<mml:mover><mml:${baseTag}$1>${base}</mml:${baseTag}><mml:${attachTag}>${attach}</mml:${attachTag}></mml:mover>`;
-            label = `Overscript (${base} with ${attach} over)`;
-        } else if (structType === 'under') {
-            replacement = `<mml:munder><mml:${baseTag}$1>${base}</mml:${baseTag}><mml:${attachTag}>${attach}</mml:${attachTag}></mml:munder>`;
-            label = `Underscript (${base} with ${attach} under)`;
-        }
-
-        const updated = xmlInput.replace(pattern, replacement);
-        if (updated !== xmlInput) {
-            setXmlInput(updated);
-            setToast({ msg: `Split "${tokenText}" at pos ${validIndex} ➔ ${label}`, type: 'success' });
-            if (selectedCanvasToken && selectedCanvasToken.text === tokenText) {
-                setSelectedCanvasToken({ text: base, tagName: tag });
-            }
-        }
-    };
-
-    const splitTokenSubscript = (tokenText: string, tag: string) => {
-        splitTokenAtPosition(tokenText, tag, 1, 'sub');
-    };
-
-    const deleteToken = (tokenText: string, tag: string, targetIndex?: number) => {
-        const indexToUse = targetIndex ?? selectedCanvasToken?.nodeIndex;
         try {
-            const parser = new DOMParser();
-            const wrapped = wrapWithNamespaces(xmlInput);
-            const doc = parser.parseFromString(wrapped, 'text/xml');
-            if (doc.querySelector('parsererror')) throw new Error();
-
-            expandMfencesInDom(doc);
-
-            const allTokens = doc.querySelectorAll('mi, mn, mo, mtext, mspace, mml\\:mi, mml\\:mn, mml\\:mo, mml\\:mtext, mml\\:mspace');
-            let targetEl: Element | null = null;
-
-            if (typeof indexToUse === 'number' && indexToUse >= 0 && indexToUse < allTokens.length) {
-                targetEl = allTokens[indexToUse];
-            } else {
-                allTokens.forEach(el => {
-                    if (!targetEl && el.textContent?.trim() === tokenText) {
-                        targetEl = el;
-                    }
-                });
-            }
-
-            if (targetEl) {
-                (targetEl as Element).remove();
-                const serializer = new XMLSerializer();
-                let fullSerialized = serializer.serializeToString(doc);
-                fullSerialized = fullSerialized.replace(/^<root[^>]*>/, '').replace(/<\/root>$/, '');
-                if (fullSerialized) {
-                    setXmlInput(fullSerialized);
-                    setToast({ msg: `Deleted token "${tokenText}"`, type: 'info' });
-                    setSelectedCanvasToken(null);
-                    return;
-                }
-            }
-        } catch (e) {
-            const escText = tokenText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const pattern = new RegExp(`<mml:${tag}[^>]*>${escText}</mml:${tag}>`, 'g');
-            const updated = xmlInput.replace(pattern, '');
-            setXmlInput(updated);
-            setToast({ msg: `Deleted token "${tokenText}"`, type: 'info' });
+            setXmlInput(insertFormulaSnippet(xmlInput, snippet));
+            setToast({ msg: 'Inserted ' + label + ' into formula.', type: 'success' });
+        } catch (error) {
+            setToast({ msg: error instanceof Error ? error.message : 'Could not insert symbol.', type: 'error' });
         }
     };
 
-    const addTokenAfter = (tokenText: string, tag: string) => {
-        const escText = tokenText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const pattern = new RegExp(`(<mml:${tag}[^>]*>${escText}</mml:${tag}>)`, 'g');
-        const replacement = `$1<mml:mi>x</mml:mi>`;
-        const updated = xmlInput.replace(pattern, replacement);
-        setXmlInput(updated);
-        setToast({ msg: `Inserted new token after "${tokenText}"`, type: 'success' });
-    };
-
-    const changeTokenTagType = (tokenText: string, oldTag: string, newTag: string, targetIndex?: number) => {
-        const indexToUse = targetIndex ?? selectedCanvasToken?.nodeIndex;
-
+    // Apply changes to one source token, including repeated symbols and unprefixed MathML.
+    const editToken = (text: string, tag: string, index: number | undefined, edit: (el: Element, doc: Document) => void) => {
         try {
-            const parser = new DOMParser();
-            const wrapped = wrapWithNamespaces(xmlInput);
-            const doc = parser.parseFromString(wrapped, 'text/xml');
-            if (doc.querySelector('parsererror')) throw new Error();
-
-            expandMfencesInDom(doc);
-
-            const allTokens = doc.querySelectorAll('mi, mn, mo, mtext, mspace, mml\\:mi, mml\\:mn, mml\\:mo, mml\\:mtext, mml\\:mspace');
-            let targetEl: Element | null = null;
-
-            if (typeof indexToUse === 'number' && indexToUse >= 0 && indexToUse < allTokens.length) {
-                targetEl = allTokens[indexToUse];
-            } else {
-                allTokens.forEach(el => {
-                    if (!targetEl && el.textContent?.trim() === tokenText && el.tagName.replace(/^.*:/, '') === oldTag) {
-                        targetEl = el;
-                    }
-                });
-            }
-
-            if (targetEl) {
-                const prefix = (targetEl as Element).tagName.includes(':') ? (targetEl as Element).tagName.split(':')[0] + ':' : 'mml:';
-                const newEl = doc.createElementNS((targetEl as Element).namespaceURI || 'http://www.w3.org/1998/Math/MathML', `${prefix}${newTag}`);
-                Array.from((targetEl as Element).attributes).forEach(attr => newEl.setAttribute(attr.name, attr.value));
-                newEl.textContent = (targetEl as Element).textContent;
-
-                // Only <mi> can have the mathvariant attribute
-                if (newTag !== 'mi') {
-                    newEl.removeAttribute('mathvariant');
-                }
-
-                (targetEl as Element).replaceWith(newEl);
-
-                const serializer = new XMLSerializer();
-                let fullSerialized = serializer.serializeToString(doc);
-                fullSerialized = fullSerialized.replace(/^<root[^>]*>/, '').replace(/<\/root>$/, '');
-                
-                if (fullSerialized) {
-                    setXmlInput(fullSerialized);
-                    setToast({ msg: `Converted tag <${oldTag}> ➔ <${newTag}>`, type: 'info' });
-                    if (selectedCanvasToken && (selectedCanvasToken.nodeIndex === indexToUse || selectedCanvasToken.text === tokenText)) {
-                        setSelectedCanvasToken({
-                            ...selectedCanvasToken,
-                            tagName: newTag,
-                            mathvariant: newTag === 'mi' ? selectedCanvasToken.mathvariant : undefined
-                        });
-                    }
-                    return;
-                }
-            }
-        } catch (e) {
-            const escText = tokenText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const pattern = new RegExp(`<mml:${oldTag}([^>]*)>${escText}</mml:${oldTag}>`, 'g');
-            let replacement = `<mml:${newTag}$1>${tokenText}</mml:${newTag}>`;
-            if (newTag !== 'mi') {
-                replacement = replacement.replace(/\s*mathvariant="[^"]*"/gi, '');
-            }
-            const updated = xmlInput.replace(pattern, replacement);
-            setXmlInput(updated);
-            setToast({ msg: `Converted tag <${oldTag}> ➔ <${newTag}>`, type: 'info' });
+            setXmlInput(editFormulaToken(xmlInput, text, tag, index ?? selectedCanvasToken?.nodeIndex, edit));
+            setSelectedCanvasToken(null);
+        } catch (error) {
+            setToast({ msg: error instanceof Error ? error.message : 'Could not edit symbol.', type: 'error' });
         }
     };
-
-    const changeTokenMathvariant = (tokenText: string, tag: string, mathvariantVal: string, targetIndex?: number) => {
-        const cleanTag = tag.replace(/^.*:/, '').toLowerCase();
-        if (cleanTag !== 'mi') {
-            setToast({ msg: 'Only <mi> (or <mml:mi>) tags can have the mathvariant attribute.', type: 'warn' });
-            return;
-        }
-
-        const indexToUse = targetIndex ?? selectedCanvasToken?.nodeIndex;
-
-        try {
-            const parser = new DOMParser();
-            const wrapped = wrapWithNamespaces(xmlInput);
-            const doc = parser.parseFromString(wrapped, 'text/xml');
-            if (doc.querySelector('parsererror')) throw new Error();
-
-            expandMfencesInDom(doc);
-
-            const allTokens = doc.querySelectorAll('mi, mn, mo, mtext, mspace, mml\\:mi, mml\\:mn, mml\\:mo, mml\\:mtext, mml\\:mspace');
-            let targetEl: Element | null = null;
-
-            if (typeof indexToUse === 'number' && indexToUse >= 0 && indexToUse < allTokens.length) {
-                targetEl = allTokens[indexToUse];
-            } else {
-                allTokens.forEach(el => {
-                    if (!targetEl && el.textContent?.trim() === tokenText) {
-                        targetEl = el;
-                    }
-                });
-            }
-
-            if (targetEl) {
-                if (mathvariantVal && mathvariantVal !== 'none') {
-                    (targetEl as Element).setAttribute('mathvariant', mathvariantVal);
-                } else {
-                    (targetEl as Element).removeAttribute('mathvariant');
-                }
-
-                const serializer = new XMLSerializer();
-                let fullSerialized = serializer.serializeToString(doc);
-                fullSerialized = fullSerialized.replace(/^<root[^>]*>/, '').replace(/<\/root>$/, '');
-
-                if (fullSerialized) {
-                    setXmlInput(fullSerialized);
-                    setToast({
-                        msg: mathvariantVal === 'none' 
-                            ? `Removed mathvariant from <${tag}>"${tokenText}"` 
-                            : `Set mathvariant="${mathvariantVal}" on <${tag}>"${tokenText}"`,
-                        type: 'info'
-                    });
-                    if (selectedCanvasToken && (selectedCanvasToken.nodeIndex === indexToUse || selectedCanvasToken.text === tokenText)) {
-                        setSelectedCanvasToken({
-                            ...selectedCanvasToken,
-                            mathvariant: mathvariantVal === 'none' ? undefined : mathvariantVal
-                        });
-                    }
-                    return;
-                }
-            }
-        } catch (e) {
-            const escText = tokenText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const tagPattern = new RegExp(`(<(?:mml:)?${tag}\\b)([^>]*)>${escText}(</(?:mml:)?${tag}>)`, 'g');
-            
-            const updated = xmlInput.replace(tagPattern, (_, openTag, existingAttrs, closeTag) => {
-                let newAttrs = existingAttrs.replace(/\s*mathvariant="[^"]*"/gi, '');
-                if (mathvariantVal && mathvariantVal !== 'none') {
-                    newAttrs = ` mathvariant="${mathvariantVal}"` + newAttrs;
-                }
-                return `${openTag}${newAttrs}>${tokenText}${closeTag}`;
-            });
-
-            if (updated !== xmlInput) {
-                setXmlInput(updated);
-                setToast({
-                    msg: mathvariantVal === 'none' 
-                        ? `Removed mathvariant from <${tag}>"${tokenText}"` 
-                        : `Set mathvariant="${mathvariantVal}" on <${tag}>"${tokenText}"`,
-                    type: 'info'
-                });
-                if (selectedCanvasToken && selectedCanvasToken.text === tokenText) {
-                    setSelectedCanvasToken({
-                        ...selectedCanvasToken,
-                        mathvariant: mathvariantVal === 'none' ? undefined : mathvariantVal
-                    });
-                }
-            }
-        }
-    };
-
-    // Helper to expand MathML <mfenced open="..." close="..." separators="..."> into <mrow><mo>open</mo>...<mo>close</mo></mrow>
-    const expandMfencesInDom = (container: Document | Element) => {
-        const docObj = container.ownerDocument || (container as Document);
-        const mfences = Array.from(container.querySelectorAll('mfenced, mml\\:mfenced'));
-        
-        mfences.reverse().forEach(mfence => {
-            const openAttr = mfence.hasAttribute('open') ? mfence.getAttribute('open')! : '(';
-            const closeAttr = mfence.hasAttribute('close') ? mfence.getAttribute('close')! : ')';
-            const sepAttr = mfence.hasAttribute('separators') ? mfence.getAttribute('separators')! : ',';
-
-            const tagName = mfence.tagName;
-            const isMmlPrefix = tagName.toLowerCase().startsWith('mml:');
-            const tagPrefix = isMmlPrefix ? 'mml:' : '';
-            const ns = mfence.namespaceURI || 'http://www.w3.org/1998/Math/MathML';
-
-            const mrow = docObj.createElementNS(ns, `${tagPrefix}mrow`);
-
-            if (mfence.hasAttribute('id')) mrow.setAttribute('id', mfence.getAttribute('id')!);
-            if (mfence.hasAttribute('class')) mrow.setAttribute('class', mfence.getAttribute('class')!);
-
-            // Add opening fence <mo> if non-empty
-            if (openAttr !== '') {
-                const openMo = docObj.createElementNS(ns, `${tagPrefix}mo`);
-                openMo.textContent = openAttr;
-                mrow.appendChild(openMo);
-            }
-
-            // Add children with separators
-            const childElements = Array.from(mfence.children);
-            const childNodes = Array.from(mfence.childNodes);
-            const sepChars = sepAttr.split('').map(s => s.trim()).filter(Boolean);
-
-            if (childElements.length > 0) {
-                childElements.forEach((child, i) => {
-                    mrow.appendChild(child);
-                    if (i < childElements.length - 1 && sepAttr !== '') {
-                        const sepChar = sepChars[i] || sepChars[sepChars.length - 1] || ',';
-                        const sepMo = docObj.createElementNS(ns, `${tagPrefix}mo`);
-                        sepMo.textContent = sepChar;
-                        mrow.appendChild(sepMo);
-                    }
-                });
-            } else {
-                childNodes.forEach(child => mrow.appendChild(child));
-            }
-
-            // Add closing fence <mo> if non-empty
-            if (closeAttr !== '') {
-                const closeMo = docObj.createElementNS(ns, `${tagPrefix}mo`);
-                closeMo.textContent = closeAttr;
-                mrow.appendChild(closeMo);
-            }
-
-            mfence.replaceWith(mrow);
+    const wrapToken = (text: string, tag: string, structure: string, suffix: string, index?: number) => {
+        editToken(text, tag, index, (el, doc) => {
+            const wrapper = doc.createElementNS('http://www.w3.org/1998/Math/MathML', 'mml:' + structure);
+            el.replaceWith(wrapper);
+            wrapper.appendChild(el);
+            const fragment = parseFormula(suffix);
+            for (const child of Array.from(fragment.documentElement.childNodes)) wrapper.appendChild(doc.importNode(child, true));
         });
     };
+    const wrapTokenSubscript = (text: string, tag: string, index?: number) => wrapToken(text, tag, 'msub', '<mml:mn>0</mml:mn>', index);
+    const wrapTokenSuperscript = (text: string, tag: string, index?: number) => wrapToken(text, tag, 'msup', '<mml:mn>2</mml:mn>', index);
+    const wrapTokenSubSuperscript = (text: string, tag: string, index?: number) => wrapToken(text, tag, 'msubsup', '<mml:mn>0</mml:mn><mml:mi>t</mml:mi>', index);
+    const wrapTokenFraction = (text: string, tag: string, index?: number) => wrapToken(text, tag, 'mfrac', '<mml:mn>1</mml:mn>', index);
+    const wrapTokenSqrt = (text: string, tag: string, index?: number) => wrapToken(text, tag, 'msqrt', '', index);
+    const wrapTokenUnder = (text: string, tag: string, index?: number) => wrapToken(text, tag, 'munder', '<mml:mo>∀</mml:mo>', index);
+    const wrapTokenOver = (text: string, tag: string, index?: number) => wrapToken(text, tag, 'mover', '<mml:mo>‾</mml:mo>', index);
 
-    // Helper to normalize/convert string XML containing <mml:mfenced> into <mml:mrow><mml:mo>open</mml:mo>...<mml:mo>close</mml:mo></mrow>
-    const convertMfencesToMrow = (xmlStr: string): string => {
-        try {
-            const parser = new DOMParser();
-            const wrapped = wrapWithNamespaces(xmlStr);
-            const doc = parser.parseFromString(wrapped, 'text/xml');
-            if (doc.querySelector('parsererror')) return xmlStr;
-
-            const mfences = Array.from(doc.querySelectorAll('mfenced, mml\\:mfenced'));
-            if (mfences.length === 0) return xmlStr;
-
-            expandMfencesInDom(doc);
-
-            const serializer = new XMLSerializer();
-            let fullSerialized = serializer.serializeToString(doc);
-            return fullSerialized.replace(/^<root[^>]*>/, '').replace(/<\/root>$/, '');
-        } catch (e) {
-            return xmlStr;
-        }
+    const splitTokenAtPosition = (text: string, tag: string, splitIdx: number, structure: 'sub' | 'super' | 'frac' | 'over' | 'under' = splitTargetType, index?: number) => {
+        const chars = Array.from(text);
+        if (chars.length < 2) return;
+        const position = Math.max(1, Math.min(splitIdx, chars.length - 1));
+        const base = chars.slice(0, position).join('');
+        const suffix = chars.slice(position).join('');
+        editToken(text, tag, index, (el, doc) => {
+            const wrapper = doc.createElementNS('http://www.w3.org/1998/Math/MathML', 'mml:' + ({sub:'msub',super:'msup',frac:'mfrac',over:'mover',under:'munder'}[structure]));
+            el.replaceWith(wrapper);
+            el.textContent = base;
+            wrapper.appendChild(el);
+            const attached = doc.createElementNS('http://www.w3.org/1998/Math/MathML', /^\d+$/.test(suffix) ? 'mml:mn' : 'mml:mi');
+            attached.textContent = suffix;
+            wrapper.appendChild(attached);
+        });
     };
+    const splitTokenSubscript = (text: string, tag: string, index?: number) => splitTokenAtPosition(text, tag, 1, 'sub', index);
+    const deleteToken = (text: string, tag: string, index?: number) => editToken(text, tag, index, removeFormulaToken);
+    const addTokenAfter = (text: string, tag: string, index?: number) => editToken(text, tag, index, insertFormulaTokenAfter);
+    const changeTokenTagType = (text: string, tag: string, newTag: string, index?: number) => editToken(text, tag, index, (el, doc) => {
+        const next = doc.createElementNS('http://www.w3.org/1998/Math/MathML', 'mml:' + newTag);
+        for (const attr of Array.from(el.attributes)) next.setAttribute(attr.name, attr.value);
+        next.textContent = newTag === 'mspace' ? '' : el.textContent;
+        el.replaceWith(next);
+    });
+    const changeTokenMathvariant = (text: string, tag: string, value: string, index?: number) => editToken(text, tag, index, el => {
+        if (value === 'none') el.removeAttribute('mathvariant'); else el.setAttribute('mathvariant', value);
+    });
 
-    // Strip mathvariant attribute from non-mi tags helper
-    const stripMathvariantFromNonMi = (xml: string): string => {
-        try {
-            const parser = new DOMParser();
-            const wrapped = wrapWithNamespaces(xml);
-            const doc = parser.parseFromString(wrapped, 'text/xml');
-            if (doc.querySelector('parsererror')) throw new Error();
-
-            let changed = false;
-            const allElements = doc.querySelectorAll('*');
-            allElements.forEach(el => {
-                const tag = el.tagName.replace(/^.*:/, '').toLowerCase();
-                if (tag !== 'mi' && el.hasAttribute('mathvariant')) {
-                    el.removeAttribute('mathvariant');
-                    changed = true;
-                }
-            });
-
-            if (changed) {
-                const serializer = new XMLSerializer();
-                let fullSerialized = serializer.serializeToString(doc);
-                return fullSerialized.replace(/^<root[^>]*>/, '').replace(/<\/root>$/, '');
-            }
-            return xml;
-        } catch (e) {
-            return xml.replace(/(<(?:mml:)?(?!mi\b)[a-zA-Z0-9_:]+)(\s+[^>]*?)?\s+mathvariant="[^"]*"/gi, '$1$2');
-        }
+    const convertMfencesToMrow = (xml: string): string => {
+        try { return expandFormulaFences(xml); }
+        catch { return xml; }
     };
 
     // Auto-fix mismatched tag & mfenced helper
     const autoFixXml = (input: string): string => {
-        let fixed = stripMathvariantFromNonMi(input);
+        let fixed = input;
         // Expand any mfenced open/close attributes into standard mrow + mo tags
         if (fixed.includes('mfenced')) {
             fixed = convertMfencesToMrow(fixed);
@@ -709,18 +336,10 @@ const FormulaEditorExperimental: React.FC = () => {
                 setXmlError(parserError.textContent || 'XML syntax error detected');
             } else {
                 setXmlError(null);
-                // Sync metadata fields if formula found
-                const formulaEl = doc.querySelector('formula, ce\\:formula') || doc.querySelector('[id^="fo"]');
-                if (formulaEl) {
-                    const idAttr = formulaEl.getAttribute('id');
-                    if (idAttr) setFormulaId(idAttr);
-                }
-                const mathEl = doc.querySelector('math, mml\\:math');
-                if (mathEl) {
-                    const altAttr = mathEl.getAttribute('altimg');
-                    if (altAttr) setAltImg(altAttr);
-                }
-                setIsDisplay(xmlInput.includes('ce:display'));
+                const metadata = formulaMetadata(xmlInput);
+                setFormulaId(metadata.id);
+                setAltImg(metadata.altimg);
+                setIsDisplay(metadata.display);
             }
         } catch (e: any) {
             setXmlError(e.message || 'Failed to parse XML');
@@ -729,208 +348,50 @@ const FormulaEditorExperimental: React.FC = () => {
 
     // Handle attribute change from controls bar
     const handleUpdateMetadata = (newId: string, newAltImg: string, newIsDisplay: boolean) => {
-        setFormulaId(newId);
-        setAltImg(newAltImg);
-        setIsDisplay(newIsDisplay);
-
-        let updated = xmlInput;
-        // Update display vs inline
-        if (newIsDisplay && !updated.includes('<ce:display>')) {
-            updated = `<ce:display>${updated}</ce:display>`;
-        } else if (!newIsDisplay && updated.includes('<ce:display>')) {
-            updated = updated.replace(/<ce:display>(.*?)<\/ce:display>/gs, '$1');
+        try {
+            setXmlInput(updateFormulaMetadata(xmlInput, newId, newAltImg, newIsDisplay));
+        } catch (error) {
+            setToast({ msg: error instanceof Error ? error.message : 'Could not update formula metadata.', type: 'error' });
         }
-
-        // Update ID attribute
-        updated = updated.replace(/id="[^"]*"/g, `id="${newId}"`);
-
-        // Update altimg attribute
-        if (updated.includes('altimg=')) {
-            updated = updated.replace(/altimg="[^"]*"/g, `altimg="${newAltImg}"`);
-        } else {
-            updated = updated.replace(/<mml:math/g, `<mml:math altimg="${newAltImg}"`);
-        }
-
-        setXmlInput(updated);
     };
 
-    // Format / Unlinearize XML (tag per line)
+    // Format / Format XML (tag per line)
     const formatXml = () => {
         try {
-            let formatted = xmlInput
-                .trim()
-                .replace(/>\s*</g, '><')
-                .replace(/></g, '>\n<');
+            const formatted = formatFormulaXml(xmlInput, true);
             setXmlInput(formatted);
-            setToast({ msg: "Unlinearized XML structure!", type: 'success' });
+            setToast({ msg: "XML formatted for easier reading.", type: 'success' });
         } catch (e) {
             setToast({ msg: "Could not format XML.", type: 'warn' });
         }
     };
 
-    // Linearize XML (single line)
+    // Compact XML (single line)
     const linearizeXml = () => {
         try {
-            let compressed = xmlInput
-                .replace(/>\s+</g, '><')
-                .replace(/\r?\n\s*/g, '')
-                .trim();
+            const compressed = formatFormulaXml(xmlInput, false);
             setXmlInput(compressed);
-            setToast({ msg: "Linearized XML into single line!", type: 'info' });
+            setToast({ msg: "XML compacted without changing formula text.", type: 'info' });
         } catch (e) {
-            setToast({ msg: "Could not linearize XML.", type: 'warn' });
+            setToast({ msg: "Could not compact XML.", type: 'warn' });
         }
     };
 
     // Copy to clipboard
-    const handleCopy = () => {
-        navigator.clipboard.writeText(xmlInput);
+    const handleCopy = async () => {
+        try {
+        await navigator.clipboard.writeText(xmlInput);
         setCopied(true);
         setToast({ msg: "Formula XML copied to clipboard!", type: 'success' });
         setTimeout(() => setCopied(false), 2000);
+        } catch { setToast({ msg: 'Clipboard access failed. Copy from the XML editor.', type: 'error' }); }
     };
 
-    // Transform MathML XML for native HTML5 <math> browser rendering
-    const renderableHtmlMathML = useMemo(() => {
-        try {
-            let src = xmlInput.trim();
-            if (!src) return null;
+    const renderableHtmlMathML = useMemo(() => renderFormulaPreview(xmlInput, selectedCanvasToken?.nodeIndex), [xmlInput, selectedCanvasToken]);
 
-            if (src.includes('</mml:close>')) {
-                src = src.replace(/<\/mml:close>/gi, '</mml:msub>');
-            }
-
-            // Extract the math element or whole block
-            const mathMatch = src.match(/<mml:math[\s\S]*?<\/mml:math>/i) || src.match(/<math[\s\S]*?<\/math>/i);
-            let mathBody = mathMatch ? mathMatch[0] : src;
-
-            // Strip ce: wrappers if any left
-            mathBody = mathBody.replace(/<\/?ce:[^>]+>/gi, '');
-
-            // Normalize mml: tags to standard HTML5 MathML tags
-            mathBody = mathBody
-                .replace(/<mml:/gi, '<')
-                .replace(/<\/mml:/gi, '</');
-
-            // Ensure proper <math> root tag with HTML5 MathML namespace & display mode
-            if (!mathBody.startsWith('<math')) {
-                mathBody = `<math xmlns="http://www.w3.org/1998/Math/MathML" display="block">${mathBody}</math>`;
-            } else {
-                mathBody = mathBody.replace(/<math([^>]*)>/i, (_, attrs) => {
-                    let cleanAttrs = attrs
-                        .replace(/\s*xmlns(:[a-z0-9]+)?="[^"]*"/gi, '')
-                        .replace(/\s*display="[^"]*"/gi, '');
-                    return `<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"${cleanAttrs}>`;
-                });
-            }
-
-            // Parse as DOM to accurately apply CSS font-style and dataset attributes for every token
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(mathBody, 'text/html');
-
-            // Expand any <mfenced open="..." close="..."> into <mrow><mo>open</mo>...<mo>close</mo></mrow> for native HTML5 MathML rendering
-            expandMfencesInDom(doc);
-
-            const mathEl = doc.querySelector('math');
-
-            if (mathEl) {
-                let tokenIdx = 0;
-                const allNodes = mathEl.querySelectorAll('*');
-                allNodes.forEach(el => {
-                    const tagName = el.tagName.toLowerCase().replace(/^.*:/, '');
-
-                    // Ensure non-mi tags never carry mathvariant attribute
-                    if (tagName !== 'mi' && el.hasAttribute('mathvariant')) {
-                        el.removeAttribute('mathvariant');
-                    }
-
-                    const mathvariant = tagName === 'mi' ? el.getAttribute('mathvariant')?.toLowerCase() : null;
-
-                    if (mathvariant === 'italic') {
-                        el.setAttribute('style', `${el.getAttribute('style') || ''}; font-style: italic !important; font-variant: normal !important;`.replace(/^;\s*/, ''));
-                    } else if (mathvariant === 'normal') {
-                        el.setAttribute('style', `${el.getAttribute('style') || ''}; font-style: normal !important; font-variant: normal !important;`.replace(/^;\s*/, ''));
-                    } else if (tagName === 'mi') {
-                        // <mi> without mathvariant renders as italic by default
-                        el.setAttribute('style', `${el.getAttribute('style') || ''}; font-style: italic !important; font-variant: normal !important;`.replace(/^;\s*/, ''));
-                    }
-
-                    if (['mi', 'mn', 'mo', 'mtext', 'mspace'].includes(tagName)) {
-                        const txt = (el.textContent || '').trim();
-                        if (txt || tagName === 'mspace') {
-                            el.setAttribute('data-token-index', String(tokenIdx));
-                            el.setAttribute('data-token-tag', tagName);
-                            el.setAttribute('data-token-text', txt);
-
-                            // Highlight currently selected canvas token
-                            if (selectedCanvasToken && selectedCanvasToken.nodeIndex === tokenIdx) {
-                                el.setAttribute('data-selected', 'true');
-                                el.setAttribute('style', `${el.getAttribute('style') || ''}; background-color: #fef08a !important; color: #581c87 !important; border-radius: 6px; outline: 2px solid #eab308 !important; padding: 2px 4px; box-shadow: 0 0 8px rgba(234, 179, 8, 0.4);`.replace(/^;\s*/, ''));
-                            }
-
-                            tokenIdx++;
-                        }
-                    }
-                });
-
-                return mathEl.outerHTML;
-            }
-
-            return mathBody;
-        } catch (e) {
-            return null;
-        }
-    }, [xmlInput, selectedCanvasToken]);
-
-    // Handle Direct Inline Edit in Rendered Canvas
-    const handleInlineContentEdit = (oldText: string, newText: string, targetIndex?: number) => {
-        if (oldText === newText || !oldText) return;
-        const indexToUse = targetIndex ?? selectedCanvasToken?.nodeIndex;
-
-        try {
-            const parser = new DOMParser();
-            const wrapped = wrapWithNamespaces(xmlInput);
-            const doc = parser.parseFromString(wrapped, 'text/xml');
-            if (doc.querySelector('parsererror')) throw new Error();
-
-            expandMfencesInDom(doc);
-
-            const allTokens = doc.querySelectorAll('mi, mn, mo, mtext, mspace, mml\\:mi, mml\\:mn, mml\\:mo, mml\\:mtext, mml\\:mspace');
-            
-            let targetEl: Element | null = null;
-            if (typeof indexToUse === 'number' && indexToUse >= 0 && indexToUse < allTokens.length) {
-                targetEl = allTokens[indexToUse];
-            } else {
-                allTokens.forEach(el => {
-                    if (!targetEl && el.textContent?.trim() === oldText) {
-                        targetEl = el;
-                    }
-                });
-            }
-
-            if (targetEl) {
-                (targetEl as Element).textContent = newText;
-                const serializer = new XMLSerializer();
-                let fullSerialized = serializer.serializeToString(doc);
-                fullSerialized = fullSerialized.replace(/^<root[^>]*>/, '').replace(/<\/root>$/, '');
-                if (fullSerialized) {
-                    setXmlInput(fullSerialized);
-                    setToast({ msg: `Updated symbol: "${oldText}" ➔ "${newText}"`, type: 'info' });
-                    if (selectedCanvasToken && (selectedCanvasToken.nodeIndex === indexToUse || selectedCanvasToken.text === oldText)) {
-                        setSelectedCanvasToken({ ...selectedCanvasToken, text: newText });
-                    }
-                    return;
-                }
-            }
-        } catch (e) {
-            const escOld = oldText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const regex = new RegExp(`(>)${escOld}(</)`, 'g');
-            const updated = xmlInput.replace(regex, `$1${newText}$2`);
-            if (updated !== xmlInput) {
-                setXmlInput(updated);
-                setToast({ msg: `Updated formula text: "${oldText}" ➔ "${newText}"`, type: 'info' });
-            }
-        }
+    const handleInlineContentEdit = (text: string, value: string, index?: number) => {
+        if (text === value) return;
+        editToken(text, parsedNodesList[index ?? selectedCanvasToken?.nodeIndex ?? -1]?.tag || selectedCanvasToken?.tagName || 'mi', index, el => setFormulaTokenText(el, value));
     };
 
     // Handle Direct Clicks on the Rendered Canvas
@@ -950,8 +411,11 @@ const FormulaEditorExperimental: React.FC = () => {
                         text: node.text,
                         tagName: node.tag,
                         mathvariant: node.mathvariant,
+                        width: node.width,
                         nodeIndex: idx
                     });
+                    if (node.tag === 'mspace') spaceEditorRef.current?.focus({preventScroll: true});
+                    else symbolEditorRef.current?.focus({preventScroll: true});
                     setToast({
                         msg: `Selected symbol #${idx + 1} "${node.text}" (<${node.tag}>${node.mathvariant ? ` mathvariant="${node.mathvariant}"` : ''})`,
                         type: 'info'
@@ -961,26 +425,6 @@ const FormulaEditorExperimental: React.FC = () => {
             }
         }
 
-        // Fallback: search for closest MathML leaf element
-        const closestLeaf = target.closest('mi, mn, mo, mtext, mspace') as HTMLElement | null;
-        if (closestLeaf) {
-            const leafText = (closestLeaf.textContent || '').trim();
-            const tag = closestLeaf.tagName.toLowerCase().replace(/^.*:/, '');
-            if (leafText || tag === 'mspace') {
-                const matchIndex = parsedNodesList.findIndex(n => n.text === leafText && n.tag === tag);
-                if (matchIndex !== -1) {
-                    const node = parsedNodesList[matchIndex];
-                    setSelectedCanvasToken({
-                        text: node.text,
-                        tagName: node.tag,
-                        mathvariant: node.mathvariant,
-                        nodeIndex: matchIndex
-                    });
-                    setToast({ msg: `Selected "${node.text}" (<${node.tag}>) on Canvas`, type: 'info' });
-                    return;
-                }
-            }
-        }
     };
 
     // Extract interactive nodes from XML for visual node editor
@@ -991,24 +435,23 @@ const FormulaEditorExperimental: React.FC = () => {
             const doc = parser.parseFromString(wrapped, 'text/xml');
             if (doc.querySelector('parsererror')) return [];
 
-            expandMfencesInDom(doc);
-
-            const nodes: { id: string; index: number; tag: string; text: string; fullTag: string; mathvariant?: string }[] = [];
-            const allTokens = doc.querySelectorAll('mi, mn, mo, mtext, mspace, mml\\:mi, mml\\:mn, mml\\:mo, mml\\:mtext, mml\\:mspace');
+            const nodes: { id: string; index: number; tag: string; text: string; fullTag: string; mathvariant?: string; width?: string }[] = [];
+            const allTokens = formulaTokens(doc);
             
             let idx = 0;
             allTokens.forEach((el) => {
-                const text = el.textContent?.trim() || '';
+                const text = el.textContent || '';
                 const tag = el.tagName.replace(/^.*:/, '').toLowerCase();
                 // Only mi tags can have mathvariant
-                const mathvariant = tag === 'mi' ? (el.getAttribute('mathvariant') || undefined) : undefined;
-                if (text || tag === 'mspace') {
+                const mathvariant = el.getAttribute('mathvariant') || undefined;
+                {
                     nodes.push({
                         id: `node-${idx}`,
                         index: idx,
                         tag,
                         text,
                         mathvariant,
+                        width: el.getAttribute('width') || undefined,
                         fullTag: el.outerHTML
                     });
                     idx++;
@@ -1050,7 +493,7 @@ const FormulaEditorExperimental: React.FC = () => {
     ];
 
     return (
-        <div className="max-w-full mx-auto px-2 py-8 sm:px-4 lg:px-6">
+        <div className="max-w-[1600px] mx-auto px-2 py-5 sm:px-4 lg:px-6 [&_button]:min-h-9 [&_button]:focus-visible:outline [&_button]:focus-visible:outline-2 [&_button]:focus-visible:outline-offset-2 [&_button]:focus-visible:outline-purple-600">
             {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
 
             {/* Title Header Bar */}
@@ -1062,14 +505,14 @@ const FormulaEditorExperimental: React.FC = () => {
                     <div>
                         <div className="flex items-center gap-2">
                             <h1 className="text-2xl font-black text-slate-900 tracking-tight uppercase">
-                                Formula Studio Pro <span className="text-purple-600">(Experimental)</span>
+                                Formula Studio Pro
                             </h1>
                             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-purple-100 text-purple-700">
-                                MAX Two-Way Sync
+                                Experimental
                             </span>
                         </div>
                         <p className="text-xs font-semibold text-slate-500 mt-0.5">
-                            Interactive MathML & formula editor with live two-way XML sync, formula attribute control, and tag auto-repair.
+                            Paste XML or import LaTeX, then select a symbol in the preview to edit it.
                         </p>
                     </div>
                 </div>
@@ -1104,6 +547,8 @@ const FormulaEditorExperimental: React.FC = () => {
                     </button>
 
                     <button
+                        aria-expanded={showTexImporter}
+                        aria-controls="formula-tex-import"
                         onClick={() => setShowTexImporter(!showTexImporter)}
                         className={`text-xs font-bold px-3.5 py-2 rounded-xl border transition-all flex items-center gap-1.5 active:scale-95 ${
                             showTexImporter 
@@ -1113,26 +558,12 @@ const FormulaEditorExperimental: React.FC = () => {
                         title="Convert TeX / LaTeX to MathML XML"
                     >
                         <Calculator size={14} className="text-purple-600" />
-                        <span>TeX ➔ MathML</span>
+                        <span>Import LaTeX</span>
                     </button>
 
-                    <button
-                        onClick={formatXml}
-                        className="text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 active:scale-95"
-                        title="Unlinearize XML structure (tag per line)"
-                    >
-                        <Wand2 size={14} className="text-purple-600" />
-                        <span>Unlinearize XML</span>
-                    </button>
-
-                    <button
-                        onClick={linearizeXml}
-                        className="text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 active:scale-95"
-                        title="Linearize XML into single line"
-                    >
-                        <FileCode size={14} className="text-purple-600" />
-                        <span>Linearize XML</span>
-                    </button>
+                    <input ref={fileInputRef} type="file" accept=".xml,.mml,application/xml,text/xml" onChange={handleImportFile} className="hidden" aria-label="Open XML file" />
+                    <button onClick={() => fileInputRef.current?.click()} className="text-xs font-bold px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50">Open XML file</button>
+                    <button onClick={downloadXml} disabled={!xmlInput.trim() || !!xmlError} className="text-xs font-bold px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40">Download XML</button>
 
                     <button
                         onClick={handleCopy}
@@ -1144,37 +575,20 @@ const FormulaEditorExperimental: React.FC = () => {
                 </div>
             </div>
 
-            {/* Keeper Advisory Warning Banner */}
-            <div className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3.5 text-amber-950 shadow-xs max-w-full">
-                <div className="p-2 rounded-xl bg-amber-500/20 text-amber-800 shrink-0 mt-0.5 shadow-2xs">
-                    <AlertTriangle size={18} className="text-amber-700" />
-                </div>
-                <div className="flex-1 text-xs">
-                    <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-black text-amber-950 uppercase tracking-wider text-[11px]">
-                            ⚠️ Keeper Advisory: Experimental Version
-                        </span>
-                        <span className="text-[9px] px-2 py-0.5 rounded-full bg-amber-200/90 text-amber-950 font-extrabold uppercase tracking-widest border border-amber-300">
-                            Not Yet Fully Established
-                        </span>
-                    </div>
-                    <p className="text-amber-900/90 mt-1 text-[11px] leading-relaxed">
-                        Formula Studio Pro is an <strong>experimental version</strong> protocol for interactive MathML visualization and two-way tree editing. Because complex nested equations (matrices, multi-line integrals, fences) are not yet fully established across all publisher DTD profiles, please verify rendered equations and exported XML before manuscript typesetting.
-                    </p>
-                </div>
-            </div>
+            <p className="mb-4 text-sm text-slate-600 flex items-start gap-2"><AlertTriangle size={16} className="shrink-0 mt-0.5 text-amber-600" />Experimental editor. Check your formula and XML before using them in a publication.</p>
 
             {/* TeX / LaTeX Quick Importer Drawer */}
             {showTexImporter && (
-                <div className="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white rounded-2xl p-5 mb-6 border border-purple-700 shadow-lg animate-in fade-in slide-in-from-top-2">
+                <div id="formula-tex-import" className="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white rounded-2xl p-5 mb-6 border border-purple-700 shadow-lg animate-in fade-in slide-in-from-top-2">
                     <div className="flex items-center justify-between mb-3 pb-2 border-b border-purple-800">
                         <div className="flex items-center gap-2">
                             <Calculator size={18} className="text-purple-300" />
                             <span className="text-xs font-black uppercase tracking-wider text-purple-100">
-                                LaTeX / TeX Math Converter
+                                Import a LaTeX formula
                             </span>
                         </div>
                         <button
+                            aria-label="Close LaTeX import"
                             onClick={() => setShowTexImporter(false)}
                             className="text-purple-300 hover:text-white p-1 rounded-lg hover:bg-purple-800 transition-colors"
                         >
@@ -1183,14 +597,18 @@ const FormulaEditorExperimental: React.FC = () => {
                     </div>
 
                     <p className="text-xs text-purple-200 mb-3">
-                        Paste any LaTeX expression (e.g. <code className="bg-purple-950 text-purple-300 px-1.5 py-0.5 rounded font-mono">\ln \frac&#123;C_0&#125;&#123;C_t&#125; = K_&#123;app&#125; t</code> or <code className="bg-purple-950 text-purple-300 px-1.5 py-0.5 rounded font-mono">x = \frac&#123;-b \pm \sqrt&#123;b^2 - 4ac&#125;&#125;&#123;2a&#125;</code>) to auto-generate Elsevier-compliant MathML XML.
+                        Paste a supported LaTeX expression (e.g. <code className="bg-purple-950 text-purple-300 px-1.5 py-0.5 rounded font-mono">\ln \frac&#123;C_0&#125;&#123;C_t&#125; = K_&#123;app&#125; t</code> or <code className="bg-purple-950 text-purple-300 px-1.5 py-0.5 rounded font-mono">x = \frac&#123;-b \pm \sqrt&#123;b^2 - 4ac&#125;&#125;&#123;2a&#125;</code>) to generate MathML XML. Quick import supports fractions, square roots, scripts, common symbols, and text. Unsupported commands leave the current formula unchanged.
                     </p>
 
                     <div className="flex flex-col sm:flex-row items-stretch gap-2">
                         <input
                             type="text"
                             value={texInput}
-                            onChange={(e) => setTexInput(e.target.value)}
+                            onChange={(e) => { setTexInput(e.target.value); setTexError(null); }}
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleConvertTex(); }}
+                            aria-label="LaTeX formula"
+                            aria-invalid={!!texError}
+                            aria-describedby={texError ? 'formula-tex-error' : undefined}
                             className="flex-1 bg-purple-950 border border-purple-700 rounded-xl px-4 py-2.5 text-xs font-mono text-purple-100 outline-none focus:border-purple-400 placeholder-purple-400/60"
                             placeholder="Type or paste LaTeX..."
                         />
@@ -1199,26 +617,28 @@ const FormulaEditorExperimental: React.FC = () => {
                             className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs px-5 py-2.5 rounded-xl transition-all shadow-md shrink-0 flex items-center justify-center gap-1.5 active:scale-95"
                         >
                             <Sparkles size={14} />
-                            <span>Convert to MathML</span>
+                            <span>Use this formula</span>
                         </button>
                     </div>
                 </div>
             )}
 
+            {showTexImporter && texError && <p id="formula-tex-error" role="alert" className="-mt-3 mb-5 text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl p-3">{texError} Your current formula is unchanged.</p>}
+
             {/* Info Collapsible Banner */}
             <div className="bg-gradient-to-r from-purple-50 via-indigo-50 to-slate-50 border border-purple-200/80 rounded-2xl p-4 mb-6 transition-all">
-                <div className="flex items-center justify-between cursor-pointer" onClick={() => setShowInfo(!showInfo)}>
+                <button type="button" aria-expanded={showInfo} aria-controls="formula-help" className="w-full flex items-center justify-between text-left" onClick={() => setShowInfo(!showInfo)}>
                     <div className="flex items-center gap-2 text-xs font-black text-purple-900 uppercase tracking-wider">
                         <HelpCircle size={15} className="text-purple-600" />
-                        <span>What does Formula Studio Pro MAX do?</span>
+                        <span>How to edit a formula</span>
                     </div>
                     <span className="text-xs font-bold text-purple-600 hover:text-purple-800">
-                        {showInfo ? 'Hide Details' : 'View Details'}
+                        {showInfo ? 'Hide help' : 'Show help'}
                     </span>
-                </div>
+                </button>
 
                 {showInfo && (
-                    <div className="mt-3 text-xs text-slate-700 leading-relaxed grid grid-cols-1 md:grid-cols-3 gap-4 pt-3 border-t border-purple-200/50">
+                    <div id="formula-help" className="mt-3 text-sm text-slate-700 leading-relaxed grid grid-cols-1 md:grid-cols-3 gap-4 pt-3 border-t border-purple-200/50">
                         <div className="flex items-start gap-2">
                             <div className="w-1.5 h-1.5 rounded-full bg-purple-600 mt-1.5 shrink-0"></div>
                             <div>
@@ -1244,52 +664,46 @@ const FormulaEditorExperimental: React.FC = () => {
             {/* Presets & View Mode Toolbar */}
             <div className="bg-white p-4 rounded-2xl shadow-xs border border-slate-200 mb-6 flex flex-wrap items-center justify-between gap-4">
                 <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5 mr-1">
-                        <Sparkles size={14} className="text-amber-500" /> Presets:
-                    </span>
-                    {PRESET_SAMPLES.map(sample => (
-                        <button
-                            key={sample.id}
-                            onClick={() => {
-                                setXmlInput(sample.xml);
-                                setToast({ msg: `Loaded ${sample.name}`, type: 'info' });
-                            }}
-                            className="text-xs font-bold px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-purple-50 hover:text-purple-700 hover:border-purple-200 text-slate-700 transition-all flex items-center gap-1.5 active:scale-95"
-                            title={sample.desc}
-                        >
-                            <Box size={13} className="text-slate-400" />
-                            <span>{sample.name}</span>
-                        </button>
-                    ))}
+                    <label htmlFor="formula-sample" className="text-sm font-semibold text-slate-600">Try an example</label>
+                    <select id="formula-sample" value="" onChange={(event) => {
+                        const sample = PRESET_SAMPLES.find(item => item.id === event.target.value);
+                        if (sample) { setXmlInput(sample.xml); setToast({msg: 'Example loaded. Undo restores your previous formula.', type: 'info'}); }
+                    }} className="max-w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
+                        <option value="" disabled>Choose a formula…</option>
+                        {PRESET_SAMPLES.map(sample => <option key={sample.id} value={sample.id}>{sample.name.replace('User Request Sample (Reaction Kinetics)', 'Reaction kinetics')}</option>)}
+                    </select>
                 </div>
 
                 <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
                     <button
+                        aria-pressed={viewMode === 'split'}
                         onClick={() => setViewMode('split')}
                         className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
                             viewMode === 'split' ? 'bg-white text-purple-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                         }`}
                     >
                         <Split size={14} />
-                        <span>Split View</span>
+                        <span>Preview + XML</span>
                     </button>
                     <button
+                        aria-pressed={viewMode === 'rendered'}
                         onClick={() => setViewMode('rendered')}
                         className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
                             viewMode === 'rendered' ? 'bg-white text-purple-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                         }`}
                     >
                         <Eye size={14} />
-                        <span>Rendered View</span>
+                        <span>Preview</span>
                     </button>
                     <button
+                        aria-pressed={viewMode === 'code'}
                         onClick={() => setViewMode('code')}
                         className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
                             viewMode === 'code' ? 'bg-white text-purple-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                         }`}
                     >
                         <Code size={14} />
-                        <span>XML Code</span>
+                        <span>XML</span>
                     </button>
                 </div>
             </div>
@@ -1303,6 +717,7 @@ const FormulaEditorExperimental: React.FC = () => {
                         </label>
                         <input
                             type="text"
+                            aria-label="Formula ID"
                             value={formulaId}
                             onChange={(e) => handleUpdateMetadata(e.target.value, altImg, isDisplay)}
                             className="px-3 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-800 w-28 outline-none focus:ring-2 focus:ring-purple-200"
@@ -1315,6 +730,7 @@ const FormulaEditorExperimental: React.FC = () => {
                         </label>
                         <input
                             type="text"
+                            aria-label="Alt Reference"
                             value={altImg}
                             onChange={(e) => handleUpdateMetadata(formulaId, e.target.value, isDisplay)}
                             className="px-3 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-800 w-28 outline-none focus:ring-2 focus:ring-purple-200"
@@ -1331,7 +747,7 @@ const FormulaEditorExperimental: React.FC = () => {
                                     : 'bg-slate-100 text-slate-700 border-slate-200'
                             }`}
                         >
-                            {isDisplay ? '<ce:display>' : '<ce:inline>'}
+                            {isDisplay ? 'Display equation' : 'Inline equation'}
                         </button>
                     </div>
                 </div>
@@ -1364,12 +780,12 @@ const FormulaEditorExperimental: React.FC = () => {
                     <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-200 flex flex-col min-h-[460px]">
                         <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
                             <span className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                                <Eye size={16} className="text-purple-600" /> Interactive Rendered Canvas
+                                <Eye size={16} className="text-purple-600" /> Formula preview
                             </span>
                             <div className="flex items-center gap-2">
                                 <span className="text-[11px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-2xs">
                                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                                    Click any symbol on formula to edit live
+                                    Select a symbol to edit
                                 </span>
                             </div>
                         </div>
@@ -1377,18 +793,22 @@ const FormulaEditorExperimental: React.FC = () => {
                         {/* Quick Greek & Special Symbol Insertion Palette */}
                         <div className="mb-4 bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex items-center gap-1.5 flex-wrap">
                             <span className="text-[11px] font-black text-slate-500 uppercase tracking-wider mr-1 flex items-center gap-1">
-                                <Tag size={12} className="text-purple-600" /> Quick Symbols:
+                                <Tag size={12} className="text-purple-600" /> Insert symbol:
                             </span>
                             {['α', 'β', 'γ', 'δ', 'θ', 'λ', 'μ', 'π', 'σ', 'ω', 'Δ', '±', '≤', '≥', '≠', '≈', '∞', '∂', '∫', '∑', '→'].map(sym => (
                                 <button
                                     key={sym}
                                     onClick={() => {
-                                        if (selectedCanvasToken) {
-                                            const updatedText = selectedCanvasToken.text + sym;
-                                            handleInlineContentEdit(selectedCanvasToken.text, updatedText);
-                                            setSelectedCanvasToken({ ...selectedCanvasToken, text: updatedText });
-                                        } else {
-                                            insertMathSnippet(`<mml:mi>${sym}</mml:mi>`, `Symbol ${sym}`);
+                                        try {
+                                            const selected = selectedCanvasToken;
+                                            const updated = insertFormulaSymbol(xmlInput, sym, selected || undefined);
+                                            setXmlInput(updated);
+                                            if (selected && selected.nodeIndex !== undefined) {
+                                                const replacesEmpty = selected.tagName !== 'mspace' && !selected.text.trim();
+                                                setSelectedCanvasToken({text: sym, tagName: formulaSymbolTag(sym), nodeIndex: selected.nodeIndex + (replacesEmpty ? 0 : 1)});
+                                            }
+                                        } catch (error) {
+                                            setToast({msg: error instanceof Error ? error.message : 'Could not insert symbol.', type: 'error'});
                                         }
                                     }}
                                     className="w-7 h-7 text-xs font-serif font-bold text-slate-800 bg-white hover:bg-purple-600 hover:text-white border border-slate-200 hover:border-purple-600 rounded-lg shadow-2xs transition-all flex items-center justify-center active:scale-95"
@@ -1409,7 +829,7 @@ const FormulaEditorExperimental: React.FC = () => {
                                         <div className="flex items-center gap-2">
                                             <Sparkles size={14} className="text-purple-300" />
                                             <span className="text-xs font-bold text-purple-100">
-                                                Editing Canvas Symbol:
+                                                Edit selected symbol
                                             </span>
                                             <span className="text-xs font-mono font-black bg-purple-800 text-purple-200 px-2 py-0.5 rounded border border-purple-700">
                                                 &lt;{selectedCanvasToken.tagName}&gt;{selectedCanvasToken.text}&lt;/{selectedCanvasToken.tagName}&gt;
@@ -1428,18 +848,36 @@ const FormulaEditorExperimental: React.FC = () => {
                                         {/* Real-time Text Input */}
                                         <div className="sm:col-span-5 flex items-center gap-1.5 bg-purple-950 p-1.5 rounded-lg border border-purple-700">
                                             <Edit3 size={13} className="text-purple-400 shrink-0 ml-1" />
-                                            <input
-                                                type="text"
+                                            {selectedCanvasToken.tagName === 'mspace' ? (
+                                                <div className="w-full space-y-2">
+                                                    <label htmlFor="formula-space-width" className="text-xs font-semibold text-purple-100">Space width</label>
+                                                    <input id="formula-space-width" ref={spaceEditorRef} data-formula-editor value={spaceWidth}
+                                                        onChange={event => {setSpaceWidth(event.target.value); setSpaceError(null);}}
+                                                        onKeyDown={event => {if (event.key === 'Enter') applySpaceWidth(); if (event.key === 'Escape') setSelectedCanvasToken(null);}}
+                                                        aria-invalid={!!spaceError} aria-describedby="formula-space-help"
+                                                        className="w-full bg-purple-950 border border-purple-600 rounded p-2 text-sm text-white" placeholder="0.5em" />
+                                                    <p id="formula-space-help" className="text-xs text-purple-200">Use a length such as 0.5em or 8px. Leave blank for the default.</p>
+                                                    {spaceError && <p role="alert" className="text-xs text-amber-200">{spaceError}</p>}
+                                                    <button onClick={applySpaceWidth} className="px-3 py-1 rounded bg-purple-600 text-sm text-white">Apply spacing</button>
+                                                </div>
+                                            ) : (
+                                            <textarea
+                                                ref={symbolEditorRef}
+                                                data-formula-editor
+                                                rows={selectedCanvasToken.tagName === 'mtext' ? 2 : 1}
                                                 value={selectedCanvasToken.text}
                                                 onChange={(e) => {
                                                     const newVal = e.target.value;
-                                                    handleInlineContentEdit(selectedCanvasToken.text, newVal);
+                                                    const source = parsedNodesList[selectedCanvasToken.nodeIndex ?? -1];
+                                                    if (source) handleInlineContentEdit(source.text, newVal, source.index);
                                                     setSelectedCanvasToken({ ...selectedCanvasToken, text: newVal });
                                                 }}
                                                 className="w-full text-xs font-mono font-black text-white bg-transparent outline-none"
+                                                aria-label="Selected symbol value"
+                                                onKeyDown={(event) => { if (event.key === 'Escape') setSelectedCanvasToken(null); }}
                                                 placeholder="Symbol value..."
-                                                autoFocus
                                             />
+                                            )}
                                         </div>
 
                                         {/* Quick Structural Wrappers Bar */}
@@ -1489,16 +927,16 @@ const FormulaEditorExperimental: React.FC = () => {
                                         </div>
 
                                          {/* Multi-position Custom Split Chooser for multi-character identifiers */}
-                                        {selectedCanvasToken.text.length >= 2 && (
+                                        {Array.from(selectedCanvasToken.text).length >= 2 && (
                                             <div className="sm:col-span-12 mt-2 pt-2 border-t border-purple-800/80 flex items-center gap-2 flex-wrap">
                                                 <span className="text-[11px] font-bold text-amber-300 flex items-center gap-1.5 shrink-0">
                                                     <Split size={13} className="text-amber-400" /> Choose Split & Structure:
                                                 </span>
                                                 <div className="flex items-center gap-2 flex-wrap">
-                                                    {Array.from({ length: selectedCanvasToken.text.length - 1 }).map((_, idx) => {
+                                                    {Array.from({ length: Array.from(selectedCanvasToken.text).length - 1 }).map((_, idx) => {
                                                         const pos = idx + 1;
-                                                        const base = selectedCanvasToken.text.slice(0, pos);
-                                                        const sub = selectedCanvasToken.text.slice(pos);
+                                                        const base = Array.from(selectedCanvasToken.text).slice(0, pos).join('');
+                                                        const sub = Array.from(selectedCanvasToken.text).slice(pos).join('');
                                                         return (
                                                             <div key={pos} className="inline-flex rounded-lg border border-amber-500/80 overflow-hidden shadow-2xs bg-purple-950/80">
                                                                 <button
@@ -1587,26 +1025,26 @@ const FormulaEditorExperimental: React.FC = () => {
                                 <div className="text-center w-full my-auto">
                                     <div 
                                         onClick={handleCanvasClick}
-                                        className="text-2xl sm:text-3xl font-serif text-slate-900 select-none p-6 rounded-2xl hover:bg-purple-50/80 transition-all inline-block max-w-full overflow-x-auto cursor-pointer border-2 border-dashed border-purple-200/60 hover:border-purple-400 [&_*]:transition-all [&_mi]:hover:bg-purple-200/90 [&_mi]:hover:text-purple-950 [&_mi]:rounded-md [&_mi]:px-1 [&_mi]:py-0.5 [&_mi]:outline [&_mi]:outline-1 [&_mi]:outline-purple-400 [&_mn]:hover:bg-purple-200/90 [&_mn]:hover:text-purple-950 [&_mn]:rounded-md [&_mn]:px-1 [&_mn]:py-0.5 [&_mn]:outline [&_mn]:outline-1 [&_mn]:outline-purple-400 [&_mo]:hover:bg-purple-200/90 [&_mo]:hover:text-purple-950 [&_mo]:rounded-md [&_mo]:px-1 [&_mo]:py-0.5 [&_mo]:outline [&_mo]:outline-1 [&_mo]:outline-purple-400 [&_mtext]:hover:bg-purple-200/90 [&_mtext]:hover:text-purple-950 [&_mtext]:rounded-md [&_mtext]:px-1 [&_mtext]:py-0.5 [&_mtext]:outline [&_mtext]:outline-1 [&_mtext]:outline-purple-400"
+                                        className="text-2xl sm:text-3xl font-serif text-slate-900 select-none p-6 rounded-2xl inline-block max-w-full overflow-x-auto cursor-pointer [&_[data-token-index]]:hover:bg-purple-100"
                                         dangerouslySetInnerHTML={{ __html: renderableHtmlMathML }}
                                         title="Click any formula symbol to edit directly on canvas!"
                                     />
                                     <p className="text-[11px] font-semibold text-slate-400 mt-4 flex items-center justify-center gap-1.5">
                                         <Sparkles size={12} className="text-purple-500" />
-                                        Native MathML Rendering Engine • Direct Canvas Click-to-Edit Enabled
+                                        Select a symbol above, or expand “Edit all symbols” below.
                                     </p>
                                 </div>
                             ) : (
                                 <div className="text-center text-slate-400 py-8">
                                     <AlertTriangle size={32} className="mx-auto mb-2 text-amber-500" />
-                                    <p className="text-xs font-bold text-slate-600">Could not render MathML preview</p>
-                                    <p className="text-[11px] text-slate-400 mt-1">Please check XML syntax or click Auto-Fix XML above.</p>
+                                    <p className="text-xs font-bold text-slate-600">Your preview will appear here</p>
+                                    <p className="text-[11px] text-slate-400 mt-1">Paste a MathML formula in the XML editor, import LaTeX, or choose an example.</p>
                                 </div>
                             )}
                         </div>
 
                         {/* MathML Structural Elements Quick Palette */}
-                        <div className="mt-4 p-4 bg-purple-50/60 border border-purple-100 rounded-2xl">
+                        <details className="mt-4 p-4 bg-purple-50/60 border border-purple-100 rounded-2xl"><summary className="cursor-pointer text-sm font-semibold text-purple-900">Insert a fraction, script, or other structure</summary>
                             <div className="flex items-center justify-between mb-2">
                                 <span className="text-[11px] font-black uppercase tracking-wider text-purple-900 flex items-center gap-1.5">
                                     <Sparkles size={13} className="text-purple-600" /> MathML Structure Palette (1-Click Insert)
@@ -1759,10 +1197,10 @@ const FormulaEditorExperimental: React.FC = () => {
                                     </button>
                                 )}
                             </div>
-                        </div>
+                        </details>
 
                         {/* Interactive Node Token List with Full Structural Controls */}
-                        <div className="mt-6 pt-4 border-t border-slate-100">
+                        <details className="mt-5 pt-4 border-t border-slate-100"><summary className="cursor-pointer text-sm font-semibold text-slate-700">Edit all symbols ({parsedNodesList.length})</summary>
                             <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider mb-3 flex items-center justify-between">
                                 <span className="flex items-center gap-1.5">
                                     <Edit3 size={14} className="text-indigo-600" /> Interactive Token Studio ({parsedNodesList.length} tokens)
@@ -1778,12 +1216,13 @@ const FormulaEditorExperimental: React.FC = () => {
                                         const isSelected = selectedCanvasToken?.nodeIndex === node.index;
                                         return (
                                             <div 
-                                                key={node.id}
+                                                key={node.id + node.fullTag}
                                                 onClick={() => {
                                                     setSelectedCanvasToken({
                                                         text: node.text,
                                                         tagName: node.tag,
                                                         mathvariant: node.mathvariant,
+                        width: node.width,
                                                         nodeIndex: node.index
                                                     });
                                                 }}
@@ -1833,7 +1272,7 @@ const FormulaEditorExperimental: React.FC = () => {
                                                     {/* Action utilities */}
                                                     <div className="flex items-center gap-1">
                                                         <button
-                                                            onClick={(e) => { e.stopPropagation(); addTokenAfter(node.text, node.tag); }}
+                                                            onClick={(e) => { e.stopPropagation(); addTokenAfter(node.text, node.tag, node.index); }}
                                                             className="p-1 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-md transition-colors"
                                                             title="Add token after"
                                                         >
@@ -1851,9 +1290,10 @@ const FormulaEditorExperimental: React.FC = () => {
 
                                                 {/* Value Input Field */}
                                                 <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border border-slate-200">
-                                                    <input
-                                                        type="text"
-                                                        defaultValue={node.text}
+                                                    <textarea
+                                                        rows={node.tag === 'mtext' ? 2 : 1}
+                                                        disabled={node.tag === 'mspace'}
+                                                        defaultValue={node.tag === 'mspace' ? node.width || 'Default spacing' : node.text}
                                                         onBlur={(e) => {
                                                             const val = e.target.value;
                                                             if (val !== node.text) {
@@ -1861,13 +1301,14 @@ const FormulaEditorExperimental: React.FC = () => {
                                                             }
                                                         }}
                                                         onKeyDown={(e) => {
-                                                            if (e.key === 'Enter') {
+                                                            if (e.key === 'Enter' && node.tag !== 'mtext') {
                                                                 e.currentTarget.blur();
                                                             }
                                                         }}
                                                         className="text-xs font-mono font-black text-slate-900 bg-transparent outline-none w-full px-1"
                                                         placeholder="Token text..."
                                                     />
+                                                    {node.tag === 'mspace' && <button className="text-xs font-bold text-purple-700" onClick={() => setSelectedCanvasToken({text: node.text, tagName: node.tag, nodeIndex: node.index, width: node.width})}>Edit spacing</button>}
                                                 </div>
 
                                             {/* Quick Structural Wrap Toolbar */}
@@ -1875,40 +1316,40 @@ const FormulaEditorExperimental: React.FC = () => {
                                                 <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight mr-1">Wrap:</span>
                                                 
                                              {/* Multi-point Split Chooser */}
-                                             {node.text.length >= 2 && (
+                                             {Array.from(node.text).length >= 2 && (
                                                  <div className="w-full pt-1.5 border-t border-slate-200/60 flex items-center gap-1 flex-wrap">
                                                      <span className="text-[9px] font-bold text-amber-900 uppercase tracking-tight flex items-center gap-0.5 shrink-0">
                                                          <Split size={10} className="text-amber-600" /> Split at:
                                                      </span>
-                                                     {Array.from({ length: node.text.length - 1 }).map((_, idx) => {
+                                                     {Array.from({ length: Array.from(node.text).length - 1 }).map((_, idx) => {
                                                          const pos = idx + 1;
-                                                         const base = node.text.slice(0, pos);
-                                                         const sub = node.text.slice(pos);
+                                                         const base = Array.from(node.text).slice(0, pos).join('');
+                                                         const sub = Array.from(node.text).slice(pos).join('');
                                                          return (
                                                              <div key={pos} className="inline-flex rounded border border-slate-300 overflow-hidden shadow-2xs text-[10px]">
                                                                  <button
-                                                                     onClick={() => splitTokenAtPosition(node.text, node.tag, pos, 'sub')}
+                                                                     onClick={() => splitTokenAtPosition(node.text, node.tag, pos, 'sub', node.index)}
                                                                      className="px-1.5 py-0.5 bg-amber-50 hover:bg-amber-600 hover:text-white text-amber-900 font-mono font-bold transition-colors"
                                                                      title={`Split "${node.text}" into Subscript: ${base}_${sub}`}
                                                                  >
                                                                      {base}<sub>{sub}</sub>
                                                                  </button>
                                                                  <button
-                                                                     onClick={() => splitTokenAtPosition(node.text, node.tag, pos, 'super')}
+                                                                     onClick={() => splitTokenAtPosition(node.text, node.tag, pos, 'super', node.index)}
                                                                      className="px-1 py-0.5 bg-purple-50 hover:bg-purple-600 hover:text-white text-purple-900 font-mono font-bold transition-colors border-l border-slate-200"
                                                                      title={`Split into Superscript: ${base}^${sub}`}
                                                                  >
                                                                      {base}<sup>{sub}</sup>
                                                                  </button>
                                                                  <button
-                                                                     onClick={() => splitTokenAtPosition(node.text, node.tag, pos, 'frac')}
+                                                                     onClick={() => splitTokenAtPosition(node.text, node.tag, pos, 'frac', node.index)}
                                                                      className="px-1 py-0.5 bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-900 font-mono font-bold transition-colors border-l border-slate-200"
                                                                      title={`Split into Fraction: ${base}/${sub}`}
                                                                  >
                                                                      {base}/{sub}
                                                                  </button>
                                                                  <button
-                                                                     onClick={() => splitTokenAtPosition(node.text, node.tag, pos, 'over')}
+                                                                     onClick={() => splitTokenAtPosition(node.text, node.tag, pos, 'over', node.index)}
                                                                      className="px-1 py-0.5 bg-slate-100 hover:bg-slate-700 hover:text-white text-slate-800 font-mono font-bold transition-colors border-l border-slate-200"
                                                                      title={`Split into Overscript: ${base} with ${sub} over`}
                                                                  >
@@ -1921,7 +1362,7 @@ const FormulaEditorExperimental: React.FC = () => {
                                              )}
 
                                                 <button
-                                                    onClick={() => wrapTokenSubscript(node.text, node.tag)}
+                                                    onClick={() => wrapTokenSubscript(node.text, node.tag, node.index)}
                                                     className="text-[10px] font-mono font-bold px-1.5 py-0.5 bg-white hover:bg-purple-600 hover:text-white text-purple-800 rounded border border-slate-200 transition-colors"
                                                     title="Wrap in Subscript <mml:msub>"
                                                 >
@@ -1929,7 +1370,7 @@ const FormulaEditorExperimental: React.FC = () => {
                                                 </button>
 
                                                 <button
-                                                    onClick={() => wrapTokenSuperscript(node.text, node.tag)}
+                                                    onClick={() => wrapTokenSuperscript(node.text, node.tag, node.index)}
                                                     className="text-[10px] font-mono font-bold px-1.5 py-0.5 bg-white hover:bg-purple-600 hover:text-white text-purple-800 rounded border border-slate-200 transition-colors"
                                                     title="Wrap in Superscript <mml:msup>"
                                                 >
@@ -1937,7 +1378,7 @@ const FormulaEditorExperimental: React.FC = () => {
                                                 </button>
 
                                                 <button
-                                                    onClick={() => wrapTokenSubSuperscript(node.text, node.tag)}
+                                                    onClick={() => wrapTokenSubSuperscript(node.text, node.tag, node.index)}
                                                     className="text-[10px] font-mono font-bold px-1.5 py-0.5 bg-white hover:bg-purple-600 hover:text-white text-purple-800 rounded border border-slate-200 transition-colors"
                                                     title="Wrap in Sub/Superscript <mml:msubsup>"
                                                 >
@@ -1945,7 +1386,7 @@ const FormulaEditorExperimental: React.FC = () => {
                                                 </button>
 
                                                 <button
-                                                    onClick={() => wrapTokenFraction(node.text, node.tag)}
+                                                    onClick={() => wrapTokenFraction(node.text, node.tag, node.index)}
                                                     className="text-[10px] font-mono font-bold px-1.5 py-0.5 bg-white hover:bg-purple-600 hover:text-white text-purple-800 rounded border border-slate-200 transition-colors"
                                                     title="Wrap in Fraction <mml:mfrac>"
                                                 >
@@ -1953,7 +1394,7 @@ const FormulaEditorExperimental: React.FC = () => {
                                                 </button>
 
                                                 <button
-                                                    onClick={() => wrapTokenSqrt(node.text, node.tag)}
+                                                    onClick={() => wrapTokenSqrt(node.text, node.tag, node.index)}
                                                     className="text-[10px] font-mono font-bold px-1.5 py-0.5 bg-white hover:bg-purple-600 hover:text-white text-purple-800 rounded border border-slate-200 transition-colors"
                                                     title="Wrap in Square Root <mml:msqrt>"
                                                 >
@@ -1961,7 +1402,7 @@ const FormulaEditorExperimental: React.FC = () => {
                                                 </button>
 
                                                 <button
-                                                    onClick={() => wrapTokenUnder(node.text, node.tag)}
+                                                    onClick={() => wrapTokenUnder(node.text, node.tag, node.index)}
                                                     className="text-[10px] font-mono font-bold px-1.5 py-0.5 bg-white hover:bg-purple-600 hover:text-white text-purple-800 rounded border border-slate-200 transition-colors"
                                                     title="Wrap in Underscript <mml:munder>"
                                                 >
@@ -1969,7 +1410,7 @@ const FormulaEditorExperimental: React.FC = () => {
                                                 </button>
 
                                                 <button
-                                                    onClick={() => wrapTokenOver(node.text, node.tag)}
+                                                    onClick={() => wrapTokenOver(node.text, node.tag, node.index)}
                                                     className="text-[10px] font-mono font-bold px-1.5 py-0.5 bg-white hover:bg-purple-600 hover:text-white text-purple-800 rounded border border-slate-200 transition-colors"
                                                     title="Wrap in Overscript <mml:mover>"
                                                 >
@@ -1983,7 +1424,7 @@ const FormulaEditorExperimental: React.FC = () => {
                                     <p className="text-xs text-slate-400 italic col-span-2">No editable MathML text tokens found.</p>
                                 )}
                             </div>
-                        </div>
+                        </details>
                     </div>
                 )}
 
@@ -1992,7 +1433,7 @@ const FormulaEditorExperimental: React.FC = () => {
                     <div className="bg-slate-900 rounded-[2rem] p-6 shadow-sm border border-slate-800 flex flex-col min-h-[460px] text-slate-100">
                         <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-4 flex-wrap gap-2">
                             <span className="text-xs font-black text-purple-400 uppercase tracking-wider flex items-center gap-2">
-                                <Code size={16} /> XML Source Editor
+                                <Code size={16} /> Formula XML
                             </span>
                             <div className="flex items-center gap-3">
                                 <div className="flex items-center gap-1">
@@ -2034,7 +1475,14 @@ const FormulaEditorExperimental: React.FC = () => {
                         </div>
 
                         <div className="flex-1 relative flex flex-col">
+                            <div role="status" aria-live="polite" className="mb-3 text-sm flex items-center gap-2">
+                                {xmlError ? <><AlertTriangle size={16} className="text-amber-400" /><span className="text-amber-200">Fix XML syntax to restore the preview.</span></> : xmlInput.trim() ? <><CheckCircle2 size={16} className="text-emerald-400" /><span className="text-emerald-200">XML syntax looks good</span></> : <span className="text-slate-400">Paste a formula to get started.</span>}
+                            </div>
+                            {xmlError && <details className="mb-3 text-xs text-amber-100"><summary className="cursor-pointer">Show XML error details</summary><pre className="mt-2 whitespace-pre-wrap break-words">{xmlError}</pre></details>}
                             <textarea
+                                aria-label="Formula XML"
+                                aria-invalid={!!xmlError}
+                                data-formula-xml
                                 value={xmlInput}
                                 onChange={(e) => setXmlInput(e.target.value)}
                                 placeholder="Paste or edit XML formula here..."
@@ -2045,50 +1493,24 @@ const FormulaEditorExperimental: React.FC = () => {
 
                         <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400 flex-wrap gap-2">
                             <span className="flex items-center gap-1.5">
-                                <CheckCircle2 size={13} className="text-emerald-400" /> Direct XML Edit Sync Enabled
+                                <CheckCircle2 size={13} className="text-emerald-400" /> Changes appear in the preview automatically
                             </span>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    onClick={handleUndo}
-                                    disabled={historyIndex <= 0}
-                                    className={`text-xs font-bold px-2.5 py-1 rounded-lg border transition-all flex items-center gap-1 active:scale-95 ${
-                                        historyIndex > 0 
-                                            ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700 cursor-pointer' 
-                                            : 'bg-slate-900/60 text-slate-600 border-slate-800/80 cursor-not-allowed'
-                                    }`}
-                                    title="Undo last XML edit (Ctrl+Z)"
-                                >
-                                    <RotateCcw size={12} />
-                                    <span>Undo</span>
-                                </button>
-                                <button
-                                    onClick={handleRedo}
-                                    disabled={historyIndex >= history.length - 1}
-                                    className={`text-xs font-bold px-2.5 py-1 rounded-lg border transition-all flex items-center gap-1 active:scale-95 ${
-                                        historyIndex < history.length - 1 
-                                            ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700 cursor-pointer' 
-                                            : 'bg-slate-900/60 text-slate-600 border-slate-800/80 cursor-not-allowed'
-                                    }`}
-                                    title="Redo XML edit (Ctrl+Y)"
-                                >
-                                    <RotateCw size={12} />
-                                    <span>Redo</span>
-                                </button>
+                            <div className="flex items-center gap-2 flex-wrap">
                                 <button
                                     onClick={formatXml}
                                     className="text-xs font-bold px-2.5 py-1 rounded-lg border bg-slate-800 hover:bg-slate-700 text-purple-300 border-slate-700 transition-all flex items-center gap-1 active:scale-95"
-                                    title="Unlinearize XML structure (tag per line)"
+                                    title="Format XML structure (tag per line)"
                                 >
                                     <Wand2 size={12} />
-                                    <span>Unlinearize XML</span>
+                                    <span>Format XML</span>
                                 </button>
                                 <button
                                     onClick={linearizeXml}
                                     className="text-xs font-bold px-2.5 py-1 rounded-lg border bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700 transition-all flex items-center gap-1 active:scale-95"
-                                    title="Linearize XML into single line"
+                                    title="Remove layout whitespace while preserving formula text"
                                 >
                                     <FileCode size={12} />
-                                    <span>Linearize XML</span>
+                                    <span>Compact XML</span>
                                 </button>
                                 <button
                                     onClick={() => {
@@ -2108,7 +1530,7 @@ const FormulaEditorExperimental: React.FC = () => {
             {/* Smart Suggestions Footer */}
             <div className="mt-12 pt-8 border-t border-slate-200">
                 <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-                    <Sparkles size={14} className="text-purple-600" /> Next Protocol Suggestions
+                    <Sparkles size={14} className="text-purple-600" /> Continue with another tool
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {suggestions.map((sug) => (

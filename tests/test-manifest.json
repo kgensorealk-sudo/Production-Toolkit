@@ -3,6 +3,20 @@
   "runtime": "Node 24; verified locally with 24.11.1 on Windows x64",
   "entries": [
     {
+      "file": "tests/formula-studio.mjs",
+      "kinds": [
+        "behavioral"
+      ],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineDependencies": [
+        "utils/formulaStudio.ts",
+        "jsdom",
+        "tsx"
+      ],
+      "externalChecks": []
+    },
+    {
       "file": "tests/keeper-author-group-evaluation.mjs",
       "kinds": [
         "behavioral"
