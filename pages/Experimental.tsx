@@ -12,7 +12,6 @@ import {
     Cpu,
     Database,
     Link,
-    Sigma,
     Tag,
     AlertTriangle
 } from 'lucide-react';
@@ -170,7 +169,6 @@ const Experimental: React.FC = () => {
         { id: ToolId.REF_TAGGER_EXP, title: "Reference XML Tagger Pro (Experimental)", desc: "Batch transforms plain-text reference lists into fully structured, schema-compliant XML bibliography nodes.", iconBg: "bg-emerald-50", iconText: "text-emerald-600", borderColor: "bg-emerald-500", Icon: Tag, isExperimental: true },
         { id: ToolId.XML_RENUMBER_EXP, title: "XML Normalizer Pro (Experimental)", desc: "Advanced sequential citation renumbering with alphabetical sorting, range compression, and other-ref isolation.", iconBg: "bg-blue-50", iconText: "text-blue-600", borderColor: "bg-blue-500", Icon: Database, isExperimental: true },
         { id: ToolId.CITATION_LINKER_EXP, title: "Citation Linker Pro MAX", desc: "Multi-entity citation linker with fuzzy author/year resolution, float cross-refs, and auto-text detection.", iconBg: "bg-indigo-50", iconText: "text-indigo-600", borderColor: "bg-indigo-500", Icon: Link, isExperimental: true },
-        { id: ToolId.FORMULA_EDITOR_EXP, title: "Formula Studio Pro (Experimental)", desc: "Interactive MathML formula editor with real-time two-way XML rendering, inline edit sync, and tag auto-repair.", iconBg: "bg-purple-50", iconText: "text-purple-600", borderColor: "bg-purple-500", Icon: Sigma, isExperimental: true }
     ];
 
     const filteredTools = useMemo(() => {
@@ -229,7 +227,7 @@ const Experimental: React.FC = () => {
                 </motion.div>
             </div>
 
-            {/* Keeper Advisory Warning Banner */}
+            {/* Validation advisory Warning Banner */}
             <motion.div 
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -241,14 +239,14 @@ const Experimental: React.FC = () => {
                 <div className="flex-1 text-xs">
                     <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-black text-amber-950 uppercase tracking-wider text-[11px]">
-                            ⚠️ Keeper Advisory: Experimental Versions Active
+                            ⚠️ Validation advisory: Experimental Versions Active
                         </span>
                         <span className="text-[9px] px-2 py-0.5 rounded-full bg-amber-200/90 text-amber-950 font-extrabold uppercase tracking-widest border border-amber-300">
                             Not Yet Fully Established
                         </span>
                     </div>
                     <p className="text-amber-900/90 mt-1 text-[11px] leading-relaxed">
-                        Protocols listed below are <strong>Experimental Versions</strong> under active development and testing. They are <strong>not yet fully established</strong> and may produce unexpected edge-case tags, renumbering shifts, or formatting artifacts. Keeper strongly advises verifying all XML output, citation cross-references, and formulas against standard DTD v5.6 / JATS XML guidelines before publishing. Ask Keeper in the bottom right corner if you need help deciding between an experimental version and its established counterpart!
+                        Protocols listed below are <strong>Experimental Versions</strong> under active development and testing. They are <strong>not yet fully established</strong> and may produce unexpected edge-case tags, renumbering shifts, or formatting artifacts. Verify all XML output, citation cross-references, and formulas against standard DTD v5.6 / JATS XML guidelines before publishing.
                     </p>
                 </div>
             </motion.div>

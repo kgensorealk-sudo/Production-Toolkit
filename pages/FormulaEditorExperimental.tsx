@@ -559,9 +559,6 @@ const FormulaEditorExperimental: React.FC = () => {
                             <h1 className="text-2xl font-black text-slate-900 tracking-tight uppercase">
                                 Formula Studio Pro
                             </h1>
-                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-purple-100 text-purple-700">
-                                Experimental
-                            </span>
                         </div>
                         <p className="text-xs font-semibold text-slate-500 mt-0.5">
                             Paste XML or import LaTeX, then select a symbol in the preview to edit it.
@@ -628,7 +625,7 @@ const FormulaEditorExperimental: React.FC = () => {
                 </div>
             </div>
 
-            <p className="mb-4 text-sm text-slate-600 flex items-start gap-2"><AlertTriangle size={16} className="shrink-0 mt-0.5 text-amber-600" />Experimental editor. Check your formula and XML before using them in a publication.</p>
+            <p className="mb-4 text-sm text-slate-600 flex items-start gap-2"><AlertTriangle size={16} className="shrink-0 mt-0.5 text-amber-600" />Check your formula and XML before using them in a publication.</p>
 
             {/* TeX / LaTeX Quick Importer Drawer */}
             {showTexImporter && (

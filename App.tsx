@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { HashRouter } from 'react-router-dom';
 import { Routes, Route, Navigate, useNavigate } from 'react-router';
 import Layout from './components/Layout';
-import Keeper from './pages/Keeper';
 import Landing from './pages/Landing';
 import Dashboard from './pages/Dashboard';
 import XmlRenumber from './pages/XmlRenumber';
@@ -12,7 +11,6 @@ import QuickDiff from './pages/QuickDiff';
 import TagCleaner from './pages/TagCleaner';
 import TableFixer from './pages/TableFixer';
 import TableBeautifier from './pages/TableBeautifier';
-import ArticleHighlights from './pages/ArticleHighlights';
 import ViewSync from './pages/ViewSync';
 import ReferenceUpdater from './pages/ReferenceUpdater';
 import ReferenceDupeChecker from './pages/ReferenceDupeChecker';
@@ -151,7 +149,7 @@ const App: React.FC = () => {
                                 <Route path="/tableBeautifier" element={<ProtectedRoute><Layout currentTool={ToolId.TABLE_BEAUTIFIER}><NodeAccessController toolId={ToolId.TABLE_BEAUTIFIER} displayName="Table XML Beautifier" mode="key-exclusive"><TableBeautifier /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/xmlRenumber" element={<ProtectedRoute><Layout currentTool={ToolId.XML_RENUMBER}><NodeAccessController toolId={ToolId.XML_RENUMBER} displayName="XML Normalizer" mode="key-allowed"><XmlRenumber /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/xmlRenumberExp" element={<ProtectedRoute><Layout currentTool={ToolId.XML_RENUMBER_EXP}><NodeAccessController toolId={ToolId.XML_RENUMBER_EXP} displayName="XML Normalizer Pro (Experimental)" mode="key-allowed"><XmlRenumberExperimental /></NodeAccessController></Layout></ProtectedRoute>} />
-                                <Route path="/keeper" element={<ProtectedRoute><Layout><Keeper /></Layout></ProtectedRoute>} />
+                                <Route path="/keeper" element={<Navigate to="/dashboard" replace />} />
                                 <Route path="/creditGenerator" element={<ProtectedRoute><Layout currentTool={ToolId.CREDIT_GENERATOR}><NodeAccessController toolId={ToolId.CREDIT_GENERATOR} displayName="CRediT Tagging" mode="key-allowed"><CreditGenerator /></NodeAccessController></Layout></ProtectedRoute>} />
                                 
                                 <Route path="/uncitedCleaner" element={<ProtectedRoute><Layout currentTool={ToolId.UNCITED_CLEANER}><NodeAccessController toolId={ToolId.UNCITED_CLEANER} displayName="Uncited Ref Cleaner" mode="subscription-only"><UncitedRefCleaner /></NodeAccessController></Layout></ProtectedRoute>} />
@@ -159,7 +157,7 @@ const App: React.FC = () => {
                                 <Route path="/quickDiff" element={<ProtectedRoute><Layout currentTool={ToolId.QUICK_DIFF}><NodeAccessController toolId={ToolId.QUICK_DIFF} displayName="Quick Text Diff" mode="subscription-only"><QuickDiff /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/tagCleaner" element={<ProtectedRoute><Layout currentTool={ToolId.TAG_CLEANER}><NodeAccessController toolId={ToolId.TAG_CLEANER} displayName="XML Tag Cleaner" mode="subscription-only"><TagCleaner /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/tableFixer" element={<ProtectedRoute><Layout currentTool={ToolId.TABLE_FIXER}><NodeAccessController toolId={ToolId.TABLE_FIXER} displayName="XML Table Fixer" mode="subscription-only"><TableFixer /></NodeAccessController></Layout></ProtectedRoute>} />
-                                <Route path="/highlightsGen" element={<ProtectedRoute><Layout currentTool={ToolId.HIGHLIGHTS_GEN}><NodeAccessController toolId={ToolId.HIGHLIGHTS_GEN} displayName="Article Highlights Gen" mode="subscription-only"><ArticleHighlights /></NodeAccessController></Layout></ProtectedRoute>} />
+                                <Route path="/highlightsGen" element={<Navigate to="/dashboard" replace />} />
                                 <Route path="/viewSync" element={<ProtectedRoute><Layout currentTool={ToolId.VIEW_SYNC}><NodeAccessController toolId={ToolId.VIEW_SYNC} displayName="View Synchronizer" mode="subscription-only"><ViewSync /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/referenceGen" element={<ProtectedRoute><Layout currentTool={ToolId.REFERENCE_GEN}><NodeAccessController toolId={ToolId.REFERENCE_GEN} displayName="Reference Updater" mode="subscription-only"><ReferenceUpdater /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/refDupeCheck" element={<ProtectedRoute><Layout currentTool={ToolId.REF_DUPE_CHECK}><NodeAccessController toolId={ToolId.REF_DUPE_CHECK} displayName="Duplicate Ref Remover" mode="subscription-only"><ReferenceDupeChecker /></NodeAccessController></Layout></ProtectedRoute>} />
@@ -169,7 +167,8 @@ const App: React.FC = () => {
                                 <Route path="/commentReplacer" element={<ProtectedRoute><Layout currentTool={ToolId.COMMENT_REPLACER}><NodeAccessController toolId={ToolId.COMMENT_REPLACER} displayName="Comment Replacer" mode="subscription-only"><CommentReplacer /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/citationLinker" element={<ProtectedRoute><Layout currentTool={ToolId.CITATION_LINKER}><NodeAccessController toolId={ToolId.CITATION_LINKER} displayName="Citation Linker Pro" mode="key-exclusive"><CitationLinker /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/citationLinkerExp" element={<ProtectedRoute><Layout currentTool={ToolId.CITATION_LINKER_EXP}><NodeAccessController toolId={ToolId.CITATION_LINKER_EXP} displayName="Citation Linker Pro MAX" mode="key-exclusive"><CitationLinkerExperimental /></NodeAccessController></Layout></ProtectedRoute>} />
-                                <Route path="/formulaEditorExp" element={<ProtectedRoute><Layout currentTool={ToolId.FORMULA_EDITOR_EXP}><NodeAccessController toolId={ToolId.FORMULA_EDITOR_EXP} displayName="Formula Studio Pro (Experimental)" mode="key-allowed"><FormulaEditorExperimental /></NodeAccessController></Layout></ProtectedRoute>} />
+                                <Route path="/formulaEditorExp" element={<Navigate to="/formulaEditor" replace />} />
+                                <Route path="/formulaEditor" element={<ProtectedRoute><Layout currentTool={ToolId.FORMULA_EDITOR_EXP}><NodeAccessController toolId={ToolId.FORMULA_EDITOR_EXP} displayName="Formula Studio Pro" mode="key-allowed"><FormulaEditorExperimental /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/sectionAuditor" element={<ProtectedRoute><Layout currentTool={ToolId.SECTION_AUDITOR}><NodeAccessController toolId={ToolId.SECTION_AUDITOR} displayName="Section Auditor" mode="subscription-only"><SectionAuditor /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/affiliationSequencer" element={<ProtectedRoute><Layout currentTool={ToolId.AFFILIATION_SEQUENCER}><NodeAccessController toolId={ToolId.AFFILIATION_SEQUENCER} displayName="Affiliation Sequencer" mode="subscription-only"><AffiliationSequencer /></NodeAccessController></Layout></ProtectedRoute>} />
                                 <Route path="/affiliationIdSequencer" element={<ProtectedRoute><Layout currentTool={ToolId.AFFILIATION_SEQUENCER}><NodeAccessController toolId={ToolId.AFFILIATION_SEQUENCER} displayName="Affiliation Sequencer" mode="subscription-only"><AffiliationSequencer /></NodeAccessController></Layout></ProtectedRoute>} />

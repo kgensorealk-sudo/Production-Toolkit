@@ -3,6 +3,27 @@
   "runtime": "Node 24; verified locally with 24.11.1 on Windows x64",
   "entries": [
     {
+      "file": "tests/tool-availability.mjs",
+      "kinds": [
+        "behavioral"
+      ],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineDependencies": [
+        "App.tsx",
+        "types.ts",
+        "utils/toolRegistry.ts",
+        "react",
+        "react-dom",
+        "react-router",
+        "jsdom",
+        "typescript",
+        "lucide-react",
+        "motion"
+      ],
+      "externalChecks": []
+    },
+    {
       "file": "tests/formula-dtd.mjs",
       "kinds": [
         "behavioral"

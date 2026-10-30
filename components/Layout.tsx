@@ -26,7 +26,7 @@ import TermsModal from './TermsModal';
 import TermsGateModal from './TermsGateModal';
 import Toast from './Toast';
 
-import { KeeperAvatar } from './KeeperAvatar';
+
 import { MessageSquare, Scale } from 'lucide-react';
 
 interface LayoutProps {
@@ -46,10 +46,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
     const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
     const [isTermsOpen, setIsTermsOpen] = useState(false);
     const [toast, setToast] = useState<{ msg: string, type: 'success' | 'warn' | 'error' | 'info' } | null>(null);
-    const isKeeperOpen = location.pathname === '/keeper';
-    const isKeeperUnread = false;
+
     const isVercel = window.location.hostname.includes('vercel.app');
-    const handleToggleKeeper = () => navigate('/keeper');
 
     // Tool usage tracking now happens in NodeAccessController (App.tsx), not here —
     // Layout mounts before access is checked, so tracking here counted paywalled
@@ -252,33 +250,6 @@ const Layout: React.FC<LayoutProps> = ({ children, currentTool, isLanding }) => 
                                     )}
                                     {isAnnouncementUnread && (
                                         <span className="absolute top-2 right-2 w-2 h-2 bg-indigo-600 rounded-full ring-2 ring-white" />
-                                    )}
-                                </button>
-                            )}
-
-                            {/* Dedicated Keeper AI Assistant Floater Icon */}
-                            {!isExiting && (
-                                <button 
-                                    id="keeper-header-toggle-btn"
-                                    onClick={handleToggleKeeper}
-                                    className={`p-1 rounded-xl transition-all relative group flex items-center justify-center cursor-pointer ${
-                                        isKeeperOpen 
-                                            ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/80 ring-2 ring-indigo-400/40' 
-                                            : 'text-slate-400 hover:text-indigo-600 hover:bg-white/70'
-                                    }`}
-                                    title="Open Keeper"
-                                    aria-label="Open Keeper"
-                                >
-                                    <div className="shrink-0">
-                                        <KeeperAvatar
-                                            state={isKeeperOpen ? "listening" : "idle"}
-                                            size="xs"
-                                            showBadge={true}
-                                            interactive={false}
-                                        />
-                                    </div>
-                                    {isKeeperUnread && (
-                                        <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-rose-500 rounded-full ring-2 ring-white animate-bounce" />
                                     )}
                                 </button>
                             )}

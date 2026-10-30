@@ -225,19 +225,7 @@ export const TOOL_REGISTRY: ToolInfo[] = [
         howToUse: 'Paste reference XML, select "Alphabetical (A-Z by Author Surname)" or "Numeric", and click "Sort References".',
         keywords: ['sort references', 'alphabetize', 'alphabetical order', 'author year sort', 'reorder bibliography']
     },
-    {
-        id: ToolId.HIGHLIGHTS_GEN,
-        name: 'Article Highlights Gen',
-        route: '/highlightsGen',
-        category: 'Markup & XML Structure',
-        shortDesc: 'Converts author research highlights into standardized <ce:highlights> XML structures.',
-        scenarios: [
-            'Author provided research bullet points in plain text.',
-            'Converting points into standard <ce:highlights><ce:highlight><ce:para> tags with validation of character limits.'
-        ],
-        howToUse: 'Paste bullet points, check character count limits, and click "Generate Highlights XML".',
-        keywords: ['highlights', 'bullet points', 'ce:highlights', 'author highlights', 'summary bullets']
-    },
+
     {
         id: ToolId.SECTION_AUDITOR,
         name: 'Section Auditor',
@@ -334,18 +322,17 @@ export const TOOL_REGISTRY: ToolInfo[] = [
     },
     {
         id: ToolId.FORMULA_EDITOR_EXP,
-        name: 'Formula Studio Pro (Experimental)',
-        route: '/formulaEditorExp',
+        name: 'Formula Studio Pro',
+        route: '/formulaEditor',
         category: 'Markup & XML Structure',
-        shortDesc: 'Interactive MathML formula editor with real-time two-way XML rendering, inline edit sync, and tag auto-repair.',
+        shortDesc: 'Visual MathML editing with live XML sync and automatic Elsevier CE 5.7 DTD validation.',
         scenarios: [
             'Editing and repairing MathML formulas with real-time visual equation preview.',
             'Converting LaTeX or raw formula text into standard MathML markup.'
         ],
         howToUse: 'Enter or paste MathML/formula XML, view live rendering, and double check equation markup before inserting into manuscript.',
         keywords: ['formula editor', 'mathml', 'math formulas', 'formula studio pro', 'equations'],
-        isExperimental: true,
-        warningNote: 'Experimental Version — not yet fully established. MathML tags and equations should be manually verified.'
+        isExperimental: false,
     },
     {
         id: ToolId.REF_TAGGER_EXP,
@@ -389,7 +376,7 @@ export const DASHBOARD_TOOL_IDS: ToolId[] = [
     ToolId.OTHER_REF_SCANNER,
     ToolId.REFERENCE_GEN,
     ToolId.CREDIT_GENERATOR,
-    ToolId.HIGHLIGHTS_GEN,
+    ToolId.FORMULA_EDITOR_EXP,
     ToolId.QUICK_DIFF,
     ToolId.TAG_CLEANER,
     ToolId.TABLE_FIXER,
@@ -402,7 +389,6 @@ export const DASHBOARD_TOOL_IDS: ToolId[] = [
 export const EXPERIMENTAL_TOOL_IDS: (ToolId | string)[] = [
     ToolId.XML_RENUMBER_EXP,
     ToolId.CITATION_LINKER_EXP,
-    ToolId.FORMULA_EDITOR_EXP,
     ToolId.REF_TAGGER_EXP,
     ToolId.REF_SORTER,
     'experimental'
@@ -414,7 +400,7 @@ export const EXPERIMENTAL_TOOL_IDS: (ToolId | string)[] = [
 export function isDashboardTool(id?: ToolId | string | null): boolean {
     if (!id) return false;
     const normalized = String(id).replace(/^#?\/?/, '');
-    return DASHBOARD_TOOL_IDS.some(t => t === id || t === normalized || t.toLowerCase() === normalized.toLowerCase());
+    return DASHBOARD_TOOL_IDS.some(t => t === getToolInfo(id)?.id || t === id || t === normalized || t.toLowerCase() === normalized.toLowerCase());
 }
 
 /**
@@ -422,6 +408,8 @@ export function isDashboardTool(id?: ToolId | string | null): boolean {
  */
 export function isExperimentalTool(id?: ToolId | string | null): boolean {
     if (!id) return false;
+    const info = getToolInfo(id);
+    if (info) return !!info.isExperimental;
     const str = String(id).toLowerCase();
     return (
         EXPERIMENTAL_TOOL_IDS.includes(id as any) ||

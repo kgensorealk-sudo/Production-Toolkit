@@ -26,7 +26,7 @@ const Docs: React.FC = () => {
                     <NavBtn id="idaudit" label="ID Prefix Auditor" />
                     <NavBtn id="linker" label="Citation Linker Pro" />
                     <NavBtn id="credit" label="CRediT Generator" />
-                    <NavBtn id="highlights" label="Highlights Gen" />
+                    <NavBtn id="formula" label="Formula Studio Pro" />
                     <NavBtn id="fixer" label="Table Fixer" />
                     <NavBtn id="beautifier" label="Table Beautifier" />
                     <NavBtn id="sync" label="View Sync" />
@@ -168,14 +168,10 @@ const Docs: React.FC = () => {
                             </div>
                         </section>
                     )}
-                    {section === 'highlights' && (
+                    {section === 'formula' && (
                         <section className="animate-fade-in">
-                            <h2 className="text-3xl font-extrabold text-slate-900 mb-6 uppercase tracking-tight">Highlights Generator</h2>
-                            <div className="prose prose-slate max-w-none">
-                                <p className="text-slate-600 mb-4">
-                                    Converts rich text bullet points into <code>author-highlights</code> XML structures.
-                                </p>
-                            </div>
+                            <h2 className="text-3xl font-extrabold text-slate-900 mb-6 uppercase tracking-tight">Formula Studio Pro</h2>
+                            <p className="text-slate-600 mb-4">Edit MathML in the rendered preview or XML editor. Select a symbol to edit its value, or select a bracket to edit its fence attributes. Automatic Elsevier CE 5.7 checks guard copying and downloading. Validate final article placement and document-wide IDs after insertion.</p>
                         </section>
                     )}
                     {section === 'fixer' && (
@@ -273,7 +269,7 @@ const Docs: React.FC = () => {
 
                                 <div className="p-5 rounded-2xl bg-emerald-50/50 border border-emerald-200 shadow-2xs space-y-2">
                                     <h3 className="text-base font-bold text-emerald-950">3. Access Allocation & Team Arrangements</h3>
-                                    <p>The Production Toolkit is a personally developed operational environment. Access to editorial utilities, automated XML pipelines, and the Keeper assistant is provisioned privately through the Administrator (<span className="font-semibold text-slate-800">kgenso.realK@gmail.com</span>) for verified editorial personnel to sustain ongoing server infrastructure and maintenance.</p>
+                                    <p>The Production Toolkit is a personally developed operational environment. Access to editorial utilities and automated XML pipelines is provisioned privately through the Administrator (<span className="font-semibold text-slate-800">kgenso.realK@gmail.com</span>) for verified editorial personnel to sustain ongoing server infrastructure and maintenance.</p>
                                     <p>Collaborative arrangements apply strictly to separate, verified individual accounts collaborating within the workflow and do not permit shared logins.</p>
                                 </div>
 

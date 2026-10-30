@@ -24,7 +24,7 @@ import {
     RefreshCcw,
     FileSearch,
     UserCheck,
-    Highlighter,
+    Sigma,
     Trash2,
     ShieldAlert,
     SortAsc,
@@ -240,7 +240,7 @@ const Dashboard: React.FC = () => {
         { id: ToolId.OTHER_REF_SCANNER, title: "Other-Ref Scanner", desc: "Isolate unstructured references for external transfer. Supports formatted HTML copy.", iconBg: "bg-amber-50", iconText: "text-amber-600", borderColor: "bg-amber-500", Icon: Search },
         { id: ToolId.REFERENCE_GEN, title: "Reference Updater", desc: "Merge updated/corrected references into existing XML lists while optionally preserving ID integrity.", iconBg: "bg-cyan-50", iconText: "text-cyan-600", borderColor: "bg-cyan-500", Icon: RefreshCcw },
         { id: ToolId.CREDIT_GENERATOR, title: "CRediT Tagging", desc: "Smart-detects roles from raw text, auto-corrects typos, and generates standardized NISO CRediT XML.", iconBg: "bg-purple-50", iconText: "text-purple-600", borderColor: "bg-purple-500", Icon: UserCheck },
-        { id: ToolId.HIGHLIGHTS_GEN, title: "Highlights Gen", desc: "Convert rich text input into standardized author-highlights XML structures.", iconBg: "bg-amber-50", iconText: "text-amber-600", borderColor: "bg-amber-500", Icon: Highlighter },
+        { id: ToolId.FORMULA_EDITOR_EXP, route: '/formulaEditor', title: "Formula Studio Pro", desc: "Edit MathML visually with live XML sync and automatic Elsevier CE 5.7 DTD validation.", iconBg: "bg-purple-50", iconText: "text-purple-600", borderColor: "bg-purple-500", Icon: Sigma },
         { id: ToolId.QUICK_DIFF, title: "Quick Text Diff", desc: "Instant side-by-side text comparison with line numbers and character-level highlights.", iconBg: "bg-orange-50", iconText: "text-orange-600", borderColor: "bg-orange-500", Icon: FileText },
         { id: ToolId.TAG_CLEANER, title: "XML Tag Cleaner", desc: "Safstrip specific editing option tags while maintaining document structure.", iconBg: "bg-teal-50", iconText: "text-teal-600", borderColor: "bg-teal-500", Icon: Eraser },
         { id: ToolId.TABLE_FIXER, title: "XML Table Fixer", desc: "Manage table footnotes by detaching them to legends or attaching legends back to cells.", iconBg: "bg-pink-50", iconText: "text-pink-600", borderColor: "bg-pink-500", Icon: Table },
@@ -353,7 +353,7 @@ const Dashboard: React.FC = () => {
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                             {sections.featured.map((tool) => (
-                                <ToolCard key={`featured-${tool.id}`} {...tool} delay={50} isPinned={pinnedTools.includes(tool.id)} onPinClick={() => handlePinClick(tool.id)} lockType={getLockType(tool.id)} isFree={freeTools.includes(tool.id)} expiry={freeToolsData[tool.id]} onClick={() => navigate(`/${tool.id}`)} onTipClick={(e) => handleTipClick(tool.id, tool.title, e)} />
+                                <ToolCard key={`featured-${tool.id}`} {...tool} delay={50} isPinned={pinnedTools.includes(tool.id)} onPinClick={() => handlePinClick(tool.id)} lockType={getLockType(tool.id)} isFree={freeTools.includes(tool.id)} expiry={freeToolsData[tool.id]} onClick={() => navigate(tool.route || `/${tool.id}`)} onTipClick={(e) => handleTipClick(tool.id, tool.title, e)} />
                             ))}
                         </div>
                     </section>
@@ -370,7 +370,7 @@ const Dashboard: React.FC = () => {
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                             {sections.pinned.map((tool) => (
-                                <ToolCard key={`pinned-${tool.id}`} {...tool} delay={50} isPinned={true} onPinClick={() => handlePinClick(tool.id)} lockType={getLockType(tool.id)} isFree={freeTools.includes(tool.id)} expiry={freeToolsData[tool.id]} onClick={() => navigate(`/${tool.id}`)} onTipClick={(e) => handleTipClick(tool.id, tool.title, e)} />
+                                <ToolCard key={`pinned-${tool.id}`} {...tool} delay={50} isPinned={true} onPinClick={() => handlePinClick(tool.id)} lockType={getLockType(tool.id)} isFree={freeTools.includes(tool.id)} expiry={freeToolsData[tool.id]} onClick={() => navigate(tool.route || `/${tool.id}`)} onTipClick={(e) => handleTipClick(tool.id, tool.title, e)} />
                             ))}
                         </div>
                     </section>
@@ -384,7 +384,7 @@ const Dashboard: React.FC = () => {
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                             {sections.active.map((tool, index) => (
-                                <ToolCard key={`active-${tool.id}`} {...tool} delay={100 + (index * 20)} isPinned={false} onPinClick={() => handlePinClick(tool.id)} lockType={getLockType(tool.id)} isFree={freeTools.includes(tool.id)} expiry={freeToolsData[tool.id]} onClick={() => navigate(`/${tool.id}`)} onTipClick={(e) => handleTipClick(tool.id, tool.title, e)} />
+                                <ToolCard key={`active-${tool.id}`} {...tool} delay={100 + (index * 20)} isPinned={false} onPinClick={() => handlePinClick(tool.id)} lockType={getLockType(tool.id)} isFree={freeTools.includes(tool.id)} expiry={freeToolsData[tool.id]} onClick={() => navigate(tool.route || `/${tool.id}`)} onTipClick={(e) => handleTipClick(tool.id, tool.title, e)} />
                             ))}
                         </div>
                     </section>
@@ -398,7 +398,7 @@ const Dashboard: React.FC = () => {
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                             {sections.locked.map((tool, index) => (
-                                <ToolCard key={`locked-${tool.id}`} {...tool} delay={200 + (index * 20)} isPinned={false} onPinClick={() => handlePinClick(tool.id)} lockType={getLockType(tool.id)} isFree={freeTools.includes(tool.id)} onClick={() => navigate(`/${tool.id}`)} onTipClick={(e) => handleTipClick(tool.id, tool.title, e)} />
+                                <ToolCard key={`locked-${tool.id}`} {...tool} delay={200 + (index * 20)} isPinned={false} onPinClick={() => handlePinClick(tool.id)} lockType={getLockType(tool.id)} isFree={freeTools.includes(tool.id)} onClick={() => navigate(tool.route || `/${tool.id}`)} onTipClick={(e) => handleTipClick(tool.id, tool.title, e)} />
                             ))}
                         </div>
                     </section>

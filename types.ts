@@ -73,7 +73,6 @@ export enum ToolId {
     TAG_CLEANER = 'tagCleaner',
     TABLE_FIXER = 'tableFixer',
     TABLE_BEAUTIFIER = 'tableBeautifier',
-    HIGHLIGHTS_GEN = 'highlightsGen',
     VIEW_SYNC = 'viewSync',
     REFERENCE_GEN = 'referenceGen',
     REF_DUPE_CHECK = 'refDupeCheck',

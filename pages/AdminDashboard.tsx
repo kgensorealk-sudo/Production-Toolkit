@@ -213,7 +213,6 @@ const AdminDashboard: React.FC = () => {
             case ToolId.OTHER_REF_SCANNER: return "Other-Ref Scanner";
             case ToolId.REFERENCE_GEN: return "Reference Updater";
             case ToolId.REF_DUPE_CHECK: return "Duplicate Ref Remover";
-            case ToolId.HIGHLIGHTS_GEN: return "Article Highlights Gen";
             case ToolId.QUICK_DIFF: return "Quick Text Diff";
             case ToolId.TAG_CLEANER: return "XML Tag Cleaner";
             case ToolId.TABLE_FIXER: return "XML Table Fixer";
@@ -225,7 +224,7 @@ const AdminDashboard: React.FC = () => {
             case ToolId.COMMENT_REPLACER: return "Comment Replacer";
             case ToolId.CITATION_LINKER: return "Citation Linker Pro";
             case ToolId.CITATION_LINKER_EXP: return "Citation Linker Pro MAX";
-            case ToolId.FORMULA_EDITOR_EXP: return "Formula Studio Pro (Experimental)";
+            case ToolId.FORMULA_EDITOR_EXP: return "Formula Studio Pro";
             case 'universal': return "Universal Access";
             default: return tid;
         }

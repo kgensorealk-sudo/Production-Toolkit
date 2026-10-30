@@ -54,11 +54,10 @@ const TOOL_METADATA: Record<string, { title: string, Icon: React.FC<any>, color:
     [ToolId.ID_AUDITOR]: { title: "ID Prefix Auditor", Icon: ShieldAlert, color: "text-violet-600", hex: "#7c3aed" },
     [ToolId.CITATION_LINKER]: { title: "Citation Linker Pro", Icon: Link, color: "text-indigo-600", hex: "#4f46e5" },
     [ToolId.CITATION_LINKER_EXP]: { title: "Citation Linker Pro (Experimental)", Icon: Link, color: "text-indigo-600", hex: "#4f46e5" },
-    [ToolId.FORMULA_EDITOR_EXP]: { title: "Formula Studio Pro (Experimental)", Icon: Sigma, color: "text-purple-600", hex: "#9333ea" },
+    [ToolId.FORMULA_EDITOR_EXP]: { title: "Formula Studio Pro", Icon: Sigma, color: "text-purple-600", hex: "#9333ea" },
     [ToolId.OTHER_REF_SCANNER]: { title: "Other-Ref Scanner", Icon: Search, color: "text-amber-600", hex: "#d97706" },
     [ToolId.REFERENCE_GEN]: { title: "Reference Updater", Icon: RefreshCcw, color: "text-cyan-600", hex: "#0891b2" },
     [ToolId.CREDIT_GENERATOR]: { title: "CRediT Tagging", Icon: UserCheck, color: "text-purple-600", hex: "#9333ea" },
-    [ToolId.HIGHLIGHTS_GEN]: { title: "Highlights Gen", Icon: Highlighter, color: "text-amber-600", hex: "#d97706" },
     [ToolId.QUICK_DIFF]: { title: "Quick Text Diff", Icon: FileText, color: "text-orange-600", hex: "#ea580c" },
     [ToolId.TAG_CLEANER]: { title: "XML Tag Cleaner", Icon: Eraser, color: "text-teal-600", hex: "#0d9488" },
     [ToolId.TABLE_FIXER]: { title: "XML Table Fixer", Icon: Table, color: "text-pink-600", hex: "#db2777" },
@@ -74,6 +73,7 @@ const TOOL_METADATA: Record<string, { title: string, Icon: React.FC<any>, color:
 const UserSettings: React.FC = () => {
     const { profile, user, refreshProfile, loading, isAdmin, updateProfile, deleteAccount, signOut } = useAuth();
     const { isHardwareAccelerated, setHardwareAccelerated } = useSettings();
+    const activeUnlockedTools = (profile?.unlocked_tools || []).filter(id => id !== 'highlightsGen');
     const [activeTab, setActiveTab] = useState<'profile' | 'keys' | 'security' | 'system'>('profile');
     const [keyInput, setKeyInput] = useState('');
     const [keyLoading, setKeyLoading] = useState(false);
@@ -617,9 +617,9 @@ const UserSettings: React.FC = () => {
                                             <p className="text-slate-400 font-bold uppercase tracking-widest text-[9px]">Tools currently active on your account</p>
                                         </div>
 
-                                        {profile.unlocked_tools.length > 0 ? (
+                                        {activeUnlockedTools.length > 0 ? (
                                             <div className="space-y-3">
-                                                {profile.unlocked_tools.includes('universal') ? (
+                                                {activeUnlockedTools.includes('universal') ? (
                                                     <div className="flex items-center justify-between p-4 bg-indigo-50 rounded-2xl border border-indigo-100">
                                                         <div className="flex items-center gap-3">
                                                             <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white">
@@ -630,7 +630,7 @@ const UserSettings: React.FC = () => {
                                                         <span className="text-[8px] font-black bg-indigo-600 text-white px-2 py-0.5 rounded-full uppercase tracking-widest">Master Key</span>
                                                     </div>
                                                 ) : (
-                                                    profile.unlocked_tools.map((toolId) => {
+                                                    activeUnlockedTools.map((toolId) => {
                                                         const meta = TOOL_METADATA[toolId];
                                                         const IconComponent = meta?.Icon || Shield;
                                                         
