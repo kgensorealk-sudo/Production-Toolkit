@@ -22,9 +22,27 @@ export function parseFormula(xml: string): Document {
     return doc;
 }
 
-export function serializeFormula(doc: Document): string {
+export function serializeFormula(doc: Document, standalone = false): string {
     const serializer = new XMLSerializer();
-    return Array.from(doc.documentElement.childNodes).map(node => serializer.serializeToString(node)).join('');
+    if (standalone) return Array.from(doc.documentElement.childNodes).map(node => serializer.serializeToString(node)).join('');
+    // Serialize with the temporary namespace context, then discard only the wrapper.
+    const root = doc.documentElement.cloneNode(true) as Element;
+    if (!root.hasChildNodes()) return '';
+    const declarations: [string, string][] = [];
+    for (const el of Array.from(root.querySelectorAll('*'))) {
+        for (const attr of Array.from(el.attributes)) {
+            if (attr.namespaceURI !== 'http://www.w3.org/2000/xmlns/' || attr.name === 'xmlns') continue;
+            if (root.lookupNamespaceURI(attr.localName) !== attr.value) continue;
+            let marker = 'formula-preserved-namespace-' + declarations.length;
+            while (serializer.serializeToString(root).includes(marker)) marker += '-x';
+            declarations.push([marker, attr.name]);
+            el.removeAttributeNode(attr);
+            el.setAttribute(marker, attr.value);
+        }
+    }
+    let wrapped = serializer.serializeToString(root);
+    for (const [marker, name] of declarations) wrapped = wrapped.replaceAll(' ' + marker + '=', ' ' + name + '=');
+    return wrapped.slice(wrapped.indexOf('>') + 1, wrapped.lastIndexOf('</'));
 }
 
 export function insertFormulaSnippet(xml: string, snippet: string): string {
@@ -172,7 +190,7 @@ export function exportFormulaXml(xml: string): string {
     if (doc.documentElement.children.length !== 1 || Array.from(doc.documentElement.childNodes).some(node => node.nodeType === 3 && !!node.textContent?.trim())) {
         throw new Error('Download requires one formula root element.');
     }
-    return '<?xml version="1.0" encoding="UTF-8"?>\n' + serializeFormula(doc).trim();
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + serializeFormula(doc, true).trim();
 }
 
 export function formatFormulaXml(xml: string, pretty: boolean): string {

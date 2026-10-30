@@ -7,6 +7,16 @@ for (const name of ['document','DOMParser','XMLSerializer']) globalThis[name] = 
 let passed = 0;
 const test = (name, action) => { action(); passed++; console.log(`PASS ${name}`); };
 const sample = '<ce:display id="display1"><ce:formula id="fo1"><mml:math altimg="a.svg"><mml:mi id="symbol1">x</mml:mi><mml:mi/><mml:mo>+</mml:mo><mml:mfenced><mml:mi>x</mml:mi><mml:mn>2</mml:mn></mml:mfenced></mml:math></ce:formula></ce:display>';
+test('metadata and editing do not inject namespace declarations into article fragments', () => {
+    const updated = updateFormulaMetadata(sample, 'fo1', 'si99.svg', true);
+    assert.ok(updated.includes('altimg="si99.svg"'));
+    assert.ok(!updated.includes('xmlns'));
+    assert.ok(!formatFormulaXml(updated, true).includes('xmlns'));
+    assert.ok(!editFormulaToken(updated, 'x', 'mi', 0, el => { el.textContent = 'y'; }).includes('xmlns'));
+    const explicit = '<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"><mml:mi>x</mml:mi></mml:math>';
+    assert.ok(updateFormulaMetadata(explicit, '', 'si2.svg', false).includes('xmlns:mml='));
+});
+
 test('preview has native MathML namespaces and source indexes, without selectable synthetic fences', () => {
     const preview = new DOMParser().parseFromString(renderFormulaPreview(sample), 'text/xml');
     assert.equal(preview.documentElement.namespaceURI, 'http://www.w3.org/1998/Math/MathML');

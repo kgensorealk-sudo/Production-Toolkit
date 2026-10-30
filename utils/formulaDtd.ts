@@ -1,5 +1,5 @@
 import data from './formulaDtdProfiles.json';
-import {formulaEntityReferences, parseFormula} from './formulaStudio';
+import {formulaEntityReferences, parseFormula, serializeFormula} from './formulaStudio';
 
 export type FormulaDtdVersion = '5.6' | '5.7';
 type Model = [string, string, string | null, number | null, number | null];
@@ -43,7 +43,7 @@ export function formulaAttributeIssues(version:FormulaDtdVersion, name:string, v
 
 // Normalize equivalent input prefixes for the lexical names used by the Elsevier
 // DTD. This changes serialization only; namespaces and text retain their meaning.
-export function canonicalFormulaXml(xml:string):string {
+export function canonicalFormulaXml(xml:string, standalone = true):string {
     if(/<!DOCTYPE|<!ENTITY/i.test(xml)) throw new Error('Document-level DTD/entity declarations are not allowed in a formula fragment.');
     const input=parseFormula(xml);
     if(input.documentElement.children.length!==1 || Array.from(input.documentElement.childNodes).some(node=>node.nodeType===3 && !!node.textContent?.trim())) throw new Error('Provide one formula root element.');
@@ -66,7 +66,11 @@ export function canonicalFormulaXml(xml:string):string {
         return result;
     };
     output.documentElement.appendChild(copy(input.documentElement.firstElementChild!));
-    return new XMLSerializer().serializeToString(output.documentElement.firstElementChild!);
+    if (standalone) return new XMLSerializer().serializeToString(output.documentElement.firstElementChild!);
+    for (const [prefix, uri] of Object.entries(namespaces)) {
+        if (prefix !== 'xml') output.documentElement.setAttributeNS(xmlns, 'xmlns:' + prefix, uri);
+    }
+    return serializeFormula(output);
 }
 
 export type FormulaDtdReport = {valid:boolean; errors:string[]; warnings:string[]; canonicalXml:string; version:FormulaDtdVersion};
@@ -140,5 +144,5 @@ export function validatedFormulaXml(xml:string,version:FormulaDtdVersion|''):str
     if(!version)throw new Error('Select the destination article DTD version before copying or downloading.');
     const report=validateFormulaDtd(xml,version);
     if(!report.valid)throw new Error(report.errors[0]);
-    return report.canonicalXml;
+    return canonicalFormulaXml(xml, false);
 }
