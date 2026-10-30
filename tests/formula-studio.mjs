@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {JSDOM} from 'jsdom';
-import {setFormulaTokenText, updateFormulaSpaceWidth, insertFormulaSymbol, formulaSymbolTag, editFormulaToken, expandFormulaFences, insertFormulaSnippet, insertFormulaTokenAfter, removeFormulaToken, exportFormulaXml, formatFormulaXml, formulaMetadata, formulaTokens, parseFormula, renderFormulaPreview, texToMathML, updateFormulaMetadata} from '../utils/formulaStudio.ts';
+import {formulaFences, updateFormulaFence, setFormulaTokenText, updateFormulaSpaceWidth, insertFormulaSymbol, formulaSymbolTag, editFormulaToken, expandFormulaFences, insertFormulaSnippet, insertFormulaTokenAfter, removeFormulaToken, exportFormulaXml, formatFormulaXml, formulaMetadata, formulaTokens, parseFormula, renderFormulaPreview, texToMathML, updateFormulaMetadata} from '../utils/formulaStudio.ts';
 
 const dom = new JSDOM('<!doctype html><html><body></body></html>');
 for (const name of ['document','DOMParser','XMLSerializer']) globalThis[name] = dom.window[name];
@@ -269,6 +269,60 @@ test('space controls reject invalid values and can repair imported text children
     }
     for (const width of ['hello','1','1em; color:red','NaNpx']) assert.throws(()=>updateFormulaSpaceWidth(xml,0,width),/Enter a width/);
     assert.throws(()=>updateFormulaSpaceWidth('<math><mi>x</mi></math>',0,'1em'),/Select the spacing/);
+});
+test('rendered nested fences retain source identity without changing symbol indexes', () => {
+    const xml='<math><mfenced id="outer"><mi>x</mi><mfenced id="inner"><mi>y</mi><mi>z</mi></mfenced></mfenced></math>';
+    const doc=parseFormula(xml);
+    assert.deepEqual(formulaFences(doc).map(el=>el.getAttribute('id')),['outer','inner']);
+    const preview=new DOMParser().parseFromString(renderFormulaPreview(xml),'text/xml');
+    const rows=Array.from(preview.querySelectorAll('mrow[data-fence-index]'));
+    assert.deepEqual(rows.map(el=>el.getAttribute('data-fence-index')),['0','1']);
+    assert.equal(rows[0].firstElementChild.getAttribute('data-fence-index'),'0');
+    assert.equal(rows[1].firstElementChild.getAttribute('data-fence-index'),'1');
+    assert.deepEqual(Array.from(preview.querySelectorAll('[data-token-index]')).map(el=>[el.textContent,el.getAttribute('data-token-index')]),[['x','0'],['y','1'],['z','2']]);
+});
+test('editing a nested fence preserves other fences, source tags and children', () => {
+    const xml='<m:math xmlns:m="http://www.w3.org/1998/Math/MathML"><m:mfenced id="outer"><m:mi>x</m:mi><m:mfenced id="inner" mathcolor="red"><m:mi>y</m:mi><m:mi>z</m:mi></m:mfenced></m:mfenced></m:math>';
+    const updated=updateFormulaFence(xml,1,{id:'inner',open:'[',close:']',separators:';',mathcolor:'blue'});
+    const fences=formulaFences(parseFormula(updated));
+    assert.equal(fences.length,2);
+    assert.equal(fences[0].getAttribute('id'),'outer');
+    assert.equal(fences[0].hasAttribute('open'),false);
+    assert.equal(fences[1].prefix,'m');
+    assert.equal(fences[1].getAttribute('mathcolor'),'blue');
+    assert.equal(fences[1].textContent,'yz');
+    assert.deepEqual(formulaTokens(parseFormula(updated)).map(el=>el.textContent),['x','y','z']);
+    assert.ok(renderFormulaPreview(updated).includes(';'));
+});
+test('fence attributes support explicit empty delimiters and removing formatting', () => {
+    const xml='<math><mfenced id="f" mathsize="2em"><mi>x</mi><mi>y</mi></mfenced></math>';
+    const output=updateFormulaFence(xml,0,{id:'f',open:'',close:'',separators:''});
+    const fence=formulaFences(parseFormula(output))[0];
+    assert.equal(fence.getAttribute('open'),'');
+    assert.equal(fence.hasAttribute('mathsize'),false);
+    const preview=new DOMParser().parseFromString(renderFormulaPreview(output),'text/xml');
+    assert.equal(preview.querySelectorAll('mo').length,0);
+    assert.equal(preview.querySelector('mrow').getAttribute('data-fence-index'),'0');
+});
+test('fence attribute edits safely serialize special characters and namespaced attributes', () => {
+    const xml='<mml:math><mml:mfenced xmlns:custom="urn:custom" custom:note="old"><mml:mi>x</mml:mi></mml:mfenced></mml:math>';
+    const output=updateFormulaFence(xml,0,{open:'<&"',close:'>',separators:',','xml:lang':'en','custom:note':'a&b'});
+    const fence=formulaFences(parseFormula(output))[0];
+    assert.equal(fence.getAttribute('open'),'<&"');
+    assert.equal(fence.getAttributeNS('urn:custom','note'),'a&b');
+    assert.equal(fence.getAttributeNS('http://www.w3.org/XML/1998/namespace','lang'),'en');
+    assert.ok(exportFormulaXml(output));
+    for (const attributes of [{'bad name':'x'},{'xmlns:test':'urn:bad'},{'missing:name':'x'}]) assert.throws(()=>updateFormulaFence(xml,0,attributes));
+    assert.throws(()=>updateFormulaFence(xml,8,{open:'['}),/Select the fence/);
+});
+test('hidden annotation fences do not shift the rendered fence editor target', () => {
+    const xml='<math><semantics><mi>x</mi><annotation-xml><mfenced id="hidden"><mi>h</mi></mfenced></annotation-xml></semantics><mfenced id="visible"><mi>y</mi></mfenced></math>';
+    assert.deepEqual(formulaFences(parseFormula(xml)).map(el=>el.getAttribute('id')),['visible']);
+    const edited=updateFormulaFence(xml,0,{id:'visible',open:'[',close:']'});
+    const all=Array.from(parseFormula(edited).querySelectorAll('*')).filter(el=>el.localName==='mfenced');
+    assert.equal(all[0].getAttribute('id'),'hidden');
+    assert.equal(all[0].hasAttribute('open'),false);
+    assert.equal(all[1].getAttribute('open'),'[');
 });
 console.log(`${passed} Formula Studio regression checks passed.`);
 dom.window.close();

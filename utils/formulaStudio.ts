@@ -1,9 +1,22 @@
+import dtdProfiles from './formulaDtdProfiles.json';
+
 const MATH_NS = 'http://www.w3.org/1998/Math/MathML';
 const CE_NS = 'http://www.elsevier.com/xml/common/dtd';
 const tokenNames = new Set(['mi', 'mn', 'mo', 'mtext', 'mspace']);
+const namedEntities:Record<string,string> = {...dtdProfiles.profiles['5.6'].entities,...dtdProfiles.profiles['5.7'].entities};
+const entityPattern = /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|&([A-Za-z_][A-Za-z0-9_.:-]*);/g;
+const predefined = new Set(['amp','lt','gt','quot','apos']);
+
+export function formulaEntityReferences(xml:string):string[] {
+    return Array.from(xml.matchAll(entityPattern)).flatMap(match=>match[1] && !predefined.has(match[1]) ? [match[1]] : []);
+}
 
 export function parseFormula(xml: string): Document {
-    const source = xml.trim().replace(/^<\?xml[^?]*\?>\s*/, '');
+    const source = xml.trim().replace(/^<\?xml[^?]*\?>\s*/, '').replace(entityPattern,(match,name:string|undefined)=> {
+        if(!name || predefined.has(name) || !Object.hasOwn(namedEntities,name))return match;
+        // Numeric references cannot introduce markup or recursive entity expansion.
+        return Array.from(namedEntities[name]).map(char=>'&#'+char.codePointAt(0)+';').join('');
+    });
     const doc = new DOMParser().parseFromString(`<root xmlns:ce="${CE_NS}" xmlns:mml="${MATH_NS}" xmlns:xlink="http://www.w3.org/1999/xlink">${source}</root>`, 'text/xml');
     if (doc.getElementsByTagName('parsererror').length) throw new Error('Invalid formula XML. Correct the syntax before editing.');
     return doc;
@@ -99,18 +112,46 @@ export function expandFormulaFences(xml: string): string {
     return serializeFormula(doc);
 }
 
-export function formulaTokens(container: Document | Element): Element[] {
+function formulaPresentationElements(container: Document | Element): Element[] {
     const source = container.nodeType === 1 && (container as Element).localName === 'math'
         ? container as Element
         : Array.from(container.querySelectorAll('*')).find(el => el.localName === 'math');
-    const tokens: Element[] = [];
+    const elements: Element[] = [];
     const visit = (el: Element) => {
         if (!presentationTags.has(el.localName) || (el.namespaceURI && el.namespaceURI !== MATH_NS)) return;
-        if (tokenNames.has(el.localName)) tokens.push(el);
+        elements.push(el);
         for (const child of Array.from(el.children)) visit(child);
     };
     if (source) visit(source);
-    return tokens;
+    return elements;
+}
+
+export function formulaTokens(container: Document | Element): Element[] {
+    return formulaPresentationElements(container).filter(el => tokenNames.has(el.localName));
+}
+
+export function formulaFences(container: Document | Element): Element[] {
+    return formulaPresentationElements(container).filter(el => el.localName === 'mfenced');
+}
+
+export function updateFormulaFence(xml: string, index: number, attributes: Record<string, string>): string {
+    const doc = parseFormula(xml);
+    const fence = formulaFences(doc)[index];
+    if (!fence) throw new Error('Select the fence again before editing its attributes.');
+    for (const attr of Array.from(fence.attributes)) {
+        if (attr.namespaceURI !== 'http://www.w3.org/2000/xmlns/') fence.removeAttributeNode(attr);
+    }
+    for (const [name, value] of Object.entries(attributes)) {
+        if (name === 'xmlns' || name.startsWith('xmlns:')) throw new Error('Namespace declarations are managed automatically.');
+        const parts = name.split(':');
+        if (parts.length > 2 || parts.some(part => !/^[A-Za-z_][A-Za-z0-9_.-]*$/.test(part))) throw new Error(`Invalid attribute name: ${name}`);
+        if (parts.length === 2) {
+            const namespace = parts[0] === 'xml' ? 'http://www.w3.org/XML/1998/namespace' : fence.lookupNamespaceURI(parts[0]);
+            if (!namespace) throw new Error(`The attribute prefix ${parts[0]} has no namespace declaration.`);
+            fence.setAttributeNS(namespace, name, value);
+        } else fence.setAttribute(name, value);
+    }
+    return serializeFormula(doc);
 }
 
 export function formulaMetadata(xml: string): {id: string; altimg: string; display: boolean} {
@@ -227,9 +268,12 @@ export function renderFormulaPreview(xml: string, selectedIndex?: number): strin
         const display = Array.from(doc.querySelectorAll('*')).some(el => el.localName === 'display' && el.contains(source));
         root.setAttribute('display', display || source.getAttribute('display') === 'block' ? 'block' : 'inline');
         const tokenIndexes = new Map(formulaTokens(doc).map((el, index) => [el, index]));
+        const fenceIndexes = new Map(formulaFences(doc).map((el, index) => [el, index]));
         const copy = (el: Element): Element | null => {
             if (!presentationTags.has(el.localName) || (el.namespaceURI && el.namespaceURI !== MATH_NS)) return null;
             const result = output.createElementNS(MATH_NS, el.localName === 'mfenced' ? 'mrow' : el.localName);
+            const fenceIndex = fenceIndexes.get(el);
+            if (fenceIndex !== undefined) result.setAttribute('data-fence-index', String(fenceIndex));
             for (const attr of Array.from(el.attributes)) {
                 if (presentationAttrs.has(attr.name)) result.setAttribute(attr.name, attr.value);
             }
@@ -242,6 +286,7 @@ export function renderFormulaPreview(xml: string, selectedIndex?: number): strin
                 if (!value) return;
                 const mo = output.createElementNS(MATH_NS, 'mo');
                 mo.setAttribute('fence', 'true');
+                if (fenceIndex !== undefined) mo.setAttribute('data-fence-index', String(fenceIndex));
                 mo.textContent = value;
                 result.appendChild(mo);
             };
@@ -254,6 +299,7 @@ export function renderFormulaPreview(xml: string, selectedIndex?: number): strin
                     if (el.localName === 'mfenced' && childIndex++ > 0 && separators.length) {
                         const separator = output.createElementNS(MATH_NS, 'mo');
                         separator.setAttribute('separator', 'true');
+                        if (fenceIndex !== undefined) separator.setAttribute('data-fence-index', String(fenceIndex));
                         separator.textContent = separators[Math.min(childIndex - 2, separators.length - 1)];
                         result.appendChild(separator);
                     }

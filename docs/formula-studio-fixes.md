@@ -16,7 +16,7 @@ Formula Studio renders editable MathML from XML, then writes symbol and metadata
 
 - `npm run lint`: passed.
 - `npm run build`: passed; existing bundle-size and Browserslist-age warnings remain.
-- `node --import tsx tests/formula-studio.mjs`: 32 behavioral regression checks passed. Registered in `tests/test-manifest.json`.
+- `node --import tsx tests/formula-studio.mjs`: 37 behavioral regression checks passed. Registered in `tests/test-manifest.json`.
 - The full test runner was not run. The original working folder had two unclassified Keeper tests: `keeper-author-name-correction-dashboard.mjs` and `keeper-author-name-correction.mjs`. The latest remote main also has an unclassified `subscriptionAccess.test.mjs`. Formula Studio checks ran independently.
 - Chromium: all five built-in presets rendered with native MathML namespaces and nonzero layout dimensions. Inspected fenced-expression and mobile quadratic screenshots.
 - Chromium: single-occurrence wrap, undo/redo, preservation of child and display IDs, nested TeX import, unsupported TeX preserving source, invalid XML rejection, and unprefixed MathML passed.
@@ -70,3 +70,20 @@ Four additional regression checks cover stable empty-token indexes, quick-symbol
 - Spacing nodes expose a labeled width editor with an Apply action and validation. Width edits preserve height/depth and keep `mspace` empty. The generic text-edit helper rejects spacing elements, and the advanced symbol list offers an Edit spacing button.
 
 Four additional regression checks cover exact text preservation, spacing text rejection, attribute/operand preservation, and width validation/repair. Chromium also passed the reported whitespace, focus-switching, and keyboard undo/redo workflows, plus invalid-width feedback and applying a valid space width. The script is `output/playwright/formula-studio/verify-rendered-round2-fixes.js`.
+
+## Rendered mfenced attribute editor — 2026-10-30
+
+- Clicking a generated bracket or separator now selects the original `mfenced` element. Source identity is preserved for nested fences without changing symbol indexes or exposing hidden annotation content.
+- The fence editor supports opening/closing brackets and separators, including explicit empty values. Existing attributes can be edited or removed; additional attributes such as `mathsize`, `mathcolor`, and `xml:lang` can be added.
+- An Edit fence picker provides keyboard access and allows selection when delimiters are empty. Clicking an actual symbol still opens the symbol editor.
+- Apply updates the original `mfenced` XML without expanding its source structure. Undo/redo restores attribute changes. Invalid attribute names and undeclared prefixes are rejected; namespace declarations remain managed automatically.
+
+Five regression checks cover nested identity, isolated attribute updates, empty delimiters/removal, safe escaping/namespaces, and hidden annotations. Chromium passed bracket selection, common and additional attribute changes, undo/redo, hidden-fence selection, symbol editing, and a 390 px mobile layout. Script: `output/playwright/formula-studio/verify-fence-attribute-editor.js`.
+
+## DTD-aware export — 2026-10-30
+
+Formula Studio now requires explicit CE article 5.6/5.7 selection and blocks Copy/Download when the selected DTD's formula rules fail. The fence editor enforces declared attributes. Export canonicalizes CE/MathML prefixes, and safe declared character entities are supported. See [the validation contract and downstream limits](formula-studio-dtd.md) for sources, native verification, and remaining article-context checks.
+
+Validation: 78 DTD cases, 72 matching native DTD cases, and the existing 37 editing checks. Chromium checked export gating, version-specific rules, fence enforcement, canonical downloads, and external-reference warnings.
+
+Per the operator's subsequent instruction, the UI now automatically targets CE 5.7. The version picker and initial selection gate have been removed; 5.7 validation still guards copying, downloading, and fence attributes. Internal 5.6 profiles remain available for regression/source comparison.

@@ -3,6 +3,22 @@
   "runtime": "Node 24; verified locally with 24.11.1 on Windows x64",
   "entries": [
     {
+      "file": "tests/formula-dtd.mjs",
+      "kinds": [
+        "behavioral"
+      ],
+      "classification": "portable",
+      "timeoutMs": 180000,
+      "baselineDependencies": [
+        "utils/formulaDtd.ts",
+        "utils/formulaDtdProfiles.json",
+        "utils/formulaStudio.ts",
+        "jsdom",
+        "tsx"
+      ],
+      "externalChecks": []
+    },
+    {
       "file": "tests/formula-studio.mjs",
       "kinds": [
         "behavioral"
@@ -11,6 +27,7 @@
       "timeoutMs": 180000,
       "baselineDependencies": [
         "utils/formulaStudio.ts",
+        "utils/formulaDtdProfiles.json",
         "jsdom",
         "tsx"
       ],

@@ -8,8 +8,9 @@ import {
     Split, LayoutGrid, Calculator
 } from 'lucide-react';
 import Toast from '../components/Toast';
-import { setFormulaTokenText, updateFormulaSpaceWidth, formulaSymbolTag, insertFormulaSymbol, expandFormulaFences, insertFormulaSnippet, insertFormulaTokenAfter, removeFormulaToken, exportFormulaXml, formatFormulaXml, formulaMetadata, editFormulaToken, formulaTokens, parseFormula, renderFormulaPreview, texToMathML, updateFormulaMetadata } from '../utils/formulaStudio';
+import { formulaFences, updateFormulaFence, setFormulaTokenText, updateFormulaSpaceWidth, formulaSymbolTag, insertFormulaSymbol, expandFormulaFences, insertFormulaSnippet, insertFormulaTokenAfter, removeFormulaToken, exportFormulaXml, formatFormulaXml, formulaMetadata, editFormulaToken, formulaTokens, parseFormula, renderFormulaPreview, texToMathML, updateFormulaMetadata } from '../utils/formulaStudio';
 import { SmartSuggestion } from '../types';
+import {validateFormulaDtd, validatedFormulaXml, formulaAttributeIssues, formulaDtdAttributes, type FormulaDtdVersion} from '../utils/formulaDtd';
 
 interface MathNode {
     id: string;
@@ -77,6 +78,7 @@ const PRESET_SAMPLES = [
 
 const FormulaEditorExperimental: React.FC = () => {
     const navigate = useNavigate();
+    const dtdVersion: FormulaDtdVersion = '5.7';
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [texError, setTexError] = useState<string | null>(null);
     const handleImportFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -94,7 +96,7 @@ const FormulaEditorExperimental: React.FC = () => {
     };
     const downloadXml = () => {
         try {
-        const url = URL.createObjectURL(new Blob([exportFormulaXml(xmlInput)], {type: 'application/xml;charset=utf-8'}));
+        const url = URL.createObjectURL(new Blob([exportFormulaXml(validatedFormulaXml(xmlInput, dtdVersion))], {type: 'application/xml;charset=utf-8'}));
         const link = document.createElement('a');
         link.href = url;
         link.download = (formulaId || 'formula').replace(/[^a-zA-Z0-9_-]/g, '_') + '.xml';
@@ -117,6 +119,7 @@ const FormulaEditorExperimental: React.FC = () => {
             setHistoryIndex(nextHistory.length - 1);
             setXmlInputState(val);
             setSelectedCanvasToken(null);
+            setSelectedFence(null);
         }
     };
 
@@ -126,6 +129,7 @@ const FormulaEditorExperimental: React.FC = () => {
             setHistoryIndex(prevIndex);
             setXmlInputState(history[prevIndex]);
             setSelectedCanvasToken(null);
+            setSelectedFence(null);
             setToast({ msg: 'Undo XML edit', type: 'info' });
         }
     };
@@ -136,6 +140,7 @@ const FormulaEditorExperimental: React.FC = () => {
             setHistoryIndex(nextIndex);
             setXmlInputState(history[nextIndex]);
             setSelectedCanvasToken(null);
+            setSelectedFence(null);
             setToast({ msg: 'Redo XML edit', type: 'info' });
         }
     };
@@ -173,6 +178,7 @@ const FormulaEditorExperimental: React.FC = () => {
             const converted = texToMathML(texInput);
             setXmlInput(converted);
             setSelectedCanvasToken(null);
+            setSelectedFence(null);
             setToast({ msg: 'Converted TeX to MathML XML.', type: 'success' });
             setShowTexImporter(false);
         } catch (error) {
@@ -197,6 +203,40 @@ const FormulaEditorExperimental: React.FC = () => {
         width?: string;
         nodeIndex?: number;
     } | null>(null);
+    const [selectedFence, setSelectedFence] = useState<number | null>(null);
+    const [fenceDraft, setFenceDraft] = useState<Record<string, string>>({});
+    const [fenceError, setFenceError] = useState<string | null>(null);
+    const [newFenceAttribute, setNewFenceAttribute] = useState('');
+    const [newFenceValue, setNewFenceValue] = useState('');
+    const fenceOpeningRef = useRef<HTMLInputElement>(null);
+    useEffect(() => { if (selectedFence !== null) fenceOpeningRef.current?.focus({preventScroll:true}); }, [selectedFence]);
+    const selectFence = (index: number) => {
+        if (selectedFence === index) { fenceOpeningRef.current?.focus({preventScroll:true}); return; }
+        try {
+            const fence = formulaFences(parseFormula(xmlInput))[index];
+            if (!fence) throw new Error('Select a fence in the current formula.');
+            const attributes = Object.fromEntries(Array.from(fence.attributes).filter(attr => attr.namespaceURI !== 'http://www.w3.org/2000/xmlns/').map(attr => [attr.name, attr.value]));
+            setFenceDraft({open:'(', close:')', separators:',', ...attributes});
+            setSelectedCanvasToken(null);
+            setSelectedFence(index);
+            setFenceError(null);
+            setNewFenceAttribute('');
+            setNewFenceValue('');
+            fenceOpeningRef.current?.focus({preventScroll:true});
+        } catch (error) { setToast({msg:error instanceof Error ? error.message : 'Could not select fence.',type:'error'}); }
+    };
+    const applyFenceAttributes = () => {
+        if (selectedFence === null) return;
+        try {
+            if (dtdVersion) {
+                const issues = formulaAttributeIssues(dtdVersion, 'mml:mfenced', fenceDraft);
+                if (issues.length) throw new Error(issues[0]);
+            }
+            setXmlInput(updateFormulaFence(xmlInput, selectedFence, fenceDraft));
+            setSelectedFence(null);
+            setToast({msg:'Fence attributes updated. Undo restores the previous values.',type:'success'});
+        } catch (error) { setFenceError(error instanceof Error ? error.message : 'Could not update fence attributes.'); }
+    };
     const symbolEditorRef = useRef<HTMLTextAreaElement>(null);
     const spaceEditorRef = useRef<HTMLInputElement>(null);
     const [spaceWidth, setSpaceWidth] = useState('');
@@ -250,6 +290,7 @@ const FormulaEditorExperimental: React.FC = () => {
         try {
             setXmlInput(editFormulaToken(xmlInput, text, tag, index ?? selectedCanvasToken?.nodeIndex, edit));
             setSelectedCanvasToken(null);
+            setSelectedFence(null);
         } catch (error) {
             setToast({ msg: error instanceof Error ? error.message : 'Could not edit symbol.', type: 'error' });
         }
@@ -380,11 +421,11 @@ const FormulaEditorExperimental: React.FC = () => {
     // Copy to clipboard
     const handleCopy = async () => {
         try {
-        await navigator.clipboard.writeText(xmlInput);
+        await navigator.clipboard.writeText(validatedFormulaXml(xmlInput, dtdVersion));
         setCopied(true);
         setToast({ msg: "Formula XML copied to clipboard!", type: 'success' });
         setTimeout(() => setCopied(false), 2000);
-        } catch { setToast({ msg: 'Clipboard access failed. Copy from the XML editor.', type: 'error' }); }
+        } catch (error) { setToast({ msg: error instanceof Error ? error.message : 'Clipboard access failed.', type: 'error' }); }
     };
 
     const renderableHtmlMathML = useMemo(() => renderFormulaPreview(xmlInput, selectedCanvasToken?.nodeIndex), [xmlInput, selectedCanvasToken]);
@@ -407,6 +448,7 @@ const FormulaEditorExperimental: React.FC = () => {
                 const idx = parseInt(idxAttr, 10);
                 if (!isNaN(idx) && parsedNodesList[idx]) {
                     const node = parsedNodesList[idx];
+                    setSelectedFence(null);
                     setSelectedCanvasToken({
                         text: node.text,
                         tagName: node.tag,
@@ -425,6 +467,8 @@ const FormulaEditorExperimental: React.FC = () => {
             }
         }
 
+        const fence = target.closest('[data-fence-index]');
+        if (fence) selectFence(Number(fence.getAttribute('data-fence-index')));
     };
 
     // Extract interactive nodes from XML for visual node editor
@@ -442,7 +486,7 @@ const FormulaEditorExperimental: React.FC = () => {
             allTokens.forEach((el) => {
                 const text = el.textContent || '';
                 const tag = el.tagName.replace(/^.*:/, '').toLowerCase();
-                // Only mi tags can have mathvariant
+                // Preserve the source variant; the selected DTD checks whether it is declared.
                 const mathvariant = el.getAttribute('mathvariant') || undefined;
                 {
                     nodes.push({
@@ -463,6 +507,14 @@ const FormulaEditorExperimental: React.FC = () => {
             return [];
         }
     }, [xmlInput]);
+
+    const renderedFences = useMemo(() => {
+        try { return formulaFences(parseFormula(xmlInput)).map((el,index) => ({index, id:el.getAttribute('id')})); }
+        catch { return []; }
+    }, [xmlInput]);
+
+    const dtdReport = useMemo(() => validateFormulaDtd(xmlInput, dtdVersion), [xmlInput, dtdVersion]);
+    const fenceDtdAttributes = formulaDtdAttributes(dtdVersion, 'mml:mfenced');
 
     // Smart Suggestions on Completion
     const suggestions: SmartSuggestion[] = [
@@ -563,11 +615,12 @@ const FormulaEditorExperimental: React.FC = () => {
 
                     <input ref={fileInputRef} type="file" accept=".xml,.mml,application/xml,text/xml" onChange={handleImportFile} className="hidden" aria-label="Open XML file" />
                     <button onClick={() => fileInputRef.current?.click()} className="text-xs font-bold px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50">Open XML file</button>
-                    <button onClick={downloadXml} disabled={!xmlInput.trim() || !!xmlError} className="text-xs font-bold px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40">Download XML</button>
+                    <button onClick={downloadXml} disabled={!dtdReport?.valid} className="text-xs font-bold px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40">Download XML</button>
 
                     <button
+                        disabled={!dtdReport?.valid}
                         onClick={handleCopy}
-                        className="text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-xl shadow-xs transition-all flex items-center gap-1.5 active:scale-95"
+                        className="text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2 rounded-xl shadow-xs transition-all flex items-center gap-1.5 active:scale-95"
                     >
                         {copied ? <Check size={14} /> : <Copy size={14} />}
                         <span>{copied ? 'Copied!' : 'Copy XML'}</span>
@@ -770,6 +823,20 @@ const FormulaEditorExperimental: React.FC = () => {
                 )}
             </div>
 
+            <section aria-label="Elsevier formula validation" className="mb-6 rounded-2xl border border-purple-200 bg-white p-4 space-y-3">
+                <div className="flex items-center gap-3 flex-wrap">
+                    <span className="text-sm font-semibold text-slate-700">Elsevier CE article 5.7</span>
+                    <span className="rounded-full bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-700">Automatic DTD validation</span>
+                </div>
+                <p className="text-sm text-slate-600">Formulas are checked against Elsevier CE article 5.7 before copying or downloading. Checks cover elements, child order, attributes, enumerations, and local IDs.</p>
+                <div role="status" aria-label="Elsevier DTD status" aria-live="polite" className={dtdReport?.valid ? 'text-sm font-semibold text-emerald-700' : 'text-sm font-semibold text-amber-800'}>
+                    {dtdReport.valid ? 'CE '+dtdVersion+' DTD-derived formula checks passed.' : 'Resolve the CE '+dtdVersion+' formula issues below before export.'}
+                </div>
+                {dtdReport && !dtdReport.valid && <ul aria-label="DTD validation errors" className="list-disc pl-5 space-y-1 text-sm text-red-700 break-words">{dtdReport.errors.map((error,index) => <li key={index}>{error}</li>)}</ul>}
+                {dtdReport && dtdReport.warnings.length > 0 && <ul aria-label="Article-context checks" className="list-disc pl-5 text-sm text-amber-800">{dtdReport.warnings.map((warning,index) => <li key={index}>{warning}</li>)}</ul>}
+                <p className="text-xs text-slate-500">These are formula-fragment checks, not complete-article validation. Final article placement, document-wide IDs/references, and journal rules still require validation in the destination article. Export uses canonical ce: and mml: prefixes.</p>
+            </section>
+
             {/* Main Interactive Editor Grid */}
             <div className={`grid gap-6 ${
                 viewMode === 'split' ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'
@@ -819,9 +886,49 @@ const FormulaEditorExperimental: React.FC = () => {
                             ))}
                         </div>
 
+                        {renderedFences.length > 0 && <label className="mb-4 flex items-center gap-2 flex-wrap text-sm text-slate-600">Edit fence
+                            <select aria-label="Edit fence" value={selectedFence ?? ''} onChange={event => selectFence(Number(event.target.value))} className="border border-purple-200 rounded-lg px-3 py-2 bg-white max-w-full">
+                                <option value="" disabled>Click a bracket or choose a fence…</option>
+                                {renderedFences.map(fence => <option key={fence.index} value={fence.index}>Fence {fence.index+1}{fence.id ? ' — '+fence.id : ''}</option>)}
+                            </select>
+                        </label>}
+
                         {/* MathML Display Container with Direct Canvas Click Listener & Hover Highlighting */}
                         <div className="flex-1 bg-slate-50/80 border border-slate-200 rounded-2xl p-6 flex flex-col items-center justify-center min-h-[240px] overflow-x-auto relative group">
                             
+                            {selectedFence !== null && (
+                                <section aria-label="Fence attributes" className="w-full mb-4 p-4 bg-purple-900 text-white rounded-xl border border-purple-700">
+                                    <div className="flex items-center justify-between gap-3 mb-3">
+                                        <h3 className="text-sm font-bold">Edit fence {selectedFence + 1} attributes</h3>
+                                        <button aria-label="Close fence editor" onClick={() => setSelectedFence(null)} className="p-2 rounded hover:bg-purple-800"><X size={16}/></button>
+                                    </div>
+                                    <p className="text-xs text-purple-200 mb-3">Blank opening or closing brackets hide that side. Blank separators remove separators.</p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                        {([{name:'open',label:'Opening bracket'},{name:'close',label:'Closing bracket'},{name:'separators',label:'Separators'}]).map(({name,label}) => (
+                                            <label key={name} className="text-sm">{label}<input ref={name === 'open' ? fenceOpeningRef : undefined} value={fenceDraft[name] ?? ''} onChange={event => setFenceDraft({...fenceDraft,[name]:event.target.value})} className="mt-1 w-full bg-purple-950 border border-purple-600 rounded p-2 text-white" /></label>
+                                        ))}
+                                    </div>
+                                    <div className="mt-3 space-y-2">
+                                        {Object.entries(fenceDraft).filter(([name]) => !['open','close','separators'].includes(name)).map(([name,value]) => (
+                                            <div key={name} className="flex gap-2 items-end">
+                                                <label className="flex-1 text-sm">{name}<input value={value} onChange={event => setFenceDraft({...fenceDraft,[name]:event.target.value})} className="mt-1 w-full bg-purple-950 border border-purple-600 rounded p-2 text-white" /></label>
+                                                <button aria-label={'Remove fence attribute '+name} onClick={() => {const next={...fenceDraft};delete next[name];setFenceDraft(next);}} className="p-2 rounded hover:bg-purple-800"><Trash2 size={16}/></button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <details className="mt-3"><summary className="cursor-pointer text-sm">Add another attribute</summary>
+                                        <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                            <label className="text-sm">Attribute name<input value={newFenceAttribute} onChange={event => setNewFenceAttribute(event.target.value)} placeholder="mathsize" list="mfenced-dtd-attributes" className="mt-1 w-full bg-purple-950 border border-purple-600 rounded p-2 text-white" /></label>
+                                            <label className="text-sm">Attribute value<input value={newFenceValue} onChange={event => setNewFenceValue(event.target.value)} placeholder="1.2em" className="mt-1 w-full bg-purple-950 border border-purple-600 rounded p-2 text-white" /></label>
+                                        </div>
+                                        <datalist id="mfenced-dtd-attributes">{Object.keys(fenceDtdAttributes).filter(name => !name.startsWith('xmlns')).map(name => <option key={name} value={name}/>)}</datalist>
+                                        <button onClick={() => {const name=newFenceAttribute.trim();if (!name || Object.hasOwn(fenceDraft,name)) {setFenceError('Enter a new, unique attribute name.');return;}setFenceDraft({...fenceDraft,[name]:newFenceValue});setNewFenceAttribute('');setNewFenceValue('');setFenceError(null);}} className="mt-2 px-3 py-2 border border-purple-500 rounded">Add attribute</button>
+                                    </details>
+                                    {fenceError && <p role="alert" className="mt-3 text-sm text-amber-200">{fenceError}</p>}
+                                    <div className="mt-4 flex gap-2"><button onClick={applyFenceAttributes} className="px-3 py-2 bg-purple-600 hover:bg-purple-500 rounded font-semibold">Apply fence attributes</button><button onClick={() => setSelectedFence(null)} className="px-3 py-2 border border-purple-600 rounded">Cancel</button></div>
+                                </section>
+                            )}
+
                             {/* In-Canvas Floating Quick Editor Overlay (When a symbol on canvas is clicked) */}
                             {selectedCanvasToken && (
                                 <div className="w-full mb-4 p-3 bg-purple-900 text-white rounded-xl shadow-lg border border-purple-700 animate-in fade-in slide-in-from-top-2 duration-200">
@@ -990,7 +1097,7 @@ const FormulaEditorExperimental: React.FC = () => {
                                             <span className="text-[11px] font-bold text-purple-200 flex items-center gap-1.5 shrink-0">
                                                 <Tag size={13} className="text-amber-400" /> Font Variant (mathvariant):
                                             </span>
-                                            {selectedCanvasToken.tagName.replace(/^.*:/, '').toLowerCase() === 'mi' ? (
+                                            {['mi','mn','mo','mtext','mspace'].includes(selectedCanvasToken.tagName.replace(/^.*:/, '').toLowerCase()) ? (
                                                 <div className="flex items-center gap-1 flex-wrap">
                                                     {[
                                                         { id: 'italic', label: 'italic (Italic)' },
@@ -1013,7 +1120,7 @@ const FormulaEditorExperimental: React.FC = () => {
                                                 </div>
                                             ) : (
                                                 <span className="text-[10px] font-mono text-purple-300/80 bg-purple-950/60 px-2 py-0.5 rounded border border-purple-800/80">
-                                                    mathvariant is only allowed on &lt;mi&gt; tags
+                                                    Check the selected DTD for this element’s allowed attributes
                                                 </span>
                                             )}
                                         </div>
@@ -1218,6 +1325,7 @@ const FormulaEditorExperimental: React.FC = () => {
                                             <div 
                                                 key={node.id + node.fullTag}
                                                 onClick={() => {
+                                                    setSelectedFence(null);
                                                     setSelectedCanvasToken({
                                                         text: node.text,
                                                         tagName: node.tag,
@@ -1251,7 +1359,7 @@ const FormulaEditorExperimental: React.FC = () => {
                                                             <option value="mspace">&lt;mspace&gt; space</option>
                                                         </select>
 
-                                                        {node.tag === 'mi' && (
+                                                        {['mi','mn','mo','mtext','mspace'].includes(node.tag) && (
                                                             <select
                                                                 value={node.mathvariant || 'none'}
                                                                 onChange={(e) => changeTokenMathvariant(node.text, node.tag, e.target.value, node.index)}
@@ -1308,7 +1416,7 @@ const FormulaEditorExperimental: React.FC = () => {
                                                         className="text-xs font-mono font-black text-slate-900 bg-transparent outline-none w-full px-1"
                                                         placeholder="Token text..."
                                                     />
-                                                    {node.tag === 'mspace' && <button className="text-xs font-bold text-purple-700" onClick={() => setSelectedCanvasToken({text: node.text, tagName: node.tag, nodeIndex: node.index, width: node.width})}>Edit spacing</button>}
+                                                    {node.tag === 'mspace' && <button className="text-xs font-bold text-purple-700" onClick={() => {setSelectedFence(null);setSelectedCanvasToken({text: node.text, tagName: node.tag, nodeIndex: node.index, width: node.width});}}>Edit spacing</button>}
                                                 </div>
 
                                             {/* Quick Structural Wrap Toolbar */}
